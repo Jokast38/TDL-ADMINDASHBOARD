@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@500,700,800,900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tdl-bg: #ffffff;
+  --tdl-bg-subtle: #f8f9fa;
+  --tdl-bg-muted: #f1f3f5;
+  --tdl-text: #0a0a0a;
+  --tdl-text-sec: #495057;
+  --tdl-text-muted: #868e96;
+  --tdl-primary: #0a0a0a;
+  --tdl-primary-hover: #1a1a1a;
+  --tdl-gold: #d4af37;
+  --tdl-gold-hover: #b8941f;
+  --tdl-accent: #d4af37;
+  --tdl-kami: #d4af37;
+  --tdl-success: #0b7238;
+  --tdl-warning: #f5a623;
+  --tdl-error: #d0021b;
+  --tdl-info: #0052cc;
+  --tdl-border: #e9ecef;
+}
+
+body {
+  margin: 0;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--tdl-bg);
+  color: var(--tdl-text);
+}
+
+h1, h2, h3, h4, h5, h6, .font-display {
+  font-family: 'Cabinet Grotesk', 'IBM Plex Sans', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+code, .font-mono {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 4%;
+    --primary: 0 0% 4%;
+    --primary-foreground: 45 65% 53%;
+    --secondary: 210 14% 96%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 210 14% 96%;
+    --muted-foreground: 210 8% 52%;
+    --accent: 210 14% 96%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 4 90% 41%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 14% 92%;
+    --input: 210 14% 90%;
+    --ring: 0 0% 4%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
+}
+
+/* Overline */
+.overline {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--tdl-text-muted);
+}
+
+/* Kanban drag */
+.kanban-card {
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.kanban-card:active { cursor: grabbing; }
+.kanban-card:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(0,0,0,0.06); }
+
+/* Generous spacing utilities */
+.grid-bg-noise {
+  background-image: linear-gradient(rgba(0,0,0,0.02) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(0,0,0,0.02) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Custom selection */
+::selection {
+  background: #d4af37;
+  color: #0a0a0a;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+@layer base {
+    [data-debug-wrapper="true"] {
+        display: contents !important;
+    }
+    [data-debug-wrapper="true"] > * {
+        margin-left: inherit;
+        margin-right: inherit;
+        margin-top: inherit;
+        margin-bottom: inherit;
+        padding-left: inherit;
+        padding-right: inherit;
+        padding-top: inherit;
+        padding-bottom: inherit;
+        column-gap: inherit;
+        row-gap: inherit;
+        gap: inherit;
+    }
+}
