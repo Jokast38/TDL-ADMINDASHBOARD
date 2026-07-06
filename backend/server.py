@@ -22,14 +22,17 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 app = FastAPI(title="TDL Formation API")
 
+_allowed_origins = [
+    o.strip().rstrip('/')
+    for o in (os.environ.get('CORS_ORIGINS') or 'https://tdl-admindashboard.vercel.app').split(',')
+    if o.strip()
+]
+logging.getLogger(__name__).info(f"CORS allow_origins = {_allowed_origins}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=[
-        o.strip().rstrip('/')
-        for o in os.environ.get('CORS_ORIGINS', 'https://tdl-admindashboard.vercel.app').split(',')
-        if o.strip()
-    ],
+    allow_origins=_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
