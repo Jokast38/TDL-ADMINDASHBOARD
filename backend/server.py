@@ -25,7 +25,7 @@ app = FastAPI(title="TDL Formation API")
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*', 'https://tdl-admindashboard.vercel.app').split(','),
+    allow_origins=os.environ.get('CORS_ORIGINS', 'https://tdl-admindashboard.vercel.app').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
