@@ -3,7 +3,6 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Lock, Envelope, User as UserIcon, Phone } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -14,8 +13,8 @@ export default function Login() {
   const [tab, setTab] = useState("login");
   const [loading, setLoading] = useState(false);
 
-  const [loginEmail, setLoginEmail] = useState("admin@tdlformation.fr");
-  const [loginPwd, setLoginPwd] = useState("admin123");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPwd, setLoginPwd] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regName, setRegName] = useState("");
   const [regPhone, setRegPhone] = useState("");
@@ -145,10 +144,6 @@ export default function Login() {
                 >
                   {loading ? "Connexion..." : "Se connecter"}
                 </Button>
-                <Card className="bg-gray-50 p-3 text-xs text-gray-600 border-dashed">
-                  <p className="font-semibold mb-0.5">Compte admin de démo :</p>
-                  <p className="font-mono">admin@tdlformation.fr / admin123</p>
-                </Card>
               </form>
             </TabsContent>
 
