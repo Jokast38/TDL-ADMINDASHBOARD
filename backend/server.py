@@ -22,20 +22,29 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 app = FastAPI(title="TDL Formation API")
 
-_allowed_origins = [
-    o.strip().rstrip('/')
-    for o in (os.environ.get('CORS_ORIGINS') or 'https://tdl-admindashboard.vercel.app').split(',')
-    if o.strip()
-]
-logging.getLogger(__name__).info(f"CORS allow_origins = {_allowed_origins}")
+_cors_env = os.environ.get('CORS_ORIGINS') or 'https://tdl-admindashboard.vercel.app'
+_allowed_origins = [o.strip().rstrip('/') for o in _cors_env.split(',') if o.strip()]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=_allowed_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if _allowed_origins == ['*']:
+    # A literal "*" cannot be combined with allow_credentials; use a regex that
+    # reflects the actual request origin instead, so credentials still work.
+    logging.getLogger(__name__).info("CORS: allowing all origins (regex mode, credentials-safe)")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_credentials=True,
+        allow_origin_regex=r".*",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    logging.getLogger(__name__).info(f"CORS allow_origins = {_allowed_origins}")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_credentials=True,
+        allow_origins=_allowed_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 _PREFIX = "/api"
 app.include_router(auth.router,           prefix=_PREFIX)
