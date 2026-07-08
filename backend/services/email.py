@@ -13,6 +13,20 @@ def _http_post(url: str, headers: dict, json_data: dict):
     return requests.post(url, headers=headers, json=json_data, timeout=15)
 
 
+async def _send_via_resend(api_key: str, from_addr: str, to: str, subject: str, body: str) -> str:
+    """Envoie via l'API HTTP Resend et renvoie le statut ('sent' ou 'failed: ...')."""
+    try:
+        r = await asyncio.to_thread(
+            _http_post,
+            "https://api.resend.com/emails",
+            {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            {"from": from_addr, "to": [to], "subject": subject, "html": body}
+        )
+        return "sent" if r.status_code < 300 else f"failed: {r.text[:200]}"
+    except Exception as e:
+        return f"error: {e}"
+
+
 def _smtp_send(host: str, port: int, use_tls: bool, user: str, password: str,
                from_addr: str, to: str, subject: str, body: str):
     import socket
@@ -59,16 +73,9 @@ async def send_email(to: str, subject: str, body: str) -> dict:
     }
 
     if provider == "resend" and s.get("email_api_key"):
-        try:
-            r = await asyncio.to_thread(
-                _http_post,
-                "https://api.resend.com/emails",
-                {"Authorization": f"Bearer {s['email_api_key']}", "Content-Type": "application/json"},
-                {"from": s.get("email_from", "noreply@tdlformation.fr"), "to": [to], "subject": subject, "html": body}
-            )
-            log["status"] = "sent" if r.status_code < 300 else f"failed: {r.text[:200]}"
-        except Exception as e:
-            log["status"] = f"error: {e}"
+        log["status"] = await _send_via_resend(
+            s["email_api_key"], s.get("email_from", "noreply@tdlformation.fr"), to, subject, body
+        )
 
     elif provider == "sendgrid" and s.get("email_api_key"):
         try:
@@ -116,8 +123,21 @@ async def send_email(to: str, subject: str, body: str) -> dict:
                     logger.warning(f"SMTP tentative {attempt}/{max_attempts} échouée pour {to} ({e}), nouvel essai...")
                     await asyncio.sleep(2 * attempt)
         if last_error is not None:
-            log["status"] = f"smtp_error: {last_error}"
+            smtp_error = f"smtp_error: {last_error}"
             log["retries"] = max_attempts - 1
+            # SMTP a échoué après tous les essais : on tente Resend en secours
+            # si une clé de secours est configurée, plutôt que d'abandonner.
+            fallback_key = s.get("resend_fallback_api_key")
+            if fallback_key:
+                logger.warning(f"SMTP définitivement en échec pour {to} ({last_error}), tentative via Resend en secours...")
+                fallback_status = await _send_via_resend(
+                    fallback_key, s.get("email_from", "noreply@tdlformation.fr"), to, subject, body
+                )
+                log["status"] = fallback_status
+                log["fallback_provider"] = "resend"
+                log["smtp_error"] = smtp_error
+            else:
+                log["status"] = smtp_error
 
     else:
         log["status"] = "mocked"

@@ -79,6 +79,20 @@ export default function Settings() {
                     <Switch checked={s.smtp_tls !== false} onCheckedChange={(v) => update("smtp_tls", v)} data-testid="smtp-tls" />
                     <label className="text-sm">STARTTLS (recommandé port 587)</label>
                   </div>
+                  <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900" data-testid="resend-fallback-helper">
+                    <b>🔁 Secours automatique :</b> Gmail SMTP depuis un serveur cloud échoue parfois de façon aléatoire
+                    (IP partagée méfiante aux yeux de Gmail). Renseignez une clé <b>Resend</b> ci-dessous pour qu'un email
+                    parte automatiquement par cette voie si les 3 tentatives SMTP échouent — gratuit jusqu'à 3000 emails/mois sur
+                    <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline ml-1">resend.com</a>.
+                  </div>
+                  <Field
+                    label="Clé API Resend (secours si SMTP échoue)"
+                    value={s.resend_fallback_api_key}
+                    onChange={(v) => update("resend_fallback_api_key", v)}
+                    testid="resend-fallback-key"
+                    type="password"
+                    placeholder="re_..."
+                  />
                 </div>
               )}
               {(s.email_provider === "resend" || s.email_provider === "sendgrid") && (

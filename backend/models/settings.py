@@ -13,6 +13,7 @@ class SettingsIn(BaseModel):
     smtp_user: Optional[str] = ""
     smtp_password: Optional[str] = ""
     smtp_tls: Optional[bool] = True
+    resend_fallback_api_key: Optional[str] = ""
     n8n_webhook_inscription: Optional[str] = ""
     n8n_webhook_dossier: Optional[str] = ""
     n8n_webhook_payment: Optional[str] = ""
