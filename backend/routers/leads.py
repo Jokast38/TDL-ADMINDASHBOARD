@@ -490,10 +490,9 @@ async def send_relance_single(payload: LeadRelanceSingleIn, user: dict = Depends
     if not lead.get("email"):
         return {"sent": False, "reason": "no_email"}
     body = payload.body.replace("{{name}}", lead.get("name", ""))
-    try:
-        await send_email(lead["email"], payload.subject, body)
-    except Exception as e:
-        return {"sent": False, "reason": str(e)}
+    log = await send_email(lead["email"], payload.subject, body)
+    if log["status"] not in ("sent", "mocked"):
+        return {"sent": False, "reason": log["status"]}
     update = {"updated_at": now_iso()}
     if payload.mark_contacted:
         update["contacted"] = True
@@ -516,11 +515,10 @@ async def send_relance(payload: LeadRelanceIn, user: dict = Depends(require_role
             no_email += 1
             continue
         body = payload.body.replace("{{name}}", lead.get("name", ""))
-        try:
-            await send_email(lead["email"], payload.subject, body)
-            sent += 1
-        except Exception:
+        log = await send_email(lead["email"], payload.subject, body)
+        if log["status"] not in ("sent", "mocked"):
             continue
+        sent += 1
         update = {"updated_at": now_iso()}
         if payload.mark_contacted:
             update["contacted"] = True

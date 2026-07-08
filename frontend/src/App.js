@@ -77,7 +77,7 @@ function App() {
             } />
 
             <Route path="/admin" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Dashboard /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "responsable_commercial"]}><AdminLayout><Dashboard /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/formations" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission"]}><AdminLayout><Formations /></AdminLayout></ProtectedRoute>
@@ -92,7 +92,7 @@ function App() {
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Dossiers /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/leads" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial"]}><AdminLayout><Leads /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Leads /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/documents-library" element={
               <ProtectedRoute roles={["admin", "responsable_admission", "agent_admin"]}><AdminLayout><DocumentsLibrary /></AdminLayout></ProtectedRoute>
@@ -101,16 +101,16 @@ function App() {
               <ProtectedRoute roles={["admin"]}><AdminLayout><DocTemplates /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/kami-street" element={
-              <ProtectedRoute roles={["admin", "employe"]}><AdminLayout><KamiStreet /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "commercial", "responsable_commercial"]}><AdminLayout><KamiStreet /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/orders" element={
-              <ProtectedRoute roles={["admin", "employe"]}><AdminLayout><Orders /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "commercial", "responsable_commercial"]}><AdminLayout><Orders /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/ai" element={
               <ProtectedRoute roles={["admin", "employe"]}><AdminLayout><AIAssistant /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/employees" element={
-              <ProtectedRoute roles={["admin"]}><AdminLayout><Employees /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "responsable_commercial"]}><AdminLayout><Employees /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/settings" element={
               <ProtectedRoute roles={["admin"]}><AdminLayout><Settings /></AdminLayout></ProtectedRoute>

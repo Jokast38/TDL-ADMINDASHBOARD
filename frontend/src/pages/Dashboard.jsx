@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   api, getDashboardData, getUsers,
 } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,12 +25,13 @@ import {
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
   ArcElement,
 } from 'chart.js';
-import { Line, Doughnut } from 'react-chartjs-2';
+import { Line, Doughnut, Bar } from 'react-chartjs-2';
 
 /* ─────────────────────────────────────────────
    Enregistrement des éléments Chart.js
@@ -39,11 +41,22 @@ ChartJS.register(
   LinearScale,
   PointElement,
   LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
   ArcElement
 );
+
+const LEAD_STATUS_LABELS = {
+  nouveau: "Nouveau", contacte: "Contacté", interesse: "Intéressé",
+  pas_interesse: "Pas intéressé", a_relancer: "À relancer",
+};
+
+const monthLabel = (key) => {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleString('fr-FR', { month: 'short' });
+};
 
 /* ─────────────────────────────────────────────
    Helpers
@@ -120,12 +133,15 @@ const getOrderStatusLabel = (status) => {
    Dashboard
 ───────────────────────────────────────────── */
 export default function Dashboard() {
+  const { user } = useAuth();
+  const isCommercial = user?.role === "commercial" || user?.role === "responsable_commercial" || user?.role === "admin";
   const isFirstRender = useRef(true);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
   const [stats, setStats]             = useState(null);
   const [users, setUsers]             = useState([]);
   const [integrations, setIntegrations] = useState(null);
+  const [commercialStats, setCommercialStats] = useState(null);
 
   // WordPress / Analytics
   const [wpTDL, setWpTDL]   = useState(null);
@@ -165,16 +181,20 @@ export default function Dashboard() {
     try {
       setLoading(true);
       setError(null);
-      const [dash, usersData] = await Promise.all([getDashboardData(), getUsers()]);
+      const dash = await getDashboardData();
       setStats(dash);
-      setUsers(usersData);
     } catch (err) {
       setError(err?.response?.data?.detail || err.message || "Erreur chargement dashboard");
     } finally {
       setLoading(false);
     }
 
-    // Sections secondaires — chargées en arrière-plan, indépendamment
+    // Sections secondaires — chargées en arrière-plan, indépendamment (une erreur
+    // ici, ex: /users réservé à l'admin, ne doit jamais bloquer le reste du dashboard).
+    getUsers().then(setUsers).catch(() => {});
+    if (isCommercial) {
+      api.get("/dashboard/commercial-stats").then(r => setCommercialStats(r.data)).catch(() => {});
+    }
     loadProducts(3);
     loadOrders();
     api.get("/wordpress/kami/categories").then(r => setCategories(r.data)).catch(() => {});
@@ -826,6 +846,93 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+
+      {/* Performance commerciale — CA et funnel leads (rôles commerciaux + admin) */}
+      {isCommercial && commercialStats && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2 p-6 border border-gray-200 rounded-md shadow-none" data-testid="commercial-revenue-card">
+            <p className="overline">Performance commerciale</p>
+            <h2 className="font-display text-2xl font-bold mb-1">Évolution du CA (commandes)</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              {fmtMoney(commercialStats.total_orders_revenue)} sur les 6 derniers mois
+            </p>
+            <div className="h-56">
+              <Line
+                data={{
+                  labels: commercialStats.revenue_by_month.map(r => monthLabel(r.month)),
+                  datasets: [{
+                    label: 'CA (€)',
+                    data: commercialStats.revenue_by_month.map(r => r.revenue),
+                    borderColor: '#d4af37',
+                    backgroundColor: 'rgba(212, 175, 55, 0.25)',
+                    fill: true,
+                    tension: 0.3,
+                  }],
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: { y: { beginAtZero: true, ticks: { callback: (v) => fmtMoney(v) } } },
+                }}
+              />
+            </div>
+          </Card>
+
+          <Card className="p-6 border border-gray-200 rounded-md shadow-none" data-testid="commercial-leads-card">
+            <p className="overline">Funnel leads</p>
+            <h2 className="font-display text-2xl font-bold mb-1">{commercialStats.total_leads} leads</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Taux de conversion : <span className="font-semibold text-[#0a0a0a]">{commercialStats.conversion_rate}%</span>
+              {" "}({commercialStats.converted_leads} intéressé{commercialStats.converted_leads > 1 ? "s" : ""})
+            </p>
+            <div className="h-40 flex justify-center mb-4">
+              <Doughnut
+                data={{
+                  labels: commercialStats.leads_by_status.map(s => LEAD_STATUS_LABELS[s.status] || s.status),
+                  datasets: [{
+                    data: commercialStats.leads_by_status.map(s => s.count),
+                    backgroundColor: ['#F5A623', '#0B7238', '#0a0a0a', '#d0021b', '#9013FE'],
+                  }],
+                }}
+                options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }}
+              />
+            </div>
+            <div className="space-y-2">
+              {commercialStats.leads_by_status.map(s => (
+                <div key={s.status} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-700">{LEAD_STATUS_LABELS[s.status] || s.status}</span>
+                  <Badge variant="outline" className="font-mono">{s.count}</Badge>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="lg:col-span-3 p-6 border border-gray-200 rounded-md shadow-none" data-testid="commercial-leads-evolution-card">
+            <p className="overline">Prospection</p>
+            <h2 className="font-display text-2xl font-bold mb-4">Nouveaux leads par mois</h2>
+            <div className="h-48">
+              <Bar
+                data={{
+                  labels: commercialStats.leads_by_month.map(l => monthLabel(l.month)),
+                  datasets: [{
+                    label: 'Nouveaux leads',
+                    data: commercialStats.leads_by_month.map(l => l.count),
+                    backgroundColor: '#0a0a0a',
+                    borderRadius: 4,
+                  }],
+                }}
+                options={{
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                }}
+              />
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Dernières inscriptions + Intégrations */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
