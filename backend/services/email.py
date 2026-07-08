@@ -64,80 +64,84 @@ def _smtp_send(host: str, port: int, use_tls: bool, user: str, password: str,
     server.quit()
 
 
+async def _send_via_sendgrid(api_key: str, from_addr: str, to: str, subject: str, body: str) -> str:
+    try:
+        r = await asyncio.to_thread(
+            _http_post,
+            "https://api.sendgrid.com/v3/mail/send",
+            {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            {
+                "personalizations": [{"to": [{"email": to}]}],
+                "from": {"email": from_addr},
+                "subject": subject,
+                "content": [{"type": "text/html", "value": body}]
+            }
+        )
+        return "sent" if r.status_code < 300 else f"failed: {r.text[:200]}"
+    except Exception as e:
+        return f"error: {e}"
+
+
+async def _send_via_smtp(s: dict, to: str, subject: str, body: str) -> str:
+    """Envoie en SMTP avec retry (Gmail depuis un hébergeur cloud échoue parfois
+    de façon aléatoire — IP partagée méfiante — sans être bloqué à 100%)."""
+    max_attempts = 3
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            await asyncio.to_thread(
+                _smtp_send,
+                s.get("smtp_host", "smtp.gmail.com"),
+                int(s.get("smtp_port") or 587),
+                bool(s.get("smtp_tls", True)),
+                s["smtp_user"],
+                s["smtp_password"],
+                s.get("email_from") or s.get("smtp_user"),
+                to, subject, body
+            )
+            return "sent"
+        except Exception as e:
+            last_error = e
+            if attempt < max_attempts:
+                logger.warning(f"SMTP tentative {attempt}/{max_attempts} échouée pour {to} ({e}), nouvel essai...")
+                await asyncio.sleep(2 * attempt)
+    return f"smtp_error: {last_error}"
+
+
+def _smtp_configured(s: dict) -> bool:
+    return bool(s.get("smtp_host") and s.get("smtp_user") and s.get("smtp_password"))
+
+
 async def send_email(to: str, subject: str, body: str) -> dict:
     s = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
     provider = s.get("email_provider", "mock")
+    from_addr = s.get("email_from", "noreply@tdlformation.fr")
+    # Clé Resend : celle du fournisseur principal si provider="resend", sinon
+    # celle dédiée au secours (utilisable même quand le principal est le SMTP).
+    resend_key = s.get("email_api_key") if provider == "resend" else s.get("resend_fallback_api_key")
     log = {
         "id": str(uuid.uuid4()), "to": to, "subject": subject, "body": body,
         "provider": provider, "status": "queued", "created_at": now_iso()
     }
 
-    if provider == "resend" and s.get("email_api_key"):
-        log["status"] = await _send_via_resend(
-            s["email_api_key"], s.get("email_from", "noreply@tdlformation.fr"), to, subject, body
-        )
+    if provider == "resend" and resend_key:
+        log["status"] = await _send_via_resend(resend_key, from_addr, to, subject, body)
+        if log["status"] != "sent" and _smtp_configured(s):
+            logger.warning(f"Resend en échec pour {to} ({log['status']}), tentative SMTP en secours...")
+            log["resend_error"] = log["status"]
+            log["status"] = await _send_via_smtp(s, to, subject, body)
+            log["fallback_provider"] = "smtp"
 
     elif provider == "sendgrid" and s.get("email_api_key"):
-        try:
-            r = await asyncio.to_thread(
-                _http_post,
-                "https://api.sendgrid.com/v3/mail/send",
-                {"Authorization": f"Bearer {s['email_api_key']}", "Content-Type": "application/json"},
-                {
-                    "personalizations": [{"to": [{"email": to}]}],
-                    "from": {"email": s.get("email_from", "noreply@tdlformation.fr")},
-                    "subject": subject,
-                    "content": [{"type": "text/html", "value": body}]
-                }
-            )
-            log["status"] = "sent" if r.status_code < 300 else f"failed: {r.text[:200]}"
-        except Exception as e:
-            log["status"] = f"error: {e}"
+        log["status"] = await _send_via_sendgrid(s["email_api_key"], from_addr, to, subject, body)
 
-    elif provider == "smtp" and s.get("smtp_host") and s.get("smtp_user") and s.get("smtp_password"):
-        # Gmail depuis un hébergeur cloud (IP partagée) échoue parfois de façon
-        # aléatoire (timeout) sans être bloqué à 100% — on retente donc quelques
-        # fois avant d'abandonner, au lieu d'échouer dès le premier essai.
-        max_attempts = 3
-        last_error = None
-        for attempt in range(1, max_attempts + 1):
-            try:
-                await asyncio.to_thread(
-                    _smtp_send,
-                    s.get("smtp_host", "smtp.gmail.com"),
-                    int(s.get("smtp_port") or 587),
-                    bool(s.get("smtp_tls", True)),
-                    s["smtp_user"],
-                    s["smtp_password"],
-                    s.get("email_from") or s.get("smtp_user"),
-                    to, subject, body
-                )
-                log["status"] = "sent"
-                if attempt > 1:
-                    log["retries"] = attempt - 1
-                last_error = None
-                break
-            except Exception as e:
-                last_error = e
-                if attempt < max_attempts:
-                    logger.warning(f"SMTP tentative {attempt}/{max_attempts} échouée pour {to} ({e}), nouvel essai...")
-                    await asyncio.sleep(2 * attempt)
-        if last_error is not None:
-            smtp_error = f"smtp_error: {last_error}"
-            log["retries"] = max_attempts - 1
-            # SMTP a échoué après tous les essais : on tente Resend en secours
-            # si une clé de secours est configurée, plutôt que d'abandonner.
-            fallback_key = s.get("resend_fallback_api_key")
-            if fallback_key:
-                logger.warning(f"SMTP définitivement en échec pour {to} ({last_error}), tentative via Resend en secours...")
-                fallback_status = await _send_via_resend(
-                    fallback_key, s.get("email_from", "noreply@tdlformation.fr"), to, subject, body
-                )
-                log["status"] = fallback_status
-                log["fallback_provider"] = "resend"
-                log["smtp_error"] = smtp_error
-            else:
-                log["status"] = smtp_error
+    elif provider == "smtp" and _smtp_configured(s):
+        log["status"] = await _send_via_smtp(s, to, subject, body)
+        if log["status"] != "sent" and s.get("resend_fallback_api_key"):
+            logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Resend en secours...")
+            log["smtp_error"] = log["status"]
+            log["status"] = await _send_via_resend(s["resend_fallback_api_key"], from_addr, to, subject, body)
+            log["fallback_provider"] = "resend"
 
     else:
         log["status"] = "mocked"

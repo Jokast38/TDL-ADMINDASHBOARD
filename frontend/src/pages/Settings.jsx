@@ -47,24 +47,40 @@ export default function Settings() {
         <TabsContent value="email">
           <Card className="p-6 border border-gray-200 rounded-md shadow-none">
             <h3 className="font-display text-xl font-bold mb-1">Email transactionnel</h3>
-            <p className="text-sm text-gray-500 mb-6">Choisissez votre fournisseur. SMTP Gmail recommandé pour démarrer (gratuit jusqu'à 500/jour).</p>
+            <p className="text-sm text-gray-500 mb-6">
+              Resend recommandé (fiable, HTTPS) : le SMTP Gmail depuis un serveur cloud échoue parfois de façon aléatoire
+              (IP partagée méfiante aux yeux de Gmail), même si les logs indiquent "envoyé".
+            </p>
             <div className="space-y-4 max-w-xl">
               <div>
-                <label className="text-sm font-medium">Fournisseur</label>
+                <label className="text-sm font-medium">Fournisseur principal</label>
                 <Select value={s.email_provider || "mock"} onValueChange={(v) => update("email_provider", v)}>
                   <SelectTrigger data-testid="email-provider"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="mock">Mock (logs serveur)</SelectItem>
-                    <SelectItem value="smtp">SMTP Gmail (recommandé)</SelectItem>
-                    <SelectItem value="resend">Resend</SelectItem>
+                    <SelectItem value="resend">Resend (recommandé)</SelectItem>
+                    <SelectItem value="smtp">SMTP Gmail</SelectItem>
                     <SelectItem value="sendgrid">SendGrid</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <Field label="Email expéditeur" value={s.email_from} onChange={(v) => update("email_from", v)} testid="email-from" placeholder="noreply@tdlformation.fr" />
 
-              {s.email_provider === "smtp" && (
+              {s.email_provider === "resend" && (
+                <div className="bg-green-50 border border-green-200 rounded p-3 text-xs text-green-900" data-testid="resend-helper">
+                  <b>✅ Resend :</b> créez un compte gratuit sur <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline">resend.com</a> (3000 emails/mois),
+                  générez une clé API et collez-la ci-dessous.
+                </div>
+              )}
+              {(s.email_provider === "resend" || s.email_provider === "sendgrid") && (
+                <Field label="Clé API" value={s.email_api_key} onChange={(v) => update("email_api_key", v)} testid="email-key" type="password" placeholder={s.email_provider === "resend" ? "re_..." : "SG.xxx"} />
+              )}
+
+              {(s.email_provider === "smtp" || s.email_provider === "resend") && (
                 <div className="space-y-4 pt-4 border-t border-gray-200">
+                  <p className="text-sm font-semibold">
+                    {s.email_provider === "resend" ? "SMTP Gmail (secours, optionnel)" : "SMTP Gmail (principal)"}
+                  </p>
                   <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900" data-testid="gmail-helper">
                     <b>📧 Gmail SMTP :</b> Activez la <b>validation en 2 étapes</b> sur votre compte Google, puis créez un <b>mot de passe d'application</b> ici :
                     <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="underline ml-1 text-[#d4af37] hover:text-[#b8941f]">myaccount.google.com/apppasswords</a>. Utilisez ce mot de passe ci-dessous (et non votre mot de passe Gmail classique).
@@ -79,10 +95,14 @@ export default function Settings() {
                     <Switch checked={s.smtp_tls !== false} onCheckedChange={(v) => update("smtp_tls", v)} data-testid="smtp-tls" />
                     <label className="text-sm">STARTTLS (recommandé port 587)</label>
                   </div>
+                </div>
+              )}
+
+              {s.email_provider === "smtp" && (
+                <div className="space-y-4 pt-4 border-t border-gray-200">
                   <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900" data-testid="resend-fallback-helper">
-                    <b>🔁 Secours automatique :</b> Gmail SMTP depuis un serveur cloud échoue parfois de façon aléatoire
-                    (IP partagée méfiante aux yeux de Gmail). Renseignez une clé <b>Resend</b> ci-dessous pour qu'un email
-                    parte automatiquement par cette voie si les 3 tentatives SMTP échouent — gratuit jusqu'à 3000 emails/mois sur
+                    <b>🔁 Secours automatique :</b> renseignez une clé <b>Resend</b> ci-dessous pour qu'un email parte
+                    automatiquement par cette voie si les 3 tentatives SMTP échouent — gratuit jusqu'à 3000 emails/mois sur
                     <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline ml-1">resend.com</a>.
                   </div>
                   <Field
@@ -94,9 +114,6 @@ export default function Settings() {
                     placeholder="re_..."
                   />
                 </div>
-              )}
-              {(s.email_provider === "resend" || s.email_provider === "sendgrid") && (
-                <Field label="Clé API" value={s.email_api_key} onChange={(v) => update("email_api_key", v)} testid="email-key" type="password" placeholder={s.email_provider === "resend" ? "re_..." : "SG.xxx"} />
               )}
             </div>
           </Card>
