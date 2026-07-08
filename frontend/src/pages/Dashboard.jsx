@@ -30,6 +30,7 @@ import {
   Tooltip,
   Legend,
   ArcElement,
+  Filler,
 } from 'chart.js';
 import { Line, Doughnut, Bar } from 'react-chartjs-2';
 
@@ -45,7 +46,8 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
+  Filler
 );
 
 const LEAD_STATUS_LABELS = {
@@ -926,7 +928,7 @@ export default function Dashboard() {
                   responsive: true,
                   maintainAspectRatio: false,
                   plugins: { legend: { display: false } },
-                  scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+                  scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
                 }}
               />
             </div>
