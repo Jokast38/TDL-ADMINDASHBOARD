@@ -88,20 +88,36 @@ async def send_email(to: str, subject: str, body: str) -> dict:
             log["status"] = f"error: {e}"
 
     elif provider == "smtp" and s.get("smtp_host") and s.get("smtp_user") and s.get("smtp_password"):
-        try:
-            await asyncio.to_thread(
-                _smtp_send,
-                s.get("smtp_host", "smtp.gmail.com"),
-                int(s.get("smtp_port") or 587),
-                bool(s.get("smtp_tls", True)),
-                s["smtp_user"],
-                s["smtp_password"],
-                s.get("email_from") or s.get("smtp_user"),
-                to, subject, body
-            )
-            log["status"] = "sent"
-        except Exception as e:
-            log["status"] = f"smtp_error: {e}"
+        # Gmail depuis un hébergeur cloud (IP partagée) échoue parfois de façon
+        # aléatoire (timeout) sans être bloqué à 100% — on retente donc quelques
+        # fois avant d'abandonner, au lieu d'échouer dès le premier essai.
+        max_attempts = 3
+        last_error = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                await asyncio.to_thread(
+                    _smtp_send,
+                    s.get("smtp_host", "smtp.gmail.com"),
+                    int(s.get("smtp_port") or 587),
+                    bool(s.get("smtp_tls", True)),
+                    s["smtp_user"],
+                    s["smtp_password"],
+                    s.get("email_from") or s.get("smtp_user"),
+                    to, subject, body
+                )
+                log["status"] = "sent"
+                if attempt > 1:
+                    log["retries"] = attempt - 1
+                last_error = None
+                break
+            except Exception as e:
+                last_error = e
+                if attempt < max_attempts:
+                    logger.warning(f"SMTP tentative {attempt}/{max_attempts} échouée pour {to} ({e}), nouvel essai...")
+                    await asyncio.sleep(2 * attempt)
+        if last_error is not None:
+            log["status"] = f"smtp_error: {last_error}"
+            log["retries"] = max_attempts - 1
 
     else:
         log["status"] = "mocked"
