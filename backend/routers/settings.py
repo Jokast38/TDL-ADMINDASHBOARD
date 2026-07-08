@@ -18,7 +18,9 @@ async def get_settings(user: dict = Depends(require_role("admin"))):
 
 @router.put("/settings")
 async def update_settings(payload: SettingsIn, user: dict = Depends(require_role("admin"))):
-    update = payload.model_dump()
+    # Ne met à jour que les champs explicitement envoyés (voir SettingsIn) —
+    # un appel partiel ne doit jamais réinitialiser le reste de la config.
+    update = {k: v for k, v in payload.model_dump().items() if v is not None}
     update["updated_at"] = now_iso()
     await db.settings.update_one({"id": "global"}, {"$set": update}, upsert=True)
     return await db.settings.find_one({"id": "global"}, {"_id": 0})

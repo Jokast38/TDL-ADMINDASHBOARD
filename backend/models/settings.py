@@ -3,24 +3,28 @@ from pydantic import BaseModel
 
 
 class SettingsIn(BaseModel):
-    stripe_public_key: Optional[str] = ""
-    stripe_secret_key: Optional[str] = ""
-    email_provider: Optional[str] = "mock"
-    email_api_key: Optional[str] = ""
-    email_from: Optional[str] = "noreply@tdlformation.fr"
-    smtp_host: Optional[str] = "smtp.gmail.com"
-    smtp_port: Optional[int] = 587
-    smtp_user: Optional[str] = ""
-    smtp_password: Optional[str] = ""
-    smtp_tls: Optional[bool] = True
-    resend_fallback_api_key: Optional[str] = ""
-    n8n_webhook_inscription: Optional[str] = ""
-    n8n_webhook_dossier: Optional[str] = ""
-    n8n_webhook_payment: Optional[str] = ""
-    trello_board_id: Optional[str] = ""
-    google_analytics_id: Optional[str] = ""
-    plausible_domain: Optional[str] = ""
-    public_base_url: Optional[str] = ""
+    """Tous les champs sont Optional[...] = None (et non des chaînes vides) :
+    PUT /settings ne met à jour que les champs réellement envoyés, pour ne
+    jamais écraser silencieusement le reste de la config (ex: un appel qui
+    n'envoie que 2 champs ne doit pas réinitialiser les autres)."""
+    stripe_public_key: Optional[str] = None
+    stripe_secret_key: Optional[str] = None
+    email_provider: Optional[str] = None
+    email_api_key: Optional[str] = None
+    email_from: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_tls: Optional[bool] = None
+    resend_fallback_api_key: Optional[str] = None
+    n8n_webhook_inscription: Optional[str] = None
+    n8n_webhook_dossier: Optional[str] = None
+    n8n_webhook_payment: Optional[str] = None
+    trello_board_id: Optional[str] = None
+    google_analytics_id: Optional[str] = None
+    plausible_domain: Optional[str] = None
+    public_base_url: Optional[str] = None
 
 
 class ChatIn(BaseModel):
