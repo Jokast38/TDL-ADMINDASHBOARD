@@ -4,7 +4,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.security import require_role
-from core.config import WORDPRESS_SITE, WORDPRESS_SITE_K, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, WORDPRESS_APP_PASSWORD_K, GA4_PROPERTY_ID, GA4_PROPERTY_ID_K, GA4_SERVICE_ACCOUNT_PATH
+from core.config import (
+    WORDPRESS_SITE, WORDPRESS_SITE_K, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, WORDPRESS_APP_PASSWORD_K,
+    GA4_PROPERTY_ID, GA4_PROPERTY_ID_K, GA4_SERVICE_ACCOUNT_PATH, ROLES_KAMI_STREET,
+)
 from models.document import WooProductUpdate
 from services.wordpress import (
     wp_basic_auth_headers, wp_site_url,
@@ -85,7 +88,7 @@ async def wordpress_stats_kami(user: dict = Depends(require_role("admin", "emplo
 async def woo_list_products(
     page: int = 1, per_page: int = 20,
     search: Optional[str] = None, category: Optional[str] = None,
-    user: dict = Depends(require_role("admin", "employe"))
+    user: dict = Depends(require_role(*ROLES_KAMI_STREET))
 ):
     key, secret = woo_auth_params()
     if not key or not secret:
@@ -127,7 +130,7 @@ async def woo_list_products(
 
 
 @router.get("/kami/products/{product_id}")
-async def woo_get_product(product_id: int, user: dict = Depends(require_role("admin", "employe"))):
+async def woo_get_product(product_id: int, user: dict = Depends(require_role(*ROLES_KAMI_STREET))):
     key, secret = woo_auth_params()
     if not key or not secret:
         raise HTTPException(status_code=500, detail="Variables WOOCOMMERCE_KEY_K / WOOCOMMERCE_SECRET_K manquantes")
@@ -153,7 +156,7 @@ async def woo_get_product(product_id: int, user: dict = Depends(require_role("ad
 
 
 @router.put("/kami/products/{product_id}")
-async def woo_update_product(product_id: int, payload: WooProductUpdate, user: dict = Depends(require_role("admin", "employe"))):
+async def woo_update_product(product_id: int, payload: WooProductUpdate, user: dict = Depends(require_role(*ROLES_KAMI_STREET))):
     key, secret = woo_auth_params()
     if not key or not secret:
         raise HTTPException(status_code=500, detail="Variables WOOCOMMERCE_KEY_K / WOOCOMMERCE_SECRET_K manquantes")
@@ -177,7 +180,7 @@ async def woo_update_product(product_id: int, payload: WooProductUpdate, user: d
 
 
 @router.get("/kami/categories")
-async def woo_list_categories(user: dict = Depends(require_role("admin", "employe"))):
+async def woo_list_categories(user: dict = Depends(require_role(*ROLES_KAMI_STREET))):
     key, secret = woo_auth_params()
     if not key or not secret:
         raise HTTPException(status_code=500, detail="Variables WOOCOMMERCE_KEY_K / WOOCOMMERCE_SECRET_K manquantes")
@@ -190,7 +193,7 @@ async def woo_list_categories(user: dict = Depends(require_role("admin", "employ
 @router.get("/kami/orders")
 async def woo_list_orders(
     page: int = 1, per_page: int = 20, status: Optional[str] = None,
-    user: dict = Depends(require_role("admin", "employe"))
+    user: dict = Depends(require_role(*ROLES_KAMI_STREET))
 ):
     key, secret = woo_auth_params()
     if not key or not secret:
@@ -251,7 +254,7 @@ async def woo_list_orders(
 
 
 @router.get("/kami/orders/{order_id}")
-async def woo_get_order(order_id: int, user: dict = Depends(require_role("admin", "employe"))):
+async def woo_get_order(order_id: int, user: dict = Depends(require_role(*ROLES_KAMI_STREET))):
     key, secret = woo_auth_params()
     if not key or not secret:
         raise HTTPException(status_code=500, detail="Variables WOOCOMMERCE_KEY_K / WOOCOMMERCE_SECRET_K manquantes")
@@ -284,7 +287,7 @@ async def woo_get_order(order_id: int, user: dict = Depends(require_role("admin"
 
 
 @router.put("/kami/orders/{order_id}/status")
-async def woo_update_order_status(order_id: int, status: str, user: dict = Depends(require_role("admin", "employe"))):
+async def woo_update_order_status(order_id: int, status: str, user: dict = Depends(require_role(*ROLES_KAMI_STREET))):
     valid_statuses = ["pending", "processing", "completed", "cancelled", "refunded", "failed", "on-hold"]
     if status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Statut invalide. Valeurs acceptées: {', '.join(valid_statuses)}")
