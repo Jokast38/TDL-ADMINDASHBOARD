@@ -30,9 +30,11 @@ STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
 
 # Permission groups
-ROLES_ALL_STAFF = ("admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial")
+ROLES_ALL_STAFF = ("admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial")
 ROLES_ADMIN_STAFF = ("admin", "responsable_admission", "agent_admin")
 ROLES_DOSSIERS_MGMT = ("admin", "employe", "responsable_admission", "agent_admin")
 ROLES_DOCS_VIEW = ("admin", "employe", "responsable_admission", "agent_admin")
 ROLES_ANIMATEUR_PLUS = ("admin", "animateur")
-ROLES_LEADS = ("admin", "employe", "responsable_admission", "agent_admin", "commercial")
+ROLES_LEADS = ("admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial")
+ROLES_TEAM_MGMT = ("admin", "responsable_commercial")
+ROLES_KAMI_STREET = ("admin", "employe", "commercial", "responsable_commercial")

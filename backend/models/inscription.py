@@ -10,6 +10,13 @@ class InscriptionIn(BaseModel):
     notes: Optional[str] = ""
 
 
+class InscriptionUpdate(BaseModel):
+    student_name: Optional[str] = None
+    student_phone: Optional[str] = None
+    payment_status: Optional[str] = None
+    notes: Optional[str] = None
+
+
 class DossierUpdate(BaseModel):
     status: Optional[str] = None
     notes: Optional[str] = None

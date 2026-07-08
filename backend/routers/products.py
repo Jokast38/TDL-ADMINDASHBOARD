@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.database import db
 from core.security import require_role
 from core.utils import now_iso
+from core.config import ROLES_KAMI_STREET
 from models.product import ProductIn, OrderIn
 from services.n8n import trigger_n8n
 from services.email import send_email
@@ -69,11 +70,11 @@ async def create_order(payload: OrderIn):
 
 
 @router.get("/orders")
-async def list_orders(user: dict = Depends(require_role("admin", "employe"))):
+async def list_orders(user: dict = Depends(require_role(*ROLES_KAMI_STREET))):
     return await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
 
 @router.put("/orders/{oid}")
-async def update_order(oid: str, status: str, user: dict = Depends(require_role("admin", "employe"))):
+async def update_order(oid: str, status: str, user: dict = Depends(require_role(*ROLES_KAMI_STREET))):
     await db.orders.update_one({"id": oid}, {"$set": {"status": status, "updated_at": now_iso()}})
     return await db.orders.find_one({"id": oid}, {"_id": 0})

@@ -10,7 +10,7 @@ from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_DOCS_VIEW
 from models.document import GeneratedDocIn
-from services.pdf import render_html_pdf
+from services.pdf import render_html_pdf, overlay_signature_on_pdf
 
 router = APIRouter(prefix="/documents-generated", tags=["generated-docs"])
 
@@ -79,3 +79,29 @@ async def download_generated_doc(gid: str, user: dict = Depends(get_current_user
 async def delete_generated_doc(gid: str, user: dict = Depends(require_role("admin"))):
     await db.generated_docs.delete_one({"id": gid})
     return {"ok": True}
+
+
+@router.put("/{gid}/sign")
+async def sign_generated_doc(gid: str, user: dict = Depends(require_role(*ROLES_DOCS_VIEW))):
+    """Appose la signature électronique personnelle de l'utilisateur connecté
+    sur la dernière page du document (voir POST /me/signature pour l'enregistrer
+    au préalable). Le cachet de l'entreprise reste physique, apposé après
+    impression : ceci ne concerne que la signature individuelle."""
+    doc = await db.generated_docs.find_one({"id": gid}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+    signer = await db.users.find_one({"id": user["id"]}, {"_id": 0, "signature_path": 1})
+    if not signer or not signer.get("signature_path"):
+        raise HTTPException(status_code=400, detail="Aucune signature enregistrée — ajoutez votre signature dans votre profil")
+    pdf_bytes, _ = await get_object(doc["storage_path"])
+    sig_bytes, _ = await get_object(signer["signature_path"])
+    signed_at = now_iso()
+    signed_pdf = await asyncio.to_thread(
+        overlay_signature_on_pdf, pdf_bytes, sig_bytes, user.get("name", ""), signed_at[:10]
+    )
+    result = await put_object(doc["storage_path"], signed_pdf, "application/pdf")
+    await db.generated_docs.update_one({"id": gid}, {"$set": {
+        "signed": True, "signed_by": user["id"], "signed_by_name": user.get("name"),
+        "signed_at": signed_at, "size": result["size"],
+    }})
+    return await db.generated_docs.find_one({"id": gid}, {"_id": 0})

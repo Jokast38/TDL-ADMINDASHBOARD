@@ -102,6 +102,48 @@ def generate_attestation_pdf(
     return buf.getvalue()
 
 
+def overlay_signature_on_pdf(pdf_bytes: bytes, signature_png: bytes, signer_name: str, signed_at_label: str) -> bytes:
+    """Appose l'image de signature de l'utilisateur (+ une mention) en bas à
+    droite de la DERNIÈRE page d'un PDF déjà généré. Le cachet et la signature
+    de l'entreprise restent physiques (apposés après impression) : ceci ne
+    concerne que la signature individuelle d'un utilisateur du dashboard."""
+    import io as _io
+    from pypdf import PdfReader, PdfWriter
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.lib.units import cm
+    from reportlab.lib.utils import ImageReader
+
+    reader = PdfReader(_io.BytesIO(pdf_bytes))
+    last_page = reader.pages[-1]
+    page_w = float(last_page.mediabox.width)
+    page_h = float(last_page.mediabox.height)
+
+    overlay_buf = _io.BytesIO()
+    c = rl_canvas.Canvas(overlay_buf, pagesize=(page_w, page_h))
+    try:
+        img = ImageReader(_io.BytesIO(signature_png))
+        c.drawImage(
+            img, page_w - 7 * cm, 2.6 * cm, width=5 * cm, height=2.3 * cm,
+            mask='auto', preserveAspectRatio=True, anchor='sw'
+        )
+    except Exception:
+        pass
+    c.setFont("Helvetica-Oblique", 8)
+    c.drawRightString(page_w - 2 * cm, 2.3 * cm, f"Signé électroniquement par {signer_name} le {signed_at_label}")
+    c.save()
+    overlay_buf.seek(0)
+    overlay_page = PdfReader(overlay_buf).pages[0]
+
+    writer = PdfWriter()
+    for i, page in enumerate(reader.pages):
+        if i == len(reader.pages) - 1:
+            page.merge_page(overlay_page)
+        writer.add_page(page)
+    out = _io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
 def render_html_pdf(html: str) -> bytes:
     from xhtml2pdf import pisa
     import io as _io

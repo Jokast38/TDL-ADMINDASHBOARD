@@ -1,16 +1,20 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import Response
 
 from core.database import db
 from core.security import hash_password, get_current_user, require_role
-from core.storage import put_object
+from core.storage import put_object, get_object
 from core.utils import now_iso
-from core.config import APP_NAME, ROLES_ALL_STAFF
+from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
 from models.employee import EmployeeIn, AccountStatusIn
 
 router = APIRouter(tags=["employees"])
 
-VALID_STAFF_ROLES = ("admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial")
+VALID_STAFF_ROLES = (
+    "admin", "employe", "animateur", "responsable_admission", "agent_admin",
+    "commercial", "responsable_commercial",
+)
 
 
 async def _get_or_create_staff_profile(uid: str) -> dict:
@@ -27,19 +31,27 @@ async def list_users(user: dict = Depends(require_role("admin"))):
     return await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(1000)
 
 
+# Le responsable commercial gère uniquement l'équipe commerciale, pas tout le
+# staff (admins, animateurs...) : on restreint son périmètre à ce rôle.
+MANAGEABLE_ROLES_BY_MANAGER = ("commercial",)
+
+
 @router.get("/employees")
-async def list_employees(user: dict = Depends(require_role("admin"))):
+async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
+    roles = list(VALID_STAFF_ROLES) if user["role"] == "admin" else list(MANAGEABLE_ROLES_BY_MANAGER)
     return await db.users.find(
-        {"role": {"$in": list(VALID_STAFF_ROLES)}},
+        {"role": {"$in": roles}},
         {"_id": 0, "password_hash": 0}
     ).to_list(500)
 
 
 @router.post("/employees")
-async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role("admin"))):
+async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
     existing = await db.users.find_one({"email": payload.email.lower()})
     if existing:
         raise HTTPException(status_code=400, detail="Email déjà utilisé")
+    if user["role"] != "admin" and payload.role not in MANAGEABLE_ROLES_BY_MANAGER:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez créer que des comptes commerciaux")
     role = payload.role if payload.role in VALID_STAFF_ROLES else "employe"
     doc = {
         "id": str(uuid.uuid4()), "email": payload.email.lower(), "name": payload.name,
@@ -54,7 +66,7 @@ async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role
 
 
 @router.put("/employees/{uid}/status")
-async def update_employee_status(uid: str, payload: AccountStatusIn, user: dict = Depends(require_role("admin"))):
+async def update_employee_status(uid: str, payload: AccountStatusIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
     if payload.account_status not in ("actif", "suspendu", "archive"):
         raise HTTPException(status_code=400, detail="Statut invalide (actif, suspendu, archive)")
     if uid == user["id"] and payload.account_status != "actif":
@@ -62,6 +74,8 @@ async def update_employee_status(uid: str, payload: AccountStatusIn, user: dict 
     target = await db.users.find_one({"id": uid}, {"_id": 0})
     if not target:
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user["role"] != "admin" and target.get("role") not in MANAGEABLE_ROLES_BY_MANAGER:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes commerciaux")
     await db.users.update_one({"id": uid}, {"$set": {
         "account_status": payload.account_status,
         "active": payload.account_status == "actif",
@@ -111,6 +125,38 @@ async def upload_my_profile_document(
     )
     doc.pop("_id", None)
     return doc
+
+
+@router.post("/me/signature")
+async def upload_my_signature(file: UploadFile = File(...), user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+    """Enregistre la signature manuscrite de l'utilisateur (image PNG, ex: capturée
+    via un pad de signature) pour qu'elle puisse être apposée sur les documents
+    qu'il génère (voir /documents-generated/{id}/sign)."""
+    data = await file.read()
+    if len(data) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image trop volumineuse (max 2MB)")
+    path = f"{APP_NAME}/signatures/{user['id']}.png"
+    result = await put_object(path, data, file.content_type or "image/png")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"signature_path": result["path"], "signature_updated_at": now_iso()}}
+    )
+    return {"ok": True}
+
+
+@router.delete("/me/signature")
+async def delete_my_signature(user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+    await db.users.update_one({"id": user["id"]}, {"$unset": {"signature_path": ""}})
+    return {"ok": True}
+
+
+@router.get("/me/signature/image")
+async def get_my_signature_image(user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "signature_path": 1})
+    if not u or not u.get("signature_path"):
+        raise HTTPException(status_code=404, detail="Aucune signature enregistrée")
+    data, ct = await get_object(u["signature_path"])
+    return Response(content=data, media_type=ct or "image/png")
 
 
 @router.get("/staff/{uid}/profile")

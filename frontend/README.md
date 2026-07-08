@@ -45,7 +45,7 @@ PROJET-ADMINDASHBOARD/
 │   │   ├── document.py               # GeneratedDocIn
 │   │   ├── employee.py               # EmployeeIn, AccountStatusIn
 │   │   ├── formation.py              # FormationIn, FormationUpdate
-│   │   ├── inscription.py            # InscriptionIn
+│   │   ├── inscription.py            # InscriptionIn, InscriptionUpdate, DossierUpdate
 │   │   ├── lead.py                   # LeadIn, LeadUpdate, LeadImportJsonIn, LeadRelanceIn
 │   │   ├── product.py                # ProductIn
 │   │   ├── settings.py               # SettingsIn
@@ -59,11 +59,11 @@ PROJET-ADMINDASHBOARD/
 │   │   ├── doc_templates.py          # CRUD /api/doc-templates — modèles de documents
 │   │   ├── documents.py              # /api/dossiers/:id/documents — upload/download
 │   │   ├── emargements.py            # POST /api/emargements — signature + PDF attestation
-│   │   ├── employees.py              # CRUD /api/employees — gestion collaborateurs
+│   │   ├── employees.py              # CRUD /api/employees — gestion collaborateurs + signature perso (/me/signature)
 │   │   ├── formations.py             # CRUD /api/formations — catalogue formations
-│   │   ├── generated_docs.py         # POST /api/documents-generated — génération PDF
+│   │   ├── generated_docs.py         # POST /api/documents-generated — génération + signature PDF
 │   │   ├── health.py                 # GET /api/health — healthcheck
-│   │   ├── inscriptions.py           # CRUD /api/inscriptions — inscriptions stagiaires
+│   │   ├── inscriptions.py           # CRUD /api/inscriptions — modification, annulation, réactivation
 │   │   ├── leads.py                  # CRUD /api/leads — CRM + import Excel/JSON
 │   │   ├── products.py               # CRUD /api/products — catalogue KAMI Street
 │   │   ├── settings.py               # GET/PUT /api/settings — paramètres globaux
@@ -71,9 +71,9 @@ PROJET-ADMINDASHBOARD/
 │   │   └── wordpress.py              # /api/wordpress/* — WooCommerce, WP, GA4
 │   │
 │   ├── services/                     # Logique métier externe (tous non-bloquants)
-│   │   ├── email.py                  # send_email() — Resend / SendGrid / SMTP
+│   │   ├── email.py                  # send_email() — Resend / SendGrid / SMTP (force IPv4 en SMTP)
 │   │   ├── n8n.py                    # trigger_n8n() — webhooks n8n
-│   │   ├── pdf.py                    # generate_attestation_pdf(), render_html_pdf()
+│   │   ├── pdf.py                    # generate_attestation_pdf(), render_html_pdf(), overlay_signature_on_pdf()
 │   │   ├── trello.py                 # TrelloService — création/déplacement de cartes
 │   │   └── wordpress.py              # fetch_wp_content_stats(), fetch_ga4_traffic()
 │   │
@@ -82,6 +82,12 @@ PROJET-ADMINDASHBOARD/
 │       ├── test_blog.py
 │       ├── test_seo_smtp.py
 │       └── test_sprint3.py
+│
+├── scraper/                           # Scraper Playwright ProStages (hors app principale)
+│   ├── scraper.py                     # Extraction stages/stagiaires (nom, email, tél.)
+│   ├── auth_setup.py                  # Sauvegarde de session (storage_state.json)
+│   ├── export_to_leads.py             # Importe les stagiaires récupérés comme leads CRM
+│   └── config.py                      # Sélecteurs, filtres, chemins de sortie
 │
 └── frontend/                         # SPA React
     ├── package.json
@@ -164,16 +170,16 @@ PROJET-ADMINDASHBOARD/
 
 | Module | Description |
 |---|---|
-| **Authentification** | Login JWT, rôles : `admin`, `employe`, `animateur`, `etudiant`, `responsable_admission`, `commercial` |
+| **Authentification** | Login JWT, rôles : `admin`, `employe`, `animateur`, `etudiant`, `responsable_admission`, `agent_admin`, `commercial`, `responsable_commercial` |
 | **Dashboard** | KPIs temps réel : inscriptions, chiffre d'affaires, dossiers, commandes WooCommerce |
 | **Formations** | Catalogue CACES, VTC/Taxi, SSIAP, Permis B, récupération de points |
-| **Inscriptions & Dossiers** | Cycle complet admission → vérification → soumission ANTS |
+| **Inscriptions & Dossiers** | Cycle complet admission → vérification → soumission ANTS ; modification, annulation et réactivation d'une inscription |
 | **Stages & Émargements** | Planning sessions, signature électronique, attestations PDF auto |
-| **CRM Leads** | Import Excel (TDL multi-format, auto-détection colonnes), relance email groupée, dédoublonnage |
-| **Documents** | Upload/download sécurisé, modèles HTML variables, génération PDF à la demande |
-| **Collaborateurs** | Création comptes staff, gestion rôles, profils + documents RH |
+| **CRM Leads** | Import Excel/JSON (TDL multi-format, auto-détection colonnes), regroupement des intérêts par mots-clés (bucket "Inconnus"), édition, inscription directe à une formation, relance email groupée, dédoublonnage |
+| **Documents** | Upload/download sécurisé, modèles HTML variables, génération PDF à la demande, signature électronique personnelle apposée sur le PDF (cachet/signature d'entreprise restent physiques, apposés après impression) |
+| **Collaborateurs** | Création comptes staff, gestion rôles, profils + documents RH ; `responsable_commercial` gère l'équipe `commercial` uniquement |
 | **Blog** | Rédaction, SEO (slug auto), publication/dépublication |
-| **KAMI Street** | Catalogue produits, commandes WooCommerce, stats site WordPress + GA4 |
+| **KAMI Street** | Catalogue produits, commandes WooCommerce, stats site WordPress + GA4 — accessible aussi aux rôles `commercial`/`responsable_commercial` |
 | **Intégrations** | Email (Resend/SendGrid/SMTP), Trello, n8n, WooCommerce, Google Analytics 4 |
 | **IA** | Assistant Gemini contextualisé (formations, inscriptions, leads) |
 
@@ -192,6 +198,9 @@ DELETE /api/formations/:id
 
 GET    /api/inscriptions
 POST   /api/inscriptions
+PUT    /api/inscriptions/:id
+POST   /api/inscriptions/:id/cancel
+POST   /api/inscriptions/:id/reactivate
 
 GET    /api/leads
 POST   /api/leads
@@ -213,10 +222,16 @@ GET    /api/doc-templates
 POST   /api/doc-templates
 POST   /api/documents-generated
 GET    /api/documents-generated/:id/download
+PUT    /api/documents-generated/:id/sign
 
 GET    /api/employees
 POST   /api/employees
+PUT    /api/employees/:id/status
 GET    /api/users
+
+POST   /api/me/signature
+DELETE /api/me/signature
+GET    /api/me/signature/image
 
 GET    /api/settings
 PUT    /api/settings
@@ -296,8 +311,24 @@ TRELLO_API_TOKEN=
 ### Frontend — `frontend/.env`
 
 ```env
-REACT_APP_API_URL=http://localhost:8000
+REACT_APP_BACKEND_URL=http://localhost:8000
+WDS_SOCKET_PORT=443
+ENABLE_HEALTH_CHECK=false
 ```
+
+Modèles sans secrets : `backend/.env.example` et `frontend/.env.example` (à copier avant de renseigner les vraies valeurs).
+
+---
+
+## Déploiement
+
+Backend sur **Render**, frontend sur **Vercel** — guide complet pas-à-pas dans [`DEPLOY.md`](../DEPLOY.md) (variables d'env à configurer, `render.yaml`, `vercel.json`, CORS).
+
+Points clés à retenir :
+- `CORS_ORIGINS` (backend) doit être l'URL exacte du frontend déployé (`https://...vercel.app`), ou `*` pour tout autoriser (le backend bascule alors en mode "reflète l'origine" pour rester compatible avec les cookies/`withCredentials`).
+- `GA4_SERVICE_ACCOUNT_JSON` : sur Render, coller le JSON du compte de service GA4 en variable d'env (pas de fichier local disponible) — alternative à `GA4_SERVICE_ACCOUNT_PATH` utilisé en local.
+- `backend/runtime.txt` / `.python-version` fixent Python 3.11 sur Render (évite des conflits de résolution pip avec les libs Google/gRPC sous Python 3.14).
+- L'envoi SMTP force la résolution DNS en IPv4 (`services/email.py`) pour éviter les erreurs `Network is unreachable` propres à certains hébergeurs cloud.
 
 ---
 
@@ -306,12 +337,15 @@ REACT_APP_API_URL=http://localhost:8000
 | Rôle | Accès |
 |---|---|
 | `admin` | Accès total |
-| `employe` | Dashboard, formations, inscriptions, leads, blog |
+| `employe` | Dashboard, formations, inscriptions, leads, blog, KAMI Street |
 | `responsable_admission` | Dossiers, inscriptions, leads |
-| `commercial` | Leads, marketing |
+| `agent_admin` | Dossiers, documents, inscriptions, leads |
+| `commercial` | Leads, KAMI Street (produits + commandes) |
+| `responsable_commercial` | Dashboard, Leads, KAMI Street, gestion de l'équipe `commercial` (création/statut, pas de suppression) |
 | `animateur` | Ses propres stages, émargements, attestations |
-| `agent_admin` | Dossiers, documents |
 | `etudiant` | Son propre espace, ses documents |
+
+La sidebar (`components/Layout.jsx`) n'affiche que les entrées de menu autorisées pour le rôle connecté — un rôle sans accès à une page ne voit tout simplement pas le bouton correspondant.
 
 ---
 
@@ -323,9 +357,11 @@ Le module CRM détecte automatiquement le format du fichier Excel importé :
 2. **Format générique avec en-têtes** — détection par nom de colonne (prenom, nom, email, tel…)
 3. **Sans en-têtes** — détection par contenu : colonne `@` → email, ≥ 8 chiffres → téléphone, colonnes juste avant l'email → nom/prénom, colonne 0 si mots-clés formation → intérêt
 
-Les intérêts sont normalisés automatiquement : `vtc`, `VTC`, `VTC ` → **VTC** ; `PASSERELLE TAXI`, `passerelle taxi` → **Passerelle Taxi** ; etc.
+Les intérêts sont normalisés à l'import (`vtc`, `VTC`, `VTC ` → **VTC** ; `PASSERELLE TAXI`, `passerelle taxi` → **Passerelle Taxi** ; etc.), et le filtre par intérêt de la page Leads regroupe en plus par mots-clés côté frontend (accents/casse/mots ajoutés ignorés) — tout ce qui ne correspond à aucun mot-clé connu est classé dans **Inconnus**.
 
 Les doublons sont ignorés à l'import (dédoublonnage par email puis par téléphone).
+
+`scraper/export_to_leads.py` permet d'importer les stagiaires récupérés par le scraper ProStages (`scraper/scraper.py`) directement comme leads (uniquement ceux ayant un email ou un téléphone).
 
 ---
 
@@ -335,3 +371,4 @@ Les doublons sont ignorés à l'import (dédoublonnage par email puis par télé
 - Le démarrage du serveur est non-bloquant : indexes MongoDB et seed des données se font en tâche de fond (`asyncio.create_task`).
 - Le dashboard React charge les données critiques (stats, users) en premier, puis les données secondaires (WooCommerce, WordPress) en arrière-plan sans bloquer l'affichage.
 - Les actions partielles du dashboard (afficher plus de produits, changer statut commande, sauvegarder produit) font des mises à jour optimistes sans recharger toute la page.
+- Signature électronique : chaque utilisateur enregistre sa signature manuscrite une fois (pad `react-signature-canvas`, `POST /api/me/signature`) ; le bouton "Signer" d'un document généré appose cette image + une mention horodatée sur la dernière page du PDF (`overlay_signature_on_pdf`, via `pypdf`/`reportlab`). Le cachet et la signature officielle de TDL Formation restent physiques, apposés après impression — ce mécanisme ne concerne que la signature individuelle d'un utilisateur du dashboard.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, API } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { FilePdf, DownloadSimple, MagnifyingGlass, Plus, FileText, Trash, Warning } from "@phosphor-icons/react";
+import { FilePdf, DownloadSimple, MagnifyingGlass, Plus, FileText, Trash, Warning, PenNib, Eraser } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import SignatureCanvas from "react-signature-canvas";
 
 const TYPES = ["all", "attestation_presence", "attestation", "facture", "devis", "convention", "autre"];
 
@@ -71,6 +72,18 @@ export default function DocumentsLibrary() {
   const [ctxJson, setCtxJson] = useState('{\n  "_info": "Sélectionnez un modèle ci-dessus : le contexte se pré-remplit automatiquement."\n}');
   const [deletingId, setDeletingId] = useState(null);
 
+  const [sigOpen, setSigOpen] = useState(false);
+  const [hasSignature, setHasSignature] = useState(false);
+  const [signatureUrl, setSignatureUrl] = useState(null);
+  const [savingSig, setSavingSig] = useState(false);
+  const sigPadRef = useRef(null);
+
+  const checkSignature = () => {
+    api.get("/me/signature/image", { responseType: "blob" })
+      .then((r) => { setHasSignature(true); setSignatureUrl(URL.createObjectURL(r.data)); })
+      .catch(() => { setHasSignature(false); setSignatureUrl(null); });
+  };
+
   const load = () => {
     const params = type === "all" ? {} : { params: { type_doc: type } };
     api.get("/documents-generated", params).then((r) => setItems(r.data));
@@ -78,6 +91,7 @@ export default function DocumentsLibrary() {
 
   useEffect(() => { load(); }, [type]);
   useEffect(() => { api.get("/doc-templates").then((r) => setTemplates(r.data)); }, []);
+  useEffect(() => { checkSignature(); }, []);
 
   const filtered = items.filter((d) => (d.nom_fichier + (d.template_nom || "") + (d.type_doc || "")).toLowerCase().includes(q.toLowerCase()));
 
@@ -119,6 +133,55 @@ export default function DocumentsLibrary() {
     }
   };
 
+  const signDocument = async (id) => {
+    try {
+      await api.put(`/documents-generated/${id}/sign`);
+      toast.success("Document signé");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la signature");
+    }
+  };
+
+  // Convertit une dataURL base64 en Blob à la main : plus fiable que
+  // fetch(dataUrl), que certains navigateurs/CSP bloquent sur les URI data:.
+  const dataUrlToBlob = (dataUrl) => {
+    const [header, base64] = dataUrl.split(",");
+    const mimeMatch = header.match(/data:(.*?);base64/);
+    const mime = mimeMatch ? mimeMatch[1] : "image/png";
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  };
+
+  const saveSignature = async () => {
+    if (!sigPadRef.current || sigPadRef.current.isEmpty()) return toast.error("Dessinez votre signature d'abord");
+    setSavingSig(true);
+    try {
+      const dataUrl = sigPadRef.current.getCanvas().toDataURL("image/png");
+      const blob = dataUrlToBlob(dataUrl);
+      const fd = new FormData();
+      fd.append("file", blob, "signature.png");
+      await api.post("/me/signature", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success("Signature enregistrée");
+      setSigOpen(false);
+      checkSignature();
+    } catch (e) {
+      console.error("Erreur enregistrement signature:", e);
+      toast.error(e.response?.data?.detail || e.message || "Erreur");
+    }
+    finally { setSavingSig(false); }
+  };
+
+  const removeSignature = async () => {
+    try {
+      await api.delete("/me/signature");
+      toast.success("Signature supprimée");
+      checkSignature();
+    } catch { toast.error("Erreur"); }
+  };
+
   const deleteDocument = async (id) => {
     try {
       await api.delete(`/documents-generated/${id}`);
@@ -138,6 +201,54 @@ export default function DocumentsLibrary() {
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Documents générés</h1>
           <p className="text-gray-500 mt-2">{items.length} PDF — attestations signées, factures, devis, conventions.</p>
         </div>
+        <div className="flex gap-2">
+        <Dialog open={sigOpen} onOpenChange={setSigOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" data-testid="my-signature-btn">
+              <PenNib size={16} className="mr-1" /> Ma signature {hasSignature ? "✓" : ""}
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Ma signature manuscrite</DialogTitle></DialogHeader>
+            <p className="text-xs text-gray-500">
+              Cette signature sera apposée automatiquement sur les documents que vous signez
+              (bouton <PenNib size={11} className="inline" /> dans la liste). Le cachet et la signature
+              officielle de TDL Formation restent apposés physiquement après impression.
+            </p>
+            {hasSignature && signatureUrl && (
+              <div className="border border-gray-200 rounded-md p-3 bg-gray-50">
+                <p className="text-xs font-medium mb-1">Signature actuelle :</p>
+                <img src={signatureUrl} alt="Signature enregistrée" className="h-16" />
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-medium mb-1">{hasSignature ? "Remplacer par une nouvelle signature" : "Dessinez votre signature"}</p>
+              <div className="border-2 border-dashed border-gray-300 rounded-md bg-white">
+                <SignatureCanvas
+                  ref={sigPadRef}
+                  canvasProps={{ width: 460, height: 160, className: "w-full rounded-md" }}
+                  penColor="#0a0a0a"
+                />
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => sigPadRef.current?.clear()} className="mt-1">
+                <Eraser size={12} className="mr-1" /> Effacer
+              </Button>
+            </div>
+            <div className="flex justify-between gap-2 mt-2">
+              {hasSignature ? (
+                <Button variant="outline" className="border-red-300 text-red-600 hover:bg-red-50" onClick={removeSignature}>
+                  Supprimer ma signature
+                </Button>
+              ) : <span />}
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setSigOpen(false)}>Fermer</Button>
+                <Button onClick={saveSignature} disabled={savingSig} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+                  {savingSig ? "Enregistrement..." : "Enregistrer"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
         <Dialog open={genOpen} onOpenChange={setGenOpen}>
           <DialogTrigger asChild>
             <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="gen-doc-btn">
@@ -182,6 +293,7 @@ export default function DocumentsLibrary() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 items-center">
@@ -230,6 +342,11 @@ export default function DocumentsLibrary() {
                     <div className="inline-flex gap-1">
                       <button onClick={() => view(d.id)} className="p-1.5 hover:bg-gray-100 rounded" title="Voir"><FileText size={14} /></button>
                       <button onClick={() => download(d.id, d.nom_fichier)} className="p-1.5 hover:bg-gray-100 rounded" title="Télécharger" data-testid={`dl-${d.id}`}><DownloadSimple size={14} /></button>
+                      {!d.signed && (
+                        <button onClick={() => signDocument(d.id)} className="p-1.5 hover:bg-gray-100 rounded text-[#d4af37]" title="Signer avec ma signature enregistrée" data-testid={`sign-${d.id}`}>
+                          <PenNib size={14} />
+                        </button>
+                      )}
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <button 

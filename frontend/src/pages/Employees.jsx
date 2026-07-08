@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,8 @@ const STATUS_BADGE = {
 const STATUS_LABEL = { actif: "Actif", suspendu: "Suspendu", archive: "Archivé" };
 
 export default function Employees() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
@@ -75,7 +78,7 @@ export default function Employees() {
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Employés</h1>
           <p className="text-gray-500 mt-2">{items.length} membre(s).</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (v && !isAdmin) setForm((f) => ({ ...f, role: "commercial" })); }}>
           <DialogTrigger asChild>
             <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="add-employee-btn">
               <Plus size={16} className="mr-2" /> Nouvel employé
@@ -101,11 +104,19 @@ export default function Employees() {
                 <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="employe">Employé</SelectItem>
-                    <SelectItem value="animateur">Animateur / Formateur</SelectItem>
-                    <SelectItem value="responsable_admission">Responsable admission</SelectItem>
-                    <SelectItem value="agent_admin">Agent administratif</SelectItem>
-                    <SelectItem value="admin">Administrateur</SelectItem>
+                    {isAdmin ? (
+                      <>
+                        <SelectItem value="employe">Employé</SelectItem>
+                        <SelectItem value="animateur">Animateur / Formateur</SelectItem>
+                        <SelectItem value="responsable_admission">Responsable admission</SelectItem>
+                        <SelectItem value="agent_admin">Agent administratif</SelectItem>
+                        <SelectItem value="commercial">Commercial</SelectItem>
+                        <SelectItem value="responsable_commercial">Responsable commercial</SelectItem>
+                        <SelectItem value="admin">Administrateur</SelectItem>
+                      </>
+                    ) : (
+                      <SelectItem value="commercial">Commercial</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -193,9 +204,11 @@ export default function Employees() {
                             <Play size={14} />
                           </button>
                         )}
-                        <button onClick={() => remove(u.id)} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Supprimer définitivement">
-                          <Trash size={14} />
-                        </button>
+                        {isAdmin && (
+                          <button onClick={() => remove(u.id)} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Supprimer définitivement">
+                            <Trash size={14} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

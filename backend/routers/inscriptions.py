@@ -6,7 +6,7 @@ from core.database import db
 from core.security import hash_password, get_current_user, require_role
 from core.utils import now_iso
 from core.config import ROLES_DOSSIERS_MGMT
-from models.inscription import InscriptionIn, DossierUpdate
+from models.inscription import InscriptionIn, InscriptionUpdate, DossierUpdate
 from services.trello import TrelloService
 from services.n8n import trigger_n8n
 from services.email import send_email
@@ -45,7 +45,7 @@ async def create_inscription(payload: InscriptionIn):
         "student_id": user_id, "student_name": payload.student_name,
         "student_email": payload.student_email.lower(), "student_phone": payload.student_phone,
         "price": formation.get("price", 0), "payment_status": "pending",
-        "notes": payload.notes or "", "created_at": now_iso()
+        "status": "active", "notes": payload.notes or "", "created_at": now_iso()
     }
     await db.inscriptions.insert_one(inscription)
 
@@ -85,6 +85,37 @@ async def create_inscription(payload: InscriptionIn):
 @router.get("/inscriptions")
 async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
     return await db.inscriptions.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+
+@router.put("/inscriptions/{iid}")
+async def update_inscription(iid: str, payload: InscriptionUpdate, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    existing = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    update = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if not update:
+        raise HTTPException(status_code=400, detail="Aucune modification fournie")
+    update["updated_at"] = now_iso()
+    await db.inscriptions.update_one({"id": iid}, {"$set": update})
+    return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+
+
+@router.post("/inscriptions/{iid}/cancel")
+async def cancel_inscription(iid: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    existing = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    await db.inscriptions.update_one({"id": iid}, {"$set": {"status": "annulee", "updated_at": now_iso()}})
+    return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+
+
+@router.post("/inscriptions/{iid}/reactivate")
+async def reactivate_inscription(iid: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    existing = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    await db.inscriptions.update_one({"id": iid}, {"$set": {"status": "active", "updated_at": now_iso()}})
+    return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
 
 
 @router.get("/dossiers/me")

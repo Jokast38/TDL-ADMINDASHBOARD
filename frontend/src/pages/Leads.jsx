@@ -13,9 +13,39 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Plus, UploadSimple, FileXls, FileCode, MagnifyingGlass, Trash, Phone,
-  EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree
+  EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree, PencilSimple, GraduationCap
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+
+// ─── Regroupement des intérêts par mots-clés ─────────────────────────────────
+// Le texte libre saisi/importé varie beaucoup (casse, mots en plus, accents…) :
+// deux leads "VTC" et "Formation VTC complète" doivent finir dans le même
+// groupe de filtre. On classe donc par mot-clé plutôt que par égalité stricte,
+// et tout ce qui ne correspond à aucun mot-clé connu tombe dans "Inconnus".
+const stripAccents = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+const INTEREST_GROUPS = [
+  { label: "Passerelle VTC", test: (s) => s.includes("passerelle") && s.includes("vtc") },
+  { label: "Passerelle Taxi", test: (s) => s.includes("passerelle") && s.includes("taxi") },
+  { label: "Passerelle", test: (s) => s.includes("passerelle") },
+  { label: "Mobilité Taxi", test: (s) => s.includes("mobilit") && s.includes("taxi") },
+  { label: "Mobilité", test: (s) => s.includes("mobilit") },
+  { label: "Récupération points de permis", test: (s) => (s.includes("recuperation") || s.includes("rattrapage")) && s.includes("permis") },
+  { label: "Permis B", test: (s) => s.includes("permis b") },
+  { label: "VTC", test: (s) => s.includes("vtc") },
+  { label: "Taxi", test: (s) => s.includes("taxi") },
+  { label: "CACES", test: (s) => s.includes("caces") },
+  { label: "SSIAP", test: (s) => s.includes("ssiap") },
+  { label: "CRM", test: (s) => s.includes("crm") },
+  { label: "Stage", test: (s) => s.includes("stage") },
+];
+
+const canonicalizeInterest = (raw) => {
+  if (!raw || !raw.trim()) return "Inconnus";
+  const s = stripAccents(raw.trim().toLowerCase());
+  const group = INTEREST_GROUPS.find((g) => g.test(s));
+  return group ? group.label : "Inconnus";
+};
 
 // ─── Statuts ──────────────────────────────────────────────────────────────────
 const STATUS_LABEL = {
@@ -331,6 +361,17 @@ export default function Leads() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  const [editOpen, setEditOpen] = useState(false);
+  const [editLead, setEditLead] = useState(null);
+  const [editForm, setEditForm] = useState(emptyLead);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const [formations, setFormations] = useState([]);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [enrollLead, setEnrollLead] = useState(null);
+  const [enrollForm, setEnrollForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "" });
+  const [enrolling, setEnrolling] = useState(false);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -349,16 +390,22 @@ export default function Leads() {
   };
 
   useEffect(() => { load(); }, [statusFilter, contactedFilter, callOnlyFilter]);
+  useEffect(() => {
+    api.get("/formations", { params: { active_only: true } })
+      .then(({ data }) => setFormations(data))
+      .catch(() => {});
+  }, []);
   useEffect(() => { const t = setTimeout(load, 350); return () => clearTimeout(t); }, [q]);
 
   const uniqueInterests = useMemo(() => {
-    const s = new Set(items.map((i) => i.interest).filter(Boolean));
-    return Array.from(s).sort();
+    const s = new Set(items.map((i) => canonicalizeInterest(i.interest)));
+    const sorted = Array.from(s).filter((v) => v !== "Inconnus").sort();
+    return s.has("Inconnus") ? [...sorted, "Inconnus"] : sorted;
   }, [items]);
 
   const filteredItems = useMemo(() => {
     if (interestFilter === "all") return items;
-    return items.filter((i) => i.interest === interestFilter);
+    return items.filter((i) => canonicalizeInterest(i.interest) === interestFilter);
   }, [items, interestFilter]);
 
   const toggleSelect = (id) =>
@@ -403,6 +450,60 @@ export default function Leads() {
   const deleteLead = async (id) => {
     try { await api.delete(`/leads/${id}`); toast.success("Lead supprimé"); load(); }
     catch { toast.error("Erreur"); }
+  };
+
+  const openEdit = (lead) => {
+    setEditLead(lead);
+    setEditForm({
+      name: lead.name || "", email: lead.email || "", phone: lead.phone || "",
+      interest: lead.interest || "", notes: lead.notes || "", tags: lead.tags || [],
+    });
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!editLead) return;
+    if (!editForm.name.trim()) return toast.error("Le nom est requis");
+    setSavingEdit(true);
+    try {
+      await api.put(`/leads/${editLead.id}`, {
+        name: editForm.name, email: editForm.email || null, phone: editForm.phone || null,
+        interest: editForm.interest, notes: editForm.notes,
+      });
+      toast.success("Lead mis à jour");
+      setEditOpen(false);
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+    finally { setSavingEdit(false); }
+  };
+
+  const openEnroll = (lead) => {
+    setEnrollLead(lead);
+    setEnrollForm({
+      formation_id: formations[0]?.id || "",
+      name: lead.name || "", email: lead.email || "", phone: lead.phone || "", notes: "",
+    });
+    setEnrollOpen(true);
+  };
+
+  const submitEnroll = async () => {
+    if (!enrollForm.formation_id) return toast.error("Choisissez une formation");
+    if (!enrollForm.name.trim()) return toast.error("Le nom est requis");
+    if (!enrollForm.email.trim()) return toast.error("Un email est requis pour créer l'inscription");
+    setEnrolling(true);
+    try {
+      await api.post("/inscriptions", {
+        formation_id: enrollForm.formation_id,
+        student_name: enrollForm.name,
+        student_email: enrollForm.email,
+        student_phone: enrollForm.phone || null,
+        notes: enrollForm.notes,
+      });
+      toast.success("Inscription créée");
+      if (enrollLead) updateLead(enrollLead.id, { status: "interesse" });
+      setEnrollOpen(false);
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur lors de l'inscription"); }
+    finally { setEnrolling(false); }
   };
 
   const bulkDelete = async () => {
@@ -785,7 +886,12 @@ export default function Leads() {
                     {l.email && <p className="flex items-center gap-1"><EnvelopeSimple size={12} /> {l.email}</p>}
                     {l.phone && <p className="flex items-center gap-1 text-gray-500"><Phone size={12} /> {l.phone}</p>}
                   </td>
-                  <td className="py-3 px-4 text-xs text-gray-600">{l.interest || "—"}</td>
+                  <td className="py-3 px-4 text-xs text-gray-600">
+                    {l.interest || "—"}
+                    {l.interest && (
+                      <span className="block text-[10px] text-gray-400">{canonicalizeInterest(l.interest)}</span>
+                    )}
+                  </td>
                   <td className="py-3 px-4">
                     <div className="flex flex-wrap gap-1 max-w-[180px]">
                       {(l.tags || []).map((t) => (
@@ -813,6 +919,21 @@ export default function Leads() {
                     </Select>
                   </td>
                   <td className="py-3 px-4 text-right">
+                    <div className="flex justify-end items-center gap-1">
+                      <button
+                        onClick={() => openEnroll(l)}
+                        className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded"
+                        title="Inscrire à une formation"
+                      >
+                        <GraduationCap size={14} />
+                      </button>
+                      <button
+                        onClick={() => openEdit(l)}
+                        className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
+                        title="Modifier"
+                      >
+                        <PencilSimple size={14} />
+                      </button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <button className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Supprimer">
@@ -834,6 +955,7 @@ export default function Leads() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -848,6 +970,88 @@ export default function Leads() {
           </table>
         </div>
       </Card>
+
+      {/* ── Modifier un lead ── */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Modifier le lead</DialogTitle></DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-sm font-medium">Nom</label>
+              <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Email</label>
+                <Input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Téléphone</label>
+                <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Intérêt / formation</label>
+              <Input value={editForm.interest} onChange={(e) => setEditForm({ ...editForm, interest: e.target.value })} placeholder="ex: VTC, TAXI, Stage récupération de points…" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Notes</label>
+              <Textarea rows={3} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={savingEdit}>Annuler</Button>
+            <Button onClick={saveEdit} disabled={savingEdit} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+              {savingEdit ? "Enregistrement..." : "Enregistrer"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Inscrire à une formation ── */}
+      <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Inscrire {enrollLead?.name} à une formation</DialogTitle></DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-sm font-medium">Formation</label>
+              <Select value={enrollForm.formation_id} onValueChange={(v) => setEnrollForm({ ...enrollForm, formation_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Choisir une formation" /></SelectTrigger>
+                <SelectContent>
+                  {formations.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>{f.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Nom</label>
+              <Input value={enrollForm.name} onChange={(e) => setEnrollForm({ ...enrollForm, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
+                <Input value={enrollForm.email} onChange={(e) => setEnrollForm({ ...enrollForm, email: e.target.value })} />
+                <p className="text-xs text-gray-400 mt-1">Requis pour créer l'inscription et envoyer la confirmation.</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Téléphone</label>
+                <Input value={enrollForm.phone} onChange={(e) => setEnrollForm({ ...enrollForm, phone: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Notes</label>
+              <Textarea rows={2} value={enrollForm.notes} onChange={(e) => setEnrollForm({ ...enrollForm, notes: e.target.value })} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setEnrollOpen(false)} disabled={enrolling}>Annuler</Button>
+            <Button onClick={submitEnroll} disabled={enrolling} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+              {enrolling ? "Inscription..." : "Inscrire"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -15,6 +15,7 @@ def _http_post(url: str, headers: dict, json_data: dict):
 
 def _smtp_send(host: str, port: int, use_tls: bool, user: str, password: str,
                from_addr: str, to: str, subject: str, body: str):
+    import socket
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
@@ -23,11 +24,27 @@ def _smtp_send(host: str, port: int, use_tls: bool, user: str, password: str,
     msg["From"] = from_addr
     msg["To"] = to
     msg.attach(MIMEText(body, "html"))
-    if use_tls:
-        server = smtplib.SMTP(host, port, timeout=15)
-        server.starttls()
-    else:
-        server = smtplib.SMTP_SSL(host, port, timeout=15)
+
+    # Sur certains hébergeurs (Render notamment), smtp.gmail.com se résout
+    # parfois en IPv6 alors que la route sortante IPv6 n'est pas disponible,
+    # ce qui fait échouer la connexion avec "Network is unreachable" même si
+    # l'IPv4 fonctionne très bien. On force donc la résolution DNS en IPv4
+    # uniquement, le temps d'établir la connexion.
+    original_getaddrinfo = socket.getaddrinfo
+
+    def _ipv4_only_getaddrinfo(host_, port_, family=0, type_=0, proto=0, flags=0):
+        return original_getaddrinfo(host_, port_, socket.AF_INET, type_, proto, flags)
+
+    socket.getaddrinfo = _ipv4_only_getaddrinfo
+    try:
+        if use_tls:
+            server = smtplib.SMTP(host, port, timeout=15)
+            server.starttls()
+        else:
+            server = smtplib.SMTP_SSL(host, port, timeout=15)
+    finally:
+        socket.getaddrinfo = original_getaddrinfo
+
     server.login(user, password)
     server.sendmail(from_addr, [to], msg.as_string())
     server.quit()

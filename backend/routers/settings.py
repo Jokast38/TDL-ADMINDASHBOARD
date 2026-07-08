@@ -28,13 +28,17 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(require_role
 async def integrations_status(user: dict = Depends(require_role("admin", "employe"))):
     s = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
     trello = await TrelloService.get_board_info()
+    email_provider = s.get("email_provider", "mock")
+    if email_provider == "smtp":
+        email_configured = bool(s.get("smtp_host") and s.get("smtp_user") and s.get("smtp_password"))
+    elif email_provider == "mock":
+        email_configured = True
+    else:
+        email_configured = bool(s.get("email_api_key"))
     return {
         "trello": trello,
         "stripe": {"configured": bool(s.get("stripe_secret_key"))},
-        "email": {
-            "provider": s.get("email_provider", "mock"),
-            "configured": bool(s.get("email_api_key")) if s.get("email_provider") != "mock" else True
-        },
+        "email": {"provider": email_provider, "configured": email_configured},
         "n8n": {
             "inscription": bool(s.get("n8n_webhook_inscription")),
             "dossier": bool(s.get("n8n_webhook_dossier")),
