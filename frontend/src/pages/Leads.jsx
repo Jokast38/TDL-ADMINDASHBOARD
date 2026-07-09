@@ -241,7 +241,7 @@ const TEMPLATES = {
        <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
          Consultez nos prochaines dates disponibles :
        </p>`,
-      "Voir les dates du stage →",
+      "Être recontacté →",
       TDL_CONTACT
     ),
   },
@@ -263,7 +263,7 @@ const TEMPLATES = {
        <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
          Renseignez-vous sur les prochaines sessions d'entrée :
        </p>`,
-      "Découvrir la formation ECSR →",
+      "Être recontacté →",
       TDL_CONTACT
     ),
   },
