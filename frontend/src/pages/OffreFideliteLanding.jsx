@@ -1,6 +1,17 @@
 import { useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { ArrowRight, Plus, Phone, Tag, Target, SealCheck, CalendarCheck, MapPin } from "@phosphor-icons/react";
+
+const AVANTAGES = [
+  { icon: Tag, label: "Tarif fidélité 189 €" },
+  { icon: Target, label: "Jusqu'à 4 points récupérables" },
+  { icon: SealCheck, label: "Stage agréé" },
+  { icon: CalendarCheck, label: "En seulement 2 jours" },
+  { icon: MapPin, label: "Épinay-sur-Seine" },
+];
 
 const SESSIONS = [
   { mois: "Juillet", items: [["20–21", "20 & 21 juillet"], ["24–25", "24 & 25 juillet"], ["29–30", "29 & 30 juillet"]] },
@@ -29,113 +40,44 @@ const FAQ = [
   { q: "En combien de temps suis-je rappelé ?", r: "Notre équipe vous recontacte sous 24h ouvrées après votre demande pour confirmer votre inscription et le tarif fidélité." },
 ];
 
-const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
-  .ofl{--asphalte:#1B2430;--asphalte-clair:#2C3746;--ivoire:#F1F2ED;--carte:#FFFFFF;--ambre:#E2B92B;--ambre-fonce:#C29F1F;--vert:#4F7A68;--vert-clair:#E4EEE9;--gris-texte:#5B6472;--radius:4px;
-    background:var(--ivoire);color:var(--asphalte);font-family:'Public Sans',sans-serif;line-height:1.5;}
-  .ofl *{box-sizing:border-box;}
-  .ofl h1,.ofl h2,.ofl h3{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.02em;margin:0;}
-  .ofl .mono{font-family:'IBM Plex Mono',monospace;}
-  .ofl a{color:inherit;}
-  .ofl .bandeau-route{height:6px;background-repeat:repeat-x;background-size:64px 6px;background-image:linear-gradient(90deg,var(--ambre) 0 32px,transparent 32px 64px);}
-  .ofl .wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
-  .ofl .hero{background:var(--asphalte);color:var(--ivoire);padding:64px 0 48px;position:relative;overflow:hidden;}
-  .ofl .hero .wrap{position:relative;z-index:1;max-width:760px;}
-  .ofl .badge-fidelite{display:inline-flex;align-items:center;gap:8px;background:rgba(226,185,43,0.12);border:1px solid var(--ambre);color:var(--ambre);font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;padding:7px 14px;border-radius:999px;margin-bottom:18px;}
-  .ofl .hero h1{font-size:clamp(30px,4.4vw,46px);line-height:1.1;margin-bottom:16px;}
-  .ofl .hero p.lead{color:#C7CCD4;font-size:17px;max-width:52ch;margin-bottom:10px;}
-  .ofl .hero p.fidelite{color:var(--ivoire);font-size:17px;margin-bottom:28px;background:var(--asphalte-clair);border-left:3px solid var(--ambre);padding:12px 16px;border-radius:var(--radius);}
-  .ofl .hero p.fidelite strong{color:var(--ambre);}
-  .ofl .hero-actions{display:flex;gap:14px;flex-wrap:wrap;}
-  .ofl .btn{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.03em;font-size:15px;font-weight:600;padding:14px 26px;border-radius:var(--radius);border:2px solid transparent;cursor:pointer;text-decoration:none;display:inline-block;transition:transform .15s ease,background .15s ease,border-color .15s ease;}
-  .ofl .btn-plein{background:var(--ambre);color:var(--asphalte);}
-  .ofl .btn-plein:hover{background:var(--ambre-fonce);transform:translateY(-1px);}
-  .ofl .btn-contour{border-color:#4A5566;color:var(--ivoire);}
-  .ofl .btn-contour:hover{border-color:var(--ambre);color:var(--ambre);}
-  .ofl .avantages{background:var(--asphalte-clair);border-top:1px solid #3A4557;}
-  .ofl .avantages .wrap{display:flex;flex-wrap:wrap;gap:0;}
-  .ofl .avantage-item{flex:1 1 180px;padding:20px 24px;border-left:1px solid #3A4557;color:var(--ivoire);font-family:'Oswald',sans-serif;text-transform:uppercase;font-size:14px;letter-spacing:0.02em;display:flex;align-items:center;gap:10px;}
-  .ofl .avantage-item:first-child{border-left:none;}
-  .ofl .avantage-item .puce{color:var(--ambre);font-size:18px;line-height:1;}
-  .ofl section{padding:68px 0;}
-  .ofl .section-tete{max-width:58ch;margin-bottom:36px;}
-  .ofl .section-tete .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ambre-fonce);margin-bottom:10px;display:block;}
-  .ofl .section-tete h2{font-size:clamp(24px,3vw,32px);margin-bottom:10px;}
-  .ofl .section-tete p{color:var(--gris-texte);font-size:16px;}
-  .ofl .mois-groupe{margin-bottom:32px;}
-  .ofl .mois-titre{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;}
-  .ofl .mois-titre h3{font-size:19px;color:var(--asphalte);}
-  .ofl .mois-titre::after{content:"";flex:1;height:1px;background:#D8D6CC;}
-  .ofl .sessions-grille{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;}
-  .ofl .session-carte{background:var(--carte);border:1px solid #E1DFD4;border-left:4px solid var(--ambre);border-radius:var(--radius);padding:16px 18px;display:flex;flex-direction:column;gap:10px;}
-  .ofl .session-jours{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;color:var(--asphalte);line-height:1;}
-  .ofl .session-mois{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:var(--gris-texte);}
-  .ofl .btn-mini{align-self:flex-start;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.02em;font-size:12px;font-weight:600;color:var(--asphalte);background:var(--ambre);border:none;padding:8px 14px;border-radius:var(--radius);cursor:pointer;transition:background .15s ease;}
-  .ofl .btn-mini:hover{background:var(--ambre-fonce);}
-  .ofl .zone-alt{background:var(--carte);border-top:1px solid #E1DFD4;border-bottom:1px solid #E1DFD4;}
-  .ofl .raisons-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;}
-  .ofl .raison-carte{padding:22px;border:1px solid #E1DFD4;border-radius:var(--radius);background:var(--ivoire);}
-  .ofl .raison-carte .num{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ambre-fonce);margin-bottom:8px;display:block;}
-  .ofl .raison-carte h3{font-size:16px;text-transform:none;letter-spacing:0;margin-bottom:6px;}
-  .ofl .raison-carte p{font-size:14px;color:var(--gris-texte);margin:0;}
-  .ofl .avis-entete{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:28px;}
-  .ofl .avis-note{font-family:'Oswald',sans-serif;font-size:40px;color:var(--asphalte);line-height:1;}
-  .ofl .avis-etoiles{color:var(--ambre);font-size:18px;letter-spacing:2px;}
-  .ofl .avis-source{font-size:13px;color:var(--gris-texte);}
-  .ofl .avis-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;}
-  .ofl .avis-carte{background:var(--carte);border:1px solid #E1DFD4;border-radius:var(--radius);padding:18px 20px;}
-  .ofl .avis-carte .avis-etoiles{margin-bottom:8px;}
-  .ofl .avis-carte p{font-size:14px;color:var(--asphalte);margin:0 0 10px;}
-  .ofl .avis-carte .avis-auteur{font-size:12px;color:var(--gris-texte);font-family:'IBM Plex Mono',monospace;}
-  .ofl .zone-rappel{background:var(--asphalte);color:var(--ivoire);}
-  .ofl .rappel-grille{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center;}
-  .ofl .rappel-grille h2{color:var(--ivoire);font-size:clamp(24px,3vw,32px);margin-bottom:14px;}
-  .ofl .rappel-grille p{color:#C7CCD4;font-size:15px;margin-bottom:0;}
-  .ofl .form-carte{background:var(--carte);border-radius:var(--radius);padding:32px;color:var(--asphalte);}
-  .ofl .champ{margin-bottom:16px;}
-  .ofl .champ label{display:block;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:var(--gris-texte);margin-bottom:6px;}
-  .ofl .champ input{width:100%;padding:12px 14px;border:1.5px solid #D8D6CC;border-radius:var(--radius);font-family:'Public Sans',sans-serif;font-size:15px;color:var(--asphalte);background:#FBFAF7;}
-  .ofl .champ input:focus{outline:none;border-color:var(--ambre);background:#fff;}
-  .ofl .session-choisie-note{font-size:13px;color:var(--vert);font-weight:600;margin-bottom:14px;min-height:18px;}
-  .ofl .btn-envoyer{width:100%;background:var(--ambre);color:var(--asphalte);border:none;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.03em;font-size:16px;font-weight:600;padding:15px;border-radius:var(--radius);cursor:pointer;}
-  .ofl .btn-envoyer:hover{background:var(--ambre-fonce);}
-  .ofl .btn-envoyer:disabled{opacity:0.6;cursor:not-allowed;}
-  .ofl .confirmation{display:none;background:var(--vert-clair);border:1px solid var(--vert);color:#2F5344;padding:12px 14px;border-radius:var(--radius);font-size:14px;margin-top:14px;}
-  .ofl .confirmation.visible{display:block;}
-  .ofl .faq-item{border-bottom:1px solid #D8D6CC;}
-  .ofl .faq-question{width:100%;text-align:left;background:none;border:none;cursor:pointer;padding:18px 0;display:flex;justify-content:space-between;align-items:center;font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:0.01em;font-size:15px;color:var(--asphalte);}
-  .ofl .faq-question .plus{color:var(--ambre-fonce);font-size:20px;transition:transform .2s ease;}
-  .ofl .faq-item.ouvert .faq-question .plus{transform:rotate(45deg);}
-  .ofl .faq-reponse{overflow:hidden;transition:max-height .25s ease;}
-  .ofl .faq-reponse p{color:var(--gris-texte);font-size:14px;padding-bottom:18px;margin:0;max-width:70ch;}
-  .ofl footer{padding:32px 0;text-align:center;color:var(--gris-texte);font-size:13px;}
-  @media (max-width:860px){
-    .ofl .avantages .wrap{flex-direction:column;}
-    .ofl .avantage-item{border-left:none;border-top:1px solid #3A4557;}
-    .ofl .avantage-item:first-child{border-top:none;}
-    .ofl .rappel-grille{grid-template-columns:1fr;}
-  }
-
-  .ofl .site-header{background:var(--asphalte);border-bottom:1px solid #3A4557;}
-  .ofl .site-header .wrap{max-width:1080px;height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;}
-  .ofl .site-header .logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
-  .ofl .site-header .logo img{width:36px;height:36px;border-radius:4px;object-fit:contain;background:#000;}
-  .ofl .site-header .logo span{font-family:'Oswald',sans-serif;font-weight:700;letter-spacing:0.02em;color:var(--ivoire);font-size:16px;text-transform:none;}
-  .ofl .site-header .phone{display:flex;align-items:center;gap:8px;color:var(--ambre);font-family:'IBM Plex Mono',monospace;font-size:14px;text-decoration:none;white-space:nowrap;}
-
-  .ofl .photos-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;}
-  .ofl .photo-carte{border-radius:var(--radius);overflow:hidden;border:1px solid #E1DFD4;background:var(--carte);}
-  .ofl .photo-carte img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;}
-  .ofl .photo-carte .legende{padding:8px 12px;font-family:'Oswald',sans-serif;text-transform:uppercase;font-size:12px;letter-spacing:0.02em;color:var(--gris-texte);}
-`;
-
+// Photos provisoires (Unsplash) — à remplacer par de vraies photos du centre
+// une fois disponibles : il suffit de changer les URLs ci-dessous.
 const PHOTOS = [
-  { label: "Salle de stage", src: "https://placehold.co/400x300/1B2430/F1F2ED?text=Salle+de+stage" },
-  { label: "Accueil", src: "https://placehold.co/400x300/1B2430/F1F2ED?text=Accueil" },
-  { label: "Formateur", src: "https://placehold.co/400x300/1B2430/F1F2ED?text=Formateur" },
-  { label: "Pause café", src: "https://placehold.co/400x300/1B2430/F1F2ED?text=Pause+caf%C3%A9" },
-  { label: "Parking", src: "https://placehold.co/400x300/1B2430/F1F2ED?text=Parking" },
+  { label: "Salle de stage", src: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=500&h=375&fit=crop" },
+  { label: "Accueil", src: "https://images.unsplash.com/photo-1497366216548-37526070297c?w=500&h=375&fit=crop" },
+  { label: "Formateur", src: "https://images.unsplash.com/photo-1552664730-d307ca884978?w=500&h=375&fit=crop" },
+  { label: "Pause café", src: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=500&h=375&fit=crop" },
+  { label: "Parking", src: "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=500&h=375&fit=crop" },
 ];
+
+function SiteHeader() {
+  return (
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-2">
+          <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
+          <span className="font-display font-bold text-lg tracking-tight hidden sm:inline">TDL Formation</span>
+        </Link>
+        <nav className="hidden md:flex items-center gap-8 text-sm">
+          <a href="https://tdl-formation.fr" className="hover:text-[#d4af37]">Formations</a>
+          <Link to="/blog" className="hover:text-[#d4af37]">Blog</Link>
+          <a href="https://kamistreet.fr/" target="_blank" rel="noreferrer" className="hover:text-[#d4af37]">KAMI STREET ↗</a>
+          <a href="tel:+33180907249" className="hover:text-[#d4af37]">01 80 90 72 49</a>
+        </nav>
+        <div className="flex items-center gap-2">
+          <Link to="/login">
+            <Button variant="outline" size="sm">Connexion</Button>
+          </Link>
+          <Link to="/inscription">
+            <Button size="sm" className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+              S'inscrire <ArrowRight size={14} className="ml-1" />
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </header>
+  );
+}
 
 export default function OffreFideliteLanding() {
   const [session, setSession] = useState("");
@@ -167,64 +109,81 @@ export default function OffreFideliteLanding() {
   };
 
   return (
-    <div className="ofl">
-      <style>{CSS}</style>
+    <div className="min-h-screen bg-white" data-testid="offre-fidelite-page">
+      <SiteHeader />
 
-      <div className="bandeau-route" />
-
-      <div className="site-header">
-        <div className="wrap">
-          <a href="https://tdl-formation.fr" className="logo">
-            <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" />
-            <span>TDL Formation</span>
-          </a>
-          <a href="tel:+33180907249" className="phone">01 80 90 72 49</a>
-        </div>
-      </div>
-
-      <header className="hero">
-        <div className="wrap">
-          <span className="badge-fidelite">Offre réservée à nos anciens clients</span>
-          <h1>Votre dernier stage date de plus d'un an ?</h1>
-          <p className="lead">Si votre solde de points a de nouveau diminué, vous pouvez peut-être récupérer jusqu'à 4 points grâce à un nouveau stage agréé.</p>
-          <p className="fidelite">Parce que vous avez déjà effectué un stage chez nous, bénéficiez de notre <strong>tarif fidélité de 189&nbsp;€</strong>.</p>
-          <div className="hero-actions">
-            <a href="#rappel" className="btn btn-plein" onClick={(e) => { e.preventDefault(); formRef.current?.scrollIntoView({ behavior: "smooth" }); }}>
+      {/* Hero */}
+      <section className="bg-[#0a0a0a] text-white">
+        <div className="max-w-5xl mx-auto px-6 lg:px-10 py-16 lg:py-24">
+          <span className="inline-flex items-center gap-2 border border-[#d4af37] text-[#d4af37] text-sm uppercase tracking-widest px-4 py-2 rounded-full mb-7">
+            Offre réservée à nos anciens clients
+          </span>
+          <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tighter leading-[0.98]">
+            Votre dernier stage date de plus d'un an ?
+          </h1>
+          <p className="text-gray-300 text-xl mt-7 max-w-2xl leading-relaxed">
+            Si votre solde de points a de nouveau diminué, vous pouvez peut-être récupérer jusqu'à 4 points grâce à un nouveau stage agréé.
+          </p>
+          <p className="text-white text-lg mt-5 max-w-2xl bg-[#1a1a1a] border-l-4 border-[#d4af37] px-5 py-4 rounded">
+            Parce que vous avez déjà effectué un stage chez nous, bénéficiez de notre <strong className="text-[#d4af37]">tarif fidélité de 189&nbsp;€</strong>.
+          </p>
+          <div className="flex flex-wrap gap-4 mt-10">
+            <Button
+              size="lg"
+              className="bg-[#d4af37] hover:bg-[#b8941f] text-black font-semibold text-base px-8 py-6"
+              onClick={() => formRef.current?.scrollIntoView({ behavior: "smooth" })}
+            >
               Être rappelé gratuitement
+            </Button>
+            <a href="tel:+33180907249">
+              <Button size="lg" variant="outline" className="border-gray-600 text-white hover:border-[#d4af37] hover:text-[#d4af37] bg-transparent text-base px-8 py-6">
+                <Phone size={18} className="mr-2" /> Appeler maintenant
+              </Button>
             </a>
-            <a href="tel:+33180907249" className="btn btn-contour">Appeler maintenant</a>
           </div>
         </div>
-      </header>
+      </section>
 
-      <div className="avantages">
-        <div className="wrap">
-          <div className="avantage-item"><span className="puce">✓</span>Tarif fidélité 189&nbsp;€</div>
-          <div className="avantage-item"><span className="puce">✓</span>Jusqu'à 4 points récupérables</div>
-          <div className="avantage-item"><span className="puce">✓</span>Stage agréé</div>
-          <div className="avantage-item"><span className="puce">✓</span>En seulement 2 jours</div>
-          <div className="avantage-item"><span className="puce">✓</span>Épinay-sur-Seine</div>
+      {/* Bandeau avantages */}
+      <div className="bg-[#1a1a1a] border-t border-gray-800">
+        <div className="max-w-5xl mx-auto px-6 lg:px-8 flex flex-wrap">
+          {AVANTAGES.map(({ icon: Icon, label }, i) => (
+            <div key={label} className={`flex-1 min-w-[180px] py-6 px-5 text-white text-base font-medium flex items-center gap-3 ${i > 0 ? "border-l border-gray-800" : ""}`}>
+              <Icon size={26} className="text-[#d4af37] shrink-0" weight="duotone" />
+              {label}
+            </div>
+          ))}
         </div>
       </div>
 
-      <section id="calendrier">
-        <div className="wrap">
-          <div className="section-tete">
-            <span className="eyebrow">Calendrier</span>
-            <h2>Les prochaines sessions</h2>
-            <p>Cliquez sur « Être rappelé » à côté de la date qui vous convient : nous vous recontactons pour finaliser votre inscription au tarif fidélité.</p>
+      {/* Calendrier */}
+      <section className="py-20 lg:py-28">
+        <div className="max-w-5xl mx-auto px-6 lg:px-10">
+          <div className="max-w-2xl mb-12">
+            <p className="overline text-[#b8941f] mb-3">Calendrier</p>
+            <h2 className="font-display text-4xl font-bold tracking-tight mb-4">Les prochaines sessions</h2>
+            <p className="text-gray-500 text-lg">Cliquez sur « Être rappelé » à côté de la date qui vous convient : nous vous recontactons pour finaliser votre inscription au tarif fidélité.</p>
           </div>
           {SESSIONS.map(({ mois, items }) => (
-            <div className="mois-groupe" key={mois}>
-              <div className="mois-titre"><h3>{mois}</h3></div>
-              <div className="sessions-grille">
+            <div className="mb-10" key={mois}>
+              <div className="flex items-baseline gap-4 mb-5">
+                <h3 className="font-display text-xl font-bold">{mois}</h3>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                 {items.map(([jours, label]) => (
-                  <div className="session-carte" key={label}>
+                  <div key={label} className="bg-white border border-gray-200 border-l-4 border-l-[#d4af37] rounded-md p-5 flex flex-col gap-3.5">
                     <div>
-                      <div className="session-jours">{jours}</div>
-                      <div className="session-mois">{mois}</div>
+                      <div className="font-mono text-2xl font-semibold">{jours}</div>
+                      <div className="text-sm uppercase tracking-wider text-gray-400">{mois}</div>
                     </div>
-                    <button type="button" className="btn-mini" onClick={() => chooseSession(label)}>Être rappelé</button>
+                    <button
+                      type="button"
+                      onClick={() => chooseSession(label)}
+                      className="self-start text-sm font-semibold uppercase tracking-wide text-black bg-[#d4af37] hover:bg-[#b8941f] px-4 py-2 rounded"
+                    >
+                      Être rappelé
+                    </button>
                   </div>
                 ))}
               </div>
@@ -233,97 +192,114 @@ export default function OffreFideliteLanding() {
         </div>
       </section>
 
-      <div className="zone-alt">
-        <div className="wrap" style={{ padding: "68px 0" }}>
-          <div className="section-tete">
-            <span className="eyebrow">Pourquoi nous revenir</span>
-            <h2>Pourquoi revenir chez TDL ?</h2>
+      {/* Pourquoi revenir */}
+      <div className="bg-gray-50 border-y border-gray-200">
+        <div className="max-w-5xl mx-auto px-6 lg:px-10 py-20 lg:py-28">
+          <div className="max-w-2xl mb-12">
+            <p className="overline text-[#b8941f] mb-3">Pourquoi nous revenir</p>
+            <h2 className="font-display text-4xl font-bold tracking-tight">Pourquoi revenir chez TDL ?</h2>
           </div>
-          <div className="raisons-grille">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {RAISONS.map((r) => (
-              <div className="raison-carte" key={r.n}>
-                <span className="num">{r.n}</span>
-                <h3>{r.titre}</h3>
-                <p>{r.texte}</p>
+              <div key={r.n} className="bg-white border border-gray-200 rounded-md p-6">
+                <span className="font-mono text-sm text-[#b8941f] block mb-3">{r.n}</span>
+                <h3 className="font-semibold text-base mb-2">{r.titre}</h3>
+                <p className="text-base text-gray-500 leading-relaxed">{r.texte}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      <section id="avis">
-        <div className="wrap">
-          <div className="section-tete">
-            <span className="eyebrow">Ils nous ont fait confiance</span>
-            <h2>Les avis Google</h2>
+      {/* Avis Google */}
+      <section className="py-20 lg:py-28">
+        <div className="max-w-5xl mx-auto px-6 lg:px-10">
+          <div className="max-w-2xl mb-10">
+            <p className="overline text-[#b8941f] mb-3">Ils nous ont fait confiance</p>
+            <h2 className="font-display text-4xl font-bold tracking-tight">Les avis Google</h2>
           </div>
-          <div className="avis-entete">
-            <div className="avis-note">4,6/5</div>
+          <div className="flex items-center gap-5 flex-wrap mb-9">
+            <div className="font-display text-5xl font-bold">4,6/5</div>
             <div>
-              <div className="avis-etoiles">★★★★★</div>
-              <div className="avis-source">
-                Note moyenne — <a href="https://www.google.com/search?q=TDL+Formation+Epinay-sur-Seine+avis" target="_blank" rel="noopener noreferrer">voir tous nos avis sur Google</a>
+              <div className="text-[#d4af37] tracking-widest text-lg">★★★★★</div>
+              <div className="text-base text-gray-500">
+                Note moyenne — <a href="https://www.google.com/search?q=TDL+Formation+Epinay-sur-Seine+avis" target="_blank" rel="noopener noreferrer" className="underline hover:text-[#d4af37]">voir tous nos avis sur Google</a>
               </div>
             </div>
           </div>
-          <div className="avis-grille">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             {AVIS.map((a, i) => (
-              <div className="avis-carte" key={i}>
-                <div className="avis-etoiles">★★★★★</div>
-                <p>{a}</p>
-                <div className="avis-auteur">Exemple d'avis client</div>
+              <div key={i} className="bg-white border border-gray-200 rounded-md p-6">
+                <div className="text-[#d4af37] mb-3">★★★★★</div>
+                <p className="text-base mb-3 leading-relaxed">{a}</p>
+                <div className="font-mono text-sm text-gray-400">Exemple d'avis client</div>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <div className="zone-alt">
-        <div className="wrap" style={{ padding: "68px 0" }}>
-          <div className="section-tete">
-            <span className="eyebrow">Le centre</span>
-            <h2>Photos du centre</h2>
-            <p>Emplacements provisoires — à remplacer par vos photos réelles.</p>
+      {/* Photos */}
+      <div className="bg-gray-50 border-y border-gray-200">
+        <div className="max-w-5xl mx-auto px-6 lg:px-10 py-20 lg:py-28">
+          <div className="max-w-2xl mb-10">
+            <p className="overline text-[#b8941f] mb-3">Le centre</p>
+            <h2 className="font-display text-4xl font-bold tracking-tight mb-3">Photos du centre</h2>
+            <p className="text-gray-500 text-base">Photos provisoires — à remplacer par vos photos réelles.</p>
           </div>
-          <div className="photos-grille">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
             {PHOTOS.map((p) => (
-              <div className="photo-carte" key={p.label}>
-                <img src={p.src} alt={p.label} />
-                <div className="legende">{p.label}</div>
+              <div key={p.label} className="bg-white border border-gray-200 rounded-md overflow-hidden">
+                <img src={p.src} alt={p.label} className="w-full aspect-[4/3] object-cover" />
+                <div className="px-4 py-3 text-sm font-semibold uppercase tracking-wide text-gray-500">{p.label}</div>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      <div className="zone-rappel" id="rappel" ref={formRef}>
-        <div className="wrap" style={{ padding: "72px 0" }}>
-          <div className="rappel-grille">
+      {/* Formulaire de rappel */}
+      <div className="bg-[#0a0a0a] text-white" id="rappel" ref={formRef}>
+        <div className="max-w-5xl mx-auto px-6 lg:px-10 py-20 lg:py-28">
+          <div className="grid lg:grid-cols-2 gap-14 items-center">
             <div>
-              <h2>Récupérez vos points au tarif fidélité</h2>
-              <p>Laissez-nous vos coordonnées, un membre de notre équipe vous rappelle sous 24h ouvrées pour finaliser votre inscription au tarif de 189&nbsp;€.</p>
+              <h2 className="font-display text-4xl font-bold tracking-tight mb-5">Récupérez vos points au tarif fidélité</h2>
+              <p className="text-gray-300 text-lg leading-relaxed">Laissez-nous vos coordonnées, un membre de notre équipe vous rappelle sous 24h ouvrées pour finaliser votre inscription au tarif de 189&nbsp;€.</p>
             </div>
-            <div className="form-carte">
+            <div className="bg-white text-black rounded-md p-9">
               {sent ? (
-                <div className="confirmation visible">
+                <div className="bg-[#0B7238]/10 border border-[#0B7238] text-[#0B7238] rounded-md px-5 py-4 text-base">
                   Merci, votre demande a bien été prise en compte. Nous vous rappelons sous 24h ouvrées.
                 </div>
               ) : (
-                <form onSubmit={submit}>
-                  <div className="champ">
-                    <label htmlFor="prenom">Prénom</label>
-                    <input id="prenom" value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} required />
+                <form onSubmit={submit} className="space-y-5">
+                  <div>
+                    <label htmlFor="prenom" className="block text-sm font-mono uppercase tracking-wider text-gray-500 mb-2">Prénom</label>
+                    <input
+                      id="prenom" value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} required
+                      className="w-full px-4 py-3.5 border border-gray-300 rounded-md text-base focus:outline-none focus:border-[#d4af37]"
+                    />
                   </div>
-                  <div className="champ">
-                    <label htmlFor="nom">Nom</label>
-                    <input id="nom" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required />
+                  <div>
+                    <label htmlFor="nom" className="block text-sm font-mono uppercase tracking-wider text-gray-500 mb-2">Nom</label>
+                    <input
+                      id="nom" value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} required
+                      className="w-full px-4 py-3.5 border border-gray-300 rounded-md text-base focus:outline-none focus:border-[#d4af37]"
+                    />
                   </div>
-                  <div className="champ">
-                    <label htmlFor="telephone">Téléphone</label>
-                    <input id="telephone" type="tel" value={form.telephone} onChange={(e) => setForm({ ...form, telephone: e.target.value })} required />
+                  <div>
+                    <label htmlFor="telephone" className="block text-sm font-mono uppercase tracking-wider text-gray-500 mb-2">Téléphone</label>
+                    <input
+                      id="telephone" type="tel" value={form.telephone} onChange={(e) => setForm({ ...form, telephone: e.target.value })} required
+                      className="w-full px-4 py-3.5 border border-gray-300 rounded-md text-base focus:outline-none focus:border-[#d4af37]"
+                    />
                   </div>
-                  <div className="session-choisie-note">{session ? `Session souhaitée : ${session}` : ""}</div>
-                  <button type="submit" className="btn-envoyer" disabled={sending}>
+                  <div className="text-sm font-semibold text-[#0B7238] min-h-[18px]">{session ? `Session souhaitée : ${session}` : ""}</div>
+                  <button
+                    type="submit"
+                    disabled={sending}
+                    className="w-full bg-[#d4af37] hover:bg-[#b8941f] disabled:opacity-60 text-black font-semibold uppercase tracking-wide text-base py-4 rounded-md"
+                  >
                     {sending ? "Envoi..." : "Être rappelé"}
                   </button>
                 </form>
@@ -333,24 +309,27 @@ export default function OffreFideliteLanding() {
         </div>
       </div>
 
-      <section id="faq">
-        <div className="wrap">
-          <div className="section-tete">
-            <span className="eyebrow">Questions fréquentes</span>
-            <h2>FAQ</h2>
+      {/* FAQ */}
+      <section className="py-20 lg:py-28">
+        <div className="max-w-5xl mx-auto px-6 lg:px-10">
+          <div className="max-w-2xl mb-10">
+            <p className="overline text-[#b8941f] mb-3">Questions fréquentes</p>
+            <h2 className="font-display text-4xl font-bold tracking-tight">FAQ</h2>
           </div>
-          <div className="faq-liste">
+          <div className="divide-y divide-gray-200 border-t border-gray-200">
             {FAQ.map((f, i) => {
               const isOpen = openFaq === i;
               return (
-                <div className={`faq-item ${isOpen ? "ouvert" : ""}`} key={i}>
-                  <button type="button" className="faq-question" onClick={() => setOpenFaq(isOpen ? null : i)}>
+                <div key={i}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(isOpen ? null : i)}
+                    className="w-full flex items-center justify-between py-5 text-left font-semibold text-base"
+                  >
                     <span>{f.q}</span>
-                    <span className="plus">+</span>
+                    <Plus size={22} className={`text-[#b8941f] transition-transform shrink-0 ml-4 ${isOpen ? "rotate-45" : ""}`} />
                   </button>
-                  <div className="faq-reponse" style={{ maxHeight: isOpen ? "200px" : "0" }}>
-                    <p>{f.r}</p>
-                  </div>
+                  {isOpen && <p className="text-base text-gray-500 pb-5 max-w-2xl leading-relaxed">{f.r}</p>}
                 </div>
               );
             })}
@@ -358,11 +337,9 @@ export default function OffreFideliteLanding() {
         </div>
       </section>
 
-      <footer>
+      <footer className="border-t border-gray-200 py-10 text-center text-base text-gray-500">
         TDL Formation — 59 avenue Joffre, 93800 Épinay-sur-Seine · 01 80 90 72 49 · contact@tdl-formation.fr
       </footer>
-
-      <div className="bandeau-route" />
     </div>
   );
 }
