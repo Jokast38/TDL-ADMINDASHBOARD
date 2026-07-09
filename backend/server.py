@@ -15,7 +15,7 @@ from routers import (
     auth, formations, inscriptions, documents, products,
     leads, employees, settings, dashboard, ai, blog,
     wordpress, stages, emargements, doc_templates,
-    generated_docs, health,
+    generated_docs, health, callback,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -64,6 +64,7 @@ app.include_router(emargements.router,    prefix=_PREFIX)
 app.include_router(doc_templates.router,  prefix=_PREFIX)
 app.include_router(generated_docs.router, prefix=_PREFIX)
 app.include_router(health.router,         prefix=_PREFIX)
+app.include_router(callback.router,       prefix=_PREFIX)
 
 
 async def _background_init():
@@ -94,6 +95,8 @@ async def _background_init():
         await db.leads.create_index("email")
         await db.leads.create_index("phone")
         await db.leads.create_index("status")
+        await db.callback_requests.create_index("id", unique=True)
+        await db.callback_requests.create_index("created_at")
     except Exception as e:
         log.warning(f"Index creation: {e}")
 

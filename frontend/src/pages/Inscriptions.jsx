@@ -11,7 +11,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise } from "@phosphor-icons/react";
+import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise, PhoneCall, Check, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n || 0);
@@ -27,9 +27,22 @@ export default function Inscriptions() {
   const [editForm, setEditForm] = useState({ student_name: "", student_phone: "", notes: "" });
   const [saving, setSaving] = useState(false);
 
-  const load = () => api.get("/inscriptions").then((r) => setItems(r.data)).catch(() => toast.error("Erreur de chargement"));
+  const [callbacks, setCallbacks] = useState([]);
 
-  useEffect(() => { load(); }, []);
+  const load = () => api.get("/inscriptions").then((r) => setItems(r.data)).catch(() => toast.error("Erreur de chargement"));
+  const loadCallbacks = () => api.get("/callback-requests").then((r) => setCallbacks(r.data)).catch(() => {});
+
+  useEffect(() => { load(); loadCallbacks(); }, []);
+
+  const markCallbackHandled = async (id, handled) => {
+    try { await api.put(`/callback-requests/${id}`, { handled }); loadCallbacks(); }
+    catch { toast.error("Erreur"); }
+  };
+
+  const deleteCallback = async (id) => {
+    try { await api.delete(`/callback-requests/${id}`); toast.success("Demande supprimée"); loadCallbacks(); }
+    catch { toast.error("Erreur"); }
+  };
 
   const filtered = items.filter((i) =>
     (i.student_name + i.student_email + i.formation_title).toLowerCase().includes(q.toLowerCase())
@@ -68,6 +81,8 @@ export default function Inscriptions() {
     finally { setSaving(false); }
   };
 
+  const pendingCallbacks = callbacks.filter((c) => !c.handled);
+
   return (
     <div className="space-y-6" data-testid="inscriptions-page">
       <div>
@@ -75,6 +90,58 @@ export default function Inscriptions() {
         <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Inscriptions</h1>
         <p className="text-gray-500 mt-2">{items.length} inscription(s) au total.</p>
       </div>
+
+      {callbacks.length > 0 && (
+        <Card className="border border-amber-200 bg-amber-50/50 rounded-md shadow-none p-5" data-testid="callback-requests-card">
+          <div className="flex items-center gap-2 mb-1">
+            <PhoneCall size={16} className="text-amber-700" />
+            <h2 className="font-display text-lg font-bold">Demandes de rappel</h2>
+            {pendingCallbacks.length > 0 && (
+              <Badge className="bg-amber-200 text-amber-900 hover:bg-amber-200">{pendingCallbacks.length} en attente</Badge>
+            )}
+          </div>
+          <p className="text-xs text-gray-500 mb-4">Formulaire "Être rappelé" de la landing page offre fidélité.</p>
+          <div className="space-y-2">
+            {callbacks.map((c) => (
+              <div
+                key={c.id}
+                className={`flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-md px-4 py-2.5 ${c.handled ? "opacity-50" : ""}`}
+                data-testid={`callback-row-${c.id}`}
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-sm">{c.prenom} {c.nom}</p>
+                  <p className="text-xs text-gray-500">
+                    {c.telephone}{c.session && <span> · Session : {c.session}</span>}
+                    <span className="ml-2 text-gray-400">{new Date(c.created_at).toLocaleDateString("fr-FR")}</span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  {!c.handled ? (
+                    <button
+                      onClick={() => markCallbackHandled(c.id, true)}
+                      className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                      title="Marquer comme rappelé"
+                    >
+                      <Check size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => markCallbackHandled(c.id, false)}
+                      className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"
+                      title="Remettre en attente"
+                    >
+                      <ArrowCounterClockwise size={14} />
+                    </button>
+                  )}
+                  <button onClick={() => deleteCallback(c.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Supprimer">
+                    <Trash size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="relative max-w-md">
         <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />

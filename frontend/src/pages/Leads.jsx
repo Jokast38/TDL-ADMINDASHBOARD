@@ -68,6 +68,7 @@ const TDL_PHONE   = "01 80 90 72 49";
 const TDL_SITE    = "https://tdl-formation.fr";
 const TDL_CONTACT = "https://tdl-formation.fr/contact/";
 const TDL_VTC     = "https://tdl-formation.fr/formation-continue-vtc/";
+const TDL_LANDING_FIDELITE = "https://tdl-admindashboard.vercel.app/offre-fidelite";
 
 // ─── Briques HTML emails ──────────────────────────────────────────────────────
 const EMAIL_HEADER = `
@@ -225,24 +226,40 @@ const TEMPLATES = {
 
   rattrapage_points: {
     label: "🔵 Stage récupération de points permis",
-    subject: "Récupérez jusqu'à 4 points sur votre permis de conduire",
+    subject: "Votre dernier stage date d'il y'a plus d'un an ?",
     body: makeEmail(
       `<p style="margin:0 0 18px 0;font-size:16px;color:#0a0a0a;">Bonjour <b>{{name}}</b>,</p>
        <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
-         Votre <b>solde de points</b> a diminué ? Il est possible de récupérer
-         <b>jusqu'à 4 points</b> sur votre permis de conduire en suivant notre
-         stage de sensibilisation à la sécurité routière — agréé par le Ministère
-         de l'Intérieur.
+         Votre dernier stage de récupération de points date déjà de plus d'un an ?
        </p>
        <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
-         Le stage se déroule sur <b>2 jours</b> dans nos locaux, en groupe réduit,
-         dans une ambiance pédagogique et bienveillante.
+         Si votre solde de points a diminué depuis, c'est le bon moment pour agir —
+         avant d'attendre le prochain courrier, la prochaine infraction ou le risque d'invalidation.
+       </p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Bonne nouvelle : vous pouvez récupérer <b>jusqu'à 4 points</b> grâce à notre stage de
+         sensibilisation à la sécurité routière, agréé par le Ministère de l'Intérieur.
+       </p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Et parce que vous nous avez déjà fait confiance, vous bénéficiez aujourd'hui de notre
+         <b>tarif fidélité à 189&nbsp;€</b>.
        </p>
        <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
-         Consultez nos prochaines dates disponibles :
+         La démarche est simple :
+       </p>
+       <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px 0;">
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">1. Vous choisissez une date disponible.</td></tr>
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">2. Vous réservez votre place en ligne.</td></tr>
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">3. Vous venez au stage pendant 2 jours.</td></tr>
+       </table>
+       <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Et vos points sont récupérés simplement, selon votre situation.
+       </p>
+       <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Ne laissez pas votre permis se fragiliser davantage — contactez-nous pour réserver un stage.
        </p>`,
-      "Être recontacté →",
-      TDL_CONTACT
+      "Réserver mon stage à 189 € →",
+      TDL_LANDING_FIDELITE
     ),
   },
 
