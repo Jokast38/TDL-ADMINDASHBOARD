@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -395,16 +395,30 @@ export default function Leads() {
   const [emailsList, setEmailsList] = useState([]);
   const [emailsLoading, setEmailsLoading] = useState(false);
 
+  // Pagination serveur — la base compte plusieurs milliers de leads, tout
+  // charger d'un coup rendait la page très lente. `total`/`pages` viennent
+  // de la réponse paginée du backend.
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+
+  // Intérêts distincts sur TOUTE la base (indépendant de la page affichée),
+  // via un endpoint léger dédié plutôt que de déduire du seul lot chargé.
+  const [allInterests, setAllInterests] = useState([]);
+
   const load = async () => {
     setLoading(true);
     try {
-      const params = {};
+      const params = { page, page_size: PAGE_SIZE };
       if (q) params.q = q;
       if (statusFilter !== "all") params.status = statusFilter;
       if (contactedFilter !== "all") params.contacted = contactedFilter === "yes";
       if (callOnlyFilter) params.has_email = false;
       const { data } = await api.get("/leads", { params });
-      setItems(data);
+      setItems(data.items);
+      setTotal(data.total);
+      setPages(data.pages);
     } catch {
       toast.error("Erreur de chargement des leads");
     } finally {
@@ -412,20 +426,39 @@ export default function Leads() {
     }
   };
 
-  useEffect(() => { load(); }, [statusFilter, contactedFilter, callOnlyFilter]);
+  useEffect(() => { load(); }, [page, statusFilter, contactedFilter, callOnlyFilter]);
+  // Un changement de filtre (statut/contacté/à appeler) doit revenir à la page 1.
+  const isFirstFilterRun = useRef(true);
+  useEffect(() => {
+    if (isFirstFilterRun.current) { isFirstFilterRun.current = false; return; }
+    setPage(1);
+  }, [statusFilter, contactedFilter, callOnlyFilter]);
+  // Recherche texte : debounce, et retour à la page 1 (sinon "page 3" pourrait
+  // se retrouver vide après une nouvelle recherche plus étroite).
+  useEffect(() => {
+    const t = setTimeout(() => { page === 1 ? load() : setPage(1); }, 350);
+    return () => clearTimeout(t);
+  }, [q]);
+  useEffect(() => {
+    api.get("/leads/interests").then(({ data }) => setAllInterests(data)).catch(() => {});
+  }, []);
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } })
       .then(({ data }) => setFormations(data))
       .catch(() => {});
   }, []);
-  useEffect(() => { const t = setTimeout(load, 350); return () => clearTimeout(t); }, [q]);
 
+  // Calculé sur TOUTE la base (via /leads/interests), pas seulement la page
+  // affichée, pour que le menu de filtre reste complet quelle que soit la page.
   const uniqueInterests = useMemo(() => {
-    const s = new Set(items.map((i) => canonicalizeInterest(i.interest)));
+    const s = new Set(allInterests.map(canonicalizeInterest));
     const sorted = Array.from(s).filter((v) => v !== "Inconnus").sort();
     return s.has("Inconnus") ? [...sorted, "Inconnus"] : sorted;
-  }, [items]);
+  }, [allInterests]);
 
+  // Le filtre par intérêt s'applique côté client, donc uniquement sur la page
+  // actuellement chargée (pas sur l'ensemble des leads) — un compromis pour
+  // éviter de recharger toute la base à chaque changement de ce filtre.
   const filteredItems = useMemo(() => {
     if (interestFilter === "all") return items;
     return items.filter((i) => canonicalizeInterest(i.interest) === interestFilter);
@@ -634,7 +667,9 @@ export default function Leads() {
         <div>
           <p className="overline flex items-center gap-2"><UsersThree size={12} /> Prospection commerciale</p>
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Leads</h1>
-          <p className="text-gray-500 mt-2">{filteredItems.length} lead(s) affiché(s) sur {items.length} total</p>
+          <p className="text-gray-500 mt-2">
+            {filteredItems.length} lead(s) affiché(s) — page {page}/{pages} ({total} au total)
+          </p>
         </div>
         <div className="flex gap-2">
 
@@ -1015,6 +1050,25 @@ export default function Leads() {
             </tbody>
           </table>
         </div>
+        {pages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
+            <Button
+              variant="outline" size="sm"
+              disabled={page <= 1 || loading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Précédent
+            </Button>
+            <span className="text-sm text-gray-500">Page {page} / {pages}</span>
+            <Button
+              variant="outline" size="sm"
+              disabled={page >= pages || loading}
+              onClick={() => setPage((p) => Math.min(pages, p + 1))}
+            >
+              Suivant
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* ── Modifier un lead ── */}

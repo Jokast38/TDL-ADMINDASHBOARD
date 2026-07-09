@@ -1,4 +1,5 @@
 import re
+import time
 import uuid
 from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
@@ -11,6 +12,29 @@ from models.lead import LeadIn, LeadUpdate, LeadImportJsonIn, LeadRelanceIn, Lea
 from services.email import send_email
 
 router = APIRouter(prefix="/leads", tags=["leads"])
+
+# Cache mémoire très simple pour GET /leads : la liste (3500+ leads) est lue
+# bien plus souvent qu'elle n'est modifiée, et une requête Mongo + sérialisation
+# de milliers de documents a un coût non négligeable. TTL court (le temps
+# qu'un même écran se recharge plusieurs fois d'affilée), invalidé sur toute
+# écriture (create/update/delete/import) pour ne jamais servir de données périmées.
+_LEADS_CACHE: Dict[tuple, tuple] = {}
+_LEADS_CACHE_TTL = 20  # secondes
+
+
+def _leads_cache_get(key: tuple):
+    entry = _LEADS_CACHE.get(key)
+    if entry and (time.time() - entry[0]) < _LEADS_CACHE_TTL:
+        return entry[1]
+    return None
+
+
+def _leads_cache_set(key: tuple, value) -> None:
+    _LEADS_CACHE[key] = (time.time(), value)
+
+
+def _leads_cache_clear() -> None:
+    _LEADS_CACHE.clear()
 
 
 # ---- Helpers normalisation ----
@@ -322,6 +346,8 @@ async def _insert_leads_dedup(leads: list) -> dict:
             continue
         await db.leads.insert_one(lead)
         inserted += 1
+    if inserted:
+        _leads_cache_clear()
     return {"inserted": inserted, "skipped_duplicates": skipped}
 
 
@@ -335,8 +361,13 @@ async def list_leads(
     has_email: Optional[bool] = None,
     has_phone: Optional[bool] = None,
     q: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
     user: dict = Depends(require_role(*ROLES_LEADS))
 ):
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 200)
+
     query: Dict[str, Any] = {}
     if tag: query["tags"] = tag
     if status: query["status"] = status
@@ -351,7 +382,35 @@ async def list_leads(
             {"email": {"$regex": q, "$options": "i"}},
             {"phone": {"$regex": q, "$options": "i"}},
         ]
-    return await db.leads.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)
+
+    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, page, page_size)
+    cached = _leads_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    total = await db.leads.count_documents(query)
+    items = await db.leads.find(query, {"_id": 0}) \
+        .sort("created_at", -1) \
+        .skip((page - 1) * page_size) \
+        .limit(page_size) \
+        .to_list(page_size)
+
+    result = {"items": items, "total": total, "page": page, "page_size": page_size, "pages": max((total + page_size - 1) // page_size, 1)}
+    _leads_cache_set(cache_key, result)
+    return result
+
+
+@router.get("/interests")
+async def list_distinct_interests(user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Valeurs d'intérêt distinctes sur TOUTE la base (indépendamment de la
+    pagination), pour alimenter le filtre sans devoir charger tous les leads."""
+    cache_key = ("interests",)
+    cached = _leads_cache_get(cache_key)
+    if cached is not None:
+        return cached
+    values = await db.leads.distinct("interest", {"interest": {"$nin": [None, ""]}})
+    _leads_cache_set(cache_key, values)
+    return values
 
 
 @router.post("")
@@ -367,6 +426,7 @@ async def create_lead(payload: LeadIn, user: dict = Depends(require_role(*ROLES_
     lead["updated_at"] = now_iso()
     await db.leads.insert_one(lead)
     lead.pop("_id", None)
+    _leads_cache_clear()
     return lead
 
 
@@ -378,12 +438,14 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
     update["updated_at"] = now_iso()
     await db.leads.update_one({"id": lid}, {"$set": update})
+    _leads_cache_clear()
     return await db.leads.find_one({"id": lid}, {"_id": 0})
 
 
 @router.delete("/{lid}")
 async def delete_lead(lid: str, user: dict = Depends(require_role(*ROLES_LEADS))):
     await db.leads.delete_one({"id": lid})
+    _leads_cache_clear()
     return {"ok": True}
 
 
@@ -393,6 +455,7 @@ async def bulk_delete_leads(payload: Dict[str, List[str]], user: dict = Depends(
     if not ids:
         raise HTTPException(status_code=400, detail="Aucun lead sélectionné")
     result = await db.leads.delete_many({"id": {"$in": ids}})
+    _leads_cache_clear()
     return {"deleted": result.deleted_count}
 
 
@@ -508,6 +571,7 @@ async def send_relance_single(payload: LeadRelanceSingleIn, user: dict = Depends
     await db.leads.update_one({"id": payload.lead_id}, {"$set": update})
     if payload.add_tag:
         await db.leads.update_one({"id": payload.lead_id}, {"$addToSet": {"tags": payload.add_tag}})
+    _leads_cache_clear()
     return {"sent": True}
 
 
@@ -534,4 +598,6 @@ async def send_relance(payload: LeadRelanceIn, user: dict = Depends(require_role
         await db.leads.update_one({"id": lead["id"]}, {"$set": update})
         if payload.add_tag:
             await db.leads.update_one({"id": lead["id"]}, {"$addToSet": {"tags": payload.add_tag}})
+    if sent:
+        _leads_cache_clear()
     return {"sent": sent, "skipped_no_email": no_email}

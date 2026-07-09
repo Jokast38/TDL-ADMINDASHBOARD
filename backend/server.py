@@ -96,6 +96,7 @@ async def _background_init():
         await db.leads.create_index("email")
         await db.leads.create_index("phone")
         await db.leads.create_index("status")
+        await db.leads.create_index("created_at")
         await db.callback_requests.create_index("id", unique=True)
         await db.callback_requests.create_index("created_at")
     except Exception as e:
