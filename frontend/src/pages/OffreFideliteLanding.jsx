@@ -115,7 +115,27 @@ const CSS = `
     .ofl .avantage-item:first-child{border-top:none;}
     .ofl .rappel-grille{grid-template-columns:1fr;}
   }
+
+  .ofl .site-header{background:var(--asphalte);border-bottom:1px solid #3A4557;}
+  .ofl .site-header .wrap{max-width:1080px;height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;}
+  .ofl .site-header .logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
+  .ofl .site-header .logo img{width:36px;height:36px;border-radius:4px;object-fit:contain;background:#000;}
+  .ofl .site-header .logo span{font-family:'Oswald',sans-serif;font-weight:700;letter-spacing:0.02em;color:var(--ivoire);font-size:16px;text-transform:none;}
+  .ofl .site-header .phone{display:flex;align-items:center;gap:8px;color:var(--ambre);font-family:'IBM Plex Mono',monospace;font-size:14px;text-decoration:none;white-space:nowrap;}
+
+  .ofl .photos-grille{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;}
+  .ofl .photo-carte{border-radius:var(--radius);overflow:hidden;border:1px solid #E1DFD4;background:var(--carte);}
+  .ofl .photo-carte img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;}
+  .ofl .photo-carte .legende{padding:8px 12px;font-family:'Oswald',sans-serif;text-transform:uppercase;font-size:12px;letter-spacing:0.02em;color:var(--gris-texte);}
 `;
+
+const PHOTOS = [
+  { label: "Salle de stage", src: "https://placehold.co/400x300/1B2430/F1F2ED?text=Salle+de+stage" },
+  { label: "Accueil", src: "https://placehold.co/400x300/1B2430/F1F2ED?text=Accueil" },
+  { label: "Formateur", src: "https://placehold.co/400x300/1B2430/F1F2ED?text=Formateur" },
+  { label: "Pause café", src: "https://placehold.co/400x300/1B2430/F1F2ED?text=Pause+caf%C3%A9" },
+  { label: "Parking", src: "https://placehold.co/400x300/1B2430/F1F2ED?text=Parking" },
+];
 
 export default function OffreFideliteLanding() {
   const [session, setSession] = useState("");
@@ -152,12 +172,22 @@ export default function OffreFideliteLanding() {
 
       <div className="bandeau-route" />
 
+      <div className="site-header">
+        <div className="wrap">
+          <a href="https://tdl-formation.fr" className="logo">
+            <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" />
+            <span>TDL Formation</span>
+          </a>
+          <a href="tel:+33180907249" className="phone">01 80 90 72 49</a>
+        </div>
+      </div>
+
       <header className="hero">
         <div className="wrap">
           <span className="badge-fidelite">Offre réservée à nos anciens clients</span>
           <h1>Votre dernier stage date de plus d'un an ?</h1>
           <p className="lead">Si votre solde de points a de nouveau diminué, vous pouvez peut-être récupérer jusqu'à 4 points grâce à un nouveau stage agréé.</p>
-          <p className="fidelite">Parce que vous avez déjà effectué un stage chez nous, bénéficiez de notre <strong>tarif fidélité de 180&nbsp;€</strong>.</p>
+          <p className="fidelite">Parce que vous avez déjà effectué un stage chez nous, bénéficiez de notre <strong>tarif fidélité de 189&nbsp;€</strong>.</p>
           <div className="hero-actions">
             <a href="#rappel" className="btn btn-plein" onClick={(e) => { e.preventDefault(); formRef.current?.scrollIntoView({ behavior: "smooth" }); }}>
               Être rappelé gratuitement
@@ -169,7 +199,7 @@ export default function OffreFideliteLanding() {
 
       <div className="avantages">
         <div className="wrap">
-          <div className="avantage-item"><span className="puce">✓</span>Tarif fidélité 180&nbsp;€</div>
+          <div className="avantage-item"><span className="puce">✓</span>Tarif fidélité 189&nbsp;€</div>
           <div className="avantage-item"><span className="puce">✓</span>Jusqu'à 4 points récupérables</div>
           <div className="avantage-item"><span className="puce">✓</span>Stage agréé</div>
           <div className="avantage-item"><span className="puce">✓</span>En seulement 2 jours</div>
@@ -248,12 +278,30 @@ export default function OffreFideliteLanding() {
         </div>
       </section>
 
+      <div className="zone-alt">
+        <div className="wrap" style={{ padding: "68px 0" }}>
+          <div className="section-tete">
+            <span className="eyebrow">Le centre</span>
+            <h2>Photos du centre</h2>
+            <p>Emplacements provisoires — à remplacer par vos photos réelles.</p>
+          </div>
+          <div className="photos-grille">
+            {PHOTOS.map((p) => (
+              <div className="photo-carte" key={p.label}>
+                <img src={p.src} alt={p.label} />
+                <div className="legende">{p.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="zone-rappel" id="rappel" ref={formRef}>
         <div className="wrap" style={{ padding: "72px 0" }}>
           <div className="rappel-grille">
             <div>
               <h2>Récupérez vos points au tarif fidélité</h2>
-              <p>Laissez-nous vos coordonnées, un membre de notre équipe vous rappelle sous 24h ouvrées pour finaliser votre inscription au tarif de 180&nbsp;€.</p>
+              <p>Laissez-nous vos coordonnées, un membre de notre équipe vous rappelle sous 24h ouvrées pour finaliser votre inscription au tarif de 189&nbsp;€.</p>
             </div>
             <div className="form-carte">
               {sent ? (

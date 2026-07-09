@@ -1,6 +1,8 @@
 import asyncio
+import re
 import uuid
 import logging
+import urllib.parse
 import requests
 
 from core.database import db
@@ -18,6 +20,20 @@ def _with_tracking_pixel(body: str, log_id: str) -> str:
     ce signal, donc c'est un indicateur, pas une preuve fiable à 100%."""
     pixel_url = f"{PUBLIC_BACKEND_URL}/api/track/open/{log_id}.gif"
     return body + f'<img src="{pixel_url}" width="1" height="1" alt="" style="display:none;border:0;" />'
+
+
+_HREF_RE = re.compile(r'href="(https?://[^"]+)"')
+
+
+def _with_click_tracking(body: str, log_id: str) -> str:
+    """Remplace chaque lien http(s) du corps par une redirection via le
+    backend, pour compter les clics avant de renvoyer vers l'URL réelle.
+    Les liens mailto:/tel: ne sont pas concernés (regex limitée à http(s))."""
+    def _rewrite(match):
+        original_url = match.group(1)
+        redirect = f"{PUBLIC_BACKEND_URL}/api/track/click/{log_id}?url={urllib.parse.quote(original_url, safe='')}"
+        return f'href="{redirect}"'
+    return _HREF_RE.sub(_rewrite, body)
 
 
 def _http_post(url: str, headers: dict, json_data: dict):
@@ -135,9 +151,14 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None) -> di
         "id": log_id, "to": to, "subject": subject, "body": body,
         "provider": provider, "status": "queued", "created_at": now_iso(),
         "opened": False, "opened_at": None, "open_count": 0,
+        "clicked": False, "clicked_at": None, "click_count": 0,
         **(extra or {}),
     }
-    tracked_body = _with_tracking_pixel(body, log_id) if provider != "mock" else body
+    if provider != "mock":
+        tracked_body = _with_click_tracking(body, log_id)
+        tracked_body = _with_tracking_pixel(tracked_body, log_id)
+    else:
+        tracked_body = body
 
     if provider == "resend" and resend_key:
         log["status"] = await _send_via_resend(resend_key, from_addr, to, subject, tracked_body)
