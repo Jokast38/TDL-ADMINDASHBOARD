@@ -29,6 +29,11 @@ GA4_SERVICE_ACCOUNT_JSON = os.getenv("GA4_SERVICE_ACCOUNT_JSON")
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
 
+# URL publique du backend, utilisée pour construire des liens absolus dans les
+# emails envoyés (ex: pixel de tracking d'ouverture) — un email ouvert dans
+# une boîte mail externe ne peut pas pointer vers "localhost".
+PUBLIC_BACKEND_URL = os.environ.get("PUBLIC_BACKEND_URL", "https://tdl-admindashboard.onrender.com")
+
 # Permission groups
 ROLES_ALL_STAFF = ("admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial")
 ROLES_ADMIN_STAFF = ("admin", "responsable_admission", "agent_admin")

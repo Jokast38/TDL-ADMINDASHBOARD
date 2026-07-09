@@ -15,7 +15,7 @@ from routers import (
     auth, formations, inscriptions, documents, products,
     leads, employees, settings, dashboard, ai, blog,
     wordpress, stages, emargements, doc_templates,
-    generated_docs, health, callback,
+    generated_docs, health, callback, tracking,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -65,6 +65,7 @@ app.include_router(doc_templates.router,  prefix=_PREFIX)
 app.include_router(generated_docs.router, prefix=_PREFIX)
 app.include_router(health.router,         prefix=_PREFIX)
 app.include_router(callback.router,       prefix=_PREFIX)
+app.include_router(tracking.router,       prefix=_PREFIX)
 
 
 async def _background_init():

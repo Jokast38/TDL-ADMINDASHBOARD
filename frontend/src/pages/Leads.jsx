@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Plus, UploadSimple, FileXls, FileCode, MagnifyingGlass, Trash, Phone,
-  EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree, PencilSimple, GraduationCap
+  EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree, PencilSimple, GraduationCap,
+  EnvelopeOpen, Eye,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -389,6 +390,11 @@ export default function Leads() {
   const [enrollForm, setEnrollForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "" });
   const [enrolling, setEnrolling] = useState(false);
 
+  const [emailsOpen, setEmailsOpen] = useState(false);
+  const [emailsLead, setEmailsLead] = useState(null);
+  const [emailsList, setEmailsList] = useState([]);
+  const [emailsLoading, setEmailsLoading] = useState(false);
+
   const load = async () => {
     setLoading(true);
     try {
@@ -521,6 +527,20 @@ export default function Leads() {
       setEnrollOpen(false);
     } catch (e) { toast.error(e.response?.data?.detail || "Erreur lors de l'inscription"); }
     finally { setEnrolling(false); }
+  };
+
+  const openEmailsHistory = async (lead) => {
+    setEmailsLead(lead);
+    setEmailsOpen(true);
+    setEmailsLoading(true);
+    try {
+      const { data } = await api.get(`/leads/${lead.id}/emails`);
+      setEmailsList(data);
+    } catch {
+      toast.error("Erreur de chargement de l'historique");
+    } finally {
+      setEmailsLoading(false);
+    }
   };
 
   const bulkDelete = async () => {
@@ -937,6 +957,15 @@ export default function Leads() {
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="flex justify-end items-center gap-1">
+                      {l.email && (
+                        <button
+                          onClick={() => openEmailsHistory(l)}
+                          className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
+                          title="Historique des emails envoyés"
+                        >
+                          <EnvelopeOpen size={14} />
+                        </button>
+                      )}
                       <button
                         onClick={() => openEnroll(l)}
                         className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded"
@@ -1066,6 +1095,52 @@ export default function Leads() {
             <Button onClick={submitEnroll} disabled={enrolling} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
               {enrolling ? "Inscription..." : "Inscrire"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Historique des emails envoyés (avec statut d'ouverture) ── */}
+      <Dialog open={emailsOpen} onOpenChange={setEmailsOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Emails envoyés à {emailsLead?.name}</DialogTitle></DialogHeader>
+          <div className="space-y-2 mt-2 max-h-96 overflow-y-auto">
+            {emailsLoading && <p className="text-sm text-gray-400">Chargement...</p>}
+            {!emailsLoading && emailsList.length === 0 && (
+              <p className="text-sm text-gray-400">Aucun email envoyé à ce lead pour l'instant.</p>
+            )}
+            {emailsList.map((e) => (
+              <div key={e.id} className="border border-gray-200 rounded-md p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{e.subject}</p>
+                    <p className="text-xs text-gray-500">{new Date(e.created_at).toLocaleString("fr-FR")}</p>
+                  </div>
+                  {e.opened ? (
+                    <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10 shrink-0 flex items-center gap-1">
+                      <Eye size={11} /> Ouvert{e.open_count > 1 ? ` (${e.open_count}x)` : ""}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-gray-500 shrink-0">Non ouvert</Badge>
+                  )}
+                </div>
+                {e.opened && e.opened_at && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Première ouverture : {new Date(e.opened_at).toLocaleString("fr-FR")}
+                  </p>
+                )}
+                {e.status !== "sent" && e.status !== "mocked" && (
+                  <p className="text-[11px] text-red-500 mt-1">Échec d'envoi : {e.status}</p>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-400 pt-2 border-t border-gray-100">
+            Le suivi d'ouverture repose sur un pixel invisible : certains clients mail (Gmail proxy, Apple Mail
+            Privacy Protection, images bloquées par défaut...) peuvent fausser ce signal. À prendre comme indicateur,
+            pas comme preuve absolue.
+          </p>
+          <div className="flex justify-end mt-2">
+            <Button variant="outline" onClick={() => setEmailsOpen(false)}>Fermer</Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -5,8 +5,19 @@ import requests
 
 from core.database import db
 from core.utils import now_iso
+from core.config import PUBLIC_BACKEND_URL
 
 logger = logging.getLogger(__name__)
+
+
+def _with_tracking_pixel(body: str, log_id: str) -> str:
+    """Ajoute une image invisible 1x1 en fin de corps HTML : quand le client
+    mail la charge (email ouvert), le serveur reçoit la requête et marque
+    l'email comme ouvert. Best-effort : beaucoup de clients (Gmail proxy,
+    Apple Mail Privacy Protection, images bloquées par défaut...) faussent
+    ce signal, donc c'est un indicateur, pas une preuve fiable à 100%."""
+    pixel_url = f"{PUBLIC_BACKEND_URL}/api/track/open/{log_id}.gif"
+    return body + f'<img src="{pixel_url}" width="1" height="1" alt="" style="display:none;border:0;" />'
 
 
 def _http_post(url: str, headers: dict, json_data: dict):
@@ -112,35 +123,39 @@ def _smtp_configured(s: dict) -> bool:
     return bool(s.get("smtp_host") and s.get("smtp_user") and s.get("smtp_password"))
 
 
-async def send_email(to: str, subject: str, body: str) -> dict:
+async def send_email(to: str, subject: str, body: str, extra: dict = None) -> dict:
     s = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
     provider = s.get("email_provider", "mock")
     from_addr = s.get("email_from", "noreply@tdlformation.fr")
     # Clé Resend : celle du fournisseur principal si provider="resend", sinon
     # celle dédiée au secours (utilisable même quand le principal est le SMTP).
     resend_key = s.get("email_api_key") if provider == "resend" else s.get("resend_fallback_api_key")
+    log_id = str(uuid.uuid4())
     log = {
-        "id": str(uuid.uuid4()), "to": to, "subject": subject, "body": body,
-        "provider": provider, "status": "queued", "created_at": now_iso()
+        "id": log_id, "to": to, "subject": subject, "body": body,
+        "provider": provider, "status": "queued", "created_at": now_iso(),
+        "opened": False, "opened_at": None, "open_count": 0,
+        **(extra or {}),
     }
+    tracked_body = _with_tracking_pixel(body, log_id) if provider != "mock" else body
 
     if provider == "resend" and resend_key:
-        log["status"] = await _send_via_resend(resend_key, from_addr, to, subject, body)
+        log["status"] = await _send_via_resend(resend_key, from_addr, to, subject, tracked_body)
         if log["status"] != "sent" and _smtp_configured(s):
             logger.warning(f"Resend en échec pour {to} ({log['status']}), tentative SMTP en secours...")
             log["resend_error"] = log["status"]
-            log["status"] = await _send_via_smtp(s, to, subject, body)
+            log["status"] = await _send_via_smtp(s, to, subject, tracked_body)
             log["fallback_provider"] = "smtp"
 
     elif provider == "sendgrid" and s.get("email_api_key"):
-        log["status"] = await _send_via_sendgrid(s["email_api_key"], from_addr, to, subject, body)
+        log["status"] = await _send_via_sendgrid(s["email_api_key"], from_addr, to, subject, tracked_body)
 
     elif provider == "smtp" and _smtp_configured(s):
-        log["status"] = await _send_via_smtp(s, to, subject, body)
+        log["status"] = await _send_via_smtp(s, to, subject, tracked_body)
         if log["status"] != "sent" and s.get("resend_fallback_api_key"):
             logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Resend en secours...")
             log["smtp_error"] = log["status"]
-            log["status"] = await _send_via_resend(s["resend_fallback_api_key"], from_addr, to, subject, body)
+            log["status"] = await _send_via_resend(s["resend_fallback_api_key"], from_addr, to, subject, tracked_body)
             log["fallback_provider"] = "resend"
 
     else:

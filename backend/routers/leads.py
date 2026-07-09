@@ -482,6 +482,13 @@ async def import_leads_from_inscriptions(user: dict = Depends(require_role(*ROLE
     return await _insert_leads_dedup(leads)
 
 
+@router.get("/{lid}/emails")
+async def list_lead_emails(lid: str, user: dict = Depends(require_role(*ROLES_LEADS))):
+    return await db.email_logs.find(
+        {"lead_id": lid}, {"_id": 0, "body": 0}
+    ).sort("created_at", -1).to_list(200)
+
+
 @router.post("/relance/single")
 async def send_relance_single(payload: LeadRelanceSingleIn, user: dict = Depends(require_role(*ROLES_LEADS))):
     lead = await db.leads.find_one({"id": payload.lead_id}, {"_id": 0})
@@ -490,7 +497,7 @@ async def send_relance_single(payload: LeadRelanceSingleIn, user: dict = Depends
     if not lead.get("email"):
         return {"sent": False, "reason": "no_email"}
     body = payload.body.replace("{{name}}", lead.get("name", ""))
-    log = await send_email(lead["email"], payload.subject, body)
+    log = await send_email(lead["email"], payload.subject, body, extra={"lead_id": payload.lead_id})
     if log["status"] not in ("sent", "mocked"):
         return {"sent": False, "reason": log["status"]}
     update = {"updated_at": now_iso()}
@@ -515,7 +522,7 @@ async def send_relance(payload: LeadRelanceIn, user: dict = Depends(require_role
             no_email += 1
             continue
         body = payload.body.replace("{{name}}", lead.get("name", ""))
-        log = await send_email(lead["email"], payload.subject, body)
+        log = await send_email(lead["email"], payload.subject, body, extra={"lead_id": lead["id"]})
         if log["status"] not in ("sent", "mocked"):
             continue
         sent += 1

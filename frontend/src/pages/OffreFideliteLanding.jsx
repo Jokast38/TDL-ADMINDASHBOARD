@@ -9,7 +9,7 @@ const SESSIONS = [
 
 const RAISONS = [
   { n: "01", titre: "Plus de disponibilités", texte: "Des sessions régulières tout l'été pour vous inscrire rapidement." },
-  { n: "02", titre: "Prix fidélité", texte: "180 € au lieu du tarif standard, réservé à nos anciens stagiaires." },
+  { n: "02", titre: "Prix fidélité", texte: "189 € au lieu du tarif standard, réservé à nos anciens stagiaires." },
   { n: "03", titre: "Équipe reconnue", texte: "Des formateurs que vous connaissez déjà, agréés par la Préfecture." },
   { n: "04", titre: "Inscription rapide", texte: "Un dossier déjà connu chez nous : moins de démarches pour vous." },
   { n: "05", titre: "Excellent accueil", texte: "Une équipe disponible du lundi au samedi, 9h–18h." },
@@ -24,7 +24,7 @@ const AVIS = [
 
 const FAQ = [
   { q: "Puis-je refaire un stage ?", r: "Oui. Un stage de récupération de points ne peut être effectué qu'une fois par période de 12 mois. Si votre dernier stage date de plus d'un an, vous pouvez en refaire un dès aujourd'hui." },
-  { q: "Pourquoi 180 € ?", r: "180 € est notre tarif fidélité, réservé aux personnes ayant déjà suivi un stage chez TDL Formation, en dessous de notre tarif standard." },
+  { q: "Pourquoi 189 € ?", r: "189 € est notre tarif fidélité, réservé aux personnes ayant déjà suivi un stage chez TDL Formation, en dessous de notre tarif standard." },
   { q: "Comment se déroule le stage ?", r: "Le stage se déroule sur 2 jours consécutifs (7h/jour), en salle, avec des formateurs agréés par la Préfecture, autour de la sensibilisation à la sécurité routière." },
   { q: "En combien de temps suis-je rappelé ?", r: "Notre équipe vous recontacte sous 24h ouvrées après votre demande pour confirmer votre inscription et le tarif fidélité." },
 ];
