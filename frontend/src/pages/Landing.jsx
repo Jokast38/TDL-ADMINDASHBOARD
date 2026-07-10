@@ -12,7 +12,7 @@ import {
 import {
   ArrowRight, GraduationCap, Lightning, Trophy, CaretDown,
   IdentificationCard, Truck, FireSimple, Car, Phone, EnvelopeSimple, MapPin,
-  List, X,
+  List, X, DownloadSimple,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -309,6 +309,28 @@ export default function Landing() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Brochure */}
+      <section className="py-16 border-t border-gray-200 bg-[#0a0a0a] text-white">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 grid md:grid-cols-2 gap-8 items-center">
+          <div>
+            <p className="overline" style={{ color: "#d4af37" }}>Restez informé</p>
+            <h2 className="font-display text-2xl sm:text-3xl font-bold tracking-tight mt-2 mb-3">
+              Recevez nos prochaines sessions et le calendrier des examens 2026.
+            </h2>
+            <p className="text-gray-300 max-w-lg">
+              Téléchargez notre brochure avec les dates d'examens VTC et Taxi à venir, pour planifier votre inscription.
+            </p>
+          </div>
+          <div className="flex md:justify-end">
+            <a href="/doc/calendrier_examens_2026.pdf" download>
+              <Button size="lg" className="bg-[#d4af37] text-black hover:bg-[#b8941f]" data-testid="brochure-download">
+                <DownloadSimple size={18} className="mr-2" /> Télécharger la brochure
+              </Button>
+            </a>
           </div>
         </div>
       </section>
