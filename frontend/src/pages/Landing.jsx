@@ -12,6 +12,7 @@ import {
 import {
   ArrowRight, GraduationCap, Lightning, Trophy, CaretDown,
   IdentificationCard, Truck, FireSimple, Car, Phone, EnvelopeSimple, MapPin,
+  List, X,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -37,6 +38,8 @@ export default function Landing() {
   const [contactForm, setContactForm] = useState({ prenom: "", nom: "", email: "", telephone: "", message: "" });
   const [contactSending, setContactSending] = useState(false);
   const [contactSent, setContactSent] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileSubOpen, setMobileSubOpen] = useState(null); // "vtc" | "taxi" | null
 
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data));
@@ -86,7 +89,7 @@ export default function Landing() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
             <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
             <span className="font-display font-bold text-lg tracking-tight hidden sm:inline">TDL Formation</span>
           </Link>
@@ -99,16 +102,56 @@ export default function Landing() {
             <a href="#contact" className="hover:text-[#d4af37]">Contact</a>
           </nav>
           <div className="flex items-center gap-2">
-            <Link to="/login">
+            <Link to="/login" className="hidden sm:block">
               <Button variant="outline" size="sm" data-testid="login-link">Connexion</Button>
             </Link>
-            <Link to="/inscription">
+            <Link to="/inscription" className="hidden sm:block">
               <Button size="sm" className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="inscription-cta">
                 S'inscrire <ArrowRight size={14} className="ml-1" />
               </Button>
             </Link>
+            <button
+              className="md:hidden p-2 text-gray-700"
+              onClick={() => setMobileOpen((v) => !v)}
+              aria-label={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
+              data-testid="mobile-menu-toggle"
+            >
+              {mobileOpen ? <X size={22} /> : <List size={22} />}
+            </button>
           </div>
         </div>
+
+        {/* Panneau mobile */}
+        {mobileOpen && (
+          <div className="md:hidden border-t border-gray-200 bg-white max-h-[calc(100vh-4rem)] overflow-y-auto" data-testid="mobile-menu-panel">
+            <nav className="px-6 py-4 flex flex-col text-sm">
+              <MobileSubMenu
+                label="Formations VTC" titles={NAV_VTC} byTitle={byTitle}
+                open={mobileSubOpen === "vtc"} onToggle={() => setMobileSubOpen((v) => (v === "vtc" ? null : "vtc"))}
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <MobileSubMenu
+                label="Formations Taxi" titles={NAV_TAXI} byTitle={byTitle}
+                open={mobileSubOpen === "taxi"} onToggle={() => setMobileSubOpen((v) => (v === "taxi" ? null : "taxi"))}
+                onNavigate={() => setMobileOpen(false)}
+              />
+              <Link to={autoEcole ? `/formations/${autoEcole.id}` : "#formations"} className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
+                Auto-école
+              </Link>
+              <a href="#formations" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Toutes les formations</a>
+              <Link to="/blog" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Blog</Link>
+              <a href="#contact" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Contact</a>
+              <div className="flex gap-2 pt-4">
+                <Link to="/login" className="flex-1" onClick={() => setMobileOpen(false)}>
+                  <Button variant="outline" size="sm" className="w-full">Connexion</Button>
+                </Link>
+                <Link to="/inscription" className="flex-1" onClick={() => setMobileOpen(false)}>
+                  <Button size="sm" className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">S'inscrire</Button>
+                </Link>
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
 
       {/* Hero */}
@@ -234,16 +277,12 @@ export default function Landing() {
       <section className="py-14 border-t border-gray-200 bg-gray-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-10 mb-10">
-            <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-md px-5 py-3 shrink-0">
+            <div className="flex items-center bg-white border border-gray-200 rounded-md px-5 py-3 shrink-0">
               <img
                 src="/Logo-Qualiopi-150dpi-Avec-Marianne-1.jpg.jpeg"
                 alt="Certifié Qualiopi - Processus certifié"
-                className="h-14 w-auto"
+                className="h-20 w-auto"
               />
-              <div>
-                <p className="font-display font-bold text-sm leading-tight">Certifié Qualiopi</p>
-                <p className="text-xs text-gray-500 leading-tight">Actions de formation & apprentissage</p>
-              </div>
             </div>
             <p className="text-sm text-gray-500 max-w-xl">
               TDL Formation est certifié Qualiopi au titre des actions de formation, garantissant la qualité de notre
@@ -346,6 +385,38 @@ export default function Landing() {
           <p className="text-xs text-gray-400 font-mono">contact@tdl-formation.fr</p>
         </div>
       </footer>
+    </div>
+  );
+}
+
+function MobileSubMenu({ label, titles, byTitle, open, onToggle, onNavigate }) {
+  return (
+    <div className="border-b border-gray-100">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="w-full flex items-center justify-between py-3 text-left"
+      >
+        {label}
+        <CaretDown size={14} className={`text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="pb-2 pl-3 flex flex-col">
+          {titles.map((title) => {
+            const f = byTitle(title);
+            return (
+              <Link
+                key={title}
+                to={f ? `/formations/${f.id}` : "#formations"}
+                className="py-2 text-gray-600 text-sm"
+                onClick={onNavigate}
+              >
+                {title}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
