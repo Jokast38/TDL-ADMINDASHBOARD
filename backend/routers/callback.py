@@ -15,28 +15,40 @@ CONTACT_EMAIL = "contact@tdl-formation.fr"
 
 @router.post("")
 async def create_callback_request(payload: CallbackRequestIn):
-    """Formulaire public (landing page 'offre fidélité') : demande de rappel,
-    sans inscription formelle. Notifie l'équipe par email et rend l'entrée
-    visible dans la page Inscriptions du dashboard."""
+    """Formulaire public (landing page 'offre fidélité' ou formulaire de
+    contact du site) : demande de rappel, sans inscription formelle. Notifie
+    l'équipe par email et rend l'entrée visible dans la page Inscriptions du
+    dashboard."""
     doc = {
         "id": str(uuid.uuid4()),
         "prenom": payload.prenom, "nom": payload.nom,
-        "telephone": payload.telephone, "session": payload.session or "",
+        "telephone": payload.telephone, "email": payload.email or "",
+        "message": payload.message or "", "session": payload.session or "",
         "source": payload.source or "offre_fidelite",
         "handled": False, "notes": "",
         "created_at": now_iso(),
     }
     await db.callback_requests.insert_one(doc)
 
-    session_line = f"<p>Session souhaitée : <b>{payload.session}</b></p>" if payload.session else ""
-    await send_email(
-        CONTACT_EMAIL,
-        f"Nouvelle demande de rappel — {payload.prenom} {payload.nom}",
-        f"<p>Nouvelle demande de rappel depuis la landing page offre fidélité :</p>"
-        f"<p>Nom : <b>{payload.prenom} {payload.nom}</b><br>"
-        f"Téléphone : <b>{payload.telephone}</b></p>"
-        f"{session_line}"
+    is_contact_form = doc["source"] == "contact_form"
+    subject = (
+        f"Nouveau message de contact — {payload.prenom} {payload.nom}" if is_contact_form
+        else f"Nouvelle demande de rappel — {payload.prenom} {payload.nom}"
     )
+    lines = [
+        f"<p>Nouveau {'message de contact' if is_contact_form else 'demande de rappel'} depuis le site :</p>",
+        f"<p>Nom : <b>{payload.prenom} {payload.nom}</b><br>",
+        f"Téléphone : <b>{payload.telephone}</b>",
+    ]
+    if payload.email:
+        lines.append(f"<br>Email : <b>{payload.email}</b>")
+    lines.append("</p>")
+    if payload.session:
+        lines.append(f"<p>Session souhaitée : <b>{payload.session}</b></p>")
+    if payload.message:
+        lines.append(f"<p>Message :<br>{payload.message}</p>")
+
+    await send_email(CONTACT_EMAIL, subject, "".join(lines))
 
     doc.pop("_id", None)
     return {"ok": True}

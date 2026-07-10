@@ -6,6 +6,8 @@ class CallbackRequestIn(BaseModel):
     prenom: str
     nom: str
     telephone: str
+    email: Optional[str] = ""
+    message: Optional[str] = ""
     session: Optional[str] = ""
     source: Optional[str] = "offre_fidelite"
 
