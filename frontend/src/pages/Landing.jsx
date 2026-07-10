@@ -164,7 +164,7 @@ export default function Landing() {
             </h1>
             <p className="text-gray-600 text-lg mt-6 max-w-xl">
               Formation initiale, continue, passerelle VTC ↔ Taxi, SSIAP, ECSR — inscription en ligne, dossier ANTS
-              suivi, paiement sécurisé. Et la mobilité électrique KAMI STREET en bonus.
+              suivi, paiement sécurisé.
             </p>
             <div className="flex flex-wrap gap-3 mt-8">
               <Link to="/inscription">
