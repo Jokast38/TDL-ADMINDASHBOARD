@@ -11,7 +11,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise, PhoneCall, Check, Trash } from "@phosphor-icons/react";
+import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise, PhoneCall, Check, Trash, GraduationCap } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n || 0);
@@ -29,10 +29,20 @@ export default function Inscriptions() {
 
   const [callbacks, setCallbacks] = useState([]);
 
+  const [formations, setFormations] = useState([]);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [enrollCallback, setEnrollCallback] = useState(null);
+  const [enrollForm, setEnrollForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "" });
+  const [enrolling, setEnrolling] = useState(false);
+
   const load = () => api.get("/inscriptions").then((r) => setItems(r.data)).catch(() => toast.error("Erreur de chargement"));
   const loadCallbacks = () => api.get("/callback-requests").then((r) => setCallbacks(r.data)).catch(() => {});
 
-  useEffect(() => { load(); loadCallbacks(); }, []);
+  useEffect(() => {
+    load();
+    loadCallbacks();
+    api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data)).catch(() => {});
+  }, []);
 
   const markCallbackHandled = async (id, handled) => {
     try { await api.put(`/callback-requests/${id}`, { handled }); loadCallbacks(); }
@@ -42,6 +52,39 @@ export default function Inscriptions() {
   const deleteCallback = async (id) => {
     try { await api.delete(`/callback-requests/${id}`); toast.success("Demande supprimée"); loadCallbacks(); }
     catch { toast.error("Erreur"); }
+  };
+
+  const openEnroll = (c) => {
+    setEnrollCallback(c);
+    setEnrollForm({
+      formation_id: formations[0]?.id || "",
+      name: `${c.prenom || ""} ${c.nom || ""}`.trim(),
+      email: c.email || "",
+      phone: c.telephone || "",
+      notes: c.message || "",
+    });
+    setEnrollOpen(true);
+  };
+
+  const submitEnroll = async () => {
+    if (!enrollForm.formation_id) return toast.error("Choisissez une formation");
+    if (!enrollForm.name.trim()) return toast.error("Le nom est requis");
+    if (!enrollForm.email.trim()) return toast.error("Un email est requis pour créer l'inscription");
+    setEnrolling(true);
+    try {
+      await api.post("/inscriptions", {
+        formation_id: enrollForm.formation_id,
+        student_name: enrollForm.name,
+        student_email: enrollForm.email,
+        student_phone: enrollForm.phone || null,
+        notes: enrollForm.notes,
+      });
+      toast.success("Inscription créée");
+      if (enrollCallback) await markCallbackHandled(enrollCallback.id, true);
+      setEnrollOpen(false);
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur lors de l'inscription"); }
+    finally { setEnrolling(false); }
   };
 
   const filtered = items.filter((i) =>
@@ -116,6 +159,13 @@ export default function Inscriptions() {
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => openEnroll(c)}
+                    className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded"
+                    title="Inscrire à une formation"
+                  >
+                    <GraduationCap size={14} />
+                  </button>
                   {!c.handled ? (
                     <button
                       onClick={() => markCallbackHandled(c.id, true)}
@@ -268,6 +318,50 @@ export default function Inscriptions() {
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>Annuler</Button>
             <Button onClick={saveEdit} disabled={saving} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
               {saving ? "Enregistrement..." : "Enregistrer"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Inscrire {enrollCallback?.prenom} {enrollCallback?.nom} à une formation</DialogTitle></DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-sm font-medium">Formation</label>
+              <Select value={enrollForm.formation_id} onValueChange={(v) => setEnrollForm({ ...enrollForm, formation_id: v })}>
+                <SelectTrigger><SelectValue placeholder="Choisir une formation" /></SelectTrigger>
+                <SelectContent>
+                  {formations.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>{f.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Nom</label>
+              <Input value={enrollForm.name} onChange={(e) => setEnrollForm({ ...enrollForm, name: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
+                <Input value={enrollForm.email} onChange={(e) => setEnrollForm({ ...enrollForm, email: e.target.value })} />
+                <p className="text-xs text-gray-400 mt-1">Requis pour créer l'inscription (non collecté par le formulaire de rappel).</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Téléphone</label>
+                <Input value={enrollForm.phone} onChange={(e) => setEnrollForm({ ...enrollForm, phone: e.target.value })} />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Notes</label>
+              <Textarea rows={2} value={enrollForm.notes} onChange={(e) => setEnrollForm({ ...enrollForm, notes: e.target.value })} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setEnrollOpen(false)} disabled={enrolling}>Annuler</Button>
+            <Button onClick={submitEnroll} disabled={enrolling} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+              {enrolling ? "Inscription..." : "Inscrire"}
             </Button>
           </div>
         </DialogContent>

@@ -358,6 +358,11 @@ export default function Leads() {
   const [callOnlyFilter, setCallOnlyFilter] = useState(false);
   const [interestFilter, setInterestFilter] = useState("all");
 
+  // Autocomplétion : suggestions issues de TOUTE la base (pas seulement la
+  // page affichée), indépendante de la recherche/pagination principale.
+  const [suggestions, setSuggestions] = useState([]);
+  const [searchFocused, setSearchFocused] = useState(false);
+
   const [selected, setSelected] = useState(new Set());
 
   const [addOpen, setAddOpen] = useState(false);
@@ -439,6 +444,18 @@ export default function Leads() {
     const t = setTimeout(() => { page === 1 ? load() : setPage(1); }, 350);
     return () => clearTimeout(t);
   }, [q]);
+  // Autocomplétion : requête légère (8 résultats) sur toute la base, séparée
+  // de la recherche principale — ne touche ni `items` ni la pagination.
+  useEffect(() => {
+    const needle = q.trim();
+    if (needle.length < 2) { setSuggestions([]); return; }
+    const t = setTimeout(() => {
+      api.get("/leads", { params: { q: needle, page: 1, page_size: 8 } })
+        .then(({ data }) => setSuggestions(data.items))
+        .catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
   useEffect(() => {
     api.get("/leads/interests").then(({ data }) => setAllInterests(data)).catch(() => {});
   }, []);
@@ -459,10 +476,25 @@ export default function Leads() {
   // Le filtre par intérêt s'applique côté client, donc uniquement sur la page
   // actuellement chargée (pas sur l'ensemble des leads) — un compromis pour
   // éviter de recharger toute la base à chaque changement de ce filtre.
+  // La recherche texte filtre aussi instantanément la page déjà chargée (pas
+  // d'attente réseau), en parallèle de la recherche serveur (debounced, sur
+  // toute la base) qui remplace `items` une fois arrivée — les deux se
+  // combinent sans se marcher dessus.
   const filteredItems = useMemo(() => {
-    if (interestFilter === "all") return items;
-    return items.filter((i) => canonicalizeInterest(i.interest) === interestFilter);
-  }, [items, interestFilter]);
+    let result = items;
+    if (interestFilter !== "all") {
+      result = result.filter((i) => canonicalizeInterest(i.interest) === interestFilter);
+    }
+    if (q.trim()) {
+      const needle = q.trim().toLowerCase();
+      result = result.filter((i) =>
+        (i.name || "").toLowerCase().includes(needle) ||
+        (i.email || "").toLowerCase().includes(needle) ||
+        (i.phone || "").toLowerCase().includes(needle)
+      );
+    }
+    return result;
+  }, [items, interestFilter, q]);
 
   const toggleSelect = (id) =>
     setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -774,7 +806,30 @@ export default function Leads() {
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative w-64">
           <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />
-          <Input placeholder="Rechercher nom, email, tél..." value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
+          <Input
+            placeholder="Rechercher nom, email, tél..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+            className="pl-9"
+          />
+          {searchFocused && q.trim().length >= 2 && suggestions.length > 0 && (
+            <div className="absolute z-20 top-full mt-1 w-80 bg-white border border-gray-200 rounded-md shadow-lg overflow-hidden">
+              <p className="text-[10px] uppercase tracking-wide text-gray-400 px-3 pt-2 pb-1">Dans toute la base</p>
+              {suggestions.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onMouseDown={() => { setQ(s.email || s.phone || s.name); setSearchFocused(false); }}
+                  className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-t border-gray-100 first:border-t-0"
+                >
+                  <p className="font-medium">{s.name}</p>
+                  <p className="text-xs text-gray-500">{s.email || s.phone || "—"}</p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>

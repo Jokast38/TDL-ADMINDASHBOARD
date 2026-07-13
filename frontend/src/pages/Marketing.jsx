@@ -169,15 +169,21 @@ function EmailStatsTab() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left border-y border-gray-200">
               <tr>
-                <th className="py-2.5 px-5 overline">Objet</th>
+                <th className="py-2.5 px-5 overline">Date</th>
+                <th className="py-2.5 px-5 overline">Objet (campagne)</th>
                 <th className="py-2.5 px-5 overline text-right">Envoyés</th>
                 <th className="py-2.5 px-5 overline text-right">Ouverts</th>
                 <th className="py-2.5 px-5 overline text-right">Clics</th>
+                <th className="py-2.5 px-5 overline text-right">Inscrits</th>
+                <th className="py-2.5 px-5 overline text-right">Conversion</th>
               </tr>
             </thead>
             <tbody>
               {stats.by_subject.filter((s) => s.sent > 0).map((s) => (
                 <tr key={s.subject} className="border-b border-gray-100">
+                  <td className="py-2.5 px-5 text-xs text-gray-500 font-mono whitespace-nowrap">
+                    {s.first_sent ? new Date(s.first_sent).toLocaleDateString("fr-FR") : "—"}
+                  </td>
                   <td className="py-2.5 px-5 max-w-md truncate" title={s.subject}>{s.subject}</td>
                   <td className="py-2.5 px-5 text-right font-mono">{s.sent}</td>
                   <td className="py-2.5 px-5 text-right font-mono text-[#0B7238]">
@@ -186,10 +192,16 @@ function EmailStatsTab() {
                   <td className="py-2.5 px-5 text-right font-mono text-[#d4af37]">
                     {s.clicked} {s.sent > 0 && <span className="text-gray-400">({Math.round(s.clicked / s.sent * 100)}%)</span>}
                   </td>
+                  <td className="py-2.5 px-5 text-right font-mono">{s.converted}</td>
+                  <td className="py-2.5 px-5 text-right">
+                    <Badge className={s.conversion_rate > 0 ? "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10" : "bg-gray-100 text-gray-500 hover:bg-gray-100"}>
+                      {s.conversion_rate}%
+                    </Badge>
+                  </td>
                 </tr>
               ))}
               {!stats.by_subject.filter((s) => s.sent > 0).length && (
-                <tr><td colSpan="4" className="py-8 text-center text-gray-400">Aucun email envoyé sur cette période.</td></tr>
+                <tr><td colSpan="7" className="py-8 text-center text-gray-400">Aucun email envoyé sur cette période.</td></tr>
               )}
             </tbody>
           </table>
@@ -199,7 +211,10 @@ function EmailStatsTab() {
       <p className="text-[11px] text-gray-400">
         Le suivi d'ouverture/clic repose sur un pixel invisible et une redirection de liens : certains clients mail
         (Gmail proxy, Apple Mail Privacy Protection, images bloquées par défaut...) peuvent fausser ces chiffres.
-        À prendre comme indicateur de tendance, pas comme mesure exacte à 100%.
+        À prendre comme indicateur de tendance, pas comme mesure exacte à 100%. La colonne "Inscrits" compte les
+        inscriptions dont l'email correspond à un destinataire de la campagne, sans tenir compte de la date exacte
+        (une inscription antérieure à l'envoi serait aussi comptée) — un indicateur de résultat, pas une preuve stricte
+        de causalité.
       </p>
     </div>
   );

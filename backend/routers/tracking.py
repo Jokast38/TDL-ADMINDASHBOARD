@@ -65,10 +65,23 @@ async def email_stats(days: int = 30, user: dict = Depends(require_role(*ROLES_L
             "sent": {"$sum": {"$cond": [{"$in": ["$status", ["sent", "mocked"]]}, 1, 0]}},
             "opened": {"$sum": {"$cond": ["$opened", 1, 0]}},
             "clicked": {"$sum": {"$cond": ["$clicked", 1, 0]}},
+            "first_sent": {"$min": "$created_at"},
+            "recipients": {"$addToSet": "$to"},
         }},
         {"$sort": {"sent": -1}},
         {"$limit": 15},
     ]).to_list(15)
+
+    # Conversion par campagne : combien des destinataires de cette campagne ont
+    # une inscription (même email) — indicateur approximatif, ne tient pas
+    # compte de l'ordre temporel exact (une inscription antérieure à l'envoi
+    # compterait aussi), mais donne une vraie tendance de résultat par campagne.
+    for x in by_subject:
+        recipient_emails = [e.lower() for e in x.get("recipients", []) if e]
+        x["converted"] = (
+            await db.inscriptions.count_documents({"student_email": {"$in": recipient_emails}})
+            if recipient_emails else 0
+        )
 
     by_day = await db.email_logs.aggregate([
         {"$match": match},
@@ -88,7 +101,11 @@ async def email_stats(days: int = 30, user: dict = Depends(require_role(*ROLES_L
         "open_rate": round(opened / sent * 100, 1) if sent else 0,
         "click_rate": round(clicked / sent * 100, 1) if sent else 0,
         "by_subject": [
-            {"subject": x["_id"] or "(sans objet)", "sent": x["sent"], "opened": x["opened"], "clicked": x["clicked"]}
+            {
+                "subject": x["_id"] or "(sans objet)", "sent": x["sent"], "opened": x["opened"], "clicked": x["clicked"],
+                "converted": x["converted"], "first_sent": x.get("first_sent"),
+                "conversion_rate": round(x["converted"] / x["sent"] * 100, 1) if x["sent"] else 0,
+            }
             for x in by_subject
         ],
         "by_day": [{"day": x["_id"], "sent": x["sent"], "opened": x["opened"], "clicked": x["clicked"]} for x in by_day],
