@@ -244,35 +244,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* KAMI STREET */}
-      <section className="py-16 lg:py-24 bg-black text-white">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 grid lg:grid-cols-2 gap-12 items-center">
-          <div>
-            <p className="overline" style={{ color: "#d4af37" }}>
-              <Lightning size={12} className="inline mr-1" weight="fill" /> KAMI STREET
-            </p>
-            <h2 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-2 mb-4">
-              Mobilité électrique<br />nouvelle génération.
-            </h2>
-            <p className="text-gray-300 mb-6 max-w-md">
-              Vélos & scooters électriques sélectionnés pour la ville. Livraison rapide, SAV inclus.
-            </p>
-            <a href="https://kamistreet.fr/" target="_blank" rel="noreferrer">
-              <Button size="lg" className="bg-[#d4af37] text-black hover:bg-[#b8941f] hover:text-black" data-testid="kami-cta">
-                Découvrir la gamme sur kamistreet.fr <ArrowRight size={16} className="ml-2" />
-              </Button>
-            </a>
-          </div>
-          <div className="aspect-square bg-[#d4af37]/10 rounded-md flex items-center justify-center border border-white/10">
-            <img
-              src="https://images.unsplash.com/photo-1597260491619-bab87197869f?w=800"
-              alt="KAMI STREET"
-              className="w-full h-full object-cover rounded-md"
-            />
-          </div>
-        </div>
-      </section>
-
       {/* Certifications & Partenaires */}
       <section className="py-14 border-t border-gray-200 bg-gray-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
@@ -397,6 +368,35 @@ export default function Landing() {
               </form>
             )}
           </Card>
+        </div>
+      </section>
+
+      {/* KAMI STREET */}
+      <section className="py-16 lg:py-24 bg-black text-white">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 grid lg:grid-cols-2 gap-12 items-center">
+          <div>
+            <p className="overline" style={{ color: "#d4af37" }}>
+              <Lightning size={12} className="inline mr-1" weight="fill" /> KAMI STREET
+            </p>
+            <h2 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-2 mb-4">
+              Mobilité électrique<br />nouvelle génération.
+            </h2>
+            <p className="text-gray-300 mb-6 max-w-md">
+              Vélos & scooters électriques sélectionnés pour la ville. Livraison rapide, SAV inclus.
+            </p>
+            <a href="https://kamistreet.fr/" target="_blank" rel="noreferrer">
+              <Button size="lg" className="bg-[#d4af37] text-black hover:bg-[#b8941f] hover:text-black" data-testid="kami-cta">
+                Découvrir la gamme sur kamistreet.fr <ArrowRight size={16} className="ml-2" />
+              </Button>
+            </a>
+          </div>
+          <div className="aspect-square bg-[#d4af37]/10 rounded-md flex items-center justify-center border border-white/10">
+            <img
+              src="https://images.unsplash.com/photo-1597260491619-bab87197869f?w=800"
+              alt="KAMI STREET"
+              className="w-full h-full object-cover rounded-md"
+            />
+          </div>
         </div>
       </section>
 
