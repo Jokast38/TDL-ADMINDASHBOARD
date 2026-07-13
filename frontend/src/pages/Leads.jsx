@@ -264,6 +264,45 @@ const TEMPLATES = {
     ),
   },
 
+  vtc_recuperation_points: {
+    label: "🚗🔵 VTC — Récupération de points (fidélité)",
+    subject: "Chauffeur professionnel : préservez votre permis",
+    body: makeEmail(
+      `<p style="margin:0 0 18px 0;font-size:16px;color:#0a0a0a;">Bonjour <b>{{name}}</b>,</p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Vous avez déjà suivi votre formation chez TDL. Aujourd'hui, nous reprenons contact avec vous car,
+         en tant que chauffeur professionnel, votre permis est bien plus qu'un simple document : c'est votre
+         principal outil de travail.
+       </p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Parce que vous passez une grande partie de votre journée sur la route, préserver votre capital de
+         points est essentiel pour continuer à exercer votre activité sereinement.
+       </p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Si votre solde de points a diminué, vous pouvez peut-être récupérer <b>jusqu'à 4 points</b> grâce à
+         notre stage de sensibilisation à la sécurité routière, agréé par le Ministère de l'Intérieur.
+       </p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Et parce que vous avez déjà fait confiance à TDL, nous avons le plaisir de vous faire bénéficier de
+         notre <b>tarif fidélité de 189&nbsp;€</b> pour votre prochain stage de récupération de points.
+       </p>
+       <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
+         La démarche est simple :
+       </p>
+       <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px 0;">
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">✅ Choisissez une date disponible</td></tr>
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">✅ Demandez à être rappelé par notre équipe</td></tr>
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">✅ Effectuez votre stage en seulement 2 jours</td></tr>
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">✅ Récupérez jusqu'à 4 points, selon votre situation</td></tr>
+       </table>
+       <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Nos prochaines sessions sont disponibles à Épinay-sur-Seine tout au long de l'été.
+       </p>`,
+      "Découvrir les prochaines dates à 189 € →",
+      TDL_LANDING_FIDELITE
+    ),
+  },
+
   ecsr: {
     label: "🎓 Formation ECSR (Moniteur auto-école)",
     subject: "Devenez moniteur d'auto-école — Titre Pro ECSR avec TDL Formation",
@@ -420,6 +459,13 @@ export default function Leads() {
       if (statusFilter !== "all") params.status = statusFilter;
       if (contactedFilter !== "all") params.contacted = contactedFilter === "yes";
       if (callOnlyFilter) params.has_email = false;
+      if (interestFilter !== "all") {
+        // Le regroupement (VTC, Taxi, ...) est calculé côté client via
+        // canonicalizeInterest() ; on envoie au backend les valeurs brutes
+        // correspondantes pour filtrer sur TOUTE la base, pas juste la page.
+        const rawValues = allInterests.filter((raw) => canonicalizeInterest(raw) === interestFilter);
+        params.interest_in = (rawValues.length ? rawValues : [interestFilter]).join("|");
+      }
       const { data } = await api.get("/leads", { params });
       setItems(data.items);
       setTotal(data.total);
@@ -431,13 +477,13 @@ export default function Leads() {
     }
   };
 
-  useEffect(() => { load(); }, [page, statusFilter, contactedFilter, callOnlyFilter]);
-  // Un changement de filtre (statut/contacté/à appeler) doit revenir à la page 1.
+  useEffect(() => { load(); }, [page, statusFilter, contactedFilter, callOnlyFilter, interestFilter]);
+  // Un changement de filtre (statut/contacté/à appeler/intérêt) doit revenir à la page 1.
   const isFirstFilterRun = useRef(true);
   useEffect(() => {
     if (isFirstFilterRun.current) { isFirstFilterRun.current = false; return; }
     setPage(1);
-  }, [statusFilter, contactedFilter, callOnlyFilter]);
+  }, [statusFilter, contactedFilter, callOnlyFilter, interestFilter]);
   // Recherche texte : debounce, et retour à la page 1 (sinon "page 3" pourrait
   // se retrouver vide après une nouvelle recherche plus étroite).
   useEffect(() => {
@@ -473,18 +519,14 @@ export default function Leads() {
     return s.has("Inconnus") ? [...sorted, "Inconnus"] : sorted;
   }, [allInterests]);
 
-  // Le filtre par intérêt s'applique côté client, donc uniquement sur la page
-  // actuellement chargée (pas sur l'ensemble des leads) — un compromis pour
-  // éviter de recharger toute la base à chaque changement de ce filtre.
-  // La recherche texte filtre aussi instantanément la page déjà chargée (pas
-  // d'attente réseau), en parallèle de la recherche serveur (debounced, sur
-  // toute la base) qui remplace `items` une fois arrivée — les deux se
-  // combinent sans se marcher dessus.
+  // Le filtre par intérêt est désormais appliqué côté serveur (voir load(),
+  // paramètre interest_in) pour porter sur toute la base et pas seulement la
+  // page chargée. La recherche texte, elle, filtre en plus instantanément la
+  // page déjà chargée (pas d'attente réseau), en parallèle de la recherche
+  // serveur (debounced, sur toute la base) qui remplace `items` une fois
+  // arrivée — les deux se combinent sans se marcher dessus.
   const filteredItems = useMemo(() => {
     let result = items;
-    if (interestFilter !== "all") {
-      result = result.filter((i) => canonicalizeInterest(i.interest) === interestFilter);
-    }
     if (q.trim()) {
       const needle = q.trim().toLowerCase();
       result = result.filter((i) =>

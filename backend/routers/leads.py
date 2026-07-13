@@ -361,6 +361,7 @@ async def list_leads(
     has_email: Optional[bool] = None,
     has_phone: Optional[bool] = None,
     q: Optional[str] = None,
+    interest_in: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
     user: dict = Depends(require_role(*ROLES_LEADS))
@@ -382,8 +383,17 @@ async def list_leads(
             {"email": {"$regex": q, "$options": "i"}},
             {"phone": {"$regex": q, "$options": "i"}},
         ]
+    if interest_in:
+        # Le regroupement par mots-clés (VTC, Taxi, Passerelle...) est calculé
+        # côté frontend (voir canonicalizeInterest) à partir de /leads/interests ;
+        # ici on ne fait qu'un filtre exact sur les valeurs brutes qui appartiennent
+        # au groupe choisi, pour que le filtre porte sur TOUTE la base et pas
+        # seulement la page déjà chargée.
+        values = [v for v in interest_in.split("|") if v]
+        if values:
+            query["interest"] = {"$in": values}
 
-    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, page, page_size)
+    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, page, page_size)
     cached = _leads_cache_get(cache_key)
     if cached is not None:
         return cached
