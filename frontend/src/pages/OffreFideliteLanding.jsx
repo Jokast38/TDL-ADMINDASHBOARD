@@ -50,6 +50,12 @@ const PHOTOS = [
   { label: "Parking", src: "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=500&h=375&fit=crop" },
 ];
 
+// Validation basique : téléphone français (fixe/mobile, avec ou sans +33,
+// espaces/points/tirets tolérés) et email — pour éviter les demandes avec un
+// numéro incomplet (chiffre oublié) impossibles à rappeler.
+const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
+const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
+
 function SiteHeader() {
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
@@ -96,6 +102,9 @@ export default function OffreFideliteLanding() {
     e.preventDefault();
     if (!form.prenom.trim() || !form.nom.trim() || !form.telephone.trim()) {
       return toast.error("Merci de remplir tous les champs");
+    }
+    if (!isValidPhone(form.telephone)) {
+      return toast.error("Merci de vérifier votre numéro de téléphone (10 chiffres, ex : 06 12 34 56 78)");
     }
     setSending(true);
     try {

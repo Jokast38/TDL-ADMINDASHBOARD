@@ -18,6 +18,19 @@ const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", curr
 
 const PAYMENT_LABEL = { pending: "En attente", paid: "Payé", refunded: "Remboursé" };
 
+// Rappel de l'intérêt de la personne selon l'origine du formulaire : la
+// landing "offre fidélité" ne collecte qu'une session choisie, le formulaire
+// de contact du site un message libre — sinon on affiche "Non précisé".
+const callbackInterest = (c) => {
+  if (c.source === "offre_fidelite") {
+    return c.session ? `Offre fidélité — session du ${c.session}` : "Offre fidélité — récupération de points";
+  }
+  if (c.source === "contact_form") {
+    return c.message?.trim() ? c.message.trim() : "Formulaire de contact du site";
+  }
+  return "Non précisé";
+};
+
 export default function Inscriptions() {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
@@ -154,8 +167,11 @@ export default function Inscriptions() {
                 <div className="min-w-0">
                   <p className="font-medium text-sm">{c.prenom} {c.nom}</p>
                   <p className="text-xs text-gray-500">
-                    {c.telephone}{c.session && <span> · Session : {c.session}</span>}
+                    {c.telephone}{c.email && <span> · {c.email}</span>}
                     <span className="ml-2 text-gray-400">{new Date(c.created_at).toLocaleDateString("fr-FR")}</span>
+                  </p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Intérêt : {callbackInterest(c)}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">

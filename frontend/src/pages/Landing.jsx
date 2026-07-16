@@ -32,6 +32,13 @@ const NAV_TAXI = ["Formation Taxi Initiale", "Formation Continue Taxi", "Formati
 
 const PARTENAIRES = ["Uber", "Bolt", "FreeNow", "Heetch", "Marcel", "LeCab"];
 
+// Validation basique du formulaire de contact : téléphone français (avec ou
+// sans +33, espaces/points/tirets tolérés) et email — pour éviter les
+// demandes avec un numéro incomplet (chiffre oublié) impossibles à rappeler.
+const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
+
 export default function Landing() {
   const [formations, setFormations] = useState([]);
 
@@ -52,6 +59,12 @@ export default function Landing() {
     e.preventDefault();
     if (!contactForm.prenom.trim() || !contactForm.nom.trim() || !contactForm.telephone.trim()) {
       return toast.error("Merci de remplir au moins nom, prénom et téléphone");
+    }
+    if (!isValidPhone(contactForm.telephone)) {
+      return toast.error("Merci de vérifier votre numéro de téléphone (10 chiffres, ex : 06 12 34 56 78)");
+    }
+    if (contactForm.email.trim() && !EMAIL_RE.test(contactForm.email.trim())) {
+      return toast.error("Merci de vérifier le format de votre email");
     }
     setContactSending(true);
     try {

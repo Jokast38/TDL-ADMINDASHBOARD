@@ -9,6 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle, ArrowRight, ArrowLeft } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
+// Validation basique : téléphone français (avec ou sans +33, espaces/points/
+// tirets tolérés) et email — pour éviter les dossiers avec un numéro
+// incomplet (chiffre oublié) ou un email mal formé, impossibles à recontacter.
+const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
+
 export default function PublicInscription() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -26,6 +33,12 @@ export default function PublicInscription() {
   }, []);
 
   const submit = async () => {
+    if (!EMAIL_RE.test(form.student_email.trim())) {
+      return toast.error("Merci de vérifier le format de votre email");
+    }
+    if (form.student_phone.trim() && !isValidPhone(form.student_phone)) {
+      return toast.error("Merci de vérifier votre numéro de téléphone (10 chiffres, ex : 06 12 34 56 78)");
+    }
     try {
       const { data } = await api.post("/inscriptions", { formation_id: formationId, ...form });
       setSuccess(data);
