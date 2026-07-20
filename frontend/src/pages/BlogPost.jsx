@@ -7,11 +7,24 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Calendar, Eye, ShareNetwork, Tag } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import FAQSection from "@/components/FAQSection";
+import { faqsForCategory } from "@/constants/formationFaqs";
+import { heroForCategory } from "@/constants/formationAssets";
+import { useReveal } from "@/hooks/useReveal";
+
+const CATEGORY_TO_FORMATION = {
+  actualites: "VTC_TAXI",
+  conseils: "VTC_TAXI",
+  formations: "VTC_TAXI",
+  kami: "AUTO_ECOLE",
+  seo: "VTC_TAXI",
+};
 
 export default function BlogPost() {
   const { slug } = useParams();
   const navigate = useNavigate();
   const [post, setPost] = useState(null);
+  const revealRef = useReveal();
 
   useEffect(() => {
     api.get(`/blog/posts/${slug}`).then((r) => {
@@ -23,6 +36,7 @@ export default function BlogPost() {
       if (!meta) { meta = document.createElement("meta"); meta.name = "description"; document.head.appendChild(meta); }
       meta.setAttribute("content", r.data.seo_description || r.data.excerpt || "");
     }).catch(() => navigate("/blog"));
+    window.scrollTo(0, 0);
   }, [slug, navigate]);
 
   const share = () => {
@@ -36,8 +50,21 @@ export default function BlogPost() {
 
   if (!post) return <div className="min-h-screen flex items-center justify-center text-gray-400">Chargement…</div>;
 
+  const articleJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: post.title,
+    description: post.seo_description || post.excerpt || "",
+    image: post.cover_image || heroForCategory(CATEGORY_TO_FORMATION[post.category] || "VTC_TAXI"),
+    datePublished: post.published_at || post.created_at,
+    author: { "@type": "Organization", name: "TDL Formation" },
+    publisher: { "@type": "Organization", name: "TDL Formation" },
+  };
+  const faqCategory = CATEGORY_TO_FORMATION[post.category];
+
   return (
-    <div className="min-h-screen bg-white" data-testid="blog-post-page">
+    <div className="min-h-screen bg-white" data-testid="blog-post-page" ref={revealRef}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }} />
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
@@ -50,7 +77,7 @@ export default function BlogPost() {
         </div>
       </header>
 
-      <article className="max-w-3xl mx-auto px-6 py-10 lg:py-16">
+      <article className="max-w-3xl mx-auto px-6 py-10 lg:py-16 animate-fade-in-up">
         <Badge variant="outline" className="mb-4">{post.category}</Badge>
         <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tighter leading-[1.05] mb-6">
           {post.title}
@@ -66,11 +93,13 @@ export default function BlogPost() {
           </button>
         </div>
 
-        {post.cover_image && (
-          <div className="aspect-video bg-gray-100 rounded-md overflow-hidden mb-10">
-            <img src={post.cover_image} alt={post.title} className="w-full h-full object-cover" />
-          </div>
-        )}
+        <div className="aspect-video bg-gray-100 rounded-md overflow-hidden mb-10">
+          <img
+            src={post.cover_image || heroForCategory(faqCategory || "VTC_TAXI")}
+            alt={post.title}
+            className="w-full h-full object-cover"
+          />
+        </div>
 
         <div className="prose prose-lg max-w-none
           prose-headings:font-display prose-headings:font-bold prose-headings:tracking-tight
@@ -96,6 +125,8 @@ export default function BlogPost() {
             </div>
           </div>
         )}
+
+        {faqCategory && <FAQSection faqs={faqsForCategory(faqCategory)} />}
 
         <div className="mt-16 p-8 bg-black text-white rounded-md" data-testid="cta-block">
           <p className="overline mb-2" style={{ color: "#d4af37" }}>Passer à l'action</p>

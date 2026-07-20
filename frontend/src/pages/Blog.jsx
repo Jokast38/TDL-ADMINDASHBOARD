@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, ArrowRight, Calendar, Tag, Eye } from "@phosphor-icons/react";
+import { useReveal } from "@/hooks/useReveal";
 
 const CATEGORIES = [
   { key: "all", label: "Tous" },
@@ -27,9 +28,10 @@ export default function Blog() {
 
   const featured = posts[0];
   const rest = posts.slice(1);
+  const revealRef = useReveal();
 
   return (
-    <div className="min-h-screen bg-white" data-testid="blog-list-page">
+    <div className="min-h-screen bg-white" data-testid="blog-list-page" ref={revealRef}>
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
@@ -48,7 +50,7 @@ export default function Blog() {
       </header>
 
       <section className="border-b border-gray-200 grid-bg-noise">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-24">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-24 animate-fade-in-up">
           <p className="overline mb-3">Le journal TDL</p>
           <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tighter leading-[0.95]">
             Actualités, <span className="text-[#d4af37]">conseils</span>, guides<br />formation & mobilité.
@@ -113,8 +115,8 @@ export default function Blog() {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {rest.map((p) => (
-              <Link key={p.id} to={`/blog/${p.slug}`} data-testid={`post-${p.slug}`}>
+            {rest.map((p, idx) => (
+              <Link key={p.id} to={`/blog/${p.slug}`} data-testid={`post-${p.slug}`} data-reveal className={`reveal reveal-delay-${(idx % 4) + 1}`}>
                 <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all h-full">
                   <div className="aspect-video bg-gray-100 overflow-hidden">
                     {p.cover_image ? (

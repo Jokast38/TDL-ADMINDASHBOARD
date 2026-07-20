@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, CaretRight, Clock, Users, CheckCircle } from "@phosphor-icons/react";
+import { heroForCategory, galleryForCategory } from "@/constants/formationAssets";
+import { faqsForCategory } from "@/constants/formationFaqs";
+import FAQSection from "@/components/FAQSection";
+import { useReveal } from "@/hooks/useReveal";
 
 const CATEGORY_LABELS = {
   CACES: "CACES",
@@ -20,6 +24,7 @@ export default function FormationDetail() {
   const [formation, setFormation] = useState(null);
   const [others, setOthers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const revealRef = useReveal();
 
   useEffect(() => {
     setLoading(true);
@@ -52,9 +57,10 @@ export default function FormationDetail() {
   }
 
   const f = formation;
+  const gallery = galleryForCategory(f.category);
 
   return (
-    <div className="min-h-screen bg-white" data-testid="formation-detail-page">
+    <div className="min-h-screen bg-white" data-testid="formation-detail-page" ref={revealRef}>
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -84,19 +90,28 @@ export default function FormationDetail() {
         </div>
       </div>
 
+      {/* Hero banner */}
+      <section className="relative border-b border-gray-200 overflow-hidden">
+        <div className="absolute inset-0">
+          <img
+            src={f.image_url || heroForCategory(f.category)}
+            alt={f.title}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+        </div>
+        <div className="relative max-w-5xl mx-auto px-6 lg:px-8 py-16 lg:py-24 animate-fade-in-up">
+          <Badge className="mb-4 bg-[#d4af37] text-black hover:bg-[#d4af37]">{CATEGORY_LABELS[f.category] || f.category}</Badge>
+          <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight text-white max-w-3xl">
+            {f.title}
+          </h1>
+        </div>
+      </section>
+
       {/* Article */}
       <article className="max-w-5xl mx-auto px-6 lg:px-8 py-12 lg:py-16">
         <div className="grid lg:grid-cols-3 gap-12">
           <div className="lg:col-span-2">
-            <Badge variant="outline" className="mb-4">{CATEGORY_LABELS[f.category] || f.category}</Badge>
-            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight leading-tight mb-6">{f.title}</h1>
-
-            {f.image_url && (
-              <div className="aspect-video bg-gray-100 rounded-md overflow-hidden mb-8">
-                <img src={f.image_url} alt={f.title} className="w-full h-full object-cover" />
-              </div>
-            )}
-
             <div className="prose-formation">
               <p className="text-gray-700 text-lg leading-relaxed whitespace-pre-line">{f.description || "Description à venir."}</p>
             </div>
@@ -119,6 +134,29 @@ export default function FormationDetail() {
                 <li className="flex items-start gap-2"><CheckCircle size={16} className="text-[#0B7238] mt-0.5 shrink-0" weight="fill" /> Dossier ANTS suivi par notre équipe</li>
               </ul>
             </div>
+
+            {gallery.length > 0 && (
+              <div className="mt-10 pt-8 border-t border-gray-200">
+                <h2 className="font-display text-xl font-bold mb-4">Projetez-vous</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {gallery.map((src, i) => (
+                    <div
+                      key={src}
+                      data-reveal
+                      className={`reveal reveal-delay-${(i % 4) + 1} aspect-square bg-gray-100 rounded-md overflow-hidden`}
+                    >
+                      <img
+                        src={src}
+                        alt={`${f.title} — illustration ${i + 1}`}
+                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <FAQSection faqs={faqsForCategory(f.category)} title="Questions fréquentes sur cette formation" />
           </div>
 
           {/* Sidebar */}

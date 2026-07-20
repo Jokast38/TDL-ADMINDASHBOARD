@@ -15,6 +15,9 @@ import {
   List, X, DownloadSimple,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import HeroSlideshow from "@/components/HeroSlideshow";
+import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
+import { useReveal } from "@/hooks/useReveal";
 
 const CATEGORIES = [
   { key: "CACES", label: "CACES", icon: Truck, desc: "Toutes catégories - chariots, nacelles, grues" },
@@ -47,6 +50,7 @@ export default function Landing() {
   const [contactSent, setContactSent] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSubOpen, setMobileSubOpen] = useState(null); // "vtc" | "taxi" | null
+  const revealRef = useReveal();
 
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data));
@@ -98,7 +102,7 @@ export default function Landing() {
   );
 
   return (
-    <div className="min-h-screen bg-white" data-testid="landing-page">
+    <div className="min-h-screen bg-white" data-testid="landing-page" ref={revealRef}>
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -168,9 +172,11 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="border-b border-gray-200 grid-bg-noise">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-28 grid lg:grid-cols-12 gap-8 items-end">
-          <div className="lg:col-span-7">
+      <section className="relative border-b border-gray-200 overflow-hidden">
+        <HeroSlideshow slides={HOME_HERO_SLIDES} />
+        <div className="grid-bg-noise absolute inset-0 pointer-events-none" />
+        <div className="relative max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-28 grid lg:grid-cols-12 gap-8 items-end">
+          <div className="lg:col-span-7 animate-fade-in-up">
             <p className="overline mb-4">Organisme certifié Qualiopi · Épinay-sur-Seine (93) & Creil (60)</p>
             <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tighter leading-[0.95]">
               Devenez chauffeur <span className="text-[#d4af37]">VTC</span> ou <span className="text-[#d4af37]">Taxi</span><br />professionnel.
@@ -192,7 +198,7 @@ export default function Landing() {
               </a>
             </div>
           </div>
-          <div className="lg:col-span-5 grid grid-cols-2 gap-4">
+          <div className="lg:col-span-5 grid grid-cols-2 gap-4 animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
             <Stat label="Réussite examen VTC" value="97%" accent="#0B7238" />
             <Stat label="Réussite examen Taxi" value="95%" accent="#0B7238" />
             <Stat label="Examens réussis" value="5000+" accent="#d4af37" />
@@ -210,8 +216,8 @@ export default function Landing() {
             6 domaines de formation professionnelle agréés, plus la mobilité électrique KAMI STREET.
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {CATEGORIES.map((c) => (
-              <Card key={c.key} className="p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-[#0a0a0a] transition-all" data-testid={`cat-${c.key}`}>
+            {CATEGORIES.map((c, idx) => (
+              <Card key={c.key} data-reveal className={`reveal reveal-delay-${(idx % 4) + 1} p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-[#0a0a0a] transition-all`} data-testid={`cat-${c.key}`}>
                 <c.icon size={28} className="text-[#0a0a0a]" weight="duotone" />
                 <h3 className="font-display font-bold mt-3">{c.label}</h3>
                 <p className="text-xs text-gray-500 mt-1">{c.desc}</p>
@@ -227,14 +233,16 @@ export default function Landing() {
           <p className="overline">Catalogue</p>
           <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2 mb-10">Formations disponibles</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {formations.map((f) => (
-              <Card key={f.id} className="overflow-hidden border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all" data-testid={`public-formation-${f.id}`}>
+            {formations.map((f, idx) => (
+              <Card key={f.id} data-reveal className={`reveal reveal-delay-${(idx % 4) + 1} overflow-hidden border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all`} data-testid={`public-formation-${f.id}`}>
                 <Link to={`/formations/${f.id}`}>
-                  {f.image_url && (
-                    <div className="aspect-video bg-gray-100 overflow-hidden">
-                      <img src={f.image_url} alt={f.title} className="w-full h-full object-cover" />
-                    </div>
-                  )}
+                  <div className="aspect-video bg-gray-100 overflow-hidden">
+                    <img
+                      src={f.image_url || heroForCategory(f.category)}
+                      alt={f.title}
+                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                    />
+                  </div>
                 </Link>
                 <div className="p-5">
                   <Badge variant="outline" className="text-xs mb-2">{f.category}</Badge>
