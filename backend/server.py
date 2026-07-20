@@ -2,8 +2,10 @@ import asyncio
 import os
 import logging
 import uuid
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 
 from core.database import client, db
@@ -66,6 +68,12 @@ app.include_router(generated_docs.router, prefix=_PREFIX)
 app.include_router(health.router,         prefix=_PREFIX)
 app.include_router(callback.router,       prefix=_PREFIX)
 app.include_router(tracking.router,       prefix=_PREFIX)
+
+# Fichiers uploadés depuis l'admin (ex: images de couverture d'articles de blog),
+# servis en statique — indépendant du service de stockage objet externe Emergent.
+UPLOADS_DIR = Path(__file__).parent / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 
 async def _background_init():

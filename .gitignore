@@ -11,6 +11,7 @@ backend/.venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+backend/uploads/
 
 # Node
 node_modules/

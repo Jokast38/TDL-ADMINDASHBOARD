@@ -110,6 +110,9 @@ function App() {
             <Route path="/admin/orders" element={
               <ProtectedRoute roles={["admin", "employe", "commercial", "responsable_commercial"]}><AdminLayout><Orders /></AdminLayout></ProtectedRoute>
             } />
+            <Route path="/admin/blog" element={
+              <ProtectedRoute roles={["admin", "employe"]}><AdminLayout><AdminBlog /></AdminLayout></ProtectedRoute>
+            } />
             <Route path="/admin/ai" element={
               <ProtectedRoute roles={["admin", "employe"]}><AdminLayout><AIAssistant /></AdminLayout></ProtectedRoute>
             } />

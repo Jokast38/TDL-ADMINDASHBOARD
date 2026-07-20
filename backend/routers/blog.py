@@ -1,14 +1,32 @@
 import uuid
 import json as _json
-from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 from core.database import db
 from core.security import require_role
 from core.utils import now_iso, slugify
-from core.config import EMERGENT_LLM_KEY
+from core.config import EMERGENT_LLM_KEY, PUBLIC_BACKEND_URL
 from models.blog import BlogPostIn, BlogPostUpdate, BlogGenerateIn
 
 router = APIRouter(prefix="/blog", tags=["blog"])
+
+UPLOADS_DIR = Path(__file__).parent.parent / "uploads" / "blog"
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+
+@router.post("/upload-image")
+async def blog_upload_image(file: UploadFile = File(...), user: dict = Depends(require_role("admin", "employe"))):
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Format d'image non supporté (jpg, png, webp, gif)")
+    data = await file.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image trop volumineuse (max 8MB)")
+    ext = (file.filename or "jpg").rsplit(".", 1)[-1].lower()
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"{uuid.uuid4()}.{ext}"
+    (UPLOADS_DIR / filename).write_bytes(data)
+    return {"url": f"{PUBLIC_BACKEND_URL}/uploads/blog/{filename}"}
 
 SEED_ARTICLES_TOPICS = [
     {"topic": "Le CACES R489 en 2026 : guide complet sur les catégories, prix et durée", "category": "conseils", "keywords": "CACES R489, chariot élévateur, formation CACES, prix CACES"},

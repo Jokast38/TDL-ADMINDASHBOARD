@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, PencilSimple, Trash, Sparkle, Eye, ArrowSquareOut, MagicWand } from "@phosphor-icons/react";
+import { Plus, PencilSimple, Trash, Sparkle, Eye, ArrowSquareOut, MagicWand, UploadSimple, Image as ImageIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const CATEGORIES = ["actualites", "conseils", "formations", "kami", "seo"];
@@ -27,6 +27,8 @@ export default function AdminBlog() {
   const [aiKeywords, setAiKeywords] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [tagsInput, setTagsInput] = useState("");
+  const [coverUploading, setCoverUploading] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
   const load = () => api.get("/blog/admin/posts").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
@@ -53,6 +55,26 @@ export default function AdminBlog() {
       load();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
+  const uploadCover = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    setCoverUploading(true);
+    try {
+      const { data } = await api.post("/blog/upload-image", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setForm((f) => ({ ...f, cover_image: data.url }));
+      toast.success("Image téléversée");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur upload image");
+    } finally {
+      setCoverUploading(false);
+      e.target.value = "";
     }
   };
 
@@ -180,8 +202,30 @@ export default function AdminBlog() {
                   <Textarea rows={2} value={form.excerpt} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} data-testid="post-excerpt" />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="text-sm font-medium">Image de couverture (URL)</label>
-                  <Input value={form.cover_image || ""} onChange={(e) => setForm({ ...form, cover_image: e.target.value })} />
+                  <label className="text-sm font-medium">Image de couverture</label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      value={form.cover_image || ""}
+                      onChange={(e) => setForm({ ...form, cover_image: e.target.value })}
+                      placeholder="https://... ou téléversez un fichier"
+                      data-testid="post-cover-url"
+                    />
+                    <label className="shrink-0">
+                      <input type="file" accept="image/*" className="hidden" onChange={uploadCover} data-testid="post-cover-upload" />
+                      <Button type="button" variant="outline" disabled={coverUploading} className="cursor-pointer">
+                        <UploadSimple size={14} className="mr-1" /> {coverUploading ? "Envoi..." : "Choisir"}
+                      </Button>
+                    </label>
+                  </div>
+                  {form.cover_image ? (
+                    <div className="mt-3 aspect-video w-full max-w-xs bg-gray-100 rounded-md overflow-hidden border border-gray-200">
+                      <img src={form.cover_image} alt="Aperçu couverture" className="w-full h-full object-cover" />
+                    </div>
+                  ) : (
+                    <div className="mt-3 aspect-video w-full max-w-xs bg-gray-50 rounded-md border border-dashed border-gray-200 flex items-center justify-center text-gray-400">
+                      <ImageIcon size={24} />
+                    </div>
+                  )}
                 </div>
                 <div className="sm:col-span-2">
                   <label className="text-sm font-medium">Contenu (Markdown) *</label>

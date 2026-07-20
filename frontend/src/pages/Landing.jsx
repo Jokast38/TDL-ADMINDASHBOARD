@@ -10,9 +10,9 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  ArrowRight, GraduationCap, Lightning, Trophy, CaretDown,
+  ArrowRight, GraduationCap, Lightning, Trophy, CaretDown, CaretRight,
   IdentificationCard, Truck, FireSimple, Car, Phone, EnvelopeSimple, MapPin,
-  List, X, DownloadSimple,
+  List, X, DownloadSimple, ArrowUp,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import HeroSlideshow from "@/components/HeroSlideshow";
@@ -34,6 +34,52 @@ const NAV_VTC = ["Formation VTC", "Formation VTC en Ligne", "Formation Continue 
 const NAV_TAXI = ["Formation Taxi Initiale", "Formation Continue Taxi", "Formation Passerelle VTC vers Taxi", "Formation Mobilité Taxi Banlieue (60-93)"];
 
 const PARTENAIRES = ["Uber", "Bolt", "FreeNow", "Heetch", "Marcel", "LeCab"];
+
+const WHY_US = [
+  {
+    title: "Centre agréé Qualiopi",
+    desc: "Des programmes de formation complets conçus par des experts du transport de personnes, avec un taux de réussite supérieur à 95%.",
+  },
+  {
+    title: "Méthodes modernes",
+    desc: "Un suivi personnalisé et un accompagnement administratif pour lancer votre activité professionnelle en toute confiance.",
+  },
+  {
+    title: "Formateurs certifiés",
+    desc: "Des formateurs qualifiés, agréés par la Préfecture, avec une véritable expérience de terrain dans le transport de personnes.",
+  },
+  {
+    title: "Accompagnement ANTS",
+    desc: "Un suivi de votre dossier ANTS de A à Z, jusqu'à l'obtention de votre carte professionnelle VTC ou Taxi.",
+  },
+];
+
+// Triple chevron ">>>" — signature visuelle des cartes "Pourquoi nous choisir".
+const TripleChevron = () => (
+  <div className="flex -space-x-3 shrink-0" aria-hidden="true">
+    <CaretRight size={22} weight="bold" className="text-[#d4af37]" />
+    <CaretRight size={22} weight="bold" className="text-[#d4af37]" />
+    <CaretRight size={22} weight="bold" className="text-[#d4af37]" />
+  </div>
+);
+
+const WHY_CARD_CLIP = { clipPath: "polygon(0 0, calc(100% - 28px) 0, 100% 50%, calc(100% - 28px) 100%, 0 100%)" };
+
+const WhyCard = ({ item, delay }) => (
+  <div
+    data-reveal
+    className={`reveal reveal-delay-${delay} bg-white text-black p-6 pr-10 hover:-translate-y-1 transition-transform`}
+    style={WHY_CARD_CLIP}
+  >
+    <div className="flex items-start gap-4">
+      <TripleChevron />
+      <div>
+        <h3 className="font-display font-bold text-lg mb-1">{item.title}</h3>
+        <p className="text-sm text-gray-600 leading-relaxed">{item.desc}</p>
+      </div>
+    </div>
+  </div>
+);
 
 // Validation basique du formulaire de contact : téléphone français (avec ou
 // sans +33, espaces/points/tirets tolérés) et email — pour éviter les
@@ -325,6 +371,57 @@ export default function Landing() {
             </a>
           </div>
         </div>
+      </section>
+
+      {/* Pourquoi choisir TDL Formation */}
+      <section className="relative bg-[#0a0a0a] text-white overflow-hidden" id="pourquoi">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-24 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center relative z-10">
+          <div>
+            <p className="overline text-[#d4af37] mb-4">Expérimenté & fiable</p>
+            <h2 className="font-display text-4xl sm:text-5xl font-bold tracking-tight leading-[1.05] mb-6">
+              Pourquoi choisir <span className="text-[#d4af37]">TDL Formation</span> ?
+            </h2>
+            <p className="text-gray-300 text-lg max-w-xl mb-10 leading-relaxed">
+              TDL Formation est le centre de référence pour les formations VTC et Taxi en Île-de-France. Notre
+              approche pédagogique personnalisée et nos formateurs expérimentés garantissent votre réussite.
+            </p>
+            <div className="space-y-4">
+              <WhyCard item={WHY_US[0]} delay={1} />
+              <div className="grid sm:grid-cols-2 gap-4">
+                <WhyCard item={WHY_US[1]} delay={2} />
+                <WhyCard item={WHY_US[2]} delay={3} />
+              </div>
+              <WhyCard item={WHY_US[3]} delay={4} />
+            </div>
+          </div>
+
+          <div className="relative hidden lg:block" data-reveal>
+            <div className="absolute -top-6 left-6 flex gap-2 z-10">
+              {[0, 1, 2, 3].map((i) => (
+                <span key={i} className="w-8 h-2 bg-[#d4af37]/60 -skew-x-[20deg]" />
+              ))}
+            </div>
+            <div
+              className="aspect-[4/5] w-full overflow-hidden"
+              style={{ clipPath: "polygon(12% 0, 100% 0, 100% 100%, 0% 100%)" }}
+            >
+              <img
+                src="/tdl-image/formation-conduite-taxi-vtc-tdl-Grande.jpeg"
+                alt="Chauffeur VTC formé par TDL Formation"
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </div>
+        </div>
+
+        <a
+          href="#top"
+          onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+          className="hidden lg:flex absolute right-3 top-1/2 -translate-y-1/2 flex-col items-center gap-2 text-[#d4af37] text-xs tracking-widest z-10"
+        >
+          <ArrowUp size={14} />
+          <span className="[writing-mode:vertical-rl]">Haut de page</span>
+        </a>
       </section>
 
       {/* Contact */}
