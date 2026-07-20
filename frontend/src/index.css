@@ -124,6 +124,19 @@ code, .font-mono {
 .reveal-delay-3 { transition-delay: 0.24s; }
 .reveal-delay-4 { transition-delay: 0.32s; }
 
+/* Reveal variant: slides in from the left instead of from below (e.g. "Informations
+   pratiques" grid), so cards sweep left-to-right as they cross into view. */
+.reveal-left {
+  opacity: 0;
+  transform: translateX(-36px);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.reveal-left.reveal-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
 /* Hero slideshow crossfade */
 .hero-slide {
   position: absolute;

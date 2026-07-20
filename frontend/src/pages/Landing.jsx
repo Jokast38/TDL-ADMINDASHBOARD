@@ -13,6 +13,8 @@ import {
   ArrowRight, GraduationCap, Lightning, Trophy, CaretDown, CaretRight,
   IdentificationCard, Truck, FireSimple, Car, Phone, EnvelopeSimple, MapPin,
   List, X, DownloadSimple, ArrowUp,
+  Certificate, UsersThree, ClipboardText, Target, CalendarBlank, DoorOpen,
+  Clock, PiggyBank, NotePencil, Wheelchair,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import HeroSlideshow from "@/components/HeroSlideshow";
@@ -64,6 +66,100 @@ const TripleChevron = () => (
 );
 
 const WHY_CARD_CLIP = { clipPath: "polygon(0 0, calc(100% - 28px) 0, 100% 50%, calc(100% - 28px) 100%, 0 100%)" };
+
+const INFO_NAVY = "#12224a";
+const INFO_ORANGE = "#f5a623";
+
+const INFOS_PRATIQUES = [
+  {
+    icon: Certificate,
+    title: "Intitulé",
+    text: "Titre professionnel Conseiller de vente — RNCP37098 - Niveau 4, délivré par le Ministère chargé de l'emploi.",
+  },
+  {
+    icon: UsersThree,
+    title: "Public visé",
+    text: "Jeunes souhaitant se former en apprentissage, demandeurs d'emploi, salariés, personnes en reconversion ou toute personne souhaitant exercer dans la vente, le commerce et la relation client.",
+  },
+  {
+    icon: ClipboardText,
+    title: "Prérequis",
+    text: "Maîtrise de base du français écrit et oral, intérêt pour la relation client, capacité à travailler en équipe, projet professionnel validé par entretien et test de positionnement.",
+  },
+  {
+    icon: Target,
+    title: "Objectifs",
+    text: "Accueillir, conseiller et vendre en environnement omnicanal ; contribuer à la tenue et à l'animation de l'unité marchande ; améliorer l'expérience client ; préparer et valider le titre professionnel Conseiller de vente.",
+  },
+  {
+    icon: CalendarBlank,
+    title: "Durée et rythme",
+    text: "Parcours indicatif : 6 mois en alternance, avec 1 jour par semaine en centre et 4 jours en entreprise. La durée peut être adaptée selon le positionnement initial.",
+  },
+  {
+    icon: DoorOpen,
+    title: "Modalités d'accès",
+    text: "Dossier de candidature, entretien individuel, test de positionnement, vérification du projet professionnel et recherche/validation d'une entreprise d'accueil.",
+  },
+  {
+    icon: Clock,
+    title: "Délais d'accès",
+    text: "Inscription possible selon calendrier des sessions, sous réserve d'un dossier complet, de la signature du contrat d'apprentissage et des places disponibles.",
+  },
+  {
+    icon: PiggyBank,
+    title: "Tarifs / Financement",
+    text: "Formation finançable dans le cadre du contrat d'apprentissage par l'OPCO de l'entreprise selon les règles en vigueur. Autres financements possibles selon le statut du candidat.",
+  },
+  {
+    icon: GraduationCap,
+    title: "Méthodes mobilisées",
+    text: "Cours en présentiel, supports pédagogiques, mises en situation, cas pratiques, jeux de rôle, exercices professionnels, accompagnement dossier professionnel et suivi en entreprise.",
+  },
+  {
+    icon: NotePencil,
+    title: "Évaluation",
+    text: "Évaluations formatives, mises en situation, examens blancs, suivi des compétences, dossier professionnel, entretien technique et session d'examen conformément au référentiel du titre.",
+  },
+  {
+    icon: Wheelchair,
+    title: "Accessibilité",
+    text: "Formation accessible aux personnes en situation de handicap après étude des besoins. Contact référent handicap disponible sur simple demande.",
+  },
+  {
+    icon: Phone,
+    title: "Contact",
+    text: "TDL Formation\n01 80 90 72 49\ncontact@tdl-formation.fr\n59 Av. Joffre, 93800 Épinay-sur-Seine",
+  },
+];
+
+const InfoCard = ({ item, colDelay }) => {
+  const Icon = item.icon;
+  return (
+    <div
+      data-reveal
+      className={`reveal-left reveal-delay-${colDelay} group bg-white rounded-xl border border-gray-100 shadow-sm p-6 transition-all hover:-translate-y-1 hover:shadow-xl`}
+    >
+      <div
+        className="w-14 h-14 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
+        style={{ backgroundColor: `${INFO_ORANGE}1a` }}
+      >
+        <Icon size={26} weight="bold" style={{ color: INFO_NAVY }} />
+      </div>
+      <h3
+        className="font-display font-extrabold text-base tracking-tight uppercase mb-2 transition-colors group-hover:text-[#f5a623]"
+        style={{ color: INFO_NAVY }}
+      >
+        {item.title}
+      </h3>
+      <span
+        className="block h-[3px] w-8 rounded-full mb-3 transition-all duration-300 group-hover:w-14"
+        style={{ backgroundColor: INFO_ORANGE }}
+      />
+      <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{item.text}</p>
+    </div>
+  );
+};
 
 const WhyCard = ({ item, delay }) => (
   <div
@@ -422,6 +518,24 @@ export default function Landing() {
           <ArrowUp size={14} />
           <span className="[writing-mode:vertical-rl]">Haut de page</span>
         </a>
+      </section>
+
+      {/* Informations pratiques */}
+      <section className="py-16 lg:py-24 bg-[#f8f9fb] border-t border-gray-200" id="infos-pratiques">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight uppercase" style={{ color: INFO_NAVY }}>
+              Informations pratiques
+            </h2>
+            <span className="inline-block h-[3px] w-16 rounded-full mt-3 mb-4" style={{ backgroundColor: INFO_ORANGE }} />
+            <p className="text-gray-500">Tous les éléments essentiels sur la formation Conseiller de Vente</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {INFOS_PRATIQUES.map((item, idx) => (
+              <InfoCard key={item.title} item={item} colDelay={(idx % 3) + 1} />
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* Contact */}
