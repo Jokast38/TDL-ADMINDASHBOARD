@@ -4,21 +4,22 @@ const NAVY = "#12224a";
 const ORANGE = "#f5a623";
 
 const Bullet = ({ children }) => (
-  <li className="flex items-center gap-2.5 text-sm text-gray-800">
-    <span className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: ORANGE }}>
+  <li className="flex items-start gap-2.5 text-sm text-gray-800">
+    <span className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ backgroundColor: ORANGE }}>
       <Check size={12} weight="bold" className="text-black" />
     </span>
-    {children}
+    <span className="min-w-0 break-words">{children}</span>
   </li>
 );
 
 const Panel = ({ icon: Icon, title, children, className = "" }) => (
-  <div data-reveal className={`reveal bg-white rounded-2xl border-2 p-6 ${className}`} style={{ borderColor: NAVY }}>
-    <div className="flex items-center gap-4 mb-4">
-      <span className="w-14 h-14 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: ORANGE }}>
-        <Icon size={26} weight="bold" className="text-black" />
+  <div data-reveal className={`reveal min-w-0 bg-white rounded-2xl border-2 p-5 sm:p-6 ${className}`} style={{ borderColor: NAVY }}>
+    <div className="flex items-center gap-3 sm:gap-4 mb-4">
+      <span className="w-11 h-11 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: ORANGE }}>
+        <Icon size={22} weight="bold" className="text-black sm:hidden" />
+        <Icon size={26} weight="bold" className="text-black hidden sm:block" />
       </span>
-      <h3 className="font-display font-extrabold text-lg sm:text-xl uppercase tracking-tight" style={{ color: NAVY }}>
+      <h3 className="min-w-0 break-words font-display font-extrabold text-base sm:text-lg lg:text-xl uppercase tracking-tight" style={{ color: NAVY }}>
         {title}
       </h3>
     </div>
@@ -31,9 +32,9 @@ export default function CareerOutlookSection({ outlook, title = "Débouchés & p
   const { debouches, structures, salaireRange, salaireNote, salaireManager, evolutions, poursuites } = outlook;
 
   return (
-    <section className="mt-10 pt-8 border-t border-gray-200">
-      <h2 className="font-display text-xl font-bold mb-6">{title}</h2>
-      <div className="grid lg:grid-cols-3 gap-4">
+    <section className="mt-10 pt-8 border-t border-gray-200 overflow-hidden">
+      <h2 className="font-display text-xl font-bold mb-6 break-words">{title}</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Panel icon={Briefcase} title="Débouchés professionnels">
           <ul className="space-y-2.5">
             {debouches.map((d) => <Bullet key={d}>{d}</Bullet>)}
@@ -52,19 +53,19 @@ export default function CareerOutlookSection({ outlook, title = "Débouchés & p
             <span className="w-6 rounded-t" style={{ height: "65%", backgroundColor: ORANGE }} />
             <span className="w-6 rounded-t" style={{ height: "100%", backgroundColor: ORANGE }} />
           </div>
-          <div className="border-t border-gray-200 pt-4">
-            <p className="text-2xl font-display font-extrabold" style={{ color: NAVY }}>
-              {salaireRange} <span className="text-sm font-medium text-gray-500">brut</span>
+          <div className="border-t border-gray-200 pt-4 min-w-0">
+            <p className="text-xl sm:text-2xl font-display font-extrabold break-words" style={{ color: NAVY }}>
+              {salaireRange}
             </p>
-            <p className="text-sm text-gray-500 mb-4">{salaireNote}</p>
-            <div className="rounded-lg px-4 py-3 text-sm font-medium" style={{ backgroundColor: `${ORANGE}22`, color: NAVY }}>
+            <p className="text-sm text-gray-500 mb-4">brut {salaireNote}</p>
+            <div className="rounded-lg px-4 py-3 text-sm font-medium break-words" style={{ backgroundColor: `${ORANGE}22`, color: NAVY }}>
               {salaireManager}
             </div>
           </div>
         </Panel>
 
         <Panel icon={TrendUp} title="Évolutions" className="lg:col-span-2">
-          <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">
             {evolutions.map((e) => <Bullet key={e}>{e}</Bullet>)}
           </ul>
         </Panel>
@@ -72,21 +73,26 @@ export default function CareerOutlookSection({ outlook, title = "Débouchés & p
 
       <div
         data-reveal
-        className="reveal mt-4 bg-white rounded-2xl border-2 p-6 flex flex-wrap items-center gap-4"
+        className="reveal min-w-0 mt-4 bg-white rounded-2xl border-2 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4"
         style={{ borderColor: NAVY }}
       >
-        <span className="w-14 h-14 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: ORANGE }}>
-          <GraduationCap size={26} weight="bold" className="text-black" />
-        </span>
-        <h3 className="font-display font-extrabold text-lg uppercase tracking-tight" style={{ color: NAVY }}>
-          Poursuites d'études
-        </h3>
-        <span className="text-sm text-gray-500">Titres niveau 5</span>
-        <div className="flex flex-wrap gap-2 ml-auto">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <span className="w-11 h-11 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: ORANGE }}>
+            <GraduationCap size={22} weight="bold" className="text-black sm:hidden" />
+            <GraduationCap size={26} weight="bold" className="text-black hidden sm:block" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="break-words font-display font-extrabold text-base sm:text-lg uppercase tracking-tight" style={{ color: NAVY }}>
+              Poursuites d'études
+            </h3>
+            <span className="text-sm text-gray-500">Titres niveau 5</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 sm:ml-auto">
           {poursuites.map((p) => (
             <span
               key={p}
-              className="px-4 py-1.5 rounded-full text-sm font-semibold"
+              className="px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap"
               style={{ backgroundColor: `${ORANGE}33`, color: NAVY }}
             >
               {p}
