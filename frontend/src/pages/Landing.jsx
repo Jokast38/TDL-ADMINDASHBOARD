@@ -14,7 +14,7 @@ import {
   IdentificationCard, Truck, FireSimple, Car, Phone, EnvelopeSimple, MapPin,
   List, X, DownloadSimple, ArrowUp,
   Certificate, UsersThree, ClipboardText, Target, CalendarBlank, DoorOpen,
-  Clock, PiggyBank, NotePencil, Wheelchair, Play,
+  Clock, PiggyBank, NotePencil, Wheelchair, Storefront,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import HeroSlideshow from "@/components/HeroSlideshow";
@@ -28,6 +28,7 @@ const CATEGORIES = [
   { key: "SSIAP", label: "SSIAP 1/2/3", icon: FireSimple, desc: "Sécurité incendie" },
   { key: "VTC_TAXI", label: "VTC / Taxi", icon: Car, desc: "Examen + carte pro" },
   { key: "ECSR", label: "ECSR", icon: GraduationCap, desc: "Enseignant de la conduite" },
+  { key: "VENTE", label: "Conseiller de Vente", icon: Storefront, desc: "Titre pro RNCP37098 en alternance" },
 ];
 
 // Menus déroulants navbar : chaque entrée est reliée par son titre exact en
@@ -133,52 +134,6 @@ const INFOS_PRATIQUES = [
   },
 ];
 
-// Aperçu vidéo YouTube en "click-to-play" (facade légère : la miniature se
-// charge sans script tiers, l'iframe n'est injectée qu'au clic) — présentation
-// du métier de Conseiller de Vente.
-const VENDEUR_VIDEO_ID = "h9_u2IES9Vo";
-
-const VendeurVideoPreview = () => {
-  const [playing, setPlaying] = useState(false);
-  return (
-    <div
-      data-reveal
-      className="reveal relative aspect-video max-w-3xl mx-auto rounded-xl overflow-hidden shadow-lg mb-12 bg-black"
-    >
-      {playing ? (
-        <iframe
-          className="w-full h-full"
-          src={`https://www.youtube.com/embed/${VENDEUR_VIDEO_ID}?autoplay=1`}
-          title="Découvrez le métier de Conseiller de Vente"
-          frameBorder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-          data-testid="vendeur-video-iframe"
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => setPlaying(true)}
-          className="group relative w-full h-full block"
-          aria-label="Lire la vidéo de présentation du métier de Conseiller de Vente"
-          data-testid="vendeur-video-play"
-        >
-          <img
-            src={`https://img.youtube.com/vi/${VENDEUR_VIDEO_ID}/hqdefault.jpg`}
-            alt="Aperçu vidéo — Formation Conseiller de Vente"
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-          <div className="absolute inset-0 bg-black/30 group-hover:bg-black/45 transition-colors flex items-center justify-center">
-            <span className="w-16 h-16 rounded-full bg-white/95 flex items-center justify-center shadow-lg transition-transform group-hover:scale-110">
-              <Play size={28} weight="fill" style={{ color: INFO_NAVY }} />
-            </span>
-          </div>
-        </button>
-      )}
-    </div>
-  );
-};
-
 const InfoCard = ({ item, colDelay }) => {
   const Icon = item.icon;
   return (
@@ -246,6 +201,7 @@ export default function Landing() {
 
   const byTitle = (title) => formations.find((f) => f.title === title);
   const autoEcole = byTitle("Permis B - Forfait complet");
+  const conseillerVente = byTitle("Titre Professionnel Conseiller de Vente");
 
   const submitContact = async (e) => {
     e.preventDefault();
@@ -302,6 +258,7 @@ export default function Landing() {
             <NavDropdown label="Formations VTC" titles={NAV_VTC} />
             <NavDropdown label="Formations Taxi" titles={NAV_TAXI} />
             <Link to={autoEcole ? `/formations/${autoEcole.id}` : "#formations"} className="hover:text-[#d4af37]">Auto-école</Link>
+            <Link to={conseillerVente ? `/formations/${conseillerVente.id}` : "#formations"} className="hover:text-[#d4af37]">Conseiller de Vente</Link>
             <a href="#formations" className="hover:text-[#d4af37]">Toutes les formations</a>
             <Link to="/blog" className="hover:text-[#d4af37]">Blog</Link>
             <a href="#contact" className="hover:text-[#d4af37]">Contact</a>
@@ -342,6 +299,9 @@ export default function Landing() {
               />
               <Link to={autoEcole ? `/formations/${autoEcole.id}` : "#formations"} className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
                 Auto-école
+              </Link>
+              <Link to={conseillerVente ? `/formations/${conseillerVente.id}` : "#formations"} className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
+                Conseiller de Vente
               </Link>
               <a href="#formations" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Toutes les formations</a>
               <Link to="/blog" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Blog</Link>
@@ -576,12 +536,20 @@ export default function Landing() {
             <span className="inline-block h-[3px] w-16 rounded-full mt-3 mb-4" style={{ backgroundColor: INFO_ORANGE }} />
             <p className="text-gray-500">Tous les éléments essentiels sur la formation Conseiller de Vente</p>
           </div>
-          <VendeurVideoPreview />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {INFOS_PRATIQUES.map((item, idx) => (
               <InfoCard key={item.title} item={item} colDelay={(idx % 3) + 1} />
             ))}
           </div>
+          {conseillerVente && (
+            <div className="flex justify-center mt-12">
+              <Link to={`/formations/${conseillerVente.id}`}>
+                <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+                  Voir la fiche formation <ArrowRight size={16} className="ml-2" />
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
       </section>
 

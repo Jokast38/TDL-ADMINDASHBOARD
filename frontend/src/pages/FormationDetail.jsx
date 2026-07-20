@@ -4,10 +4,13 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, CaretRight, Clock, Users, CheckCircle } from "@phosphor-icons/react";
+import { ArrowRight, CaretRight, Clock, Users, CheckCircle, DownloadSimple } from "@phosphor-icons/react";
 import { heroForCategory, galleryForCategory } from "@/constants/formationAssets";
 import { faqsForCategory } from "@/constants/formationFaqs";
+import { careerOutlookForCategory, videoForCategory } from "@/constants/careerOutlook";
 import FAQSection from "@/components/FAQSection";
+import CareerOutlookSection from "@/components/CareerOutlookSection";
+import VideoPreview from "@/components/VideoPreview";
 import { useReveal } from "@/hooks/useReveal";
 
 const CATEGORY_LABELS = {
@@ -17,6 +20,11 @@ const CATEGORY_LABELS = {
   SSIAP: "SSIAP",
   VTC_TAXI: "VTC / Taxi",
   ECSR: "ECSR",
+  VENTE: "Conseiller de Vente",
+};
+
+const CATEGORY_PROGRAM_PDF = {
+  VENTE: "/doc/programme_externe_TP_conseiller_de_vente_TDL_Qualiopi_CFA-2.pdf",
 };
 
 export default function FormationDetail() {
@@ -116,6 +124,12 @@ export default function FormationDetail() {
               <p className="text-gray-700 text-lg leading-relaxed whitespace-pre-line">{f.description || "Description à venir."}</p>
             </div>
 
+            {videoForCategory(f.category) && (
+              <div className="mt-8">
+                <VideoPreview {...videoForCategory(f.category)} />
+              </div>
+            )}
+
             <div className="mt-10 pt-8 border-t border-gray-200">
               <h2 className="font-display text-xl font-bold mb-4">Financement</h2>
               <p className="text-gray-600 text-sm leading-relaxed">
@@ -156,6 +170,8 @@ export default function FormationDetail() {
               </div>
             )}
 
+            <CareerOutlookSection outlook={careerOutlookForCategory(f.category)} />
+
             <FAQSection faqs={faqsForCategory(f.category)} title="Questions fréquentes sur cette formation" />
           </div>
 
@@ -188,6 +204,20 @@ export default function FormationDetail() {
               <a href="tel:+33180907249" className="block mt-2">
                 <Button variant="outline" className="w-full">01 80 90 72 49</Button>
               </a>
+              {CATEGORY_PROGRAM_PDF[f.category] && (
+                <a
+                  href={CATEGORY_PROGRAM_PDF[f.category]}
+                  download
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block mt-2"
+                  data-testid="download-program-btn"
+                >
+                  <Button variant="outline" className="w-full border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37]/10 hover:text-[#d4af37]">
+                    <DownloadSimple size={16} className="mr-2" /> Télécharger le programme
+                  </Button>
+                </a>
+              )}
             </Card>
 
             {others.length > 0 && (

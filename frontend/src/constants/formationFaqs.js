@@ -108,6 +108,28 @@ export const CATEGORY_FAQS = {
       a: "Oui, selon votre situation, la formation ECSR peut être prise en charge par le CPF, France Travail ou un OPCO. Notre équipe étudie votre éligibilité et vous accompagne dans les démarches.",
     },
   ],
+  VENTE: [
+    {
+      q: "Qu'est-ce que le Titre Professionnel Conseiller de Vente ?",
+      a: "C'est un titre professionnel RNCP37098 de niveau 4, délivré par le Ministère chargé de l'emploi. Il forme au métier de conseiller de vente : accueillir, conseiller, vendre et fidéliser la clientèle en magasin et en environnement omnicanal.",
+    },
+    {
+      q: "Comment se déroule la formation Conseiller de Vente chez TDL ?",
+      a: "La formation se déroule en alternance sur un parcours indicatif de 6 mois (400 heures / 45 jours), à raison d'1 jour par semaine en centre à Épinay-sur-Seine et 4 jours en entreprise.",
+    },
+    {
+      q: "Qui peut s'inscrire à cette formation ?",
+      a: "Les jeunes souhaitant se former en apprentissage, les demandeurs d'emploi, les salariés, les personnes en reconversion, ou toute personne souhaitant exercer dans la vente, le commerce et la relation client.",
+    },
+    {
+      q: "La formation Conseiller de Vente est-elle finançable ?",
+      a: "Oui, dans le cadre d'un contrat d'apprentissage, la formation est finançable par l'OPCO de l'entreprise d'accueil selon les règles en vigueur. D'autres financements sont possibles selon le statut du candidat.",
+    },
+    {
+      q: "Comment se passe l'examen final du titre ?",
+      a: "L'examen comprend une mise en situation professionnelle, un entretien technique sur tableau de bord, un questionnement à partir de productions (diaporama et fiches produit) et un entretien final sur le dossier professionnel.",
+    },
+  ],
 };
 
 export function faqsForCategory(category) {

@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, PencilSimple, Trash, GraduationCap } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-const categories = ["CACES", "PERMIS", "AUTO_ECOLE", "SSIAP", "VTC_TAXI"];
+const categories = ["CACES", "PERMIS", "AUTO_ECOLE", "SSIAP", "VTC_TAXI", "ECSR", "VENTE"];
 
 const empty = {
   title: "", category: "CACES", description: "", duration_hours: 0,

@@ -5,10 +5,11 @@ const IMG = "/tdl-image";
 export const CATEGORY_HERO = {
   CACES: `${IMG}/about-2.jpg`,
   PERMIS: `${IMG}/banniere-stade-de-recuperation-de-points-Moyenne.jpeg`,
-  AUTO_ECOLE: `${IMG}/formation-conseiller-vente-automobile-tdl-Grande.jpeg`,
+  AUTO_ECOLE: `${IMG}/about-1.jpg`,
   SSIAP: `${IMG}/banniere-formation-ssiap-inspection-equipement-incendie-Moyenne.jpeg`,
   VTC_TAXI: `${IMG}/formation-conduite-taxi-vtc-tdl-Grande.jpeg`,
   ECSR: `${IMG}/formation-ecsr-cours-code-route-en-sallE-Moyenne.jpeg`,
+  VENTE: `${IMG}/Formation-conseiller-de-vente-en-mobilite-Grande.jpeg`,
 };
 
 export const CATEGORY_GALLERY = {
@@ -17,10 +18,11 @@ export const CATEGORY_GALLERY = {
     `${IMG}/banniere-stade-de-recuperation-de-points-Moyenne.jpeg`,
     `${IMG}/reussite-examen-1er-coup-tdl-1024x700-1.webp`,
   ],
-  AUTO_ECOLE: [
+  AUTO_ECOLE: [`${IMG}/about-1.jpg`, `${IMG}/about-2.jpg`],
+  VENTE: [
+    `${IMG}/Formation-conseiller-de-vente-en-mobilite-Grande.jpeg`,
     `${IMG}/formation-conseiller-vente-automobile-tdl-Grande.jpeg`,
     `${IMG}/formation-conseiller-vente-velo-tdl-Grande-Moyenne.jpeg`,
-    `${IMG}/INFOS-PRATIIQUE-TP-VENDEUR-1.png`,
   ],
   SSIAP: [
     `${IMG}/banniere-formation-ssiap-inspection-equipement-incendie-Moyenne.jpeg`,
