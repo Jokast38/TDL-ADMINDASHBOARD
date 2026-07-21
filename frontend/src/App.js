@@ -12,6 +12,7 @@ import StudentSpace from "@/pages/StudentSpace";
 import Blog from "@/pages/Blog";
 import BlogPost from "@/pages/BlogPost";
 import OffreFideliteLanding from "@/pages/OffreFideliteLanding";
+import MentionsLegales from "@/pages/MentionsLegales";
 
 import Layout from "@/components/Layout";
 import Dashboard from "@/pages/Dashboard";
@@ -72,6 +73,7 @@ function App() {
             <Route path="/blog" element={<Blog />} />
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/offre-fidelite" element={<OffreFideliteLanding />} />
+            <Route path="/mentions-legales" element={<MentionsLegales />} />
 
             <Route path="/espace-eleve" element={
               <ProtectedRoute roles={["etudiant"]}><StudentSpace /></ProtectedRoute>
