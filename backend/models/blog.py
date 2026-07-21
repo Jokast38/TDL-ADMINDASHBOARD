@@ -33,3 +33,8 @@ class BlogGenerateIn(BaseModel):
     category: str = "actualites"
     tone: Optional[str] = "professionnel et accessible"
     keywords: Optional[str] = ""
+
+
+class WordPressBlogImportIn(BaseModel):
+    wp_ids: Optional[List[int]] = None
+    status: str = "draft"

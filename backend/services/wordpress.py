@@ -216,3 +216,53 @@ def woo_headers() -> dict:
 def woo_base() -> str:
     site_url = wp_site_url(WORDPRESS_SITE_K or "")
     return f"{site_url}/wp-json/wc/v3"
+
+
+def fetch_wp_posts_for_import(site_url: str, headers: dict, per_page: int = 50) -> list:
+    """Récupère les articles publiés sur WordPress (avec image mise en avant et
+    catégories) pour import dans le blog interne. Si le plugin Rank Math a son
+    option "REST API" activée (Rank Math > Réglages généraux > Autres), ses
+    champs meta (rank_math_title/rank_math_description) sont aussi remontés ;
+    sinon on retombe sur le titre/extrait WordPress classique."""
+    base = f"{site_url}/wp-json/wp/v2"
+    resp = requests.get(
+        f"{base}/posts",
+        headers=headers,
+        params={"per_page": per_page, "status": "publish", "_embed": "wp:featuredmedia,wp:term"},
+        timeout=30,
+    )
+    if resp.status_code == 401:
+        raise HTTPException(status_code=401, detail="Auth WordPress échouée — vérifiez WORDPRESS_USER et le mot de passe d'application")
+    resp.raise_for_status()
+    posts = resp.json()
+
+    results = []
+    for p in posts:
+        title = p.get("title", {}).get("rendered", "")
+        excerpt_html = p.get("excerpt", {}).get("rendered", "")
+        content_html = p.get("content", {}).get("rendered", "")
+
+        cover_image = None
+        embedded_media = (p.get("_embedded") or {}).get("wp:featuredmedia") or []
+        if embedded_media and isinstance(embedded_media[0], dict):
+            cover_image = embedded_media[0].get("source_url")
+
+        categories = []
+        for term_group in (p.get("_embedded") or {}).get("wp:term") or []:
+            for term in term_group:
+                if term.get("taxonomy") == "category" and term.get("name", "").lower() != "uncategorized":
+                    categories.append(term.get("name"))
+
+        results.append({
+            "wp_id": p.get("id"),
+            "wp_link": p.get("link"),
+            "date": p.get("date"),
+            "title": title,
+            "excerpt_html": excerpt_html,
+            "content_html": content_html,
+            "cover_image": cover_image,
+            "categories": categories,
+            "rank_math_title": p.get("rank_math_title"),
+            "rank_math_description": p.get("rank_math_description"),
+        })
+    return results

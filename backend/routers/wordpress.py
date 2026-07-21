@@ -1,21 +1,142 @@
 import asyncio
+import uuid
+import html2text
 import requests
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
+from core.database import db
 from core.security import require_role
+from core.utils import now_iso, slugify
 from core.config import (
     WORDPRESS_SITE, WORDPRESS_SITE_K, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, WORDPRESS_APP_PASSWORD_K,
     GA4_PROPERTY_ID, GA4_PROPERTY_ID_K, GA4_SERVICE_ACCOUNT_PATH, ROLES_KAMI_STREET,
 )
 from models.document import WooProductUpdate
+from models.blog import WordPressBlogImportIn
 from services.wordpress import (
     wp_basic_auth_headers, wp_site_url,
     fetch_wp_content_stats, fetch_ga4_traffic, fetch_jetpack_traffic,
+    fetch_wp_posts_for_import,
     woo_auth_params, woo_headers, woo_base
 )
 
 router = APIRouter(prefix="/wordpress", tags=["wordpress"])
+
+# Catégories du blog interne (voir AdminBlog.jsx) — les catégories WordPress
+# n'y correspondent pas forcément, donc on route par mot-clé plutôt que par
+# nom exact, avec "actualites" en repli.
+_CATEGORY_KEYWORDS = {
+    "formations": ["formation", "caces", "ssiap", "ecsr", "vente", "conseiller"],
+    "conseils": ["conseil", "guide", "astuce"],
+    "kami": ["kami", "mobilité", "scooter", "vélo", "electrique"],
+    "seo": [],
+}
+
+
+def _map_category(wp_categories: list) -> str:
+    names = " ".join(wp_categories).lower()
+    for cat, keywords in _CATEGORY_KEYWORDS.items():
+        if any(k in names for k in keywords):
+            return cat
+    return "actualites"
+
+
+def _html_to_markdown(html: str) -> str:
+    converter = html2text.HTML2Text()
+    converter.body_width = 0  # ne pas forcer de retour à la ligne arbitraire
+    converter.ignore_images = False
+    return converter.handle(html or "").strip()
+
+
+@router.get("/blog/import-preview")
+async def wordpress_blog_import_preview(user: dict = Depends(require_role("admin", "employe"))):
+    """Liste les articles publiés sur tdl-formation.fr (avec leurs métas Rank Math
+    si exposées) et indique lesquels sont déjà importés dans le blog interne."""
+    if not WORDPRESS_SITE or not WORDPRESS_USER or not WORDPRESS_APP_PASSWORD:
+        raise HTTPException(status_code=500, detail="Variables WORDPRESS_SITE / WORDPRESS_USER / WORDPRESS_APP_PASSWORD manquantes")
+    site_url = wp_site_url(WORDPRESS_SITE)
+    headers = wp_basic_auth_headers(WORDPRESS_USER, WORDPRESS_APP_PASSWORD)
+    try:
+        posts = await asyncio.to_thread(fetch_wp_posts_for_import, site_url, headers)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur WordPress: {e}")
+
+    existing_wp_ids = {
+        d["wp_source_id"]
+        async for d in db.blog_posts.find({"wp_source_id": {"$exists": True}}, {"wp_source_id": 1})
+    }
+    for p in posts:
+        p["already_imported"] = p["wp_id"] in existing_wp_ids
+    return {"posts": posts, "rank_math_available": any(p.get("rank_math_title") for p in posts)}
+
+
+@router.post("/blog/import")
+async def wordpress_blog_import(
+    payload: WordPressBlogImportIn = WordPressBlogImportIn(),
+    user: dict = Depends(require_role("admin", "employe")),
+):
+    wp_ids = payload.wp_ids
+    status = payload.status
+    """Importe les articles WordPress sélectionnés (ou tous les nouveaux si
+    wp_ids est vide) dans le blog interne, en conservant le SEO Rank Math
+    quand il est exposé par l'API REST. Idempotent : un article déjà importé
+    (même wp_source_id) est ignoré, pas dupliqué."""
+    if not WORDPRESS_SITE or not WORDPRESS_USER or not WORDPRESS_APP_PASSWORD:
+        raise HTTPException(status_code=500, detail="Variables WORDPRESS_SITE / WORDPRESS_USER / WORDPRESS_APP_PASSWORD manquantes")
+    site_url = wp_site_url(WORDPRESS_SITE)
+    headers = wp_basic_auth_headers(WORDPRESS_USER, WORDPRESS_APP_PASSWORD)
+    try:
+        posts = await asyncio.to_thread(fetch_wp_posts_for_import, site_url, headers)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur WordPress: {e}")
+
+    if wp_ids:
+        posts = [p for p in posts if p["wp_id"] in wp_ids]
+
+    results = []
+    for p in posts:
+        if await db.blog_posts.find_one({"wp_source_id": p["wp_id"]}):
+            results.append({"wp_id": p["wp_id"], "title": p["title"], "status": "skipped_already_imported"})
+            continue
+
+        base_slug = slugify(p["title"])
+        slug = base_slug
+        i = 2
+        while await db.blog_posts.find_one({"slug": slug}):
+            slug = f"{base_slug}-{i}"
+            i += 1
+
+        excerpt_md = _html_to_markdown(p["excerpt_html"])[:300]
+        doc = {
+            "id": str(uuid.uuid4()),
+            "slug": slug,
+            "title": p["title"],
+            "excerpt": excerpt_md or p["title"],
+            "content": _html_to_markdown(p["content_html"]),
+            "category": _map_category(p["categories"]),
+            "cover_image": p.get("cover_image"),
+            "tags": p.get("categories", []),
+            "seo_title": (p.get("rank_math_title") or p["title"])[:60],
+            "seo_description": (p.get("rank_math_description") or excerpt_md)[:160],
+            "status": status,
+            "author_id": user["id"],
+            "author_name": user.get("name", "TDL"),
+            "views": 0,
+            "wp_source_id": p["wp_id"],
+            "wp_source_link": p.get("wp_link"),
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+            "published_at": now_iso() if status == "published" else None,
+        }
+        await db.blog_posts.insert_one(doc)
+        results.append({"wp_id": p["wp_id"], "title": p["title"], "status": "imported", "slug": slug})
+
+    return {"results": results}
 
 
 @router.get("/stats")

@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, PencilSimple, Trash, Sparkle, Eye, ArrowSquareOut, MagicWand, UploadSimple, Image as ImageIcon } from "@phosphor-icons/react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, PencilSimple, Trash, Sparkle, Eye, ArrowSquareOut, MagicWand, UploadSimple, Image as ImageIcon, CloudArrowDown, CheckCircle, CloudArrowUp, ArrowCounterClockwise } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const CATEGORIES = ["actualites", "conseils", "formations", "kami", "seo"];
@@ -29,6 +30,12 @@ export default function AdminBlog() {
   const [tagsInput, setTagsInput] = useState("");
   const [coverUploading, setCoverUploading] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [wpOpen, setWpOpen] = useState(false);
+  const [wpLoading, setWpLoading] = useState(false);
+  const [wpImporting, setWpImporting] = useState(false);
+  const [wpPosts, setWpPosts] = useState([]);
+  const [wpRankMathAvailable, setWpRankMathAvailable] = useState(false);
+  const [wpSelected, setWpSelected] = useState([]);
 
   const load = () => api.get("/blog/admin/posts").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
@@ -85,6 +92,17 @@ export default function AdminBlog() {
     load();
   };
 
+  const toggleStatus = async (p) => {
+    const nextStatus = p.status === "published" ? "draft" : "published";
+    try {
+      await api.put(`/blog/posts/${p.id}`, { status: nextStatus });
+      toast.success(nextStatus === "published" ? "Article publié" : "Repassé en brouillon");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
   const generate = async () => {
     if (!aiTopic) return toast.error("Sujet requis");
     setAiLoading(true);
@@ -123,6 +141,42 @@ export default function AdminBlog() {
     }
   };
 
+  const openWpImport = async () => {
+    setWpOpen(true);
+    setWpLoading(true);
+    try {
+      const { data } = await api.get("/wordpress/blog/import-preview");
+      setWpPosts(data.posts);
+      setWpRankMathAvailable(data.rank_math_available);
+      setWpSelected(data.posts.filter((p) => !p.already_imported).map((p) => p.wp_id));
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur de connexion à WordPress");
+    } finally {
+      setWpLoading(false);
+    }
+  };
+
+  const toggleWpSelected = (wpId) => {
+    setWpSelected((sel) => (sel.includes(wpId) ? sel.filter((id) => id !== wpId) : [...sel, wpId]));
+  };
+
+  const importFromWordpress = async () => {
+    if (!wpSelected.length) return toast.error("Sélectionnez au moins un article");
+    setWpImporting(true);
+    try {
+      const { data } = await api.post("/wordpress/blog/import", { wp_ids: wpSelected, status: "draft" });
+      const imported = data.results.filter((r) => r.status === "imported").length;
+      const skipped = data.results.filter((r) => r.status !== "imported").length;
+      toast.success(`${imported} article(s) importé(s) en brouillon${skipped ? ` · ${skipped} déjà présents` : ""}`);
+      setWpOpen(false);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur import WordPress");
+    } finally {
+      setWpImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6" data-testid="admin-blog-page">
       <div className="flex items-end justify-between flex-wrap gap-4">
@@ -135,6 +189,72 @@ export default function AdminBlog() {
           <Button variant="outline" onClick={seedArticles} disabled={seeding} className="border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37]/10 hover:text-[#d4af37]" data-testid="seed-btn">
             <MagicWand size={16} className="mr-1" weight="fill" /> {seeding ? "Génération..." : "Seed 8 articles SEO"}
           </Button>
+          <Dialog open={wpOpen} onOpenChange={setWpOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" onClick={openWpImport} data-testid="wp-import-btn">
+                <CloudArrowDown size={16} className="mr-1" /> Importer depuis WordPress
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="wp-import-dialog">
+              <DialogHeader>
+                <DialogTitle>Importer les articles WordPress (tdl-formation.fr)</DialogTitle>
+              </DialogHeader>
+              {wpLoading ? (
+                <p className="text-sm text-gray-400 py-8 text-center">Connexion à WordPress...</p>
+              ) : (
+                <>
+                  {!wpRankMathAvailable && (
+                    <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900">
+                      <b>ℹ️ Rank Math :</b> les métadonnées SEO (titre/description) de Rank Math ne sont pas exposées par
+                      l'API WordPress. Activez <b>Rank Math &gt; Réglages généraux &gt; Autres &gt; API REST</b> pour
+                      les récupérer automatiquement ; en attendant, le titre et l'extrait WordPress classiques sont
+                      utilisés pour le SEO.
+                    </div>
+                  )}
+                  <div className="max-h-[50vh] overflow-y-auto space-y-1 mt-2">
+                    {wpPosts.map((p) => (
+                      <label
+                        key={p.wp_id}
+                        className={`flex items-start gap-3 p-3 rounded-md border ${p.already_imported ? "border-gray-100 bg-gray-50 opacity-60" : "border-gray-200 hover:border-[#d4af37]"}`}
+                      >
+                        <Checkbox
+                          checked={wpSelected.includes(p.wp_id)}
+                          onCheckedChange={() => toggleWpSelected(p.wp_id)}
+                          disabled={p.already_imported}
+                          className="mt-1"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{p.title}</p>
+                          <p className="text-xs text-gray-400">
+                            {p.categories?.join(", ") || "Sans catégorie"} · {new Date(p.date).toLocaleDateString("fr-FR")}
+                          </p>
+                        </div>
+                        {p.already_imported && (
+                          <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10 shrink-0">
+                            <CheckCircle size={12} className="mr-1" weight="fill" /> Importé
+                          </Badge>
+                        )}
+                      </label>
+                    ))}
+                    {!wpPosts.length && (
+                      <p className="text-sm text-gray-400 py-8 text-center">Aucun article publié trouvé sur WordPress.</p>
+                    )}
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <Button variant="outline" onClick={() => setWpOpen(false)}>Annuler</Button>
+                    <Button
+                      onClick={importFromWordpress}
+                      disabled={wpImporting || !wpSelected.length}
+                      className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
+                      data-testid="wp-import-confirm"
+                    >
+                      {wpImporting ? "Import..." : `Importer (${wpSelected.length}) en brouillon`}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
           <Dialog open={aiOpen} onOpenChange={setAiOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37]/10 hover:text-[#d4af37]" data-testid="ai-generate-btn">
@@ -287,11 +407,17 @@ export default function AdminBlog() {
                   </td>
                   <td className="py-3 px-4"><Badge variant="outline">{p.category}</Badge></td>
                   <td className="py-3 px-4">
-                    <Badge className={p.status === "published"
-                      ? "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-100"}>
-                      {p.status === "published" ? "Publié" : "Brouillon"}
-                    </Badge>
+                    <button
+                      onClick={() => toggleStatus(p)}
+                      title={p.status === "published" ? "Repasser en brouillon" : "Publier"}
+                      data-testid={`toggle-status-${p.id}`}
+                    >
+                      <Badge className={`cursor-pointer transition-colors ${p.status === "published"
+                        ? "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/20"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
+                        {p.status === "published" ? "Publié" : "Brouillon"}
+                      </Badge>
+                    </button>
                   </td>
                   <td className="py-3 px-4 font-mono">{p.views || 0}</td>
                   <td className="py-3 px-4 text-xs text-gray-500 font-mono">
@@ -299,6 +425,14 @@ export default function AdminBlog() {
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="inline-flex gap-1">
+                      <button
+                        onClick={() => toggleStatus(p)}
+                        className={`p-1.5 rounded ${p.status === "published" ? "hover:bg-gray-100 text-gray-600" : "hover:bg-[#0B7238]/10 text-[#0B7238]"}`}
+                        title={p.status === "published" ? "Repasser en brouillon" : "Publier"}
+                        data-testid={`publish-toggle-${p.id}`}
+                      >
+                        {p.status === "published" ? <ArrowCounterClockwise size={14} /> : <CloudArrowUp size={14} />}
+                      </button>
                       {p.status === "published" && (
                         <a href={`/blog/${p.slug}`} target="_blank" rel="noreferrer" className="p-1.5 hover:bg-gray-100 rounded" title="Voir">
                           <ArrowSquareOut size={14} />
