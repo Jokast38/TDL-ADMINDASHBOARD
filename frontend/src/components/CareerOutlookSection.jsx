@@ -14,12 +14,14 @@ const Bullet = ({ children }) => (
 
 const Panel = ({ icon: Icon, title, children, className = "" }) => (
   <div data-reveal className={`reveal min-w-0 bg-white rounded-2xl border-2 p-5 sm:p-6 ${className}`} style={{ borderColor: NAVY }}>
-    <div className="flex items-center gap-3 sm:gap-4 mb-4">
-      <span className="w-11 h-11 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: ORANGE }}>
-        <Icon size={22} weight="bold" className="text-black sm:hidden" />
-        <Icon size={26} weight="bold" className="text-black hidden sm:block" />
+    <div className="flex items-start gap-3 mb-5">
+      <span className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: ORANGE }}>
+        <Icon size={20} weight="bold" className="text-black" />
       </span>
-      <h3 className="min-w-0 break-words font-display font-extrabold text-base sm:text-lg lg:text-xl uppercase tracking-tight" style={{ color: NAVY }}>
+      <h3
+        className="flex-1 min-w-0 break-words leading-snug font-display font-extrabold text-sm sm:text-base uppercase tracking-tight pt-1"
+        style={{ color: NAVY }}
+      >
         {title}
       </h3>
     </div>
@@ -76,13 +78,12 @@ export default function CareerOutlookSection({ outlook, title = "Débouchés & p
         className="reveal min-w-0 mt-4 bg-white rounded-2xl border-2 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center gap-4"
         style={{ borderColor: NAVY }}
       >
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-          <span className="w-11 h-11 sm:w-14 sm:h-14 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: ORANGE }}>
-            <GraduationCap size={22} weight="bold" className="text-black sm:hidden" />
-            <GraduationCap size={26} weight="bold" className="text-black hidden sm:block" />
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: ORANGE }}>
+            <GraduationCap size={20} weight="bold" className="text-black" />
           </span>
           <div className="min-w-0">
-            <h3 className="break-words font-display font-extrabold text-base sm:text-lg uppercase tracking-tight" style={{ color: NAVY }}>
+            <h3 className="break-words leading-snug font-display font-extrabold text-sm sm:text-base uppercase tracking-tight pt-1" style={{ color: NAVY }}>
               Poursuites d'études
             </h3>
             <span className="text-sm text-gray-500">Titres niveau 5</span>
