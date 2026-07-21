@@ -169,7 +169,8 @@ function EmailStatsTab() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left border-y border-gray-200">
               <tr>
-                <th className="py-2.5 px-5 overline">Date</th>
+                <th className="py-2.5 px-5 overline">Premier envoi</th>
+                <th className="py-2.5 px-5 overline">Dernier envoi</th>
                 <th className="py-2.5 px-5 overline">Objet (campagne)</th>
                 <th className="py-2.5 px-5 overline text-right">Envoyés</th>
                 <th className="py-2.5 px-5 overline text-right">Ouverts</th>
@@ -183,6 +184,12 @@ function EmailStatsTab() {
                 <tr key={s.subject} className="border-b border-gray-100">
                   <td className="py-2.5 px-5 text-xs text-gray-500 font-mono whitespace-nowrap">
                     {s.first_sent ? new Date(s.first_sent).toLocaleDateString("fr-FR") : "—"}
+                  </td>
+                  <td className="py-2.5 px-5 text-xs text-gray-500 font-mono whitespace-nowrap">
+                    {s.last_sent ? new Date(s.last_sent).toLocaleDateString("fr-FR") : "—"}
+                    {s.last_sent && s.first_sent && s.last_sent !== s.first_sent && (
+                      <Badge className="ml-2 bg-[#0052CC]/10 text-[#0052CC] hover:bg-[#0052CC]/10 text-[10px]">Relancée</Badge>
+                    )}
                   </td>
                   <td className="py-2.5 px-5 max-w-md truncate" title={s.subject}>{s.subject}</td>
                   <td className="py-2.5 px-5 text-right font-mono">{s.sent}</td>
@@ -201,7 +208,7 @@ function EmailStatsTab() {
                 </tr>
               ))}
               {!stats.by_subject.filter((s) => s.sent > 0).length && (
-                <tr><td colSpan="7" className="py-8 text-center text-gray-400">Aucun email envoyé sur cette période.</td></tr>
+                <tr><td colSpan="8" className="py-8 text-center text-gray-400">Aucun email envoyé sur cette période.</td></tr>
               )}
             </tbody>
           </table>

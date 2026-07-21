@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
+import SiteFooter from "@/components/SiteFooter";
 import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
 
@@ -652,15 +653,7 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 py-8">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 flex flex-wrap gap-4 items-center justify-between">
-          <p className="text-sm text-gray-500">© 2026 TDL Formation · Tous droits réservés.</p>
-          <div className="flex items-center gap-4">
-            <Link to="/mentions-legales" className="text-xs text-gray-400 hover:text-[#d4af37]">Mentions légales</Link>
-            <p className="text-xs text-gray-400 font-mono">contact@tdl-formation.fr</p>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

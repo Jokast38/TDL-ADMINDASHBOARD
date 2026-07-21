@@ -5,23 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, CaretRight, Clock, Users, CheckCircle, DownloadSimple } from "@phosphor-icons/react";
-import { heroForCategory, galleryForCategory } from "@/constants/formationAssets";
+import { heroForCategory, galleryForCategory, CATEGORY_LABELS } from "@/constants/formationAssets";
 import { faqsForCategory } from "@/constants/formationFaqs";
 import { careerOutlookForCategory, videoForCategory } from "@/constants/careerOutlook";
 import FAQSection from "@/components/FAQSection";
 import CareerOutlookSection from "@/components/CareerOutlookSection";
 import VideoPreview from "@/components/VideoPreview";
+import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
-
-const CATEGORY_LABELS = {
-  CACES: "CACES",
-  PERMIS: "Récupération de points",
-  AUTO_ECOLE: "Auto-école",
-  SSIAP: "SSIAP",
-  VTC_TAXI: "VTC / Taxi",
-  ECSR: "ECSR",
-  VENTE: "Conseiller de Vente",
-};
 
 const CATEGORY_PROGRAM_PDF = {
   VENTE: "/doc/programme_externe_TP_conseiller_de_vente_TDL_Qualiopi_CFA-2.pdf",
@@ -240,15 +231,7 @@ export default function FormationDetail() {
         </div>
       </article>
 
-      <footer className="border-t border-gray-200 py-8">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 flex flex-wrap gap-4 items-center justify-between">
-          <p className="text-sm text-gray-500">© 2026 TDL Formation · Tous droits réservés.</p>
-          <div className="flex items-center gap-4">
-            <Link to="/mentions-legales" className="text-xs text-gray-400 hover:text-[#d4af37]">Mentions légales</Link>
-            <p className="text-xs text-gray-400 font-mono">contact@tdl-formation.fr</p>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

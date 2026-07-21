@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, ArrowRight, Calendar, Tag, Eye } from "@phosphor-icons/react";
 import { useReveal } from "@/hooks/useReveal";
+import SiteFooter from "@/components/SiteFooter";
 
 const CATEGORIES = [
   { key: "all", label: "Tous" },
@@ -141,17 +142,7 @@ export default function Blog() {
         </div>
       </section>
 
-      <footer className="border-t border-gray-200 py-8 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 flex flex-wrap gap-4 items-center justify-between">
-          <p className="text-sm text-gray-500">© 2026 TDL Formation</p>
-          <div className="flex items-center gap-4">
-            <Link to="/mentions-legales" className="text-sm text-gray-500 hover:text-[#d4af37]">Mentions légales</Link>
-            <Link to="/" className="text-sm text-gray-500 hover:text-[#d4af37] inline-flex items-center gap-1">
-              <ArrowLeft size={14} /> Retour au site
-            </Link>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter className="border-t border-gray-200 py-8 bg-gray-50" />
     </div>
   );
 }

@@ -66,9 +66,10 @@ async def email_stats(days: int = 30, user: dict = Depends(require_role(*ROLES_L
             "opened": {"$sum": {"$cond": ["$opened", 1, 0]}},
             "clicked": {"$sum": {"$cond": ["$clicked", 1, 0]}},
             "first_sent": {"$min": "$created_at"},
+            "last_sent": {"$max": "$created_at"},
             "recipients": {"$addToSet": "$to"},
         }},
-        {"$sort": {"sent": -1}},
+        {"$sort": {"last_sent": -1}},
         {"$limit": 15},
     ]).to_list(15)
 
@@ -103,7 +104,7 @@ async def email_stats(days: int = 30, user: dict = Depends(require_role(*ROLES_L
         "by_subject": [
             {
                 "subject": x["_id"] or "(sans objet)", "sent": x["sent"], "opened": x["opened"], "clicked": x["clicked"],
-                "converted": x["converted"], "first_sent": x.get("first_sent"),
+                "converted": x["converted"], "first_sent": x.get("first_sent"), "last_sent": x.get("last_sent"),
                 "conversion_rate": round(x["converted"] / x["sent"] * 100, 1) if x["sent"] else 0,
             }
             for x in by_subject

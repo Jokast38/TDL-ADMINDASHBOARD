@@ -2,6 +2,16 @@
 // Mapping par catégorie de formation : image de bannière (hero) + galerie de projection.
 const IMG = "/tdl-image";
 
+export const CATEGORY_LABELS = {
+  CACES: "CACES",
+  PERMIS: "Récupération de points",
+  AUTO_ECOLE: "Auto-école",
+  SSIAP: "SSIAP",
+  VTC_TAXI: "VTC / Taxi",
+  ECSR: "ECSR",
+  VENTE: "Conseiller de Vente",
+};
+
 export const CATEGORY_HERO = {
   CACES: `${IMG}/about-2.jpg`,
   PERMIS: `${IMG}/banniere-stade-de-recuperation-de-points-Moyenne.jpeg`,

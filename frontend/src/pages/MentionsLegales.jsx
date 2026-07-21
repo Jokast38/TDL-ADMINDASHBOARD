@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, CaretRight } from "@phosphor-icons/react";
+import SiteFooter from "@/components/SiteFooter";
 
 const SECTIONS = [
   {
@@ -146,12 +147,7 @@ export default function MentionsLegales() {
         </div>
       </article>
 
-      <footer className="border-t border-gray-200 py-8">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 flex flex-wrap gap-4 items-center justify-between">
-          <p className="text-sm text-gray-500">© 2026 TDL Formation · Tous droits réservés.</p>
-          <p className="text-xs text-gray-400 font-mono">contact@tdl-formation.fr</p>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
