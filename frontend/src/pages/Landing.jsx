@@ -18,6 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import HeroSlideshow from "@/components/HeroSlideshow";
+import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
 
@@ -552,6 +553,9 @@ export default function Landing() {
           )}
         </div>
       </section>
+
+      {/* Avis Google */}
+      <GoogleReviewsCarousel />
 
       {/* Contact */}
       <section className="py-16 lg:py-24 border-t border-gray-200" id="contact">
