@@ -8,6 +8,7 @@ import { CATEGORY_FAQS } from "@/constants/formationFaqs";
 import { CATEGORY_LABELS } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
 import SiteFooter from "@/components/SiteFooter";
+import ChatWidget from "@/components/ChatWidget";
 
 const CATEGORY_ORDER = ["VTC_TAXI", "CACES", "PERMIS", "AUTO_ECOLE", "SSIAP", "ECSR", "VENTE"];
 
@@ -171,6 +172,7 @@ export default function FAQ() {
       </section>
 
       <SiteFooter />
+      <ChatWidget />
     </div>
   );
 }

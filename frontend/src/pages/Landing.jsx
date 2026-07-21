@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
+import ChatWidget from "@/components/ChatWidget";
 import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
 
@@ -654,6 +655,7 @@ export default function Landing() {
 
       {/* Footer */}
       <SiteFooter />
+      <ChatWidget />
     </div>
   );
 }

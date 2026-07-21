@@ -12,6 +12,7 @@ import FAQSection from "@/components/FAQSection";
 import CareerOutlookSection from "@/components/CareerOutlookSection";
 import VideoPreview from "@/components/VideoPreview";
 import SiteFooter from "@/components/SiteFooter";
+import ChatWidget from "@/components/ChatWidget";
 import { useReveal } from "@/hooks/useReveal";
 
 const CATEGORY_PROGRAM_PDF = {
@@ -232,6 +233,7 @@ export default function FormationDetail() {
       </article>
 
       <SiteFooter />
+      <ChatWidget />
     </div>
   );
 }

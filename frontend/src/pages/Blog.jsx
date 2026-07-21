@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, ArrowRight, Calendar, Tag, Eye } from "@phosphor-icons/react";
 import { useReveal } from "@/hooks/useReveal";
 import SiteFooter from "@/components/SiteFooter";
+import ChatWidget from "@/components/ChatWidget";
 
 const CATEGORIES = [
   { key: "all", label: "Tous" },
@@ -143,6 +144,7 @@ export default function Blog() {
       </section>
 
       <SiteFooter className="border-t border-gray-200 py-8 bg-gray-50" />
+      <ChatWidget />
     </div>
   );
 }
