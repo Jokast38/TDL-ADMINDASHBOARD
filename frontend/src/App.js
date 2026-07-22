@@ -7,6 +7,7 @@ import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import PublicInscription from "@/pages/PublicInscription";
 import FormationDetail from "@/pages/FormationDetail";
+import PublicFormations from "@/pages/PublicFormations";
 import PublicKamiStreet from "@/pages/PublicKamiStreet";
 import StudentSpace from "@/pages/StudentSpace";
 import Blog from "@/pages/Blog";
@@ -69,6 +70,7 @@ function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/inscription" element={<PublicInscription />} />
+            <Route path="/formations" element={<PublicFormations />} />
             <Route path="/formations/:id" element={<FormationDetail />} />
             <Route path="/kami-street" element={<PublicKamiStreet />} />
             <Route path="/blog" element={<Blog />} />

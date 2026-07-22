@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
+import FormationCard from "@/components/FormationCard";
 import ChatWidget from "@/components/ChatWidget";
 import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
@@ -262,7 +263,7 @@ export default function Landing() {
             <NavDropdown label="Formations Taxi" titles={NAV_TAXI} />
             <Link to={autoEcole ? `/formations/${autoEcole.id}` : "#formations"} className="hover:text-[#d4af37]">Auto-école</Link>
             <Link to={conseillerVente ? `/formations/${conseillerVente.id}` : "#formations"} className="hover:text-[#d4af37]">Conseiller de Vente</Link>
-            <a href="#formations" className="hover:text-[#d4af37]">Toutes les formations</a>
+            <Link to="/formations" className="hover:text-[#d4af37]">Toutes les formations</Link>
             <Link to="/blog" className="hover:text-[#d4af37]">Blog</Link>
             <a href="#contact" className="hover:text-[#d4af37]">Contact</a>
           </nav>
@@ -306,7 +307,7 @@ export default function Landing() {
               <Link to={conseillerVente ? `/formations/${conseillerVente.id}` : "#formations"} className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
                 Conseiller de Vente
               </Link>
-              <a href="#formations" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Toutes les formations</a>
+              <Link to="/formations" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Toutes les formations</Link>
               <Link to="/blog" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Blog</Link>
               <a href="#contact" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Contact</a>
               <div className="flex gap-2 pt-4">
@@ -384,35 +385,19 @@ export default function Landing() {
           <p className="overline">Catalogue</p>
           <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2 mb-10">Formations disponibles</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {formations.map((f, idx) => (
-              <Card key={f.id} data-reveal className={`reveal reveal-delay-${(idx % 4) + 1} overflow-hidden border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all`} data-testid={`public-formation-${f.id}`}>
-                <Link to={`/formations/${f.id}`}>
-                  <div className="aspect-video bg-gray-100 overflow-hidden">
-                    <img
-                      src={f.image_url || heroForCategory(f.category)}
-                      alt={f.title}
-                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                    />
-                  </div>
-                </Link>
-                <div className="p-5">
-                  <Badge variant="outline" className="text-xs mb-2">{f.category}</Badge>
-                  <Link to={`/formations/${f.id}`}>
-                    <h3 className="font-display font-bold text-lg leading-tight hover:text-[#d4af37]">{f.title}</h3>
-                  </Link>
-                  <p className="text-sm text-gray-600 mt-2 line-clamp-2">{f.description}</p>
-                  <div className="flex items-end justify-between mt-4 pt-4 border-t border-gray-100">
-                    <p className="font-display font-bold text-2xl">{f.price > 0 ? `${f.price}€` : "Sur devis"}</p>
-                    <Link to={`/formations/${f.id}`}>
-                      <Button size="sm" className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid={`inscr-${f.id}`}>
-                        En savoir plus
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              </Card>
+            {formations.slice(0, 6).map((f, idx) => (
+              <FormationCard key={f.id} formation={f} revealDelay={(idx % 4) + 1} />
             ))}
           </div>
+          {formations.length > 6 && (
+            <div className="flex justify-center mt-10">
+              <Link to="/formations">
+                <Button size="lg" variant="outline" data-testid="see-all-formations-btn">
+                  Voir toutes nos formations <ArrowRight size={16} className="ml-2" />
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
       </section>
 

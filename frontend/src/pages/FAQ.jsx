@@ -59,7 +59,7 @@ export default function FAQ() {
             <span className="font-display font-bold text-lg tracking-tight hidden sm:inline">TDL Formation</span>
           </Link>
           <nav className="hidden md:flex items-center gap-7 text-sm">
-            <Link to="/#formations" className="hover:text-[#d4af37]">Formations</Link>
+            <Link to="/formations" className="hover:text-[#d4af37]">Formations</Link>
             <Link to="/blog" className="hover:text-[#d4af37]">Blog</Link>
             <a href="/#contact" className="hover:text-[#d4af37]">Contact</a>
           </nav>

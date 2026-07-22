@@ -84,7 +84,7 @@ export default function FormationDetail() {
         <div className="max-w-5xl mx-auto px-6 lg:px-8 py-3 flex items-center gap-2 text-xs text-gray-500">
           <Link to="/" className="hover:text-[#d4af37]">Accueil</Link>
           <CaretRight size={10} />
-          <Link to="/#formations" className="hover:text-[#d4af37]">Formations</Link>
+          <Link to="/formations" className="hover:text-[#d4af37]">Formations</Link>
           <CaretRight size={10} />
           <span className="text-gray-700">{f.title}</span>
         </div>
