@@ -8,7 +8,7 @@ from core.database import db
 from core.security import require_role
 from core.utils import now_iso
 from core.config import ROLES_LEADS
-from models.lead import LeadIn, LeadUpdate, LeadImportJsonIn, LeadRelanceIn, LeadRelanceSingleIn
+from models.lead import LeadIn, LeadUpdate, LeadImportJsonIn, LeadRelanceIn, LeadRelanceSingleIn, LeadBroadcastIn
 from services.email import send_email
 
 router = APIRouter(prefix="/leads", tags=["leads"])
@@ -423,6 +423,20 @@ async def list_distinct_interests(user: dict = Depends(require_role(*ROLES_LEADS
     return values
 
 
+@router.get("/broadcast-targets")
+async def broadcast_targets(interest_in: Optional[str] = None, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Liste minimale (id/name/email) de TOUS les leads correspondant au filtre,
+    sans le plafond de pagination de GET /leads (200) — utilisée par le bouton
+    Campagne pour boucler côté client avec une vraie barre de progression,
+    au lieu d'un seul gros appel serveur invisible depuis le navigateur."""
+    query: Dict[str, Any] = {}
+    if interest_in:
+        values = [v for v in interest_in.split("|") if v]
+        if values:
+            query["interest"] = {"$in": values}
+    return await db.leads.find(query, {"_id": 0, "id": 1, "name": 1, "email": 1}).to_list(20000)
+
+
 @router.post("")
 async def create_lead(payload: LeadIn, user: dict = Depends(require_role(*ROLES_LEADS))):
     lead = payload.model_dump()
@@ -611,3 +625,38 @@ async def send_relance(payload: LeadRelanceIn, user: dict = Depends(require_role
     if sent:
         _leads_cache_clear()
     return {"sent": sent, "skipped_no_email": no_email}
+
+
+@router.post("/broadcast")
+async def send_broadcast(payload: LeadBroadcastIn, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Lance une campagne email sur TOUS les leads correspondant au(x) intérêt(s)
+    choisi(s) (toute la base, pas seulement la page affichée) — même mécanique
+    d'envoi que /leads/relance, mais le filtre remplace la sélection manuelle."""
+    query: Dict[str, Any] = {}
+    if payload.interest_in:
+        values = [v for v in payload.interest_in.split("|") if v]
+        if values:
+            query["interest"] = {"$in": values}
+
+    leads = await db.leads.find(query, {"_id": 0}).to_list(100000)
+    sent, no_email = 0, 0
+    for lead in leads:
+        if not lead.get("email"):
+            no_email += 1
+            continue
+        body = payload.body.replace("{{name}}", lead.get("name", ""))
+        log = await send_email(lead["email"], payload.subject, body, extra={"lead_id": lead["id"], "campaign": True})
+        if log["status"] not in ("sent", "mocked"):
+            continue
+        sent += 1
+        update = {"updated_at": now_iso()}
+        if payload.mark_contacted:
+            update["contacted"] = True
+            update["last_contacted_at"] = now_iso()
+            update["status"] = "contacte"
+        await db.leads.update_one({"id": lead["id"]}, {"$set": update})
+        if payload.add_tag:
+            await db.leads.update_one({"id": lead["id"]}, {"$addToSet": {"tags": payload.add_tag}})
+    if sent:
+        _leads_cache_clear()
+    return {"sent": sent, "skipped_no_email": no_email, "total_matched": len(leads)}

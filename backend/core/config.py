@@ -29,6 +29,11 @@ GA4_SERVICE_ACCOUNT_JSON = os.getenv("GA4_SERVICE_ACCOUNT_JSON")
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
 GOOGLE_PLACE_ID = os.getenv("GOOGLE_PLACE_ID")
 
+# Chatbot commercial — Ollama hébergé (ollama.com), modèle Mistral Nemo 12B.
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "https://ollama.com")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:31b")
+
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
 

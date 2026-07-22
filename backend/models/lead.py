@@ -40,3 +40,15 @@ class LeadRelanceSingleIn(BaseModel):
     body: str
     mark_contacted: bool = True
     add_tag: Optional[str] = None
+
+
+class LeadBroadcastIn(BaseModel):
+    # Valeurs brutes d'intérêt (jointes par "|"), calculées côté frontend à partir
+    # du regroupement canonique (voir canonicalizeInterest) — même format que le
+    # paramètre interest_in de GET /leads, pour filtrer sur toute la base et pas
+    # seulement une page chargée. None/vide = tous les leads.
+    interest_in: Optional[str] = None
+    subject: str
+    body: str
+    mark_contacted: bool = True
+    add_tag: Optional[str] = None

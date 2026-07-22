@@ -11,10 +11,11 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus, UploadSimple, FileXls, FileCode, MagnifyingGlass, Trash, Phone,
   EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree, PencilSimple, GraduationCap,
-  EnvelopeOpen, Eye,
+  EnvelopeOpen, Eye, Megaphone,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -423,6 +424,19 @@ export default function Leads() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
+  // ── Campagne (broadcast) : envoi par catégorie d'intérêt, sur toute la base ──
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [broadcastAll, setBroadcastAll] = useState(false);
+  const [broadcastInterests, setBroadcastInterests] = useState(new Set());
+  const [broadcastTemplateKey, setBroadcastTemplateKey] = useState("relance_generique");
+  const [broadcastSubject, setBroadcastSubject] = useState(TEMPLATES.relance_generique.subject);
+  const [broadcastBody, setBroadcastBody] = useState(TEMPLATES.relance_generique.body);
+  const [broadcastCount, setBroadcastCount] = useState(null);
+  const [broadcastCountLoading, setBroadcastCountLoading] = useState(false);
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState(null);
+  const [broadcastProgress, setBroadcastProgress] = useState(null);
+
   const [editOpen, setEditOpen] = useState(false);
   const [editLead, setEditLead] = useState(null);
   const [editForm, setEditForm] = useState(emptyLead);
@@ -733,6 +747,94 @@ export default function Leads() {
   const selectedLeadsWithEmail = filteredItems.filter((l) => selected.has(l.id) && l.email);
   const selectedLeadsNoEmail   = filteredItems.filter((l) => selected.has(l.id) && !l.email);
 
+  // ── Campagne (broadcast) ──────────────────────────────────────────────────
+  const toggleBroadcastInterest = (label) =>
+    setBroadcastInterests((prev) => {
+      const n = new Set(prev);
+      n.has(label) ? n.delete(label) : n.add(label);
+      return n;
+    });
+
+  const applyBroadcastTemplate = (key) => {
+    setBroadcastTemplateKey(key);
+    setBroadcastSubject(TEMPLATES[key].subject);
+    setBroadcastBody(TEMPLATES[key].body);
+  };
+
+  // Valeurs brutes d'intérêt (regroupées côté serveur via "|") correspondant
+  // aux catégories canoniques cochées — même logique que le filtre principal,
+  // mais potentiellement sur plusieurs catégories à la fois.
+  const broadcastInterestIn = useMemo(() => {
+    if (broadcastAll || broadcastInterests.size === 0) return "";
+    return allInterests.filter((raw) => broadcastInterests.has(canonicalizeInterest(raw))).join("|");
+  }, [broadcastAll, broadcastInterests, allInterests]);
+
+  useEffect(() => {
+    if (!broadcastOpen) return;
+    if (!broadcastAll && broadcastInterests.size === 0) { setBroadcastCount(0); return; }
+    setBroadcastCountLoading(true);
+    const params = { page_size: 1 };
+    if (!broadcastAll && broadcastInterestIn) params.interest_in = broadcastInterestIn;
+    api.get("/leads", { params })
+      .then(({ data }) => setBroadcastCount(data.total))
+      .catch(() => setBroadcastCount(null))
+      .finally(() => setBroadcastCountLoading(false));
+  }, [broadcastOpen, broadcastAll, broadcastInterestIn]);
+
+  const resetBroadcast = () => {
+    setBroadcastOpen(false);
+    setBroadcastAll(false);
+    setBroadcastInterests(new Set());
+    setBroadcastResult(null);
+    setBroadcastCount(null);
+    setBroadcastProgress(null);
+  };
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Envoi bouclé côté client (comme la relance manuelle) plutôt qu'un seul gros
+  // appel serveur : ça donne une vraie barre de progression, et le petit délai
+  // entre chaque email limite le risque de déclencher la limite anti-abus de
+  // Gmail SMTP sur un gros volume envoyé d'un coup.
+  const sendBroadcast = async () => {
+    if (!broadcastSubject || !broadcastBody) return toast.error("Sujet et message requis");
+    if (!broadcastAll && broadcastInterests.size === 0) return toast.error("Sélectionnez au moins un intérêt, ou \"Tous les leads\"");
+    setBroadcasting(true);
+    try {
+      const { data: targets } = await api.get("/leads/broadcast-targets", {
+        params: broadcastAll ? {} : { interest_in: broadcastInterestIn },
+      });
+      const withEmail = targets.filter((l) => l.email);
+      const noEmail = targets.length - withEmail.length;
+
+      let sent = 0, skipped = 0, errors = 0;
+      setBroadcastProgress({ total: withEmail.length, sent: 0, skipped: 0, errors: 0, done: false });
+      for (const lead of withEmail) {
+        try {
+          const { data } = await api.post("/leads/relance/single", {
+            lead_id: lead.id, subject: broadcastSubject, body: broadcastBody,
+            mark_contacted: true, add_tag: "campagne_broadcast",
+          });
+          data.sent ? sent++ : skipped++;
+        } catch { errors++; }
+        setBroadcastProgress({ total: withEmail.length, sent, skipped, errors, done: false });
+        await sleep(300);
+      }
+      setBroadcastProgress({ total: withEmail.length, sent, skipped, errors, done: true });
+      setBroadcastResult({ sent, no_email: noEmail, send_failed: skipped + errors, total_matched: targets.length });
+      if (sent === 0 && (skipped + errors) > 0) {
+        toast.error(`Aucun email envoyé — ${skipped + errors} échec(s) d'envoi (SMTP/Resend). Vérifiez la configuration email.`);
+      } else {
+        toast.success(`${sent} email(s) envoyé(s) sur ${targets.length} lead(s) correspondant(s)`);
+      }
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de l'envoi de la campagne");
+    } finally {
+      setBroadcasting(false);
+    }
+  };
+
   return (
     <div className="space-y-6" data-testid="leads-page">
 
@@ -838,6 +940,136 @@ export default function Leads() {
               <div className="flex justify-end gap-2 mt-4">
                 <Button variant="outline" onClick={() => setAddOpen(false)}>Annuler</Button>
                 <Button onClick={createLead} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Créer</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Campagne (broadcast) par catégorie d'intérêt */}
+          <Dialog open={broadcastOpen} onOpenChange={(v) => (v ? setBroadcastOpen(true) : resetBroadcast())}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37]/10 hover:text-[#d4af37]" data-testid="broadcast-btn">
+                <Megaphone size={16} className="mr-1" /> Campagne
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto" data-testid="broadcast-dialog">
+              <DialogHeader><DialogTitle>Lancer une campagne par catégorie de leads</DialogTitle></DialogHeader>
+              <div className="space-y-4 mt-2">
+                {!broadcasting && !broadcastProgress?.done && (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium mb-2 block">Destinataires</label>
+                      <label className="flex items-center gap-2 p-2.5 rounded-md border border-gray-200 hover:bg-gray-50 cursor-pointer mb-2">
+                        <Checkbox checked={broadcastAll} onCheckedChange={(v) => setBroadcastAll(!!v)} data-testid="broadcast-all" />
+                        <span className="text-sm font-medium">Tous les leads (aucun filtre d'intérêt)</span>
+                      </label>
+                      <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 ${broadcastAll ? "opacity-40 pointer-events-none" : ""}`}>
+                        {uniqueInterests.map((label) => (
+                          <label
+                            key={label}
+                            className="flex items-center gap-2 p-2 rounded-md border border-gray-200 hover:bg-gray-50 cursor-pointer text-sm"
+                          >
+                            <Checkbox
+                              checked={broadcastInterests.has(label)}
+                              onCheckedChange={() => toggleBroadcastInterest(label)}
+                              data-testid={`broadcast-interest-${label}`}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-sm bg-gray-50 border border-gray-200 rounded-md p-3">
+                      <UsersThree size={16} />
+                      {broadcastCountLoading
+                        ? "Calcul du nombre de destinataires..."
+                        : broadcastCount === null
+                          ? "—"
+                          : `${broadcastCount} lead(s) correspondant(s)`}
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium">Modèle</label>
+                      <Select value={broadcastTemplateKey} onValueChange={applyBroadcastTemplate}>
+                        <SelectTrigger data-testid="broadcast-template"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(TEMPLATES).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Sujet</label>
+                      <Input value={broadcastSubject} onChange={(e) => setBroadcastSubject(e.target.value)} data-testid="broadcast-subject" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">
+                        Message HTML — <code className="font-mono bg-gray-100 px-1 text-xs">{"{{name}}"}</code> sera remplacé par le nom du lead
+                      </label>
+                      <Textarea rows={7} value={broadcastBody} onChange={(e) => setBroadcastBody(e.target.value)} className="font-mono text-xs" data-testid="broadcast-body" />
+                    </div>
+                  </>
+                )}
+
+                {/* Barre de progression pendant l'envoi */}
+                {broadcastProgress && (
+                  <div className="space-y-2" data-testid="broadcast-progress">
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <span>
+                        {broadcastProgress.done
+                          ? `Terminé — ${broadcastProgress.sent} envoyé(s)${broadcastProgress.skipped ? `, ${broadcastProgress.skipped} sans email` : ""}${broadcastProgress.errors ? `, ${broadcastProgress.errors} erreur(s)` : ""}`
+                          : `Envoi en cours… ${broadcastProgress.sent + broadcastProgress.skipped + broadcastProgress.errors} / ${broadcastProgress.total}`}
+                      </span>
+                      <span className="font-mono">
+                        {Math.round(((broadcastProgress.sent + broadcastProgress.skipped + broadcastProgress.errors) / Math.max(broadcastProgress.total, 1)) * 100)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                      <div
+                        className="h-2.5 rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.round(((broadcastProgress.sent + broadcastProgress.skipped + broadcastProgress.errors) / Math.max(broadcastProgress.total, 1)) * 100)}%`,
+                          backgroundColor: broadcastProgress.done ? (broadcastProgress.errors > 0 ? "#f59e0b" : "#16a34a") : "#d4af37",
+                        }}
+                      />
+                    </div>
+                    <div className="flex gap-4 text-xs">
+                      <span className="text-green-700">✓ {broadcastProgress.sent} envoyé(s)</span>
+                      {broadcastProgress.skipped > 0 && <span className="text-gray-500">↷ {broadcastProgress.skipped} ignoré(s)</span>}
+                      {broadcastProgress.errors > 0 && <span className="text-red-600">✗ {broadcastProgress.errors} erreur(s)</span>}
+                    </div>
+                  </div>
+                )}
+
+                {broadcastResult && broadcastProgress?.done && (
+                  <div className={`border rounded-md p-3 text-sm ${broadcastResult.sent > 0 ? "bg-green-50 border-green-200 text-green-900" : "bg-red-50 border-red-200 text-red-900"}`}>
+                    {broadcastResult.sent > 0 ? "✓" : "✗"} {broadcastResult.sent} email(s) envoyé(s)
+                    {broadcastResult.no_email > 0 && ` · ${broadcastResult.no_email} sans adresse email`}
+                    {broadcastResult.send_failed > 0 && ` · ${broadcastResult.send_failed} échec(s) d'envoi`}
+                    {" "}sur {broadcastResult.total_matched} lead(s) correspondant(s).
+                    {broadcastResult.send_failed > 0 && (
+                      <p className="mt-1 text-xs">
+                        Des échecs d'envoi signalent souvent un problème SMTP/Resend (voir Paramètres &gt; Email) plutôt que des leads invalides.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                {broadcastProgress?.done ? (
+                  <Button onClick={resetBroadcast} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Fermer</Button>
+                ) : (
+                  <>
+                    <Button variant="outline" onClick={resetBroadcast} disabled={broadcasting}>Annuler</Button>
+                    <Button
+                      onClick={sendBroadcast}
+                      disabled={broadcasting || !broadcastCount}
+                      className="bg-[#d4af37] text-black hover:bg-[#b8941f]"
+                      data-testid="broadcast-send"
+                    >
+                      {broadcasting ? "Envoi en cours…" : `Lancer la campagne (${broadcastCount ?? 0})`}
+                    </Button>
+                  </>
+                )}
               </div>
             </DialogContent>
           </Dialog>

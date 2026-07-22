@@ -59,6 +59,7 @@ export default function Settings() {
                   <SelectContent>
                     <SelectItem value="mock">Mock (logs serveur)</SelectItem>
                     <SelectItem value="resend">Resend (recommandé)</SelectItem>
+                    <SelectItem value="brevo">Brevo</SelectItem>
                     <SelectItem value="smtp">SMTP Gmail</SelectItem>
                     <SelectItem value="sendgrid">SendGrid</SelectItem>
                   </SelectContent>
@@ -72,8 +73,23 @@ export default function Settings() {
                   générez une clé API et collez-la ci-dessous.
                 </div>
               )}
-              {(s.email_provider === "resend" || s.email_provider === "sendgrid") && (
-                <Field label="Clé API" value={s.email_api_key} onChange={(v) => update("email_api_key", v)} testid="email-key" type="password" placeholder={s.email_provider === "resend" ? "re_..." : "SG.xxx"} />
+              {s.email_provider === "brevo" && (
+                <div className="bg-green-50 border border-green-200 rounded p-3 text-xs text-green-900" data-testid="brevo-helper">
+                  <b>✅ Brevo :</b> utilisez une clé <b>API v3</b> (commence par <code className="font-mono">xkeysib-</code>), générée
+                  depuis <a href="https://app.brevo.com/settings/keys/api" target="_blank" rel="noreferrer" className="underline">SMTP &amp; API → Clés API</a> —
+                  pas une clé SMTP (<code className="font-mono">xsmtpsib-</code>), qui ne fonctionne pas avec l'API HTTP utilisée ici.
+                  L'adresse expéditeur doit être un email vérifié dans Brevo (Expéditeurs &amp; IP).
+                </div>
+              )}
+              {(s.email_provider === "resend" || s.email_provider === "sendgrid" || s.email_provider === "brevo") && (
+                <Field
+                  label="Clé API"
+                  value={s.email_api_key}
+                  onChange={(v) => update("email_api_key", v)}
+                  testid="email-key"
+                  type="password"
+                  placeholder={s.email_provider === "resend" ? "re_..." : s.email_provider === "brevo" ? "xkeysib-..." : "SG.xxx"}
+                />
               )}
 
               {(s.email_provider === "smtp" || s.email_provider === "resend") && (

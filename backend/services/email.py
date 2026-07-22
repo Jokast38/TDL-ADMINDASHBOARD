@@ -109,6 +109,26 @@ async def _send_via_sendgrid(api_key: str, from_addr: str, to: str, subject: str
         return f"error: {e}"
 
 
+async def _send_via_brevo(api_key: str, from_addr: str, to: str, subject: str, body: str) -> str:
+    """Envoie via l'API HTTP Brevo (ex-Sendinblue) — comme Resend/SendGrid,
+    en HTTPS, donc non bloqué par les hébergeurs qui coupent le SMTP sortant."""
+    try:
+        r = await asyncio.to_thread(
+            _http_post,
+            "https://api.brevo.com/v3/smtp/email",
+            {"api-key": api_key, "Content-Type": "application/json", "Accept": "application/json"},
+            {
+                "sender": {"email": from_addr},
+                "to": [{"email": to}],
+                "subject": subject,
+                "htmlContent": body,
+            }
+        )
+        return "sent" if r.status_code < 300 else f"failed: {r.text[:200]}"
+    except Exception as e:
+        return f"error: {e}"
+
+
 async def _send_via_smtp(s: dict, to: str, subject: str, body: str) -> str:
     """Envoie en SMTP avec retry (Gmail depuis un hébergeur cloud échoue parfois
     de façon aléatoire — IP partagée méfiante — sans être bloqué à 100%)."""
@@ -170,6 +190,14 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None) -> di
 
     elif provider == "sendgrid" and s.get("email_api_key"):
         log["status"] = await _send_via_sendgrid(s["email_api_key"], from_addr, to, subject, tracked_body)
+
+    elif provider == "brevo" and s.get("email_api_key"):
+        log["status"] = await _send_via_brevo(s["email_api_key"], from_addr, to, subject, tracked_body)
+        if log["status"] != "sent" and _smtp_configured(s):
+            logger.warning(f"Brevo en échec pour {to} ({log['status']}), tentative SMTP en secours...")
+            log["brevo_error"] = log["status"]
+            log["status"] = await _send_via_smtp(s, to, subject, tracked_body)
+            log["fallback_provider"] = "smtp"
 
     elif provider == "smtp" and _smtp_configured(s):
         log["status"] = await _send_via_smtp(s, to, subject, tracked_body)

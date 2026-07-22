@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ChatCircleDots, PaperPlaneRight, X, Robot } from "@phosphor-icons/react";
 import { WELCOME_MESSAGE, QUICK_REPLIES, getBotReply } from "@/constants/chatbotScript";
 
-// Chatbot public — actuellement scripté (voir constants/chatbotScript.js),
-// en attendant l'entraînement d'un vrai modèle sur les échanges de l'équipe
-// commerciale. Le point d'échange (sendMessage) est isolé pour pouvoir
-// brancher un vrai appel API plus tard sans retoucher l'UI.
+// Chatbot public — branché sur le modèle réel (Ollama, voir backend
+// routers/chatbot.py) via POST /api/chat/message. Si l'appel échoue
+// (modèle indisponible, réseau...), on retombe sur le script local
+// (constants/chatbotScript.js) pour ne jamais laisser le visiteur sans
+// réponse — dégradation silencieuse, pas d'erreur affichée.
+const SESSION_KEY = "tdl_chat_session_id";
 let idCounter = 0;
 const nextId = () => `m${++idCounter}`;
 
@@ -17,24 +20,36 @@ export default function ChatWidget() {
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const scrollRef = useRef(null);
+  const sessionIdRef = useRef(null);
+
+  useEffect(() => {
+    sessionIdRef.current = localStorage.getItem(SESSION_KEY) || null;
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, typing]);
 
-  const sendMessage = (text) => {
+  const sendMessage = async (text) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     setMessages((m) => [...m, { id: nextId(), from: "user", text: trimmed }]);
     setInput("");
     setTyping(true);
-    // Délai simulé pour un rendu plus naturel — remplacer ce setTimeout par
-    // l'appel API réel (ex: await api.post("/chat/message", { message: trimmed }))
-    // le jour où un vrai modèle entraîné remplace ce script.
-    setTimeout(() => {
+    try {
+      const { data } = await api.post("/chat/message", {
+        session_id: sessionIdRef.current,
+        message: trimmed,
+      });
+      sessionIdRef.current = data.session_id;
+      localStorage.setItem(SESSION_KEY, data.session_id);
+      setMessages((m) => [...m, { id: nextId(), from: "bot", text: data.reply }]);
+    } catch {
+      // Repli sur le script local — le visiteur ne voit jamais d'erreur brute.
       setMessages((m) => [...m, { id: nextId(), from: "bot", text: getBotReply(trimmed) }]);
+    } finally {
       setTyping(false);
-    }, 700 + Math.random() * 500);
+    }
   };
 
   return (
