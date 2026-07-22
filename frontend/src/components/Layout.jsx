@@ -5,7 +5,7 @@ import NotificationBell from "@/components/NotificationBell";
 import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
-  CalendarCheck, FilePdf, FileText, UsersThree
+  CalendarCheck, FilePdf, FileText, UsersThree, Key
 } from "@phosphor-icons/react";
 
 const navAll = [
@@ -100,6 +100,13 @@ export default function Layout({ children }) {
               <p className="text-xs text-gray-500 truncate">{ROLE_LABELS[user?.role] || user?.role}</p>
             </div>
           </div>
+          <Link
+            to="/change-password"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-gray-300 hover:bg-gray-100 text-gray-700 transition-colors mb-2"
+            data-testid="change-password-link"
+          >
+            <Key size={16} /> Changer mon mot de passe
+          </Link>
           <button
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-gray-300 hover:bg-gray-100 text-gray-700 transition-colors"

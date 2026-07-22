@@ -144,6 +144,11 @@ export default function Login() {
                 >
                   {loading ? "Connexion..." : "Se connecter"}
                 </Button>
+                <p className="text-center">
+                  <Link to="/forgot-password" className="text-xs text-gray-500 hover:text-[#d4af37]" data-testid="forgot-password-link">
+                    Mot de passe oublié ?
+                  </Link>
+                </p>
               </form>
             </TabsContent>
 

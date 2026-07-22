@@ -42,6 +42,13 @@ EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
 # une boîte mail externe ne peut pas pointer vers "localhost".
 PUBLIC_BACKEND_URL = os.environ.get("PUBLIC_BACKEND_URL", "https://tdl-admindashboard.onrender.com")
 
+# URL publique du FRONTEND, utilisée pour construire les liens absolus envoyés
+# par email (connexion, réinitialisation de mot de passe...). En local ce sera
+# http://localhost:3000 (à définir dans .env) ; en prod, le domaine change
+# potentiellement — un seul endroit à mettre à jour, jamais de lien codé en dur
+# qui finirait en 404 après un changement de nom de domaine.
+PUBLIC_FRONTEND_URL = os.environ.get("PUBLIC_FRONTEND_URL", "https://tdl-admindashboard.vercel.app").rstrip("/")
+
 # Permission groups
 ROLES_ALL_STAFF = ("admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial")
 ROLES_ADMIN_STAFF = ("admin", "responsable_admission", "agent_admin")

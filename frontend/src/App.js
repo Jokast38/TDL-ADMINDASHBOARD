@@ -1,10 +1,13 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
 
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
+import ChangePassword from "@/pages/ChangePassword";
 import PublicInscription from "@/pages/PublicInscription";
 import FormationDetail from "@/pages/FormationDetail";
 import PublicFormations from "@/pages/PublicFormations";
@@ -37,6 +40,7 @@ import AnalyticsLoader from "@/components/AnalyticsLoader";
 
 function ProtectedRoute({ children, roles }) {
   const { user } = useAuth();
+  const location = useLocation();
   if (user === null) {
     return (
       <div className="min-h-screen flex items-center justify-center" data-testid="auth-loading">
@@ -45,6 +49,9 @@ function ProtectedRoute({ children, roles }) {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  if (user.must_change_password && location.pathname !== "/change-password") {
+    return <Navigate to="/change-password" replace />;
+  }
   if (roles && !roles.includes(user.role)) {
     const fallback =
       user.role === "etudiant" ? "/espace-eleve" :
@@ -69,6 +76,11 @@ function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/change-password" element={
+              <ProtectedRoute><ChangePassword /></ProtectedRoute>
+            } />
             <Route path="/inscription" element={<PublicInscription />} />
             <Route path="/formations" element={<PublicFormations />} />
             <Route path="/formations/:id" element={<FormationDetail />} />

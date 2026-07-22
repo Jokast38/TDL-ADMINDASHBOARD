@@ -11,7 +11,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { Plus, Trash, Pause, Play, Archive, Warning } from "@phosphor-icons/react";
+import { Plus, Trash, Pause, Play, Archive, Warning, Key } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const empty = { email: "", name: "", role: "employe", phone: "", department: "", password: "" };
@@ -51,6 +51,16 @@ export default function Employees() {
       await api.delete(`/employees/${id}`);
       toast.success("Supprimé");
       load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
+  const sendPasswordReset = async (u) => {
+    if (!window.confirm(`Envoyer un lien de réinitialisation de mot de passe à ${u.name} (${u.email}) ?`)) return;
+    try {
+      await api.post(`/employees/${u.id}/send-password-reset`);
+      toast.success("Email de réinitialisation envoyé");
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
     }
@@ -204,6 +214,13 @@ export default function Employees() {
                             <Play size={14} />
                           </button>
                         )}
+                        <button
+                          onClick={() => sendPasswordReset(u)}
+                          className="p-1.5 text-gray-600 hover:bg-gray-100 rounded" title="Réinitialiser le mot de passe"
+                          data-testid={`reset-password-${u.id}`}
+                        >
+                          <Key size={14} />
+                        </button>
                         {isAdmin && (
                           <button onClick={() => remove(u.id)} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Supprimer définitivement">
                             <Trash size={14} />

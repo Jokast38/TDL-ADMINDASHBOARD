@@ -8,6 +8,7 @@ from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
 from models.employee import EmployeeIn, AccountStatusIn
+from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 
 router = APIRouter(tags=["employees"])
 
@@ -57,12 +58,29 @@ async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role
         "id": str(uuid.uuid4()), "email": payload.email.lower(), "name": payload.name,
         "role": role, "phone": payload.phone, "department": payload.department,
         "password_hash": hash_password(payload.password),
-        "created_at": now_iso(), "active": True, "account_status": "actif"
+        "created_at": now_iso(), "active": True, "account_status": "actif",
+        "must_change_password": True,
     }
     await db.users.insert_one(doc)
+    await send_password_setup_email(doc, payload.password)
     doc.pop("password_hash")
     doc.pop("_id", None)
     return doc
+
+
+@router.post("/employees/{uid}/send-password-reset")
+async def send_employee_password_reset(uid: str, user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
+    """Bouton admin "Réinitialiser le mot de passe" : envoie un lien de
+    réinitialisation à l'employé plutôt que d'imposer un mot de passe choisi
+    par l'admin — l'employé choisit lui-même son nouveau mot de passe."""
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user["role"] != "admin" and target.get("role") not in MANAGEABLE_ROLES_BY_MANAGER:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes commerciaux")
+    token = await create_reset_token(uid)
+    await send_reset_link_email(target, token, triggered_by_admin=True)
+    return {"ok": True}
 
 
 @router.put("/employees/{uid}/status")
