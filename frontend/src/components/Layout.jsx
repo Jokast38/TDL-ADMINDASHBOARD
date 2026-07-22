@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import NotificationBell from "@/components/NotificationBell";
 import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
@@ -24,6 +25,8 @@ const navAll = [
   { to: "/admin/settings", label: "Paramètres", icon: Gear, roles: ["admin"] },
   { to: "/admin/marketing", label: "Marketing", icon: ChartBar, roles: ["admin"] },
 ];
+
+const NOTIFICATION_ROLES = ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"];
 
 const ROLE_LABELS = {
   admin: "Administrateur",
@@ -119,7 +122,8 @@ export default function Layout({ children }) {
           <div className="flex-1">
             <p className="overline">TDL Formation · Plateforme interne</p>
           </div>
-          <Link to="/" className="text-sm text-gray-600 hover:text-[#d4af37] hidden md:inline" data-testid="header-public-link">
+          {NOTIFICATION_ROLES.includes(user?.role) && <NotificationBell />}
+          <Link to="/" className="text-sm text-gray-600 hover:text-[#d4af37] hidden md:inline ml-4" data-testid="header-public-link">
             Site public →
           </Link>
         </header>
