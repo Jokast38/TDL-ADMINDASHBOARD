@@ -18,6 +18,7 @@ from routers import (
     leads, employees, settings, dashboard, ai, blog,
     wordpress, stages, emargements, doc_templates,
     generated_docs, health, callback, tracking, reviews, chatbot, notifications,
+    custom_email,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -71,6 +72,7 @@ app.include_router(tracking.router,       prefix=_PREFIX)
 app.include_router(reviews.router,        prefix=_PREFIX)
 app.include_router(chatbot.router,        prefix=_PREFIX)
 app.include_router(notifications.router,  prefix=_PREFIX)
+app.include_router(custom_email.router,   prefix=_PREFIX)
 
 # Fichiers uploadés depuis l'admin (ex: images de couverture d'articles de blog),
 # servis en statique — indépendant du service de stockage objet externe Emergent.

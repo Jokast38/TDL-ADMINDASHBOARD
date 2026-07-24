@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   ChartLineUp, MagnifyingGlass, Megaphone, EnvelopeSimple, ShareNetwork, Sparkle,
-  EnvelopeOpen, Cursor, PaperPlaneTilt, WarningCircle,
+  EnvelopeOpen, Cursor, PaperPlaneTilt, WarningCircle, Paperclip, X as XIcon, PencilSimple,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {
@@ -55,6 +55,7 @@ export default function Marketing() {
         <TabsList data-testid="marketing-tabs">
           <TabsTrigger value="overview" data-testid="tab-overview"><Sparkle size={14} className="mr-1" /> Plan IA</TabsTrigger>
           <TabsTrigger value="emails" data-testid="tab-emails"><EnvelopeSimple size={14} className="mr-1" /> Emails</TabsTrigger>
+          <TabsTrigger value="compose" data-testid="tab-compose"><PencilSimple size={14} className="mr-1" /> Email personnalisé</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -84,6 +85,10 @@ export default function Marketing() {
 
         <TabsContent value="emails">
           <EmailStatsTab />
+        </TabsContent>
+
+        <TabsContent value="compose">
+          <ComposeEmailTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -224,6 +229,136 @@ function EmailStatsTab() {
         de causalité.
       </p>
     </div>
+  );
+}
+
+const EMPTY_COMPOSE = { to: "", subject: "", message: "", button_text: "", button_url: "" };
+
+function ComposeEmailTab() {
+  const [form, setForm] = useState(EMPTY_COMPOSE);
+  const [file, setFile] = useState(null);
+  const [sending, setSending] = useState(false);
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const send = async () => {
+    if (!form.to.trim() || !form.subject.trim() || !form.message.trim()) {
+      return toast.error("Destinataire, objet et message sont requis");
+    }
+    setSending(true);
+    try {
+      const fd = new FormData();
+      fd.append("to", form.to.trim());
+      fd.append("subject", form.subject.trim());
+      fd.append("message", form.message);
+      if (form.button_text.trim() && form.button_url.trim()) {
+        fd.append("button_text", form.button_text.trim());
+        fd.append("button_url", form.button_url.trim());
+      }
+      if (file) fd.append("file", file);
+      await api.post("/email/send-custom", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success("Email envoyé");
+      setForm(EMPTY_COMPOSE);
+      setFile(null);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de l'envoi");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+      <div className="flex items-center gap-2 mb-2">
+        <PencilSimple size={16} className="text-[#d4af37]" weight="fill" />
+        <p className="overline">Email libre</p>
+      </div>
+      <h2 className="font-display text-2xl font-bold mb-1">Composer un email personnalisé</h2>
+      <p className="text-sm text-gray-500 mb-6">
+        Écrivez simplement votre message — il sera automatiquement mis en forme avec le design TDL Formation
+        (logo, couleurs, pied de page) avant l'envoi.
+      </p>
+
+      <div className="max-w-xl space-y-4">
+        <div>
+          <label className="text-sm font-medium">Destinataire</label>
+          <Input
+            type="email"
+            value={form.to}
+            onChange={(e) => set("to", e.target.value)}
+            placeholder="destinataire@exemple.fr"
+            data-testid="compose-to"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Objet</label>
+          <Input
+            value={form.subject}
+            onChange={(e) => set("subject", e.target.value)}
+            placeholder="Objet de votre email"
+            data-testid="compose-subject"
+          />
+        </div>
+        <div>
+          <label className="text-sm font-medium">Message</label>
+          <Textarea
+            rows={8}
+            value={form.message}
+            onChange={(e) => set("message", e.target.value)}
+            placeholder="Écrivez votre message ici..."
+            data-testid="compose-message"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-200">
+          <div>
+            <label className="text-sm font-medium">Bouton de redirection (optionnel)</label>
+            <Input
+              value={form.button_text}
+              onChange={(e) => set("button_text", e.target.value)}
+              placeholder="Texte du bouton"
+              data-testid="compose-button-text"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium invisible">URL</label>
+            <Input
+              value={form.button_url}
+              onChange={(e) => set("button_url", e.target.value)}
+              placeholder="https://..."
+              data-testid="compose-button-url"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-sm font-medium block mb-1">Pièce jointe (optionnel)</label>
+          {file ? (
+            <div className="flex items-center gap-2 text-sm bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+              <Paperclip size={14} className="text-gray-500 shrink-0" />
+              <span className="truncate flex-1">{file.name}</span>
+              <button onClick={() => setFile(null)} className="text-gray-400 hover:text-red-600" data-testid="compose-remove-file">
+                <XIcon size={14} />
+              </button>
+            </div>
+          ) : (
+            <label className="inline-flex items-center gap-2 text-sm cursor-pointer px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
+              <Paperclip size={14} /> Joindre un fichier
+              <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} data-testid="compose-file-input" />
+            </label>
+          )}
+        </div>
+
+        <Button
+          onClick={send}
+          disabled={sending}
+          className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
+          data-testid="compose-send-btn"
+        >
+          <PaperPlaneTilt size={16} className="mr-2" /> {sending ? "Envoi en cours..." : "Envoyer l'email"}
+        </Button>
+      </div>
+    </Card>
   );
 }
 
