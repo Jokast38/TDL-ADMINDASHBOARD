@@ -24,6 +24,8 @@ class SettingsIn(BaseModel):
     trello_board_id: Optional[str] = None
     google_analytics_id: Optional[str] = None
     plausible_domain: Optional[str] = None
+    meta_pixel_id: Optional[str] = None
+    meta_conversion_api_token: Optional[str] = None
     public_base_url: Optional[str] = None
 
 

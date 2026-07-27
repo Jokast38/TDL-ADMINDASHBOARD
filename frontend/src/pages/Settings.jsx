@@ -205,6 +205,29 @@ export default function Settings() {
               <Field label="Google Analytics 4 — Measurement ID" value={s.google_analytics_id} onChange={(v) => update("google_analytics_id", v)} testid="ga-id" placeholder="G-XXXXXXXX" />
               <Field label="Plausible — domaine (RGPD friendly)" value={s.plausible_domain} onChange={(v) => update("plausible_domain", v)} testid="plausible-domain" placeholder="tdlformation.fr" />
               <p className="text-xs text-gray-500">💡 Plausible est privacy-friendly (pas de cookie banner nécessaire). GA4 nécessite une bannière de consentement RGPD.</p>
+
+              <div className="pt-4 border-t border-gray-200">
+                <p className="text-sm font-semibold mb-1">Meta (Facebook) Pixel</p>
+                <p className="text-xs text-gray-500 mb-3">
+                  Utilisé pour le suivi des campagnes Meta Ads : recherche, prise de rendez-vous, demande de rappel et
+                  inscription sont déjà instrumentés côté site — ils s'activent automatiquement dès que l'ID est renseigné.
+                </p>
+                <Field label="Pixel ID" value={s.meta_pixel_id} onChange={(v) => update("meta_pixel_id", v)} testid="meta-pixel-id" placeholder="1234567890123456" />
+                <div className="mt-3">
+                  <Field
+                    label="Token API de Conversion (optionnel, pour plus tard)"
+                    value={s.meta_conversion_api_token}
+                    onChange={(v) => update("meta_conversion_api_token", v)}
+                    testid="meta-capi-token"
+                    type="password"
+                    placeholder="EAAG..."
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Pas encore utilisé — réservé au futur suivi côté serveur (plus fiable que le pixel seul, contourne les
+                    bloqueurs de pub).
+                  </p>
+                </div>
+              </div>
             </div>
           </Card>
         </TabsContent>

@@ -16,16 +16,16 @@ const SESSIONS = generateUpcomingSessions();
 const NEXT_SESSION_LABEL = SESSIONS[0]?.items[0] || "";
 
 const FAQ = [
-  { q: "Puis-je refaire un stage ?", a: "Oui. Un stage de récupération de points ne peut être effectué qu'une fois par période de 12 mois. Si votre dernier stage date de plus d'un an, vous pouvez en refaire un dès aujourd'hui." },
-  { q: "Pourquoi 189 € ?", a: "189 € est notre tarif fidélité, réservé aux personnes ayant déjà suivi un stage chez TDL Formation, en dessous de notre tarif standard de 240 €." },
-  { q: "Comment se déroule le stage ?", a: "Le stage se déroule sur 2 jours consécutifs (7h/jour), en salle, avec des formateurs agréés par la Préfecture, autour de la sensibilisation à la sécurité routière." },
-  { q: "En combien de temps suis-je rappelé ?", a: "Notre équipe vous recontacte sous 24h ouvrées après votre demande pour confirmer votre inscription et le tarif fidélité." },
+  { q: "Ai-je droit à ce stage ?", a: "Oui, ce stage volontaire de récupération de points est ouvert à tout titulaire d'un permis en cours de validité, une fois tous les 12 mois." },
+  { q: "Combien de points puis-je récupérer ?", a: "Jusqu'à 4 points, dans la limite du plafond de votre permis (12 points, ou 6 en période probatoire)." },
+  { q: "Comment se déroule le stage ?", a: "2 jours consécutifs (7h/jour), en salle, avec des formateurs agréés par la Préfecture, autour de la sensibilisation à la sécurité routière." },
+  { q: "En combien de temps suis-je rappelé ?", a: "Notre équipe vous recontacte sous 24h ouvrées après votre demande pour finaliser votre inscription." },
 ];
 
 const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
 const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 
-export default function OffreFideliteLanding() {
+export default function StageRecuperationPointsLanding() {
   const [session, setSession] = useState("");
   const [form, setForm] = useState({ prenom: "", nom: "", telephone: "" });
   const [sending, setSending] = useState(false);
@@ -35,7 +35,7 @@ export default function OffreFideliteLanding() {
 
   const chooseSession = (label) => {
     setSession(label);
-    trackSchedule({ content_name: label, value: 189, currency: "EUR" });
+    trackSchedule({ content_name: label, value: 240, currency: "EUR" });
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -53,9 +53,9 @@ export default function OffreFideliteLanding() {
     }
     setSending(true);
     try {
-      await api.post("/callback-requests", { ...form, session, source: "offre_fidelite_189" });
+      await api.post("/callback-requests", { ...form, session, source: "meta_stage_recuperation_points_240" });
       setSent(true);
-      trackLead({ content_name: "offre_fidelite", value: 189, currency: "EUR", session });
+      trackLead({ content_name: "stage_recuperation_points_240", value: 240, currency: "EUR", session });
     } catch {
       toast.error("Erreur lors de l'envoi, merci de réessayer ou de nous appeler directement.");
     } finally {
@@ -64,15 +64,15 @@ export default function OffreFideliteLanding() {
   };
 
   return (
-    <div className="min-h-screen bg-white" data-testid="offre-fidelite-page" ref={revealRef}>
+    <div className="min-h-screen bg-white" data-testid="stage-recup-points-page" ref={revealRef}>
       <TopBar />
       <StageNav ctaLabel="Réserver une session" ctaHref="#form" />
 
       <Hero
-        titleLine1="Récupérez vos points"
-        titleLine2Gold="au tarif fidélité 189 €"
-        subheadline="Réservé à nos anciens stagiaires."
-        description="Votre dernier stage date de plus d'un an et votre solde de points a de nouveau diminué ? Bénéficiez de notre tarif fidélité et récupérez jusqu'à 4 points en 2 jours."
+        titleLine1="Récupérez jusqu'à 4 points"
+        titleLine2Gold="en seulement 2 jours"
+        subheadline="Stage agréé de récupération de points."
+        description="Vous avez perdu des points sur votre permis ? Notre stage agréé par la Préfecture vous permet de récupérer jusqu'à 4 points en 2 jours, sans examen."
         heroImage="/tdl-image/image-securite-routiere-rectangle-sans-fond-blanc.png"
         villes={VILLES}
         onFindSessions={handleFindSessions}
@@ -83,12 +83,11 @@ export default function OffreFideliteLanding() {
       <StepsSection title="Une démarche simple, un résultat concret." steps={DEFAULT_STEPS} />
 
       <SessionBanner
-        image="/tdl-image/about-1.jpg"
+        image="/tdl-image/about-2.jpg"
         dateLabel={session || NEXT_SESSION_LABEL}
         city="Épinay-sur-Seine (93)"
         seats="Places limitées"
-        price={189}
-        priceLabel="tarif fidélité (au lieu de 240 €)"
+        price={240}
         onReserve={() => chooseSession(session || NEXT_SESSION_LABEL)}
       />
 
@@ -133,8 +132,7 @@ export default function OffreFideliteLanding() {
         sending={sending}
         sent={sent}
         onSubmit={submit}
-        price={189}
-        priceLabel="tarif fidélité"
+        price={240}
       />
 
       <TrustBar rating={4.9} totalReviews={705} />

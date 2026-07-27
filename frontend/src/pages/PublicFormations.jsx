@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { TopBar } from "@/components/StageLandingPage";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ArrowRight, CaretRight, MagnifyingGlass, GraduationCap } from "@phosphor-icons/react";
-import { CATEGORY_LABELS } from "@/constants/formationAssets";
+import { CATEGORY_LABELS, HOME_HERO_SLIDES } from "@/constants/formationAssets";
 import FormationCard from "@/components/FormationCard";
 import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
+import HeroSlideshow from "@/components/HeroSlideshow";
 import { useReveal } from "@/hooks/useReveal";
+import { trackSearch } from "@/lib/metaPixel";
 
 const stripAccents = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
 const normalize = (s) => stripAccents((s || "").toLowerCase());
@@ -42,9 +44,17 @@ export default function PublicFormations() {
     });
   }, [formations, query, category]);
 
+  // Événement Meta "Search" — débounce pour ne pas spammer un événement par frappe.
+  useEffect(() => {
+    if (!query.trim() || query.trim().length < 3) return;
+    const id = setTimeout(() => trackSearch(query.trim()), 800);
+    return () => clearTimeout(id);
+  }, [query]);
+
   return (
     <div className="min-h-screen bg-white" data-testid="public-formations-page" ref={revealRef}>
       {/* Header */}
+      <TopBar />
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
@@ -79,25 +89,42 @@ export default function PublicFormations() {
       </div>
 
       {/* Hero */}
-      <section className="border-b border-gray-200 grid-bg-noise">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-20">
-          <p className="overline mb-3">Catalogue complet</p>
-          <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tighter leading-[0.95] mb-6">
-            Toutes nos <span className="text-[#d4af37]">formations</span>
-          </h1>
-          <p className="text-gray-600 text-lg max-w-2xl mb-8">
-            CACES, permis, auto-école, SSIAP, VTC/Taxi, ECSR, Conseiller de Vente — retrouvez l'ensemble de notre
-            catalogue et recherchez la formation qui correspond à votre projet.
-          </p>
-          <div className="relative max-w-md">
-            <MagnifyingGlass size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher une formation (ex : CACES, VTC, permis...)"
-              className="pl-10"
-              data-testid="formations-search"
-            />
+      <section className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-14 lg:py-20 grid lg:grid-cols-2 gap-10 items-start">
+          <div>
+            <p className="overline mb-4">Catalogue complet</p>
+            <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold tracking-tight leading-[0.95] uppercase">
+              Toutes nos<br /><span className="text-[#d4af37]">formations</span>
+            </h1>
+            <p className="font-display text-xl sm:text-2xl font-bold mt-5 leading-snug">Un métier, une certification, à votre rythme.</p>
+            <span className="block h-1 w-16 mt-5 mb-5 bg-[#0a0a0a]" />
+            <p className="text-gray-500 max-w-md">
+              CACES, permis, auto-école, SSIAP, VTC/Taxi, ECSR, Conseiller de Vente — retrouvez l'ensemble de notre
+              catalogue et recherchez la formation qui correspond à votre projet.
+            </p>
+
+            <div className="mt-8 bg-black rounded-lg p-5 max-w-md">
+              <p className="text-[11px] font-bold uppercase tracking-widest mb-3 text-[#d4af37]">Rechercher une formation</p>
+              <div className="relative">
+                <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Ex : CACES, VTC, permis..."
+                  data-testid="formations-search"
+                  className="w-full bg-[#1a1a1a] text-white text-sm rounded-md pl-9 pr-3 py-2.5 border border-white/10 focus:outline-none focus:border-[#d4af37]"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div
+              className="relative aspect-[4/3] overflow-hidden bg-black"
+              style={{ clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%, 0 32%)" }}
+            >
+              <HeroSlideshow slides={HOME_HERO_SLIDES} />
+            </div>
           </div>
         </div>
       </section>

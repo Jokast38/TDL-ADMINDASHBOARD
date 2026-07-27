@@ -20,7 +20,7 @@ export default function HeroSlideshow({ slides, interval = 5000, className = "" 
           className={`hero-slide ${i === active ? "hero-slide-active" : ""} w-full h-full object-cover`}
         />
       ))}
-      <div className="absolute inset-0 bg-gradient-to-r from-white via-white/85 to-white/40" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
     </div>
   );
 }

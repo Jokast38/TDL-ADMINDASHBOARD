@@ -19,6 +19,7 @@ async def public_site_config():
     return {
         "google_analytics_id": s.get("google_analytics_id", ""),
         "plausible_domain": s.get("plausible_domain", ""),
+        "meta_pixel_id": s.get("meta_pixel_id", ""),
     }
 
 

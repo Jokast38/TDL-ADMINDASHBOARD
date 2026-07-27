@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, ArrowRight, ArrowLeft } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { trackCompleteRegistration } from "@/lib/metaPixel";
 
 // Validation basique : téléphone français (avec ou sans +33, espaces/points/
 // tirets tolérés) et email — pour éviter les dossiers avec un numéro
@@ -44,6 +45,7 @@ export default function PublicInscription() {
       setSuccess(data);
       setStep(3);
       toast.success("Inscription enregistrée");
+      trackCompleteRegistration({ content_name: selected?.title, value: selected?.price, currency: "EUR" });
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
     }

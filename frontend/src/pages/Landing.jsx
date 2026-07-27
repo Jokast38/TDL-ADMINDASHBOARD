@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { TopBar } from "@/components/StageLandingPage";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,6 +18,7 @@ import {
   Clock, PiggyBank, NotePencil, Wheelchair, Storefront,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { trackLead } from "@/lib/metaPixel";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
@@ -222,6 +224,7 @@ export default function Landing() {
     try {
       await api.post("/callback-requests", { ...contactForm, source: "contact_form" });
       setContactSent(true);
+      trackLead({ content_name: "contact_form" });
     } catch {
       toast.error("Erreur lors de l'envoi, merci de réessayer ou de nous appeler directement.");
     } finally {
@@ -252,6 +255,7 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-white" data-testid="landing-page" ref={revealRef}>
       {/* Header */}
+      <TopBar />
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
@@ -324,16 +328,16 @@ export default function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="relative border-b border-gray-200 overflow-hidden">
-        <HeroSlideshow slides={HOME_HERO_SLIDES} />
-        <div className="grid-bg-noise absolute inset-0 pointer-events-none" />
-        <div className="relative max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-28 grid lg:grid-cols-12 gap-8 items-end">
-          <div className="lg:col-span-7 animate-fade-in-up">
+      <section className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-14 lg:py-20 grid lg:grid-cols-2 gap-10 items-start">
+          <div className="animate-fade-in-up">
             <p className="overline mb-4">Organisme certifié Qualiopi · Épinay-sur-Seine (93) & Creil (60)</p>
-            <h1 className="font-display text-5xl sm:text-6xl lg:text-7xl font-bold tracking-tighter leading-[0.95]">
-              Devenez chauffeur <span className="text-[#d4af37]">VTC</span> ou <span className="text-[#d4af37]">Taxi</span><br />professionnel.
+            <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold tracking-tight leading-[0.95] uppercase">
+              Formez-vous.<br /><span className="text-[#d4af37]">Certifiez-vous.</span>
             </h1>
-            <p className="text-gray-600 text-lg mt-6 max-w-xl">
+            <p className="font-display text-xl sm:text-2xl font-bold mt-5 leading-snug">Professionnel, en toute confiance.</p>
+            <span className="block h-1 w-16 mt-5 mb-5 bg-[#0a0a0a]" />
+            <p className="text-gray-500 max-w-md">
               Formation initiale, continue, passerelle VTC ↔ Taxi, SSIAP, ECSR — inscription en ligne, dossier ANTS
               suivi, paiement sécurisé.
             </p>
@@ -349,12 +353,21 @@ export default function Landing() {
                 </Button>
               </a>
             </div>
+            <div className="grid grid-cols-2 gap-4 mt-10 max-w-md animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
+              <Stat label="Réussite examen VTC" value="97%" accent="#0B7238" />
+              <Stat label="Réussite examen Taxi" value="95%" accent="#0B7238" />
+              <Stat label="Examens réussis" value="5000+" accent="#d4af37" />
+              <Stat label="Formateurs qualifiés" value="15" accent="#d4af37" />
+            </div>
           </div>
-          <div className="lg:col-span-5 grid grid-cols-2 gap-4 animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
-            <Stat label="Réussite examen VTC" value="97%" accent="#0B7238" />
-            <Stat label="Réussite examen Taxi" value="95%" accent="#0B7238" />
-            <Stat label="Examens réussis" value="5000+" accent="#d4af37" />
-            <Stat label="Formateurs qualifiés" value="15" accent="#d4af37" />
+
+          <div className="relative">
+            <div
+              className="relative aspect-[4/3] overflow-hidden bg-black"
+              style={{ clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%, 0 32%)" }}
+            >
+              <HeroSlideshow slides={HOME_HERO_SLIDES} />
+            </div>
           </div>
         </div>
       </section>
@@ -367,12 +380,12 @@ export default function Landing() {
           <p className="text-gray-600 max-w-2xl mb-10">
             6 domaines de formation professionnelle agréés, plus la mobilité électrique KAMI STREET.
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             {CATEGORIES.map((c, idx) => (
-              <Card key={c.key} data-reveal className={`reveal reveal-delay-${(idx % 4) + 1} p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-[#0a0a0a] transition-all`} data-testid={`cat-${c.key}`}>
-                <c.icon size={28} className="text-[#0a0a0a]" weight="duotone" />
-                <h3 className="font-display font-bold mt-3">{c.label}</h3>
-                <p className="text-xs text-gray-500 mt-1">{c.desc}</p>
+              <Card key={c.key} data-reveal className={`reveal reveal-delay-${(idx % 4) + 1} p-4 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-[#0a0a0a] transition-all min-w-0`} data-testid={`cat-${c.key}`}>
+                <c.icon size={24} className="text-[#0a0a0a]" weight="duotone" />
+                <h3 className="font-display font-bold text-sm mt-3 break-words">{c.label}</h3>
+                <p className="text-xs text-gray-500 mt-1 break-words">{c.desc}</p>
               </Card>
             ))}
           </div>
