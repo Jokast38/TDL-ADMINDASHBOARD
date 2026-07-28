@@ -15,7 +15,7 @@ const categories = ["CACES", "PERMIS", "AUTO_ECOLE", "SSIAP", "VTC_TAXI", "ECSR"
 
 const empty = {
   title: "", category: "CACES", description: "", duration_hours: 0,
-  price: 0, sessions_per_month: 0, active: true, image_url: ""
+  price: 0, sessions_per_month: 0, active: true, image_url: "", cpf_eligible: false,
 };
 
 export default function Formations() {
@@ -115,6 +115,10 @@ export default function Formations() {
                 <Switch checked={form.active} onCheckedChange={(v) => setForm({ ...form, active: v })} data-testid="form-active" />
                 <label className="text-sm">Active (visible publiquement)</label>
               </div>
+              <div className="flex items-center gap-2">
+                <Switch checked={!!form.cpf_eligible} onCheckedChange={(v) => setForm({ ...form, cpf_eligible: v })} data-testid="form-cpf" />
+                <label className="text-sm">Éligible CPF</label>
+              </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
@@ -130,7 +134,10 @@ export default function Formations() {
         {items.map((f) => (
           <Card key={f.id} className="p-6 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-gray-300 transition-all" data-testid={`formation-card-${f.id}`}>
             <div className="flex items-start justify-between mb-3">
-              <Badge variant="outline" className="text-xs">{f.category}</Badge>
+              <div className="flex items-center gap-1.5">
+                <Badge variant="outline" className="text-xs">{f.category}</Badge>
+                {f.cpf_eligible && <Badge className="text-xs bg-[#0052CC]/10 text-[#0052CC] hover:bg-[#0052CC]/10">CPF</Badge>}
+              </div>
               <div className="flex gap-1">
                 <button onClick={() => edit(f)} className="p-1.5 rounded hover:bg-gray-100" data-testid={`edit-formation-${f.id}`}>
                   <PencilSimple size={14} />

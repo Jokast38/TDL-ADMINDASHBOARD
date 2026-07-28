@@ -12,3 +12,4 @@ class FormationIn(BaseModel):
     active: bool = True
     image_url: Optional[str] = None
     documents_requis: List[str] = []
+    cpf_eligible: Optional[bool] = None
