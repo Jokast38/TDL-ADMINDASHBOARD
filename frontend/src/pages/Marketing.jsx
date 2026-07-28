@@ -422,14 +422,18 @@ function LandingPageCard({ page }) {
       data-testid={`landing-card-${page.path}`}
     >
       <div className="relative h-44 bg-gray-100 overflow-hidden border-b border-gray-200">
-        {/* Aperçu miniature : la vraie page rendue dans un iframe, réduite à l'échelle. */}
+        {/* Aperçu miniature : la vraie page rendue dans un iframe, réduite à l'échelle.
+            L'iframe garde sa largeur native (1280px) pour le rendu desktop, puis est
+            recentrée via marginLeft (une fois réduite, elle est plus étroite que la
+            carte, sans quoi elle restait collée à gauche avec du vide à droite). */}
         <iframe
           src={url}
           title={page.title}
-          className="pointer-events-none border-0"
+          className="pointer-events-none border-0 absolute top-0 left-1/2"
           style={{
             width: "1280px", height: "1000px",
             transform: "scale(0.235)", transformOrigin: "top left",
+            marginLeft: -(1280 * 0.235) / 2,
           }}
           tabIndex={-1}
         />
