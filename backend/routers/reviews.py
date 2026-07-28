@@ -12,6 +12,13 @@ CACHE_ID = "google_place_reviews"
 CACHE_TTL = timedelta(hours=6)
 PLACES_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 
+# Lien direct qui ouvre le formulaire "Laisser un avis" de la fiche Google Business —
+# ne nécessite aucun appel à l'API Places (juste le Place ID), donc toujours
+# disponible même si les avis eux-mêmes ne sont pas configurés/en échec.
+WRITE_REVIEW_URL = (
+    f"https://search.google.com/local/writereview?placeid={GOOGLE_PLACE_ID}" if GOOGLE_PLACE_ID else None
+)
+
 
 @router.get("/google")
 async def get_google_reviews():
@@ -21,11 +28,11 @@ async def get_google_reviews():
     if cached:
         fetched_at = datetime.fromisoformat(cached["fetched_at"])
         if datetime.now(timezone.utc) - fetched_at < CACHE_TTL:
-            return cached["data"]
+            return {**cached["data"], "write_review_url": WRITE_REVIEW_URL}
 
     if not GOOGLE_PLACES_API_KEY or not GOOGLE_PLACE_ID:
         if cached:
-            return cached["data"]
+            return {**cached["data"], "write_review_url": WRITE_REVIEW_URL}
         raise HTTPException(status_code=503, detail="Google Places non configuré (clé API ou Place ID manquant)")
 
     try:
@@ -63,8 +70,11 @@ async def get_google_reviews():
             {"$set": {"id": CACHE_ID, "data": data, "fetched_at": now_iso()}},
             upsert=True,
         )
-        return data
+        return {**data, "write_review_url": WRITE_REVIEW_URL}
     except Exception as e:
         if cached:
-            return cached["data"]
+            return {**cached["data"], "write_review_url": WRITE_REVIEW_URL}
+        if WRITE_REVIEW_URL:
+            return {"name": None, "rating": None, "user_ratings_total": None, "url": None,
+                    "reviews": [], "write_review_url": WRITE_REVIEW_URL}
         raise HTTPException(status_code=502, detail=f"Erreur Google Places: {e}")

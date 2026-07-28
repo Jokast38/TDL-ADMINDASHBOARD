@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import { Star, StarHalf } from "@phosphor-icons/react";
+import { Star, StarHalf, ArrowSquareOut } from "@phosphor-icons/react";
 
 const GOLD = "#f5c518";
 
@@ -72,7 +72,9 @@ export default function GoogleReviewsCarousel() {
     return () => clearInterval(id);
   }, [reviews.length]);
 
-  if (failed || !reviews.length) return null;
+  // On garde l'affichage tant que le bouton "laisser un avis" a un lien valide,
+  // même si aucun avis existant n'a pu être récupéré (API Places en échec/quota).
+  if (failed || !data || (!reviews.length && !data.write_review_url)) return null;
 
   const visible = [0, 1].map((offset) => reviews[(index + offset) % reviews.length]).filter(Boolean);
 
@@ -80,7 +82,7 @@ export default function GoogleReviewsCarousel() {
     <section className="relative bg-black text-white overflow-hidden">
       <div className="grid-bg-noise absolute inset-0 opacity-40 pointer-events-none" />
       <div className="relative max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-24 grid lg:grid-cols-12 gap-10 items-center">
-        <div className="lg:col-span-4" data-reveal>
+        <div className={reviews.length ? "lg:col-span-4" : "lg:col-span-12 text-center lg:text-left"} data-reveal>
           <h2 className="reveal font-display text-4xl sm:text-5xl font-bold tracking-tight leading-[1.05] mb-6">
             Ce qu'en disent<br />nos étudiants
           </h2>
@@ -91,12 +93,25 @@ export default function GoogleReviewsCarousel() {
               Note de confiance {data.rating} ({data.user_ratings_total.toLocaleString("fr-FR")} avis)
             </p>
           )}
+          {data.write_review_url && (
+            <a
+              href={data.write_review_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 mt-5 text-sm font-semibold border border-white/20 rounded-md px-4 py-2 hover:border-[#f5c518] hover:text-[#f5c518] transition-colors"
+              data-testid="leave-google-review-btn"
+            >
+              Laisser un avis Google <ArrowSquareOut size={16} />
+            </a>
+          )}
         </div>
-        <div className="lg:col-span-8 grid sm:grid-cols-2 gap-6">
-          {visible.map((rev, i) => (
-            <ReviewCard key={`${rev.author_name}-${rev.time}-${i}`} review={rev} />
-          ))}
-        </div>
+        {reviews.length > 0 && (
+          <div className="lg:col-span-8 grid sm:grid-cols-2 gap-6">
+            {visible.map((rev, i) => (
+              <ReviewCard key={`${rev.author_name}-${rev.time}-${i}`} review={rev} />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

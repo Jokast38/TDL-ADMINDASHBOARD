@@ -388,6 +388,28 @@ const TEMPLATES = {
     ),
   },
 
+  avis_google: {
+    label: "⭐ Demande d'avis Google",
+    subject: "Votre avis compte pour nous 🙏",
+    // Le lien du bouton (TDL_SITE ci-dessous) est un simple repli tant que le vrai
+    // lien "Laisser un avis Google" n'est pas encore chargé — voir l'effet
+    // recalculant googleReviewUrl juste après le montage du composant, qui
+    // régénère ce corps avec la vraie URL dès qu'elle est disponible.
+    body: makeEmail(
+      `<p style="margin:0 0 18px 0;font-size:16px;color:#0a0a0a;">Bonjour <b>{{name}}</b>,</p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Vous avez suivi une formation chez TDL Formation et nous vous en remercions !
+         Votre expérience compte énormément pour nous, et pour les futurs stagiaires qui
+         hésitent encore à nous faire confiance.
+       </p>
+       <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Auriez-vous 2 minutes pour laisser un avis Google sur votre expérience avec TDL Formation ?
+       </p>`,
+      "Laisser un avis Google ★★★★★",
+      TDL_SITE
+    ),
+  },
+
   custom: {
     label: "✏️ Message personnalisé",
     subject: "",
@@ -420,6 +442,13 @@ export default function Leads() {
   const [searchFocused, setSearchFocused] = useState(false);
 
   const [selected, setSelected] = useState(new Set());
+
+  // Lien réel "Laisser un avis Google" (construit côté backend à partir du Place ID
+  // — voir routers/reviews.py), utilisé par le modèle "Demande d'avis Google".
+  const [googleReviewUrl, setGoogleReviewUrl] = useState("");
+  useEffect(() => {
+    api.get("/reviews/google").then(({ data }) => setGoogleReviewUrl(data.write_review_url || data.url || "")).catch(() => {});
+  }, []);
 
   const [addOpen, setAddOpen] = useState(false);
   const [newLead, setNewLead] = useState(emptyLead);
@@ -777,6 +806,13 @@ export default function Leads() {
     setRelanceBody(makeCustomEmail(plainTextToHtml(customMessage), customButtonText, customButtonUrl));
   }, [templateKey, customMessage, customButtonText, customButtonUrl]);
 
+  // Remplace le lien de repli (TDL_SITE) par le vrai lien "Laisser un avis Google"
+  // dès qu'il est chargé, si ce modèle est sélectionné au moment où il arrive.
+  useEffect(() => {
+    if (templateKey !== "avis_google" || !googleReviewUrl) return;
+    setRelanceBody((b) => b.replace(`href="${TDL_SITE}"`, `href="${googleReviewUrl}"`));
+  }, [templateKey, googleReviewUrl]);
+
   const sendRelance = async () => {
     if (templateKey === "custom" && !customMessage.trim()) return toast.error("Le message est requis");
     if (!relanceSubject || !relanceBody) return toast.error("Sujet et message requis");
@@ -828,6 +864,11 @@ export default function Leads() {
     if (broadcastTemplateKey !== "custom") return;
     setBroadcastBody(makeCustomEmail(plainTextToHtml(broadcastCustomMessage), broadcastCustomButtonText, broadcastCustomButtonUrl));
   }, [broadcastTemplateKey, broadcastCustomMessage, broadcastCustomButtonText, broadcastCustomButtonUrl]);
+
+  useEffect(() => {
+    if (broadcastTemplateKey !== "avis_google" || !googleReviewUrl) return;
+    setBroadcastBody((b) => b.replace(`href="${TDL_SITE}"`, `href="${googleReviewUrl}"`));
+  }, [broadcastTemplateKey, googleReviewUrl]);
 
   // Valeurs brutes d'intérêt (regroupées côté serveur via "|") correspondant
   // aux catégories canoniques cochées — même logique que le filtre principal,
@@ -934,6 +975,11 @@ export default function Leads() {
     if (autoTemplateKey !== "custom") return;
     setAutoBody(makeCustomEmail(plainTextToHtml(autoCustomMessage), autoCustomButtonText, autoCustomButtonUrl));
   }, [autoTemplateKey, autoCustomMessage, autoCustomButtonText, autoCustomButtonUrl]);
+
+  useEffect(() => {
+    if (autoTemplateKey !== "avis_google" || !googleReviewUrl) return;
+    setAutoBody((b) => b.replace(`href="${TDL_SITE}"`, `href="${googleReviewUrl}"`));
+  }, [autoTemplateKey, googleReviewUrl]);
 
   // Valeurs brutes d'intérêt correspondant aux catégories cochées, même logique
   // que le filtre principal / la campagne — sur toute la base, pas la page affichée.
