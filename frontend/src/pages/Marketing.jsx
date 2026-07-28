@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   ChartLineUp, MagnifyingGlass, Megaphone, EnvelopeSimple, ShareNetwork, Sparkle,
   EnvelopeOpen, Cursor, PaperPlaneTilt, WarningCircle, Paperclip, X as XIcon, PencilSimple,
+  Browser, ArrowSquareOut,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {
@@ -56,6 +57,7 @@ export default function Marketing() {
           <TabsTrigger value="overview" data-testid="tab-overview"><Sparkle size={14} className="mr-1" /> Plan IA</TabsTrigger>
           <TabsTrigger value="emails" data-testid="tab-emails"><EnvelopeSimple size={14} className="mr-1" /> Emails</TabsTrigger>
           <TabsTrigger value="compose" data-testid="tab-compose"><PencilSimple size={14} className="mr-1" /> Email personnalisé</TabsTrigger>
+          <TabsTrigger value="landing" data-testid="tab-landing"><Browser size={14} className="mr-1" /> Landing pages</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -89,6 +91,10 @@ export default function Marketing() {
 
         <TabsContent value="compose">
           <ComposeEmailTab />
+        </TabsContent>
+
+        <TabsContent value="landing">
+          <LandingPagesTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -359,6 +365,108 @@ function ComposeEmailTab() {
         </Button>
       </div>
     </Card>
+  );
+}
+
+// ─── Landing pages ──────────────────────────────────────────────────────────
+// Pages de destination utilisées dans les campagnes (emails de relance, ads...).
+// Le chemin est relatif : ces pages sont servies par ce même frontend.
+const LANDING_PAGES = [
+  {
+    title: "Site TDL Formation",
+    desc: "Page d'accueil principale — présentation de l'organisme et du catalogue.",
+    path: "/",
+    color: "#0a0a0a",
+  },
+  {
+    title: "Offre fidélité — Stage récupération de points",
+    desc: "Landing dédiée au tarif fidélité 189€ pour les anciens stagiaires.",
+    path: "/offre-fidelite",
+    color: "#d4af37",
+  },
+  {
+    title: "Stage récupération de points",
+    desc: "Landing générale pour le stage de récupération de points (tarif standard).",
+    path: "/stage-recuperation-points",
+    color: "#0052CC",
+  },
+  {
+    title: "Formation SSIAP",
+    desc: "Landing dédiée aux formations SSIAP 1, 2 et 3 (sécurité incendie).",
+    path: "/formation-ssiap",
+    color: "#d0021b",
+  },
+  {
+    title: "Formation Taxi",
+    desc: "Landing dédiée à la formation Taxi (initiale, continue, passerelle VTC→Taxi).",
+    path: "/formation-taxi",
+    color: "#F5A623",
+  },
+  {
+    title: "Catalogue des formations",
+    desc: "Liste publique de toutes les formations actives, avec fiches détaillées.",
+    path: "/formations",
+    color: "#0B7238",
+  },
+];
+
+function LandingPageCard({ page }) {
+  const url = `${window.location.origin}${page.path}`;
+  return (
+    <Card
+      className="overflow-hidden border border-gray-200 rounded-md shadow-none cursor-pointer group hover:-translate-y-1 hover:shadow-lg transition-all"
+      onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+      role="link"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === "Enter" && window.open(url, "_blank", "noopener,noreferrer")}
+      data-testid={`landing-card-${page.path}`}
+    >
+      <div className="relative h-44 bg-gray-100 overflow-hidden border-b border-gray-200">
+        {/* Aperçu miniature : la vraie page rendue dans un iframe, réduite à l'échelle. */}
+        <iframe
+          src={url}
+          title={page.title}
+          className="pointer-events-none border-0"
+          style={{
+            width: "1280px", height: "1000px",
+            transform: "scale(0.235)", transformOrigin: "top left",
+          }}
+          tabIndex={-1}
+        />
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-sm font-medium flex items-center gap-1.5 bg-black/70 px-3 py-1.5 rounded-md">
+            <ArrowSquareOut size={16} /> Ouvrir la page
+          </span>
+        </div>
+      </div>
+      <div className="p-4">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: page.color }} />
+          <h3 className="font-display font-bold text-sm truncate">{page.title}</h3>
+        </div>
+        <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{page.desc}</p>
+        <p className="text-[11px] text-gray-400 mt-2 font-mono truncate">{url}</p>
+      </div>
+    </Card>
+  );
+}
+
+function LandingPagesTab() {
+  return (
+    <div className="space-y-4 mt-2">
+      <div className="flex items-center gap-2">
+        <Browser size={16} className="text-[#d4af37]" />
+        <p className="overline">Pages de destination</p>
+      </div>
+      <h2 className="font-display text-2xl font-bold -mt-1">Landing pages</h2>
+      <p className="text-sm text-gray-500 max-w-2xl">
+        Cliquez sur une page pour l'ouvrir dans un nouvel onglet — ce sont les liens à utiliser dans vos
+        campagnes email, publicités ou relances.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {LANDING_PAGES.map((page) => <LandingPageCard key={page.path} page={page} />)}
+      </div>
+    </div>
   );
 }
 

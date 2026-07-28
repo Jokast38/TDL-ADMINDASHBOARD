@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus, UploadSimple, FileXls, FileCode, MagnifyingGlass, Trash, Phone,
   EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree, PencilSimple, GraduationCap,
-  EnvelopeOpen, Eye, Megaphone,
+  EnvelopeOpen, Eye, Megaphone, ArrowsClockwise,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -453,6 +453,25 @@ export default function Leads() {
   const [broadcastCustomMessage, setBroadcastCustomMessage] = useState("");
   const [broadcastCustomButtonText, setBroadcastCustomButtonText] = useState("");
   const [broadcastCustomButtonUrl, setBroadcastCustomButtonUrl] = useState("");
+
+  // ── Relances automatiques (règles récurrentes) ────────────────────────────
+  const [automationsOpen, setAutomationsOpen] = useState(false);
+  const [automations, setAutomations] = useState([]);
+  const [automationsLoading, setAutomationsLoading] = useState(false);
+  const [automationFormOpen, setAutomationFormOpen] = useState(false);
+  const [autoName, setAutoName] = useState("");
+  const [autoTargetType, setAutoTargetType] = useState("interest");
+  const [autoInterests, setAutoInterests] = useState(new Set());
+  const [autoFrequencyDays, setAutoFrequencyDays] = useState(7);
+  const [autoTemplateKey, setAutoTemplateKey] = useState("relance_generique");
+  const [autoSubject, setAutoSubject] = useState(TEMPLATES.relance_generique.subject);
+  const [autoBody, setAutoBody] = useState(TEMPLATES.relance_generique.body);
+  const [autoCustomMessage, setAutoCustomMessage] = useState("");
+  const [autoCustomButtonText, setAutoCustomButtonText] = useState("");
+  const [autoCustomButtonUrl, setAutoCustomButtonUrl] = useState("");
+  const [autoPreviewCount, setAutoPreviewCount] = useState(null);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [autoRunningId, setAutoRunningId] = useState(null);
   const [broadcastCount, setBroadcastCount] = useState(null);
   const [broadcastCountLoading, setBroadcastCountLoading] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
@@ -885,6 +904,125 @@ export default function Leads() {
     }
   };
 
+  // ── Relances automatiques ──────────────────────────────────────────────────
+  const loadAutomations = async () => {
+    setAutomationsLoading(true);
+    try {
+      const { data } = await api.get("/leads/automations");
+      setAutomations(data);
+    } catch { toast.error("Erreur de chargement des relances automatiques"); }
+    finally { setAutomationsLoading(false); }
+  };
+
+  const toggleAutoInterest = (label) =>
+    setAutoInterests((prev) => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n; });
+
+  const applyAutoTemplate = (key) => {
+    setAutoTemplateKey(key);
+    if (key === "custom") {
+      setAutoSubject("");
+      setAutoCustomMessage("");
+      setAutoCustomButtonText("");
+      setAutoCustomButtonUrl("");
+    } else {
+      setAutoSubject(TEMPLATES[key].subject);
+      setAutoBody(TEMPLATES[key].body);
+    }
+  };
+
+  useEffect(() => {
+    if (autoTemplateKey !== "custom") return;
+    setAutoBody(makeCustomEmail(plainTextToHtml(autoCustomMessage), autoCustomButtonText, autoCustomButtonUrl));
+  }, [autoTemplateKey, autoCustomMessage, autoCustomButtonText, autoCustomButtonUrl]);
+
+  // Valeurs brutes d'intérêt correspondant aux catégories cochées, même logique
+  // que le filtre principal / la campagne — sur toute la base, pas la page affichée.
+  const autoInterestIn = useMemo(() => {
+    if (autoInterests.size === 0) return "";
+    return allInterests.filter((raw) => autoInterests.has(canonicalizeInterest(raw))).join("|");
+  }, [autoInterests, allInterests]);
+
+  const autoSelectionIds = useMemo(() => Array.from(selected), [selected]);
+
+  useEffect(() => {
+    if (!automationFormOpen) return;
+    const payload = autoTargetType === "selection"
+      ? { target_type: "selection", lead_ids: autoSelectionIds }
+      : { target_type: "interest", interest_in: autoInterestIn };
+    api.post("/leads/automations/preview-count", payload)
+      .then(({ data }) => setAutoPreviewCount(data))
+      .catch(() => setAutoPreviewCount(null));
+  }, [automationFormOpen, autoTargetType, autoInterestIn, autoSelectionIds]);
+
+  const resetAutomationForm = () => {
+    setAutomationFormOpen(false);
+    setAutoName("");
+    setAutoTargetType("interest");
+    setAutoInterests(new Set());
+    setAutoFrequencyDays(7);
+    setAutoTemplateKey("relance_generique");
+    setAutoSubject(TEMPLATES.relance_generique.subject);
+    setAutoBody(TEMPLATES.relance_generique.body);
+    setAutoCustomMessage("");
+    setAutoCustomButtonText("");
+    setAutoCustomButtonUrl("");
+    setAutoPreviewCount(null);
+  };
+
+  const createAutomation = async () => {
+    if (!autoName.trim()) return toast.error("Donnez un nom à cette règle");
+    if (autoTargetType === "interest" && autoInterests.size === 0) return toast.error("Sélectionnez au moins un intérêt");
+    if (autoTargetType === "selection" && autoSelectionIds.length === 0) return toast.error("Sélectionnez au moins un lead dans la liste avant de créer cette règle");
+    if (autoTemplateKey === "custom" && !autoCustomMessage.trim()) return toast.error("Le message est requis");
+    if (!autoSubject.trim() || !autoBody) return toast.error("Sujet et message requis");
+    if (!autoFrequencyDays || autoFrequencyDays < 1) return toast.error("La fréquence doit être d'au moins 1 jour");
+    setAutoSaving(true);
+    try {
+      await api.post("/leads/automations", {
+        name: autoName.trim(),
+        active: true,
+        target_type: autoTargetType,
+        interest_in: autoTargetType === "interest" ? autoInterestIn : null,
+        lead_ids: autoTargetType === "selection" ? autoSelectionIds : null,
+        frequency_days: Number(autoFrequencyDays),
+        subject: autoSubject,
+        body: autoBody,
+        mark_contacted: true,
+        add_tag: "relance_auto",
+      });
+      toast.success("Relance automatique créée");
+      resetAutomationForm();
+      loadAutomations();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur lors de la création"); }
+    finally { setAutoSaving(false); }
+  };
+
+  const toggleAutomationActive = async (rule) => {
+    try {
+      await api.put(`/leads/automations/${rule.id}`, { active: !rule.active });
+      loadAutomations();
+    } catch { toast.error("Erreur"); }
+  };
+
+  const deleteAutomation = async (rule) => {
+    if (!window.confirm(`Supprimer définitivement la règle "${rule.name}" ?`)) return;
+    try {
+      await api.delete(`/leads/automations/${rule.id}`);
+      toast.success("Règle supprimée");
+      loadAutomations();
+    } catch { toast.error("Erreur"); }
+  };
+
+  const runAutomationNow = async (rule) => {
+    setAutoRunningId(rule.id);
+    try {
+      const { data } = await api.post(`/leads/automations/${rule.id}/run-now`);
+      toast.success(`${data.sent} email(s) envoyé(s) immédiatement`);
+      loadAutomations();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur lors de l'envoi"); }
+    finally { setAutoRunningId(null); }
+  };
+
   return (
     <div className="space-y-6" data-testid="leads-page">
 
@@ -1152,6 +1290,206 @@ export default function Leads() {
                   </>
                 )}
               </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Relances automatiques (règles récurrentes) */}
+          <Dialog open={automationsOpen} onOpenChange={(v) => { setAutomationsOpen(v); if (v) loadAutomations(); else resetAutomationForm(); }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="border-[#0052CC] text-[#0052CC] hover:bg-[#0052CC]/10 hover:text-[#0052CC]" data-testid="automations-btn">
+                <ArrowsClockwise size={16} className="mr-1" /> Relances automatiques
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto" data-testid="automations-dialog">
+              <DialogHeader><DialogTitle>Relances automatiques</DialogTitle></DialogHeader>
+
+              {!automationFormOpen ? (
+                <div className="space-y-3 mt-2">
+                  <p className="text-sm text-gray-500">
+                    Une règle relance automatiquement les leads ciblés tous les N jours depuis leur dernier contact,
+                    jusqu'à ce qu'ils passent au statut "Intéressé" / "Pas intéressé" ou que vous désactiviez la règle.
+                  </p>
+
+                  <Button size="sm" onClick={() => setAutomationFormOpen(true)} className="bg-[#0a0a0a] text-white">
+                    <Plus size={14} className="mr-1" /> Nouvelle règle
+                  </Button>
+
+                  {automationsLoading ? (
+                    <p className="text-sm text-gray-400 py-6 text-center">Chargement...</p>
+                  ) : automations.length === 0 ? (
+                    <p className="text-sm text-gray-400 py-6 text-center">Aucune règle de relance automatique pour le moment.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {automations.map((rule) => (
+                        <Card key={rule.id} className="p-3 border border-gray-200 rounded-md shadow-none">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm truncate">{rule.name}</p>
+                                <Badge className={rule.active ? "bg-green-100 text-green-700 hover:bg-green-100" : "bg-gray-100 text-gray-500 hover:bg-gray-100"}>
+                                  {rule.active ? "Active" : "En pause"}
+                                </Badge>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {rule.target_type === "selection"
+                                  ? `${(rule.lead_ids || []).length} lead(s) sélectionné(s)`
+                                  : (rule.interest_in ? rule.interest_in.split("|").join(", ") : "Tous intérêts")}
+                                {" · "}Tous les {rule.frequency_days} jour(s)
+                              </p>
+                              <p className="text-[11px] text-gray-400 mt-0.5">
+                                {rule.last_run_at
+                                  ? `Dernier passage : ${new Date(rule.last_run_at).toLocaleString("fr-FR")} — ${rule.last_run_sent || 0} envoyé(s)`
+                                  : "Jamais encore exécutée"}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <label className="flex items-center gap-1 text-xs mr-1 cursor-pointer" title="Activer / mettre en pause">
+                                <Checkbox checked={rule.active} onCheckedChange={() => toggleAutomationActive(rule)} />
+                              </label>
+                              <Button
+                                size="icon" variant="ghost" title="Exécuter maintenant"
+                                disabled={autoRunningId === rule.id}
+                                onClick={() => runAutomationNow(rule)}
+                              >
+                                <PaperPlaneTilt size={14} />
+                              </Button>
+                              <Button size="icon" variant="ghost" title="Supprimer" onClick={() => deleteAutomation(rule)}>
+                                <Trash size={14} className="text-red-600" />
+                              </Button>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3 mt-2">
+                  <div>
+                    <label className="text-sm font-medium">Nom de la règle</label>
+                    <Input value={autoName} onChange={(e) => setAutoName(e.target.value)} placeholder="ex: Relance VTC non contactés" />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Cible</label>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button" size="sm"
+                        variant={autoTargetType === "interest" ? "default" : "outline"}
+                        className={autoTargetType === "interest" ? "bg-[#0a0a0a] text-white" : ""}
+                        onClick={() => setAutoTargetType("interest")}
+                      >
+                        Par intérêt
+                      </Button>
+                      <Button
+                        type="button" size="sm"
+                        variant={autoTargetType === "selection" ? "default" : "outline"}
+                        className={autoTargetType === "selection" ? "bg-[#0a0a0a] text-white" : ""}
+                        onClick={() => setAutoTargetType("selection")}
+                      >
+                        Sélection actuelle ({autoSelectionIds.length})
+                      </Button>
+                    </div>
+
+                    {autoTargetType === "interest" ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                        {uniqueInterests.map((label) => (
+                          <label key={label} className="flex items-center gap-2 p-2 rounded-md border border-gray-200 hover:bg-gray-50 cursor-pointer text-sm">
+                            <Checkbox checked={autoInterests.has(label)} onCheckedChange={() => toggleAutoInterest(label)} />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 mt-2">
+                        Utilisera les {autoSelectionIds.length} lead(s) actuellement cochés dans la liste — figé au
+                        moment de la création (ne suit pas les futures sélections).
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 text-sm bg-gray-50 border border-gray-200 rounded-md p-3">
+                    <UsersThree size={16} />
+                    {autoPreviewCount === null ? "—" : `${autoPreviewCount.with_email} / ${autoPreviewCount.total} lead(s) concerné(s) ont un email`}
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Fréquence de relance</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number" min={1} value={autoFrequencyDays}
+                        onChange={(e) => setAutoFrequencyDays(e.target.value)}
+                        className="w-24"
+                      />
+                      <span className="text-sm text-gray-500">jour(s) depuis le dernier contact</span>
+                    </div>
+                    <div className="flex gap-1 mt-1.5">
+                      {[3, 7, 15, 30].map((d) => (
+                        <Button key={d} type="button" size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => setAutoFrequencyDays(d)}>
+                          {d} j
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium">Modèle</label>
+                    <Select value={autoTemplateKey} onValueChange={applyAutoTemplate}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(TEMPLATES).map(([k, v]) => <SelectItem key={k} value={k}>{v.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Sujet</label>
+                    <Input value={autoSubject} onChange={(e) => setAutoSubject(e.target.value)} placeholder="Objet de l'email" />
+                  </div>
+
+                  {autoTemplateKey === "custom" ? (
+                    <>
+                      <div>
+                        <label className="text-sm font-medium">
+                          Message — <code className="font-mono bg-gray-100 px-1 text-xs">{"{{name}}"}</code> sera remplacé par le nom du lead
+                        </label>
+                        <Textarea
+                          rows={5}
+                          value={autoCustomMessage}
+                          onChange={(e) => setAutoCustomMessage(e.target.value)}
+                          placeholder="Écrivez votre message ici, comme dans un email normal..."
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-sm font-medium">Bouton (optionnel)</label>
+                          <Input value={autoCustomButtonText} onChange={(e) => setAutoCustomButtonText(e.target.value)} placeholder="Texte du bouton" />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium invisible">URL</label>
+                          <Input value={autoCustomButtonUrl} onChange={(e) => setAutoCustomButtonUrl(e.target.value)} placeholder="https://..." />
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+
+                  <div>
+                    <label className="text-sm font-medium mb-1 flex items-center gap-1"><Eye size={14} /> Aperçu de l'email</label>
+                    <iframe
+                      title="Aperçu de la relance automatique"
+                      srcDoc={autoBody.replaceAll("{{name}}", "Jean Dupont")}
+                      sandbox=""
+                      className="w-full h-64 border border-gray-200 rounded-md bg-white"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button variant="outline" onClick={resetAutomationForm} disabled={autoSaving}>Annuler</Button>
+                    <Button onClick={createAutomation} disabled={autoSaving} className="bg-[#d4af37] text-black hover:bg-[#b8941f]">
+                      {autoSaving ? "Création..." : "Créer la règle"}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
         </div>

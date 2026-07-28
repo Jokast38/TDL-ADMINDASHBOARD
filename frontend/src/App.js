@@ -17,6 +17,8 @@ import Blog from "@/pages/Blog";
 import BlogPost from "@/pages/BlogPost";
 import OffreFideliteLanding from "@/pages/OffreFideliteLanding";
 import StageRecuperationPointsLanding from "@/pages/StageRecuperationPointsLanding";
+import SsiapLanding from "@/pages/SsiapLanding";
+import TaxiFormationLanding from "@/pages/TaxiFormationLanding";
 import MentionsLegales from "@/pages/MentionsLegales";
 import FAQ from "@/pages/FAQ";
 
@@ -90,6 +92,8 @@ function App() {
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/offre-fidelite" element={<OffreFideliteLanding />} />
             <Route path="/stage-recuperation-points" element={<StageRecuperationPointsLanding />} />
+            <Route path="/formation-ssiap" element={<SsiapLanding />} />
+            <Route path="/formation-taxi" element={<TaxiFormationLanding />} />
             <Route path="/mentions-legales" element={<MentionsLegales />} />
             <Route path="/faq" element={<FAQ />} />
 

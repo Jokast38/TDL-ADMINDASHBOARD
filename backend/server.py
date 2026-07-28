@@ -18,8 +18,9 @@ from routers import (
     leads, employees, settings, dashboard, ai, blog,
     wordpress, stages, emargements, doc_templates,
     generated_docs, health, callback, tracking, reviews, chatbot, notifications,
-    custom_email,
+    custom_email, lead_automations,
 )
+from routers.lead_automations import run_due_automations
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -73,6 +74,7 @@ app.include_router(reviews.router,        prefix=_PREFIX)
 app.include_router(chatbot.router,        prefix=_PREFIX)
 app.include_router(notifications.router,  prefix=_PREFIX)
 app.include_router(custom_email.router,   prefix=_PREFIX)
+app.include_router(lead_automations.router, prefix=_PREFIX)
 
 # Fichiers uploadés depuis l'admin (ex: images de couverture d'articles de blog),
 # servis en statique — indépendant du service de stockage objet externe Emergent.
@@ -112,6 +114,7 @@ async def _background_init():
         await db.leads.create_index("created_at")
         await db.callback_requests.create_index("id", unique=True)
         await db.callback_requests.create_index("created_at")
+        await db.lead_automations.create_index("id", unique=True)
     except Exception as e:
         log.warning(f"Index creation: {e}")
 
@@ -179,10 +182,28 @@ async def _background_init():
         log.warning(f"Seeding: {e}")
 
 
+async def _automations_loop():
+    """Vérifie toutes les heures les règles de relance automatique actives et
+    envoie celles arrivées à échéance. Boucle en process : sur le plan gratuit
+    Render, le service peut s'endormir après inactivité, auquel cas la boucle se
+    met en pause — /api/leads/automations/run-due permet un déclenchement manuel
+    ou via un cron externe pour ne pas dépendre uniquement de cette boucle."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            sent = await run_due_automations()
+            if sent:
+                log.info(f"Relances automatiques : {sent} email(s) envoyé(s)")
+        except Exception as e:
+            log.warning(f"Relances automatiques : erreur — {e}")
+        await asyncio.sleep(3600)
+
+
 @app.on_event("startup")
 async def startup():
     asyncio.create_task(_background_init())
     asyncio.create_task(asyncio.to_thread(init_storage))
+    asyncio.create_task(_automations_loop())
 
 
 @app.on_event("shutdown")

@@ -42,6 +42,35 @@ class LeadRelanceSingleIn(BaseModel):
     add_tag: Optional[str] = None
 
 
+class LeadAutomationIn(BaseModel):
+    name: str
+    active: bool = True
+    # "interest": cible les leads dont l'intérêt correspond à interest_in (mêmes valeurs
+    # brutes "|"-jointes que LeadBroadcastIn.interest_in). "selection": cible un instantané
+    # figé de lead_ids (la sélection faite par l'utilisateur au moment de la création).
+    target_type: str
+    interest_in: Optional[str] = None
+    lead_ids: Optional[List[str]] = None
+    frequency_days: int
+    subject: str
+    body: str
+    mark_contacted: bool = True
+    add_tag: Optional[str] = "relance_auto"
+
+
+class LeadAutomationUpdate(BaseModel):
+    name: Optional[str] = None
+    active: Optional[bool] = None
+    target_type: Optional[str] = None
+    interest_in: Optional[str] = None
+    lead_ids: Optional[List[str]] = None
+    frequency_days: Optional[int] = None
+    subject: Optional[str] = None
+    body: Optional[str] = None
+    mark_contacted: Optional[bool] = None
+    add_tag: Optional[str] = None
+
+
 class LeadBroadcastIn(BaseModel):
     # Valeurs brutes d'intérêt (jointes par "|"), calculées côté frontend à partir
     # du regroupement canonique (voir canonicalizeInterest) — même format que le
