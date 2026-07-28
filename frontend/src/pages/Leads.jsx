@@ -137,6 +137,22 @@ const EMAIL_FOOTER = `
 const makeEmail = (body, ctaLabel, ctaUrl = TDL_SITE) =>
   EMAIL_HEADER + body + EMAIL_CTA(ctaLabel, ctaUrl) + EMAIL_CONTACT_BAR + EMAIL_FOOTER;
 
+// Construit l'email de marque à partir d'un bouton optionnel (message personnalisé) —
+// contrairement à makeEmail(), le bouton n'est ajouté que si texte + URL sont renseignés.
+const makeCustomEmail = (bodyHtml, ctaLabel, ctaUrl) =>
+  EMAIL_HEADER + bodyHtml + (ctaLabel?.trim() && ctaUrl?.trim() ? EMAIL_CTA(ctaLabel.trim(), ctaUrl.trim()) : "\n      </td></tr>") + EMAIL_CONTACT_BAR + EMAIL_FOOTER;
+
+const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+// Même logique que services/email_template.py côté backend : un employé tape du texte
+// simple (pas de balises), chaque ligne vide sépare un paragraphe.
+const plainTextToHtml = (text) => {
+  const paragraphs = (text || "").trim().split(/\n\s*\n/).filter((p) => p.trim());
+  return paragraphs
+    .map((p) => `<p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">${escapeHtml(p.trim()).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+};
+
 // ─── Templates de relance ─────────────────────────────────────────────────────
 const TEMPLATES = {
   vtc_renouvellement: {
@@ -417,6 +433,9 @@ export default function Leads() {
   const [templateKey, setTemplateKey] = useState("vtc_renouvellement");
   const [relanceSubject, setRelanceSubject] = useState(TEMPLATES.vtc_renouvellement.subject);
   const [relanceBody, setRelanceBody] = useState(TEMPLATES.vtc_renouvellement.body);
+  const [customMessage, setCustomMessage] = useState("");
+  const [customButtonText, setCustomButtonText] = useState("");
+  const [customButtonUrl, setCustomButtonUrl] = useState("");
   const [sending, setSending] = useState(false);
   const [progress, setProgress] = useState(null);
   const resetProgress = () => setProgress(null);
@@ -431,6 +450,9 @@ export default function Leads() {
   const [broadcastTemplateKey, setBroadcastTemplateKey] = useState("relance_generique");
   const [broadcastSubject, setBroadcastSubject] = useState(TEMPLATES.relance_generique.subject);
   const [broadcastBody, setBroadcastBody] = useState(TEMPLATES.relance_generique.body);
+  const [broadcastCustomMessage, setBroadcastCustomMessage] = useState("");
+  const [broadcastCustomButtonText, setBroadcastCustomButtonText] = useState("");
+  const [broadcastCustomButtonUrl, setBroadcastCustomButtonUrl] = useState("");
   const [broadcastCount, setBroadcastCount] = useState(null);
   const [broadcastCountLoading, setBroadcastCountLoading] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
@@ -718,11 +740,26 @@ export default function Leads() {
 
   const applyTemplate = (key) => {
     setTemplateKey(key);
-    setRelanceSubject(TEMPLATES[key].subject);
-    setRelanceBody(TEMPLATES[key].body);
+    if (key === "custom") {
+      setRelanceSubject("");
+      setCustomMessage("");
+      setCustomButtonText("");
+      setCustomButtonUrl("");
+    } else {
+      setRelanceSubject(TEMPLATES[key].subject);
+      setRelanceBody(TEMPLATES[key].body);
+    }
   };
 
+  // Reconstruit le HTML de marque à la volée pendant que l'employé tape son
+  // message personnalisé, pour que l'aperçu reste toujours à jour.
+  useEffect(() => {
+    if (templateKey !== "custom") return;
+    setRelanceBody(makeCustomEmail(plainTextToHtml(customMessage), customButtonText, customButtonUrl));
+  }, [templateKey, customMessage, customButtonText, customButtonUrl]);
+
   const sendRelance = async () => {
+    if (templateKey === "custom" && !customMessage.trim()) return toast.error("Le message est requis");
     if (!relanceSubject || !relanceBody) return toast.error("Sujet et message requis");
     const leadsToSend = filteredItems.filter((l) => selected.has(l.id));
     let sent = 0, skipped = 0, errors = 0;
@@ -757,9 +794,21 @@ export default function Leads() {
 
   const applyBroadcastTemplate = (key) => {
     setBroadcastTemplateKey(key);
-    setBroadcastSubject(TEMPLATES[key].subject);
-    setBroadcastBody(TEMPLATES[key].body);
+    if (key === "custom") {
+      setBroadcastSubject("");
+      setBroadcastCustomMessage("");
+      setBroadcastCustomButtonText("");
+      setBroadcastCustomButtonUrl("");
+    } else {
+      setBroadcastSubject(TEMPLATES[key].subject);
+      setBroadcastBody(TEMPLATES[key].body);
+    }
   };
+
+  useEffect(() => {
+    if (broadcastTemplateKey !== "custom") return;
+    setBroadcastBody(makeCustomEmail(plainTextToHtml(broadcastCustomMessage), broadcastCustomButtonText, broadcastCustomButtonUrl));
+  }, [broadcastTemplateKey, broadcastCustomMessage, broadcastCustomButtonText, broadcastCustomButtonUrl]);
 
   // Valeurs brutes d'intérêt (regroupées côté serveur via "|") correspondant
   // aux catégories canoniques cochées — même logique que le filtre principal,
@@ -797,6 +846,7 @@ export default function Leads() {
   // entre chaque email limite le risque de déclencher la limite anti-abus de
   // Gmail SMTP sur un gros volume envoyé d'un coup.
   const sendBroadcast = async () => {
+    if (broadcastTemplateKey === "custom" && !broadcastCustomMessage.trim()) return toast.error("Le message est requis");
     if (!broadcastSubject || !broadcastBody) return toast.error("Sujet et message requis");
     if (!broadcastAll && broadcastInterests.size === 0) return toast.error("Sélectionnez au moins un intérêt, ou \"Tous les leads\"");
     setBroadcasting(true);
@@ -999,13 +1049,44 @@ export default function Leads() {
                     </div>
                     <div>
                       <label className="text-sm font-medium">Sujet</label>
-                      <Input value={broadcastSubject} onChange={(e) => setBroadcastSubject(e.target.value)} data-testid="broadcast-subject" />
+                      <Input value={broadcastSubject} onChange={(e) => setBroadcastSubject(e.target.value)} data-testid="broadcast-subject" placeholder="Objet de l'email" />
                     </div>
+
+                    {broadcastTemplateKey === "custom" ? (
+                      <>
+                        <div>
+                          <label className="text-sm font-medium">
+                            Message — <code className="font-mono bg-gray-100 px-1 text-xs">{"{{name}}"}</code> sera remplacé par le nom du lead
+                          </label>
+                          <Textarea
+                            rows={6}
+                            value={broadcastCustomMessage}
+                            onChange={(e) => setBroadcastCustomMessage(e.target.value)}
+                            placeholder="Écrivez votre message ici, comme dans un email normal..."
+                            data-testid="broadcast-body"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-sm font-medium">Bouton de redirection (optionnel)</label>
+                            <Input value={broadcastCustomButtonText} onChange={(e) => setBroadcastCustomButtonText(e.target.value)} placeholder="Texte du bouton" />
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium invisible">URL</label>
+                            <Input value={broadcastCustomButtonUrl} onChange={(e) => setBroadcastCustomButtonUrl(e.target.value)} placeholder="https://..." />
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+
                     <div>
-                      <label className="text-sm font-medium">
-                        Message HTML — <code className="font-mono bg-gray-100 px-1 text-xs">{"{{name}}"}</code> sera remplacé par le nom du lead
-                      </label>
-                      <Textarea rows={7} value={broadcastBody} onChange={(e) => setBroadcastBody(e.target.value)} className="font-mono text-xs" data-testid="broadcast-body" />
+                      <label className="text-sm font-medium mb-1 flex items-center gap-1"><Eye size={14} /> Aperçu de l'email</label>
+                      <iframe
+                        title="Aperçu de l'email de campagne"
+                        srcDoc={broadcastBody.replaceAll("{{name}}", "Jean Dupont")}
+                        sandbox=""
+                        className="w-full h-72 border border-gray-200 rounded-md bg-white"
+                      />
                     </div>
                   </>
                 )}
@@ -1172,7 +1253,7 @@ export default function Leads() {
                   <PaperPlaneTilt size={14} className="mr-1" /> Envoyer une relance
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-xl">
+              <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader><DialogTitle>Envoyer un email de relance</DialogTitle></DialogHeader>
                 <div className="space-y-3 mt-2">
                   <div className="flex items-center gap-2 text-sm bg-gray-50 border border-gray-200 rounded-md p-3">
@@ -1228,13 +1309,43 @@ export default function Leads() {
                       </div>
                       <div>
                         <label className="text-sm font-medium">Sujet</label>
-                        <Input value={relanceSubject} onChange={(e) => setRelanceSubject(e.target.value)} />
+                        <Input value={relanceSubject} onChange={(e) => setRelanceSubject(e.target.value)} placeholder="Objet de l'email" />
                       </div>
+
+                      {templateKey === "custom" ? (
+                        <>
+                          <div>
+                            <label className="text-sm font-medium">
+                              Message — <code className="font-mono bg-gray-100 px-1 text-xs">{"{{name}}"}</code> sera remplacé par le nom du lead
+                            </label>
+                            <Textarea
+                              rows={6}
+                              value={customMessage}
+                              onChange={(e) => setCustomMessage(e.target.value)}
+                              placeholder="Écrivez votre message ici, comme dans un email normal..."
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-sm font-medium">Bouton de redirection (optionnel)</label>
+                              <Input value={customButtonText} onChange={(e) => setCustomButtonText(e.target.value)} placeholder="Texte du bouton" />
+                            </div>
+                            <div>
+                              <label className="text-sm font-medium invisible">URL</label>
+                              <Input value={customButtonUrl} onChange={(e) => setCustomButtonUrl(e.target.value)} placeholder="https://..." />
+                            </div>
+                          </div>
+                        </>
+                      ) : null}
+
                       <div>
-                        <label className="text-sm font-medium">
-                          Message HTML — <code className="font-mono bg-gray-100 px-1 text-xs">{"{{name}}"}</code> sera remplacé par le nom du lead
-                        </label>
-                        <Textarea rows={7} value={relanceBody} onChange={(e) => setRelanceBody(e.target.value)} className="font-mono text-xs" />
+                        <label className="text-sm font-medium mb-1 flex items-center gap-1"><Eye size={14} /> Aperçu de l'email</label>
+                        <iframe
+                          title="Aperçu de l'email de relance"
+                          srcDoc={relanceBody.replaceAll("{{name}}", selectedLeadsWithEmail[0]?.name || "Jean Dupont")}
+                          sandbox=""
+                          className="w-full h-72 border border-gray-200 rounded-md bg-white"
+                        />
                       </div>
                     </>
                   )}
