@@ -11,6 +11,8 @@ from core.config import PUBLIC_BACKEND_URL
 
 logger = logging.getLogger(__name__)
 
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
 
 def _with_tracking_pixel(body: str, log_id: str) -> str:
     """Ajoute une image invisible 1x1 en fin de corps HTML : quand le client
@@ -194,6 +196,16 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
         "attachment_filename": attachment["filename"] if attachment else None,
         **(extra or {}),
     }
+
+    # Sans cette vérification, une adresse invalide (erreur d'import, ex: "adresse
+    # email", "bensaadservices") était retentée à chaque envoi/relance sans jamais
+    # aboutir, côté API (Brevo/Resend/SendGrid) puis côté SMTP de secours — pour
+    # rien, puisqu'aucun serveur mail ne peut délivrer à une adresse mal formée.
+    if not _EMAIL_RE.match((to or "").strip()):
+        log["status"] = "invalid_email"
+        await db.email_logs.insert_one(log)
+        return log
+
     if provider != "mock":
         tracked_body = _with_click_tracking(body, log_id)
         tracked_body = _with_tracking_pixel(tracked_body, log_id)

@@ -32,7 +32,10 @@ def _parse_iso(value: str):
 
 
 async def _rule_target_query(rule: Dict[str, Any]) -> Dict[str, Any]:
-    query: Dict[str, Any] = {"status": {"$nin": _STOP_STATUSES}}
+    # "email_invalide" : posé automatiquement quand un envoi échoue faute d'adresse
+    # valide (voir _run_rule) — sans cette exclusion, un lead mal saisi est retenté
+    # à chaque passage de la règle, indéfiniment, sans jamais pouvoir aboutir.
+    query: Dict[str, Any] = {"status": {"$nin": _STOP_STATUSES}, "tags": {"$nin": ["email_invalide"]}}
     if rule.get("target_type") == "selection":
         query["id"] = {"$in": rule.get("lead_ids") or []}
     else:
@@ -60,6 +63,11 @@ async def _run_rule(rule: Dict[str, Any], force: bool = False) -> int:
             lead["email"], rule.get("subject", ""), body,
             extra={"lead_id": lead["id"], "automation_id": rule["id"]},
         )
+        if result["status"] == "invalid_email":
+            await db.leads.update_one(
+                {"id": lead["id"]}, {"$set": {"updated_at": now_iso()}, "$addToSet": {"tags": "email_invalide"}}
+            )
+            continue
         if result["status"] not in ("sent", "mocked"):
             continue
         sent += 1
@@ -77,11 +85,27 @@ async def _run_rule(rule: Dict[str, Any], force: bool = False) -> int:
     return sent
 
 
+_MIN_INTERVAL_MINUTES = 20
+
+
 async def run_due_automations() -> int:
     """Parcourt toutes les règles actives et relance les leads dont l'échéance
     est atteinte. Appelée en boucle par la tâche de fond (voir server.py) et
     par l'endpoint /run-due, ce qui permet aussi de la déclencher via un cron
-    externe si le service dort entre deux requêtes (plan gratuit Render)."""
+    externe si le service dort entre deux requêtes (plan gratuit Render).
+
+    La boucle de fond relance ce passage à chaque redémarrage du process (pas
+    seulement toutes les heures) — sur Render free tier qui redémarre souvent,
+    ça pouvait déclencher des dizaines de passages par jour. Ce verrou global
+    empêche deux passages à moins de 20 min d'écart, quelle que soit la cause."""
+    lock = await db.settings.find_one({"id": "automations_lock"}, {"_id": 0})
+    now = datetime.now(timezone.utc)
+    if lock and lock.get("last_run_at"):
+        last = _parse_iso(lock["last_run_at"])
+        if last and (now - last).total_seconds() < _MIN_INTERVAL_MINUTES * 60:
+            return 0
+    await db.settings.update_one({"id": "automations_lock"}, {"$set": {"last_run_at": now_iso()}}, upsert=True)
+
     rules = await db.lead_automations.find({"active": True}, {"_id": 0}).to_list(1000)
     total = 0
     for rule in rules:
