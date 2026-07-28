@@ -127,9 +127,9 @@ export default function FormationDetail() {
             <div className="mt-10 pt-8 border-t border-gray-200">
               <h2 className="font-display text-xl font-bold mb-4">Financement</h2>
               <p className="text-gray-600 text-sm leading-relaxed">
-                Cette formation est éligible au CPF, ainsi qu'aux financements France Travail et OPCO selon votre
-                situation. Des facilités de paiement sont proposées. Contactez notre équipe pour étudier votre
-                éligibilité et le montage de votre dossier de financement.
+                {f.cpf_eligible
+                  ? "Cette formation est éligible au CPF, ainsi qu'aux financements France Travail et OPCO selon votre situation. Des facilités de paiement sont proposées. Contactez notre équipe pour étudier votre éligibilité et le montage de votre dossier de financement."
+                  : "Cette formation n'est pas éligible au CPF. Elle reste finançable via France Travail, votre employeur/OPCO ou à titre personnel selon votre situation. Des facilités de paiement sont proposées. Contactez notre équipe pour étudier votre éligibilité et le montage de votre dossier de financement."}
               </p>
             </div>
 
