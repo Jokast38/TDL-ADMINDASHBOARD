@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, ArrowRight, ArrowLeft } from "@phosphor-icons/react";
+import { CheckCircle, ArrowRight, ArrowLeft, CreditCard, XCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { trackCompleteRegistration } from "@/lib/metaPixel";
 
@@ -25,13 +25,34 @@ export default function PublicInscription() {
   const [formationId, setFormationId] = useState(params.get("formation") || "");
   const [form, setForm] = useState({ student_name: "", student_email: "", student_phone: "", notes: "" });
   const [success, setSuccess] = useState(null);
+  const [paymentsEnabled, setPaymentsEnabled] = useState(false);
+  const [allowKlarna, setAllowKlarna] = useState(false);
+  const [payLoading, setPayLoading] = useState(false);
+
+  // Retour depuis Stripe Checkout : le navigateur recharge la page, l'état React
+  // (étapes 1-3) est donc perdu — on affiche un écran dédié basé sur les paramètres
+  // d'URL plutôt que d'essayer de restaurer le wizard.
+  const paiementResult = params.get("paiement");
+  const returnedInscriptionId = params.get("inscription");
 
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } }).then((r) => {
       setFormations(r.data);
       if (formationId && r.data.find((f) => f.id === formationId)) setStep(2);
     });
+    api.get("/payments/public-status").then((r) => setPaymentsEnabled(r.data.enabled)).catch(() => setPaymentsEnabled(false));
   }, []);
+
+  const payNow = async (inscriptionId) => {
+    setPayLoading(true);
+    try {
+      const { data } = await api.post("/payments/checkout", { inscription_id: inscriptionId, allow_klarna: allowKlarna });
+      window.location.href = data.url;
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la création du paiement");
+      setPayLoading(false);
+    }
+  };
 
   const submit = async () => {
     if (!EMAIL_RE.test(form.student_email.trim())) {
@@ -68,6 +89,42 @@ export default function PublicInscription() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-10">
+        {paiementResult === "succes" && (
+          <div className="text-center py-12" data-testid="payment-success">
+            <CheckCircle size={64} className="mx-auto text-[#0B7238] mb-4" weight="fill" />
+            <h1 className="font-display text-4xl font-bold tracking-tight">Paiement confirmé !</h1>
+            <p className="text-gray-500 mt-3 max-w-md mx-auto">
+              Merci, votre paiement a bien été enregistré. Un conseiller TDL Formation revient vers vous pour la suite
+              de votre dossier.
+            </p>
+            <div className="flex justify-center gap-3 mt-8">
+              <Link to="/"><Button variant="outline">Retour à l'accueil</Button></Link>
+              <Link to="/login"><Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Accéder à mon espace</Button></Link>
+            </div>
+          </div>
+        )}
+
+        {paiementResult === "annule" && (
+          <div className="text-center py-12" data-testid="payment-cancelled">
+            <XCircle size={64} className="mx-auto text-amber-500 mb-4" weight="fill" />
+            <h1 className="font-display text-4xl font-bold tracking-tight">Paiement annulé</h1>
+            <p className="text-gray-500 mt-3 max-w-md mx-auto">
+              Votre inscription reste bien enregistrée — seul le paiement a été annulé. Vous pouvez réessayer à tout
+              moment, ou nous contacter directement.
+            </p>
+            <div className="flex justify-center gap-3 mt-8">
+              {returnedInscriptionId && (
+                <Button onClick={() => payNow(returnedInscriptionId)} disabled={payLoading} className="bg-[#d4af37] text-black hover:bg-[#b8941f]">
+                  {payLoading ? "Redirection..." : "Réessayer le paiement"}
+                </Button>
+              )}
+              <Link to="/"><Button variant="outline">Retour à l'accueil</Button></Link>
+            </div>
+          </div>
+        )}
+
+        {!paiementResult && (
+        <>
         {/* Steps */}
         <div className="flex items-center gap-2 mb-8">
           {[1, 2, 3].map((s) => (
@@ -151,11 +208,47 @@ export default function PublicInscription() {
               Votre dossier <span className="font-mono">{success.dossier?.id?.slice(0, 8)}</span> a été créé.
               Vous allez recevoir un email avec les étapes suivantes.
             </p>
+
+            {paymentsEnabled && !selected?.cpf_eligible && selected?.price > 0 && (
+              <Card className="max-w-md mx-auto mt-8 p-6 border border-gray-200 rounded-md shadow-none text-left" data-testid="payment-section">
+                <div className="flex items-center gap-2 mb-3">
+                  <CreditCard size={20} className="text-[#d4af37]" weight="duotone" />
+                  <h2 className="font-display text-lg font-bold">Payer maintenant (optionnel)</h2>
+                </div>
+                <p className="text-sm text-gray-500 mb-4">
+                  Vous pouvez régler votre formation ({selected.price} €) dès maintenant par carte bancaire.
+                </p>
+                <label className="flex items-start gap-2 text-sm mb-4 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allowKlarna}
+                    onChange={(e) => setAllowKlarna(e.target.checked)}
+                    className="mt-0.5"
+                    data-testid="allow-klarna"
+                  />
+                  <span>
+                    Payer en plusieurs fois avec Klarna — Klarna vous proposera de régler en 3x ou 4x sans frais
+                    (selon votre éligibilité) sur la page de paiement sécurisée.
+                  </span>
+                </label>
+                <Button
+                  onClick={() => payNow(success.inscription.id)}
+                  disabled={payLoading}
+                  className="w-full bg-[#d4af37] text-black hover:bg-[#b8941f]"
+                  data-testid="pay-now-btn"
+                >
+                  {payLoading ? "Redirection..." : `Payer ${selected.price} €`}
+                </Button>
+              </Card>
+            )}
+
             <div className="flex justify-center gap-3 mt-8">
               <Link to="/"><Button variant="outline">Retour à l'accueil</Button></Link>
               <Link to="/login"><Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Accéder à mon espace</Button></Link>
             </div>
           </div>
+        )}
+        </>
         )}
       </main>
     </div>

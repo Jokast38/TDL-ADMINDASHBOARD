@@ -1,0 +1,130 @@
+CATALOGUE DES FORMATIONS - TDL FORMATION
+
+A uploader comme fichier de base de connaissance de l'agent d'accueil telephonique dans Limova.
+Genere a partir des formations actives en base au 29/07/2026 - a regenerer si le catalogue ou les tarifs changent (voir note en bas de fichier).
+
+Toutes les formations sont dispensees a Epinay-sur-Seine (93), certaines egalement a Creil (60).
+Formateurs agrees, centre certifie Qualiopi.
+
+================================================================
+VTC / TAXI
+================================================================
+
+FORMATION VTC (complete, initiale)
+Prix : 1490 EUR
+Duree : 50h
+Eligible CPF : Oui
+Formation intensive preparant a l'obtention de la carte VTC. Suivi pedagogique personnalise, mises en situation reelles. 97% de reussite a l'examen.
+
+FORMATION TAXI INITIALE (complete)
+Prix : 1490 EUR
+Duree : 66h
+Eligible CPF : Oui
+Preparation a l'examen taxi : cadre legal T3P, connaissance du territoire, gestion commerciale, conduite en situation reelle. Groupes de 15 stagiaires maximum. 95% de reussite a l'examen.
+
+FORMATION VTC EN LIGNE
+Prix : 990 EUR
+Duree : 50h
+Eligible CPF : Oui
+Formation VTC 100% a distance, a son propre rythme. Meme contenu pedagogique que le presentiel (theorie + pratique), jusqu'a l'obtention de la carte VTC.
+
+FORMATION PASSERELLE TAXI -> VTC
+Prix : 790 EUR
+Duree : sur devis
+Eligible CPF : Oui
+Pour les chauffeurs de taxi (carte detenue depuis moins de 3 ans) qui veulent devenir chauffeurs VTC : reglementation VTC, developpement commercial, gestion d'entreprise, relation client haut de gamme.
+
+FORMATION PASSERELLE VTC VERS TAXI
+Prix : 790 EUR
+Duree : 14h
+Eligible CPF : Oui
+Pour les chauffeurs VTC qui veulent devenir conducteurs de taxi : reglementation taxi, connaissance du territoire, taximetre et facturation, mise en situation pratique. Acces a l'examen a la Chambre des Metiers et de l'Artisanat.
+
+FORMATION CONTINUE VTC (renouvellement)
+Prix : 200 EUR
+Duree : 14h
+Eligible CPF : Non
+Stage obligatoire pour renouveler la carte professionnelle VTC tous les 5 ans (article R3120-8-2 du Code des transports).
+
+FORMATION CONTINUE TAXI (renouvellement)
+Prix : 200 EUR
+Duree : 14h
+Eligible CPF : Non
+Renouvellement de la carte professionnelle de taxi : evolutions reglementaires, qualite de service client, securite routiere, gestion professionnelle. Attestation indispensable - sans elle, le renouvellement est refuse.
+
+FORMATION MOBILITE TAXI BANLIEUE (60, 75, 92, 93, 95)
+Prix : 390 EUR
+Duree : 50h
+Eligible CPF : Non
+Pour les chauffeurs de taxi titulaires d'une carte professionnelle qui veulent changer de zone d'exercice : geographie et itineraires du nouveau territoire, reglementation locale, preparation a l'examen specifique (QCM, mise en situation).
+
+================================================================
+SECURITE INCENDIE
+================================================================
+
+SSIAP 1 - AGENT DE SECURITE INCENDIE
+Prix : 720 EUR
+Duree : 67h + examen
+Eligible CPF : non precise - orienter vers un conseiller
+Formation initiale SSIAP 1.
+
+================================================================
+PERMIS / AUTO-ECOLE
+================================================================
+
+PERMIS B - FORFAIT COMPLET
+Prix : 1290 EUR
+Duree : 20h de conduite
+Eligible CPF : non precise - orienter vers un conseiller
+Code + 20h de conduite, accompagnement ANTS inclus.
+
+RECUPERATION DE POINTS DE PERMIS
+Prix : 240 EUR
+Duree : 14h (2 jours)
+Eligible CPF : non precise - orienter vers un conseiller
+Stage agree de recuperation de 4 points sur 2 jours.
+Attention : une offre fidelite a 189 EUR existe pour les anciens stagiaires (page dediee /offre-fidelite) - si l'appelant dit avoir deja fait un stage chez TDL, transmettre l'information a un conseiller plutot que de donner ce tarif soi-meme.
+
+================================================================
+CACES
+================================================================
+
+CACES R489 CAT. 3 - CHARIOT ELEVATEUR
+Prix : 850 EUR
+Duree : 35h
+Eligible CPF : non precise - orienter vers un conseiller
+Formation initiale, chariot elevateur en porte-a-faux jusqu'a 6 tonnes.
+
+CACES R486 CAT. B - NACELLE ELEVATRICE
+Prix : 650 EUR
+Duree : 21h
+Eligible CPF : non precise - orienter vers un conseiller
+Formation conduite nacelle elevatrice multidirectionnelle.
+
+================================================================
+ENSEIGNEMENT / RECONVERSION
+================================================================
+
+ECSR - ENSEIGNANT DE LA CONDUITE ET DE LA SECURITE ROUTIERE
+Prix : sur devis
+Duree : 1190h (910h en centre + 280h de stage en entreprise)
+Eligible CPF : Oui
+Titre professionnel reconnu par l'Etat (niveau 5, Bac+2). Debouches : enseignant de la conduite, coordinateur d'enseignants, formateur specialise.
+
+TITRE PROFESSIONNEL CONSEILLER DE VENTE (RNCP37098, Niveau 4)
+Prix : formation en alternance (voir conseiller pour le cout)
+Duree : 400h / 45 jours sur environ 6 mois (1 jour/semaine en centre, 4 jours en entreprise)
+Eligible CPF : non precise - orienter vers un conseiller
+Public vise : alternance, demandeurs d'emploi, salaries, reconversion.
+
+================================================================
+REGLE GENERALE A DONNER A L'ORAL
+================================================================
+
+Meme quand une formation est marquee "Eligible CPF" dans ce document, toujours dire a l'appelant que l'eligibilite reelle et le reste a charge sont verifies au cas par cas par un conseiller - ne jamais garantir un financement a 100%.
+
+================================================================
+REGENERER CE FICHIER
+================================================================
+
+Ce contenu est un instantane de la base de donnees a la date indiquee. Si les prix ou l'eligibilite CPF changent (page Formations du dashboard), il faut regenerer ce fichier et le re-uploader dans Limova pour que l'agent reste a jour.

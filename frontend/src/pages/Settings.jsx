@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { CreditCard, EnvelopeSimple, Kanban, Plugs, ChartBar, MagnifyingGlass } from "@phosphor-icons/react";
+import { CreditCard, EnvelopeSimple, Kanban, Plugs, ChartBar, MagnifyingGlass, Robot } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 export default function Settings() {
@@ -42,6 +42,7 @@ export default function Settings() {
           <TabsTrigger value="n8n" data-testid="tab-n8n"><Plugs size={14} className="mr-1" /> n8n</TabsTrigger>
           <TabsTrigger value="seo" data-testid="tab-seo"><MagnifyingGlass size={14} className="mr-1" /> SEO</TabsTrigger>
           <TabsTrigger value="analytics" data-testid="tab-analytics"><ChartBar size={14} className="mr-1" /> Analytics</TabsTrigger>
+          <TabsTrigger value="limova" data-testid="tab-limova"><Robot size={14} className="mr-1" /> Limova</TabsTrigger>
         </TabsList>
 
         <TabsContent value="email">
@@ -141,9 +142,25 @@ export default function Settings() {
             <p className="text-sm text-gray-500 mb-6">Clés depuis le dashboard Stripe (mode test ou production).</p>
             <div className="space-y-4 max-w-xl">
               <Field label="Publishable Key (pk_...)" value={s.stripe_public_key} onChange={(v) => update("stripe_public_key", v)} testid="stripe-pub" />
-              <Field label="Secret Key (sk_...)" value={s.stripe_secret_key} onChange={(v) => update("stripe_secret_key", v)} testid="stripe-sec" type="password" />
+              <Field label="Secret Key (sk_...)" value={s.stripe_secret_key} onChange={(v) => update("stripe_secret_key", v)} testid="stripe-sec" type="password" placeholder="sk_... (laisser vide si déjà définie via STRIPE_SECRET_KEY sur le serveur)" />
               {s.stripe_secret_key && <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10">Configuré</Badge>}
+              <Field label="Webhook Secret (whsec_...)" value={s.stripe_webhook_secret} onChange={(v) => update("stripe_webhook_secret", v)} testid="stripe-webhook-secret" type="password" placeholder="whsec_..." />
+              <p className="text-xs text-gray-500">
+                Créez un endpoint webhook dans Stripe (Développeurs → Webhooks) pointant vers
+                <code className="font-mono bg-gray-100 px-1 mx-1">/api/payments/webhook</code>, écoutant l'événement
+                <code className="font-mono bg-gray-100 px-1 mx-1">checkout.session.completed</code>, puis collez ici son
+                secret de signature.
+              </p>
             </div>
+          </Card>
+
+          <Card className="p-6 border border-gray-200 rounded-md shadow-none mt-4">
+            <h3 className="font-display text-xl font-bold mb-1">Paiement des inscriptions</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Une fois activé, un bouton de paiement (comptant, 2x ou 3x) apparaît sur la page publique d'inscription
+              pour les formations <b>non éligibles CPF</b>.
+            </p>
+            <PaymentsToggle />
           </Card>
         </TabsContent>
 
@@ -231,6 +248,22 @@ export default function Settings() {
             </div>
           </Card>
         </TabsContent>
+        <TabsContent value="limova">
+          <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+            <h3 className="font-display text-xl font-bold mb-1">Limova — Agents IA</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Créez vos agents (téléphonique, marketing/LinkedIn) depuis votre espace Limova, puis collez ici leur clé
+              API et leurs identifiants. L'activation/désactivation et le lancement des campagnes se font ensuite
+              depuis Marketing → Agents IA.
+            </p>
+            <div className="space-y-4 max-w-xl">
+              <Field label="Clé API Limova" value={s.limova_api_key} onChange={(v) => update("limova_api_key", v)} testid="limova-api-key" type="password" placeholder="lmv_... (laisser vide si déjà définie via LIMOVA_API_KEY sur le serveur)" />
+              {s.limova_api_key && <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10">Configuré</Badge>}
+              <Field label="ID de l'agent téléphonique" value={s.limova_phone_agent_id} onChange={(v) => update("limova_phone_agent_id", v)} testid="limova-phone-agent" placeholder="agent-uuid" />
+              <Field label="ID de l'agent marketing / LinkedIn" value={s.limova_marketing_agent_id} onChange={(v) => update("limova_marketing_agent_id", v)} testid="limova-marketing-agent" placeholder="agent-uuid" />
+            </div>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <div className="flex justify-end">
@@ -238,6 +271,39 @@ export default function Settings() {
           Enregistrer les paramètres
         </Button>
       </div>
+    </div>
+  );
+}
+
+function PaymentsToggle() {
+  const [status, setStatus] = useState(null);
+
+  const load = () => api.get("/payments/status").then((r) => setStatus(r.data)).catch(() => setStatus(null));
+  useEffect(() => { load(); }, []);
+
+  const toggle = async (enabled) => {
+    try {
+      const { data } = await api.put("/payments/toggle", { enabled });
+      setStatus(data);
+      toast.success(enabled ? "Paiement en ligne activé" : "Paiement en ligne désactivé");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
+  if (!status) return <p className="text-sm text-gray-400">Chargement...</p>;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Switch checked={status.enabled} disabled={!status.configured} onCheckedChange={toggle} data-testid="payments-toggle" />
+        <label className="text-sm">{status.enabled ? "Activé" : "Désactivé"}</label>
+      </div>
+      {!status.configured && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+          Renseignez la clé secrète Stripe ci-dessus (ou STRIPE_SECRET_KEY sur le serveur) pour pouvoir activer.
+        </p>
+      )}
     </div>
   );
 }

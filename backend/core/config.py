@@ -29,6 +29,16 @@ GA4_SERVICE_ACCOUNT_JSON = os.getenv("GA4_SERVICE_ACCOUNT_JSON")
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
 GOOGLE_PLACE_ID = os.getenv("GOOGLE_PLACE_ID")
 
+# Agents IA (Limova) — la clé peut être posée ici en env (serveur) ou dans
+# Paramètres → Limova (db.settings) ; ce dernier a priorité s'il est renseigné.
+LIMOVA_API_KEY = os.getenv("LIMOVA_API_KEY")
+
+# Paiement des inscriptions (formations non éligibles CPF) — mêmes priorités :
+# Paramètres → Stripe (db.settings) prioritaire si renseigné, sinon ces env vars.
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
 # Chatbot commercial — Ollama hébergé (ollama.com), modèle Mistral Nemo 12B.
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "https://ollama.com")
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")

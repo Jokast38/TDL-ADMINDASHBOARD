@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,10 +6,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ChartLineUp, MagnifyingGlass, Megaphone, EnvelopeSimple, ShareNetwork, Sparkle,
   EnvelopeOpen, Cursor, PaperPlaneTilt, WarningCircle, Paperclip, X as XIcon, PencilSimple,
-  Browser, ArrowSquareOut,
+  Browser, ArrowSquareOut, Robot, PhoneCall, LinkedinLogo, Phone, Headset,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {
@@ -58,6 +66,7 @@ export default function Marketing() {
           <TabsTrigger value="emails" data-testid="tab-emails"><EnvelopeSimple size={14} className="mr-1" /> Emails</TabsTrigger>
           <TabsTrigger value="compose" data-testid="tab-compose"><PencilSimple size={14} className="mr-1" /> Email personnalisé</TabsTrigger>
           <TabsTrigger value="landing" data-testid="tab-landing"><Browser size={14} className="mr-1" /> Landing pages</TabsTrigger>
+          <TabsTrigger value="agents" data-testid="tab-agents"><Robot size={14} className="mr-1" /> Agents IA</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -95,6 +104,10 @@ export default function Marketing() {
 
         <TabsContent value="landing">
           <LandingPagesTab />
+        </TabsContent>
+
+        <TabsContent value="agents">
+          <AgentsIaTab />
         </TabsContent>
       </Tabs>
     </div>
@@ -471,6 +484,528 @@ function LandingPagesTab() {
         {LANDING_PAGES.map((page) => <LandingPageCard key={page.path} page={page} />)}
       </div>
     </div>
+  );
+}
+
+// ─── Agents IA (Limova) ─────────────────────────────────────────────────────
+const OUTCOME_COLORS = {
+  veut_etre_rappele: "bg-amber-100 text-amber-700 hover:bg-amber-100",
+  veut_sinscrire: "bg-green-100 text-green-700 hover:bg-green-100",
+  pas_interesse: "bg-red-100 text-red-700 hover:bg-red-100",
+  injoignable: "bg-gray-100 text-gray-600 hover:bg-gray-100",
+};
+
+function AgentsIaTab() {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadStatus = () => api.get("/limova/status").then(({ data }) => setStatus(data)).catch(() => setStatus(null));
+  useEffect(() => { loadStatus().finally(() => setLoading(false)); }, []);
+
+  const toggle = async (field, value) => {
+    try {
+      const { data } = await api.put("/limova/toggle", { [field]: value });
+      setStatus(data);
+      toast.success(value ? "Agent activé" : "Agent désactivé");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
+  if (loading) return <p className="text-sm text-gray-400 py-8 text-center">Chargement...</p>;
+
+  return (
+    <div className="space-y-6 mt-2">
+      <p className="text-sm text-gray-500 max-w-2xl">
+        Agents IA propulsés par Limova — appels téléphoniques automatisés et prospection LinkedIn. Configurez la clé
+        API et les identifiants d'agent dans <b>Paramètres → Limova</b>, puis activez/désactivez ici.
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <PhoneAgentCard status={status} onToggle={(v) => toggle("phone_enabled", v)} />
+        <LinkedinAgentCard status={status} onToggle={(v) => toggle("linkedin_enabled", v)} />
+      </div>
+      <InboundReceptionCard status={status} />
+      <SocialConnectionsCard />
+    </div>
+  );
+}
+
+// Agent d'accueil : Limova achète un numéro dédié qui transfère les appels vers
+// votre vrai numéro ; une fois l'agent connecté, il décroche si l'appel
+// transféré reste sans réponse. L'achat du numéro est facturé (3600 crédits
+// Limova) et non réversible — jamais déclenché sans confirmation explicite.
+function InboundReceptionCard({ status }) {
+  const configured = !!status?.phone_agent_configured;
+  const [numbers, setNumbers] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [userPhone, setUserPhone] = useState("");
+  const [friendlyName, setFriendlyName] = useState("");
+  const [registering, setRegistering] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.get("/limova/phone/inbound-numbers")
+      .then(({ data }) => setNumbers(data?.data || []))
+      .catch(() => setNumbers(null))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const register = async () => {
+    if (!userPhone.trim()) return toast.error("Indiquez le numéro à faire sonner en premier");
+    setRegistering(true);
+    try {
+      await api.post("/limova/phone/inbound-numbers", {
+        user_phone_number: userPhone.trim(), friendly_name: friendlyName.trim() || null, confirm_cost: true,
+      });
+      toast.success("Numéro d'accueil créé");
+      setUserPhone(""); setFriendlyName("");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la création du numéro");
+    } finally {
+      setRegistering(false);
+    }
+  };
+
+  const connectAgent = async () => {
+    setConnecting(true);
+    try {
+      await api.post("/limova/phone/inbound-numbers/connect-agent");
+      toast.success("Agent d'accueil connecté");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la connexion de l'agent");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  return (
+    <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+      <div className="flex items-center gap-2 mb-1">
+        <Headset size={20} className="text-[#0052CC]" weight="duotone" />
+        <h3 className="font-display text-lg font-bold">Agent d'accueil (appels entrants)</h3>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Un numéro dédié reçoit les appels et les transfère vers votre vrai numéro. Si personne ne décroche, l'agent IA
+        prend le relais automatiquement.
+      </p>
+      {!configured && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-4">
+          Configurez d'abord l'ID de l'agent téléphonique dans Paramètres → Limova.
+        </p>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-gray-400 py-4">Chargement...</p>
+      ) : numbers?.length ? (
+        <div className="space-y-2 mb-4">
+          {numbers.map((n) => (
+            <div key={n.id} className="border border-gray-200 rounded-md p-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{n.friendlyName || n.twilioPhoneNumber}</p>
+                <p className="text-xs text-gray-400">
+                  {n.twilioPhoneNumber} → transfère vers {n.userPhoneNumber}
+                </p>
+              </div>
+              {n.connectedAgents?.length ? (
+                <Badge className="bg-green-100 text-green-700 hover:bg-green-100 shrink-0">Agent connecté</Badge>
+              ) : (
+                <Button size="sm" variant="outline" disabled={!configured || connecting} onClick={connectAgent} className="shrink-0">
+                  {connecting ? "..." : "Connecter l'agent"}
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-gray-400 mb-4">Aucun numéro d'accueil configuré pour le moment.</p>
+      )}
+
+      <div className="pt-4 border-t border-gray-200 space-y-2">
+        <p className="text-sm font-medium">Créer un numéro d'accueil</p>
+        <Input value={userPhone} onChange={(e) => setUserPhone(e.target.value)} placeholder="Votre numéro actuel (+33...)" />
+        <Input value={friendlyName} onChange={(e) => setFriendlyName(e.target.value)} placeholder="Nom (ex: Accueil TDL Formation)" />
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button size="sm" disabled={!userPhone.trim()} className="bg-[#0a0a0a] text-white w-full">
+              <PhoneCall size={14} className="mr-1" /> Créer ce numéro
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Achat d'un numéro dédié</AlertDialogTitle>
+              <AlertDialogDescription>
+                Cette action achète un vrai numéro de téléphone via Limova/Twilio et facture <b>3600 crédits</b> de
+                votre compte Limova. L'action n'est pas réversible. Confirmez-vous ?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Annuler</AlertDialogCancel>
+              <AlertDialogAction onClick={register} disabled={registering} className="bg-[#0a0a0a] text-white hover:bg-[#1a1a1a]">
+                {registering ? "Création..." : "Confirmer l'achat"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    </Card>
+  );
+}
+
+// Instagram/Facebook : Limova ne documente que la connexion OAuth pour ces deux
+// réseaux, pas de publication via l'API (contrairement à LinkedIn) — cette carte
+// sert donc juste à connecter les comptes en vue d'un usage futur.
+function SocialConnectionsCard() {
+  const [statuses, setStatuses] = useState({ instagram: null, facebook: null });
+  const [connecting, setConnecting] = useState(null);
+
+  const loadStatus = (network) => {
+    api.get(`/limova/${network}/auth-status`)
+      .then(({ data }) => setStatuses((s) => ({ ...s, [network]: data })))
+      .catch(() => setStatuses((s) => ({ ...s, [network]: { connected: false } })));
+  };
+  useEffect(() => { loadStatus("instagram"); loadStatus("facebook"); }, []);
+
+  const connect = async (network) => {
+    setConnecting(network);
+    try {
+      const { data } = await api.post(`/limova/${network}/auth-initiate`);
+      if (data?.url || data?.authUrl) {
+        window.open(data.url || data.authUrl, "_blank", "noopener,noreferrer");
+      } else {
+        toast.success("Connexion initiée — suivez les instructions Limova");
+      }
+      loadStatus(network);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur de connexion");
+    } finally {
+      setConnecting(null);
+    }
+  };
+
+  return (
+    <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+      <div className="flex items-center gap-2 mb-1">
+        <ShareNetwork size={20} className="text-[#d4af37]" weight="duotone" />
+        <h3 className="font-display text-lg font-bold">Réseaux sociaux</h3>
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Connexion des comptes Instagram et Facebook via Limova. À ce jour, l'API Limova ne permet que la connexion
+        (pas encore de publication automatique) — utile pour préparer l'intégration.
+      </p>
+      <div className="grid sm:grid-cols-2 gap-4">
+        {["instagram", "facebook"].map((network) => (
+          <div key={network} className="border border-gray-200 rounded-md p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium capitalize">{network}</p>
+              <Badge className={statuses[network]?.connected ? "bg-green-100 text-green-700 hover:bg-green-100 mt-1" : "bg-gray-100 text-gray-500 hover:bg-gray-100 mt-1"}>
+                {statuses[network]?.connected ? "Connecté" : "Non connecté"}
+              </Badge>
+            </div>
+            <Button size="sm" variant="outline" disabled={connecting === network} onClick={() => connect(network)}>
+              {connecting === network ? "..." : "Connecter"}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function AgentStatusBadge({ configured, enabled }) {
+  if (!configured) return <Badge className="bg-gray-100 text-gray-500 hover:bg-gray-100">Non configuré</Badge>;
+  return enabled
+    ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Actif</Badge>
+    : <Badge className="bg-gray-100 text-gray-500 hover:bg-gray-100">En pause</Badge>;
+}
+
+function PhoneAgentCard({ status, onToggle }) {
+  const configured = !!status?.phone_agent_configured;
+  const enabled = !!status?.phone_enabled;
+  const [campaignOpen, setCampaignOpen] = useState(false);
+  const [callsOpen, setCallsOpen] = useState(false);
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    api.get("/limova/phone/stats").then(({ data }) => setStats(data)).catch(() => setStats(null));
+  }, []);
+
+  return (
+    <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <PhoneCall size={20} className="text-[#0052CC]" weight="duotone" />
+          <h3 className="font-display text-lg font-bold">Agent téléphonique</h3>
+        </div>
+        <AgentStatusBadge configured={configured} enabled={enabled} />
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Lance des campagnes d'appels automatisés vers vos leads (par intérêt), et laisse un employé qualifier le
+        résultat de chaque appel (veut être rappelé, veut s'inscrire...).
+      </p>
+      <div className="flex items-center gap-2 mb-4">
+        <Switch checked={enabled} disabled={!configured} onCheckedChange={onToggle} data-testid="phone-agent-toggle" />
+        <label className="text-sm">{enabled ? "Activé" : "Désactivé"}</label>
+      </div>
+      {!configured && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-4">
+          Renseignez la clé API et l'ID de l'agent téléphonique dans Paramètres → Limova pour l'activer.
+        </p>
+      )}
+      {stats && (
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <StatTile label="Campagnes lancées" value={stats.campaigns_launched} />
+          <StatTile label="Appels qualifiés" value={stats.qualified_calls} />
+          {stats.by_outcome.map((o) => (
+            <StatTile key={o.outcome} label={o.label} value={o.count} small />
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <Dialog open={campaignOpen} onOpenChange={setCampaignOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" disabled={!configured || !enabled} className="bg-[#0a0a0a] text-white">
+              <Phone size={14} className="mr-1" /> Lancer une campagne d'appels
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>Nouvelle campagne d'appels</DialogTitle></DialogHeader>
+            <PhoneCampaignForm onDone={() => setCampaignOpen(false)} />
+          </DialogContent>
+        </Dialog>
+        <Dialog open={callsOpen} onOpenChange={setCallsOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" variant="outline" disabled={!configured}>Voir les appels</Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Appels récents</DialogTitle></DialogHeader>
+            <PhoneCallsList />
+          </DialogContent>
+        </Dialog>
+      </div>
+    </Card>
+  );
+}
+
+function StatTile({ label, value, small }) {
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-md p-3">
+      <p className={small ? "font-display text-lg font-bold" : "font-display text-2xl font-bold"}>{value ?? 0}</p>
+      <p className="text-xs text-gray-500">{label}</p>
+    </div>
+  );
+}
+
+function PhoneCampaignForm({ onDone }) {
+  const [name, setName] = useState("");
+  const [interests, setInterests] = useState([]);
+  const [selected, setSelected] = useState(new Set());
+  const [count, setCount] = useState(null);
+  const [launching, setLaunching] = useState(false);
+
+  useEffect(() => {
+    api.get("/leads/interests").then(({ data }) => setInterests([...new Set(data)].sort())).catch(() => {});
+  }, []);
+
+  const interestIn = useMemo(() => Array.from(selected).join("|"), [selected]);
+
+  useEffect(() => {
+    const params = { has_phone: true, page_size: 1 };
+    if (interestIn) params.interest_in = interestIn;
+    api.get("/leads", { params }).then(({ data }) => setCount(data.total)).catch(() => setCount(null));
+  }, [interestIn]);
+
+  const toggleInterest = (label) =>
+    setSelected((prev) => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n; });
+
+  const launch = async () => {
+    if (!name.trim()) return toast.error("Donnez un nom à cette campagne");
+    setLaunching(true);
+    try {
+      const { data } = await api.post("/limova/phone/campaigns", {
+        name: name.trim(), interest_in: interestIn || null,
+      });
+      toast.success(`Campagne lancée — ${data.targeted_count} lead(s) appelé(s)`);
+      onDone();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors du lancement");
+    } finally {
+      setLaunching(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 mt-2">
+      <div>
+        <label className="text-sm font-medium">Nom de la campagne</label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="ex: Relance téléphonique VTC" />
+      </div>
+      <div>
+        <label className="text-sm font-medium mb-1 block">Cibler par intérêt (laisser vide = tous les leads avec téléphone)</label>
+        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+          {interests.map((label) => (
+            <label key={label} className="flex items-center gap-2 p-2 rounded-md border border-gray-200 hover:bg-gray-50 cursor-pointer text-sm">
+              <Checkbox checked={selected.has(label)} onCheckedChange={() => toggleInterest(label)} />
+              {label}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 text-sm bg-gray-50 border border-gray-200 rounded-md p-3">
+        <Phone size={16} /> {count === null ? "—" : `${count} lead(s) avec téléphone correspondant(s)`}
+      </div>
+      <div className="flex justify-end gap-2 pt-2">
+        <Button variant="outline" onClick={onDone} disabled={launching}>Annuler</Button>
+        <Button onClick={launch} disabled={launching || !count} className="bg-[#d4af37] text-black hover:bg-[#b8941f]">
+          {launching ? "Lancement..." : `Lancer (${count ?? 0})`}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PhoneCallsList() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    api.get("/limova/phone/calls")
+      .then(({ data }) => { setData(data); setError(null); })
+      .catch((e) => setError(e.response?.data?.detail || "Erreur de chargement"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  const setOutcome = async (callId, outcome) => {
+    try {
+      await api.post(`/limova/phone/calls/${callId}/outcome`, { outcome });
+      toast.success("Issue de l'appel enregistrée");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
+  if (loading) return <p className="text-sm text-gray-400 py-6 text-center">Chargement...</p>;
+  if (error) return <p className="text-sm text-red-600 py-6 text-center">{error}</p>;
+  if (!data?.calls?.length) return <p className="text-sm text-gray-400 py-6 text-center">Aucun appel pour le moment.</p>;
+
+  return (
+    <div className="space-y-2 mt-2">
+      {data.calls.map((c) => (
+        <div key={c.id} className="border border-gray-200 rounded-md p-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate">{c.prospectName || c.to || c.phoneNumber || "Appel"}</p>
+            <p className="text-xs text-gray-400">{c.createdAt ? new Date(c.createdAt).toLocaleString("fr-FR") : ""}</p>
+            {c.outcome && <Badge className={`mt-1 text-xs ${OUTCOME_COLORS[c.outcome] || ""}`}>{c.outcome_label}</Badge>}
+          </div>
+          <Select value={c.outcome || ""} onValueChange={(v) => setOutcome(c.id, v)}>
+            <SelectTrigger className="w-44 shrink-0"><SelectValue placeholder="Qualifier..." /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(data.outcome_options).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LinkedinAgentCard({ status, onToggle }) {
+  const configured = !!status?.linkedin_agent_configured;
+  const enabled = !!status?.linkedin_enabled;
+  const [profileUrl, setProfileUrl] = useState("");
+  const [message, setMessage] = useState("");
+  const [connectionRequest, setConnectionRequest] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [stats, setStats] = useState(null);
+  const [authStatus, setAuthStatus] = useState(null);
+  const [connecting, setConnecting] = useState(false);
+
+  useEffect(() => {
+    api.get("/limova/linkedin/stats").then(({ data }) => setStats(data)).catch(() => setStats(null));
+    api.get("/limova/linkedin/auth-status").then(({ data }) => setAuthStatus(data)).catch(() => setAuthStatus({ connected: false }));
+  }, []);
+
+  const connectLinkedin = async () => {
+    setConnecting(true);
+    try {
+      const { data } = await api.post("/limova/linkedin/auth-initiate");
+      if (data?.url || data?.authUrl) window.open(data.url || data.authUrl, "_blank", "noopener,noreferrer");
+      api.get("/limova/linkedin/auth-status").then(({ data }) => setAuthStatus(data)).catch(() => {});
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur de connexion");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const send = async () => {
+    if (!profileUrl.trim() || !message.trim()) return toast.error("Profil LinkedIn et message requis");
+    setSending(true);
+    try {
+      await api.post("/limova/linkedin/send", {
+        profile_url: profileUrl.trim(), message: message.trim(), connection_request: connectionRequest,
+      });
+      toast.success("Envoyé sur LinkedIn");
+      setProfileUrl(""); setMessage("");
+      api.get("/limova/linkedin/stats").then(({ data }) => setStats(data)).catch(() => {});
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de l'envoi");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <LinkedinLogo size={20} className="text-[#0052CC]" weight="duotone" />
+          <h3 className="font-display text-lg font-bold">Agent LinkedIn</h3>
+        </div>
+        <AgentStatusBadge configured={configured} enabled={enabled} />
+      </div>
+      <p className="text-sm text-gray-500 mb-4">
+        Envoie une demande de connexion ou un message personnalisé à un profil LinkedIn via l'agent Limova.
+      </p>
+      <div className="flex items-center gap-2 mb-4">
+        <Switch checked={enabled} disabled={!configured} onCheckedChange={onToggle} data-testid="linkedin-agent-toggle" />
+        <label className="text-sm">{enabled ? "Activé" : "Désactivé"}</label>
+      </div>
+      {!configured && (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mb-4">
+          Renseignez la clé API et l'ID de l'agent marketing/LinkedIn dans Paramètres → Limova pour l'activer.
+        </p>
+      )}
+      {stats && (
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <StatTile label="Demandes de connexion" value={stats.connection_requests} />
+          <StatTile label="Messages envoyés" value={stats.messages} />
+        </div>
+      )}
+      {configured && !authStatus?.connected && (
+        <Button size="sm" variant="outline" onClick={connectLinkedin} disabled={connecting} className="mb-4 w-full">
+          {connecting ? "..." : "Connecter le compte LinkedIn"}
+        </Button>
+      )}
+      <div className="space-y-2">
+        <Input value={profileUrl} onChange={(e) => setProfileUrl(e.target.value)} placeholder="URL du profil LinkedIn" disabled={!configured || !enabled} />
+        <Textarea rows={3} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Message personnalisé..." disabled={!configured || !enabled} />
+        <label className="flex items-center gap-2 text-sm">
+          <Checkbox checked={connectionRequest} onCheckedChange={setConnectionRequest} disabled={!configured || !enabled} />
+          Demande de connexion (sinon, message direct)
+        </label>
+        <Button onClick={send} disabled={!configured || !enabled || sending} className="bg-[#0a0a0a] text-white w-full">
+          {sending ? "Envoi..." : "Envoyer"}
+        </Button>
+      </div>
+    </Card>
   );
 }
 

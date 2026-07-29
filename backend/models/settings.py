@@ -9,6 +9,7 @@ class SettingsIn(BaseModel):
     n'envoie que 2 champs ne doit pas réinitialiser les autres)."""
     stripe_public_key: Optional[str] = None
     stripe_secret_key: Optional[str] = None
+    stripe_webhook_secret: Optional[str] = None
     email_provider: Optional[str] = None
     email_api_key: Optional[str] = None
     email_from: Optional[str] = None
@@ -27,6 +28,9 @@ class SettingsIn(BaseModel):
     meta_pixel_id: Optional[str] = None
     meta_conversion_api_token: Optional[str] = None
     public_base_url: Optional[str] = None
+    limova_api_key: Optional[str] = None
+    limova_phone_agent_id: Optional[str] = None
+    limova_marketing_agent_id: Optional[str] = None
 
 
 class ChatIn(BaseModel):
