@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { setPageMeta } from "@/lib/seo";
 import { Link } from "react-router-dom";
 import { TopBar } from "@/components/StageLandingPage";
 import { ArrowLeft, CaretRight } from "@phosphor-icons/react";
@@ -94,7 +95,7 @@ const SECTIONS = [
 
 export default function MentionsLegales() {
   useEffect(() => {
-    document.title = "Mentions Légales — TDL Formation";
+    setPageMeta({ title: "Mentions Légales — TDL Formation", path: "/mentions-legales" });
     window.scrollTo(0, 0);
   }, []);
 

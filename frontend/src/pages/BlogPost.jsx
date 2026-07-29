@@ -12,6 +12,7 @@ import FAQSection from "@/components/FAQSection";
 import { faqsForCategory } from "@/constants/formationFaqs";
 import { heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
+import { setPageMeta } from "@/lib/seo";
 
 const CATEGORY_TO_FORMATION = {
   actualites: "VTC_TAXI",
@@ -30,12 +31,11 @@ export default function BlogPost() {
   useEffect(() => {
     api.get(`/blog/posts/${slug}`).then((r) => {
       setPost(r.data);
-      const seoTitle = r.data.seo_title || r.data.title;
-      document.title = `${seoTitle} — TDL Formation`;
-      // Update meta description
-      let meta = document.querySelector('meta[name="description"]');
-      if (!meta) { meta = document.createElement("meta"); meta.name = "description"; document.head.appendChild(meta); }
-      meta.setAttribute("content", r.data.seo_description || r.data.excerpt || "");
+      setPageMeta({
+        title: `${r.data.seo_title || r.data.title} — TDL Formation`,
+        description: r.data.seo_description || r.data.excerpt || "",
+        path: `/blog/${slug}`,
+      });
     }).catch(() => navigate("/blog"));
     window.scrollTo(0, 0);
   }, [slug, navigate]);

@@ -26,6 +26,7 @@ import FormationCard from "@/components/FormationCard";
 import ChatWidget from "@/components/ChatWidget";
 import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
+import { setPageMeta } from "@/lib/seo";
 
 const CATEGORIES = [
   { key: "CACES", label: "CACES", icon: Truck, desc: "Toutes catégories - chariots, nacelles, grues" },
@@ -203,6 +204,11 @@ export default function Landing() {
 
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data));
+    setPageMeta({
+      title: "TDL Formation — CACES, Permis, Auto-école, SSIAP, VTC/Taxi",
+      description: "TDL Formation — Centre de formation professionnelle agréé Qualiopi à Épinay-sur-Seine (93) et Creil (60) : CACES, récupération de points, auto-école, SSIAP, VTC/Taxi. Inscription en ligne, dossiers ANTS suivis.",
+      path: "/",
+    });
   }, []);
 
   const byTitle = (title) => formations.find((f) => f.title === title);

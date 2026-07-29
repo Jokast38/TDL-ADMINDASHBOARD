@@ -5,4 +5,4 @@ Disallow: /api
 Disallow: /login
 Disallow: /espace-eleve
 
-Sitemap: https://tdl-admin-hub.preview.emergentagent.com/api/sitemap.xml
+Sitemap: https://tdl-admindashboard.vercel.app/sitemap.xml

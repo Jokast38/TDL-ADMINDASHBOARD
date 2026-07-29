@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
+import { setPageMeta } from "@/lib/seo";
 import { trackSchedule, trackLead } from "@/lib/metaPixel";
 import Kit, { DEFAULT_FEATURES, DEFAULT_STEPS } from "@/components/StageLandingPage";
 import { generateUpcomingSessions } from "@/lib/upcomingSessions";
@@ -32,6 +33,14 @@ export default function StageRecuperationPointsLanding() {
   const [sent, setSent] = useState(false);
   const formRef = useRef(null);
   const revealRef = useReveal();
+
+  useEffect(() => {
+    setPageMeta({
+      title: "Stage récupération de points — 240€ | TDL Formation",
+      description: "Récupérez jusqu'à 4 points sur votre permis en 2 jours. Stage agréé par la Préfecture, sessions à Épinay-sur-Seine (93) et Creil (60).",
+      path: "/stage-recuperation-points",
+    });
+  }, []);
 
   const chooseSession = (label) => {
     setSession(label);

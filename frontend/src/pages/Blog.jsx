@@ -9,6 +9,7 @@ import { ArrowLeft, ArrowRight, Calendar, Tag, Eye } from "@phosphor-icons/react
 import { useReveal } from "@/hooks/useReveal";
 import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
+import { setPageMeta } from "@/lib/seo";
 
 const CATEGORIES = [
   { key: "all", label: "Tous" },
@@ -24,7 +25,11 @@ export default function Blog() {
   const [category, setCategory] = useState("all");
 
   useEffect(() => {
-    document.title = "Blog — TDL Formation";
+    setPageMeta({
+      title: "Blog — TDL Formation",
+      description: "Actualités, conseils et guides sur les formations CACES, VTC, Taxi, SSIAP, permis et auto-école par TDL Formation.",
+      path: "/blog",
+    });
     const q = category === "all" ? {} : { params: { category } };
     api.get("/blog/posts", q).then((r) => setPosts(r.data));
   }, [category]);

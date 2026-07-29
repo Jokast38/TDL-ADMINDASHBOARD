@@ -10,6 +10,7 @@ import { CATEGORY_LABELS } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
 import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
+import { setPageMeta } from "@/lib/seo";
 
 const CATEGORY_ORDER = ["VTC_TAXI", "CACES", "PERMIS", "AUTO_ECOLE", "SSIAP", "ECSR", "VENTE"];
 
@@ -18,7 +19,11 @@ export default function FAQ() {
   const revealRef = useReveal();
 
   useEffect(() => {
-    document.title = "Questions fréquentes — TDL Formation";
+    setPageMeta({
+      title: "Questions fréquentes — TDL Formation",
+      description: "Toutes les réponses à vos questions sur les formations CACES, VTC, Taxi, SSIAP, permis et auto-école chez TDL Formation.",
+      path: "/faq",
+    });
     window.scrollTo(0, 0);
   }, []);
 

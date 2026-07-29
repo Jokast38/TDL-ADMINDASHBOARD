@@ -10,6 +10,7 @@ import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import { useReveal } from "@/hooks/useReveal";
+import { setPageMeta } from "@/lib/seo";
 import { trackSearch } from "@/lib/metaPixel";
 
 const stripAccents = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -23,7 +24,11 @@ export default function PublicFormations() {
   const revealRef = useReveal();
 
   useEffect(() => {
-    document.title = "Toutes nos formations — TDL Formation";
+    setPageMeta({
+      title: "Toutes nos formations — TDL Formation",
+      description: "Catalogue complet des formations TDL Formation : CACES, récupération de points, auto-école, SSIAP, VTC/Taxi, ECSR, Conseiller de Vente.",
+      path: "/formations",
+    });
     window.scrollTo(0, 0);
     api.get("/formations", { params: { active_only: true } })
       .then(({ data }) => setFormations(data))

@@ -15,6 +15,7 @@ import VideoPreview from "@/components/VideoPreview";
 import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
 import { useReveal } from "@/hooks/useReveal";
+import { setPageMeta } from "@/lib/seo";
 
 const CATEGORY_PROGRAM_PDF = {
   VENTE: "/doc/programme_externe_TP_conseiller_de_vente_TDL_Qualiopi_CFA-2.pdf",
@@ -34,6 +35,11 @@ export default function FormationDetail() {
       setFormation(found || null);
       if (found) {
         setOthers(data.filter((f) => f.category === found.category && f.id !== found.id).slice(0, 3));
+        setPageMeta({
+          title: `${found.title} — TDL Formation`,
+          description: (found.description || "").slice(0, 155) || `${found.title} — formation professionnelle chez TDL Formation, Épinay-sur-Seine (93) et Creil (60).`,
+          path: `/formations/${found.id}`,
+        });
       }
       setLoading(false);
     });
@@ -59,9 +65,20 @@ export default function FormationDetail() {
 
   const f = formation;
   const gallery = galleryForCategory(f.category);
+  const courseJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Course",
+    name: f.title,
+    description: f.description || f.title,
+    provider: { "@type": "EducationalOrganization", name: "TDL Formation", sameAs: "https://tdl-admindashboard.vercel.app" },
+    ...(f.price > 0 && {
+      offers: { "@type": "Offer", price: f.price, priceCurrency: "EUR", availability: "https://schema.org/InStock" },
+    }),
+  };
 
   return (
     <div className="min-h-screen bg-white" data-testid="formation-detail-page" ref={revealRef}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }} />
       {/* Header */}
       <TopBar />
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">

@@ -1,9 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
+import { setPageMeta } from "@/lib/seo";
 import { trackSchedule, trackLead } from "@/lib/metaPixel";
 import Kit, { DEFAULT_FEATURES, DEFAULT_STEPS } from "@/components/StageLandingPage";
 import { generateUpcomingSessions } from "@/lib/upcomingSessions";
@@ -32,6 +33,14 @@ export default function OffreFideliteLanding() {
   const [sent, setSent] = useState(false);
   const formRef = useRef(null);
   const revealRef = useReveal();
+
+  useEffect(() => {
+    setPageMeta({
+      title: "Offre fidélité — Stage récupération de points à 189€ | TDL Formation",
+      description: "Tarif fidélité 189€ pour votre stage de récupération de points, réservé aux anciens stagiaires TDL Formation. Récupérez jusqu'à 4 points en 2 jours.",
+      path: "/offre-fidelite",
+    });
+  }, []);
 
   const chooseSession = (label) => {
     setSession(label);

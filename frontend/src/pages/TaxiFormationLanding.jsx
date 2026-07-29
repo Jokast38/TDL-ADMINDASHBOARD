@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { setPageMeta } from "@/lib/seo";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,14 @@ export default function TaxiFormationLanding() {
   const formRef = useRef(null);
   const revealRef = useReveal();
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    setPageMeta({
+      title: "Formation Taxi à Épinay-sur-Seine | TDL Formation",
+      description: "Formation Taxi initiale et continue à Épinay-sur-Seine : préparation à l'examen T3P, accompagnement administratif, financement étudié. Centre agréé Qualiopi.",
+      path: "/formation-taxi",
+    });
+  }, []);
 
   const scrollToForm = () => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 

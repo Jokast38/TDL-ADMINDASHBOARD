@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { setPageMeta } from "@/lib/seo";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,14 @@ export default function SsiapLanding() {
   const formRef = useRef(null);
   const revealRef = useReveal();
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  useEffect(() => {
+    setPageMeta({
+      title: "Formation SSIAP à Épinay-sur-Seine | TDL Formation",
+      description: "Formations SSIAP 1, 2 et 3 chez TDL Formation à Épinay-sur-Seine : prérequis, programme, examen, financement. Centre agréé Qualiopi.",
+      path: "/formation-ssiap",
+    });
+  }, []);
 
   const scrollToForm = () => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 

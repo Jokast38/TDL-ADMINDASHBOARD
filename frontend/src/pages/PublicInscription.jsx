@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { CheckCircle, ArrowRight, ArrowLeft, CreditCard, XCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { trackCompleteRegistration } from "@/lib/metaPixel";
+import { setPageMeta } from "@/lib/seo";
 
 // Validation basique : téléphone français (avec ou sans +33, espaces/points/
 // tirets tolérés) et email — pour éviter les dossiers avec un numéro
@@ -41,6 +42,7 @@ export default function PublicInscription() {
       if (formationId && r.data.find((f) => f.id === formationId)) setStep(2);
     });
     api.get("/payments/public-status").then((r) => setPaymentsEnabled(r.data.enabled)).catch(() => setPaymentsEnabled(false));
+    setPageMeta({ title: "Inscription — TDL Formation", description: "Inscrivez-vous en ligne à votre formation TDL Formation en 3 étapes simples.", path: "/inscription" });
   }, []);
 
   const payNow = async (inscriptionId) => {
