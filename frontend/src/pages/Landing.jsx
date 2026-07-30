@@ -28,6 +28,7 @@ import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { setPageMeta } from "@/lib/seo";
+import FranceMapSection from "@/components/FranceMapSection";
 
 const CATEGORIES = [
   { key: "CACES", label: "CACES", icon: Truck, desc: "Toutes catégories - chariots, nacelles, grues" },
@@ -536,6 +537,16 @@ export default function Landing() {
           <ArrowUp size={14} />
           <span className="[writing-mode:vertical-rl]">Haut de page</span>
         </a>
+      </section>
+      {/* France Map */}
+      <section className="py-16 lg:py-24 bg-[#f8f9fb] border-t border-gray-200">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <p className="overline">Nos centres</p>
+          <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2 mb-10">Où nous trouver</h2>
+          <div className="w-full">
+            <FranceMapSection className="!bg-transparent !shadow-none !border-none" />
+          </div>
+        </div>
       </section>
 
       {/* Informations pratiques */}

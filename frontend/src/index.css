@@ -145,6 +145,27 @@ code, .font-mono {
   transform: scale(1.06);
   transition: opacity 1.4s ease, transform 8s ease-out;
 }
+
+.leaflet-container {
+  background: transparent;
+}
+
+.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.9) !important;
+  font-size: 10px;
+  border-radius: 999px;
+  padding: 4px 8px;
+  margin: 8px;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+}
+
+.leaflet-popup-tip {
+  background: white;
+}
 .hero-slide.hero-slide-active {
   opacity: 1;
   transform: scale(1);
