@@ -6,6 +6,7 @@ import {
   Star, Phone, UsersThree, Armchair, PersonSimple, ChatCircleText, X,
 } from "@phosphor-icons/react";
 import { trackSchedule } from "@/lib/metaPixel";
+import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 
 const GOLD = "#d4af37";
 const NAVY = "#0a0a0a";
@@ -324,9 +325,14 @@ function BookingForm({ formRef, form, setForm, session, sending, sent, onSubmit,
               className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
               data-testid="booking-telephone"
             />
+            <PrivacyConsentCheckbox
+              checked={!!form.privacyConsent}
+              onChange={(v) => setForm({ ...form, privacyConsent: v })}
+              testId="booking-privacy-consent"
+            />
             <Button
               type="submit"
-              disabled={sending}
+              disabled={sending || !form.privacyConsent}
               style={{ backgroundColor: GOLD }}
               className="w-full text-black font-bold uppercase text-xs tracking-wide py-6"
               data-testid="booking-submit"

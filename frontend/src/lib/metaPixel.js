@@ -1,9 +1,15 @@
+import { hasConsent } from "@/lib/consent";
+
 // Wrapper sûr autour de window.fbq (Meta Pixel) — no-op si le pixel n'est pas
 // chargé (ID pas encore configuré dans Paramètres, ou script bloqué par un
 // bloqueur de pub) : les appels de tracking ne doivent jamais faire planter
-// une action utilisateur (recherche, inscription...).
+// une action utilisateur (recherche, inscription...). Vérifie aussi le
+// consentement "marketing" en plus de la garde déjà côté AnalyticsLoader
+// (défense en profondeur : même si le script était chargé par un autre biais,
+// aucun événement ne part sans consentement).
 export function trackMetaEvent(eventName, params = {}) {
   if (typeof window === "undefined" || typeof window.fbq !== "function") return;
+  if (!hasConsent("marketing")) return;
   try {
     window.fbq("track", eventName, params);
   } catch {

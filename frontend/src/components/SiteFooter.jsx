@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { InstagramLogo, TiktokLogo, FacebookLogo } from "@phosphor-icons/react";
+import { openCookieSettings } from "@/lib/consent";
 
 const SOCIALS = [
   { icon: InstagramLogo, label: "Instagram", href: "https://www.instagram.com/tdlformation_?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw%3D%3D" },
@@ -16,6 +17,10 @@ export default function SiteFooter({ className = "border-t border-gray-200 py-8"
         <div className="flex flex-wrap items-center gap-5">
           <Link to="/faq" className="text-xs text-gray-400 hover:text-[#d4af37]">FAQ</Link>
           <Link to="/mentions-legales" className="text-xs text-gray-400 hover:text-[#d4af37]">Mentions légales</Link>
+          <Link to="/politique-de-confidentialite" className="text-xs text-gray-400 hover:text-[#d4af37]">Confidentialité</Link>
+          <button onClick={() => openCookieSettings()} className="text-xs text-gray-400 hover:text-[#d4af37]" data-testid="footer-cookie-settings">
+            Gérer les cookies
+          </button>
           <div className="flex items-center gap-3">
             {SOCIALS.map((s) => (
               <a

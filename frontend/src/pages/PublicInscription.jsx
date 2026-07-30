@@ -10,6 +10,7 @@ import { CheckCircle, ArrowRight, ArrowLeft, CreditCard, XCircle } from "@phosph
 import { toast } from "sonner";
 import { trackCompleteRegistration } from "@/lib/metaPixel";
 import { setPageMeta } from "@/lib/seo";
+import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 
 // Validation basique : téléphone français (avec ou sans +33, espaces/points/
 // tirets tolérés) et email — pour éviter les dossiers avec un numéro
@@ -28,6 +29,7 @@ export default function PublicInscription() {
   const [success, setSuccess] = useState(null);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   const [allowKlarna, setAllowKlarna] = useState(false);
+  const [privacyConsent, setPrivacyConsent] = useState(false);
   const [payLoading, setPayLoading] = useState(false);
 
   // Retour depuis Stripe Checkout : le navigateur recharge la page, l'état React
@@ -57,6 +59,9 @@ export default function PublicInscription() {
   };
 
   const submit = async () => {
+    if (!privacyConsent) {
+      return toast.error("Merci d'accepter l'utilisation de vos données pour continuer");
+    }
     if (!EMAIL_RE.test(form.student_email.trim())) {
       return toast.error("Merci de vérifier le format de votre email");
     }
@@ -187,11 +192,14 @@ export default function PublicInscription() {
                   <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} data-testid="inscr-notes" />
                 </div>
               </div>
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-6">
+              <div className="mt-4">
+                <PrivacyConsentCheckbox checked={privacyConsent} onChange={setPrivacyConsent} testId="inscr-privacy-consent" />
+              </div>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-4">
                 <Button variant="outline" onClick={() => setStep(1)} className="w-full sm:w-auto">← Modifier la formation</Button>
                 <Button
                   onClick={submit}
-                  disabled={!form.student_name || !form.student_email}
+                  disabled={!form.student_name || !form.student_email || !privacyConsent}
                   className="w-full sm:w-auto bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
                   data-testid="inscr-submit"
                 >

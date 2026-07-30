@@ -221,7 +221,7 @@ export default function Settings() {
             <div className="space-y-4 max-w-xl">
               <Field label="Google Analytics 4 — Measurement ID" value={s.google_analytics_id} onChange={(v) => update("google_analytics_id", v)} testid="ga-id" placeholder="G-XXXXXXXX" />
               <Field label="Plausible — domaine (RGPD friendly)" value={s.plausible_domain} onChange={(v) => update("plausible_domain", v)} testid="plausible-domain" placeholder="tdlformation.fr" />
-              <p className="text-xs text-gray-500">💡 Plausible est privacy-friendly (pas de cookie banner nécessaire). GA4 nécessite une bannière de consentement RGPD.</p>
+              <p className="text-xs text-gray-500">💡 Plausible est privacy-friendly (chargé sans attendre de consentement). GA4 et Meta Pixel ne se chargent que si le visiteur a accepté via le bandeau cookies du site (mesure d'audience / publicité).</p>
 
               <div className="pt-4 border-t border-gray-200">
                 <p className="text-sm font-semibold mb-1">Meta (Facebook) Pixel</p>

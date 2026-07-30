@@ -41,6 +41,8 @@ import DocumentsLibrary from "@/pages/DocumentsLibrary";
 import DocTemplates from "@/pages/DocTemplates";
 import Leads from "@/pages/Leads";
 import AnalyticsLoader from "@/components/AnalyticsLoader";
+import CookieConsent from "@/components/CookieConsent";
+import PolitiqueConfidentialite from "@/pages/PolitiqueConfidentialite";
 
 function ProtectedRoute({ children, roles }) {
   const { user } = useAuth();
@@ -77,6 +79,7 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <AnalyticsLoader />
+          <CookieConsent />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
@@ -96,6 +99,7 @@ function App() {
             <Route path="/formation-ssiap" element={<SsiapLanding />} />
             <Route path="/formation-taxi" element={<TaxiFormationLanding />} />
             <Route path="/mentions-legales" element={<MentionsLegales />} />
+            <Route path="/politique-de-confidentialite" element={<PolitiqueConfidentialite />} />
             <Route path="/faq" element={<FAQ />} />
 
             <Route path="/espace-eleve" element={

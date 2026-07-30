@@ -1,21 +1,36 @@
 import { useEffect } from "react";
 import { api } from "@/lib/api";
+import { hasConsent, CONSENT_CHANGED_EVENT } from "@/lib/consent";
 
 /**
- * Injects analytics scripts (GA4 and/or Plausible) based on public site config.
- * Only loads on public routes (skips /admin and /login by default).
+ * Injects analytics scripts (GA4 and/or Plausible) and the Meta Pixel based on
+ * public site config — mais seulement si le visiteur y a consenti (bandeau
+ * cookies, voir lib/consent.js). Plausible est exempté du consentement
+ * (mesure d'audience sans cookie ni donnée personnelle, cf. recommandations
+ * CNIL) ; GA4 et Meta Pixel nécessitent respectivement le consentement
+ * "analytics" et "marketing". Rien n'est injecté sur /admin ou /login.
  */
 export default function AnalyticsLoader() {
   useEffect(() => {
     const path = window.location.pathname;
     if (path.startsWith("/admin") || path === "/login") return;
     let cancelled = false;
+    let cfgCache = null;
 
-    api.get("/public/site-config").then((r) => {
-      if (cancelled) return;
-      const cfg = r.data || {};
-      // GA4
-      if (cfg.google_analytics_id && !document.getElementById("ga4-tag")) {
+    const inject = (cfg) => {
+      // Plausible — pas de cookie, pas de donnée personnelle : chargé sans
+      // attendre de consentement (cf. exemption CNIL "mesure d'audience").
+      if (cfg.plausible_domain && !document.getElementById("plausible-tag")) {
+        const s = document.createElement("script");
+        s.id = "plausible-tag";
+        s.defer = true;
+        s.setAttribute("data-domain", cfg.plausible_domain);
+        s.src = "https://plausible.io/js/script.js";
+        document.head.appendChild(s);
+      }
+
+      // GA4 — nécessite le consentement "mesure d'audience".
+      if (cfg.google_analytics_id && hasConsent("analytics") && !document.getElementById("ga4-tag")) {
         const s1 = document.createElement("script");
         s1.id = "ga4-tag";
         s1.async = true;
@@ -26,19 +41,11 @@ export default function AnalyticsLoader() {
         s2.innerHTML = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${cfg.google_analytics_id}');`;
         document.head.appendChild(s2);
       }
-      // Plausible
-      if (cfg.plausible_domain && !document.getElementById("plausible-tag")) {
-        const s = document.createElement("script");
-        s.id = "plausible-tag";
-        s.defer = true;
-        s.setAttribute("data-domain", cfg.plausible_domain);
-        s.src = "https://plausible.io/js/script.js";
-        document.head.appendChild(s);
-      }
-      // Meta (Facebook) Pixel — base code + PageView. Les événements custom
-      // (recherche, prise de rendez-vous, inscription...) sont envoyés depuis
-      // lib/metaPixel.js une fois ce script chargé.
-      if (cfg.meta_pixel_id && !document.getElementById("meta-pixel-tag")) {
+
+      // Meta (Facebook) Pixel — nécessite le consentement "publicité/marketing".
+      // Les événements custom (lib/metaPixel.js) vérifient eux aussi le
+      // consentement avant d'appeler fbq(), en plus de cette garde ici.
+      if (cfg.meta_pixel_id && hasConsent("marketing") && !document.getElementById("meta-pixel-tag")) {
         const s = document.createElement("script");
         s.id = "meta-pixel-tag";
         s.innerHTML = `
@@ -52,9 +59,21 @@ export default function AnalyticsLoader() {
         `;
         document.head.appendChild(s);
       }
+    };
+
+    api.get("/public/site-config").then((r) => {
+      if (cancelled) return;
+      cfgCache = r.data || {};
+      inject(cfgCache);
     }).catch(() => {});
 
-    return () => { cancelled = true; };
+    // Si le visiteur accepte via le bandeau APRÈS le chargement initial de la
+    // page, on injecte immédiatement les scripts nouvellement autorisés —
+    // sans ça il faudrait recharger la page pour que le consentement prenne effet.
+    const onConsentChange = () => { if (cfgCache) inject(cfgCache); };
+    window.addEventListener(CONSENT_CHANGED_EVENT, onConsentChange);
+
+    return () => { cancelled = true; window.removeEventListener(CONSENT_CHANGED_EVENT, onConsentChange); };
   }, []);
 
   return null;

@@ -64,8 +64,11 @@ const SECTIONS = [
     content: (
       <p>
         Le site respecte la réglementation en vigueur en matière de protection des données personnelles, notamment
-        le Règlement Général sur la Protection des Données (RGPD). Pour toute demande relative à vos données
-        personnelles, vous pouvez nous contacter à l'adresse :{" "}
+        le Règlement Général sur la Protection des Données (RGPD) et la loi Informatique et Libertés. Le détail des
+        données collectées, des finalités, des durées de conservation et de vos droits est disponible dans notre{" "}
+        <Link to="/politique-de-confidentialite" className="text-[#d4af37] hover:underline">
+          politique de confidentialité
+        </Link>. Pour toute demande relative à vos données personnelles, vous pouvez nous contacter à l'adresse :{" "}
         <a href="mailto:contact@tdl-formation.fr" className="text-[#d4af37] hover:underline">contact@tdl-formation.fr</a>
       </p>
     ),

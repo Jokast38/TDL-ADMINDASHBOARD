@@ -54,6 +54,9 @@ export default function StageRecuperationPointsLanding() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (!form.privacyConsent) {
+      return toast.error("Merci d'accepter l'utilisation de vos données pour continuer");
+    }
     if (!form.prenom.trim() || !form.nom.trim() || !form.telephone.trim()) {
       return toast.error("Merci de remplir tous les champs");
     }

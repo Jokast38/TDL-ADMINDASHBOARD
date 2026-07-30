@@ -26,6 +26,7 @@ import FormationCard from "@/components/FormationCard";
 import ChatWidget from "@/components/ChatWidget";
 import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
+import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { setPageMeta } from "@/lib/seo";
 
 const CATEGORIES = [
@@ -196,6 +197,7 @@ export default function Landing() {
   const [formations, setFormations] = useState([]);
 
   const [contactForm, setContactForm] = useState({ prenom: "", nom: "", email: "", telephone: "", message: "" });
+  const [contactPrivacyConsent, setContactPrivacyConsent] = useState(false);
   const [contactSending, setContactSending] = useState(false);
   const [contactSent, setContactSent] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -217,6 +219,9 @@ export default function Landing() {
 
   const submitContact = async (e) => {
     e.preventDefault();
+    if (!contactPrivacyConsent) {
+      return toast.error("Merci d'accepter l'utilisation de vos données pour continuer");
+    }
     if (!contactForm.prenom.trim() || !contactForm.nom.trim() || !contactForm.telephone.trim()) {
       return toast.error("Merci de remplir au moins nom, prénom et téléphone");
     }
@@ -619,7 +624,8 @@ export default function Landing() {
                   <label className="text-xs font-mono uppercase tracking-wider text-gray-500 mb-1.5 block">Message</label>
                   <Textarea rows={4} value={contactForm.message} onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })} placeholder="Votre projet, la formation qui vous intéresse..." />
                 </div>
-                <Button type="submit" disabled={contactSending} className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+                <PrivacyConsentCheckbox checked={contactPrivacyConsent} onChange={setContactPrivacyConsent} testId="contact-privacy-consent" />
+                <Button type="submit" disabled={contactSending || !contactPrivacyConsent} className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
                   {contactSending ? "Envoi..." : "Envoyer le message"}
                 </Button>
               </form>

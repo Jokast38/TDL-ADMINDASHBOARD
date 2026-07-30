@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { setPageMeta } from "@/lib/seo";
+import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,7 @@ export default function TaxiFormationLanding() {
   const [form, setForm] = useState({ prenom: "", nom: "", email: "", telephone: "", formation: FORMATIONS[0], financement: "", message: "" });
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [privacyConsent, setPrivacyConsent] = useState(false);
   const formRef = useRef(null);
   const revealRef = useReveal();
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -72,6 +74,9 @@ export default function TaxiFormationLanding() {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (!privacyConsent) {
+      return toast.error("Merci d'accepter l'utilisation de vos données pour continuer");
+    }
     if (!form.prenom.trim() || !form.nom.trim() || !form.telephone.trim()) {
       return toast.error("Merci de remplir tous les champs obligatoires");
     }
@@ -188,7 +193,8 @@ export default function TaxiFormationLanding() {
                 </select>
               </div>
               <textarea value={form.message} onChange={(e) => set("message", e.target.value)} placeholder="Parlez-nous brièvement de votre projet (facultatif)" rows={3} className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
-              <Button type="submit" disabled={sending} style={{ backgroundColor: GOLD }} className="w-full text-black font-bold uppercase text-xs tracking-wide py-6">
+              <PrivacyConsentCheckbox checked={privacyConsent} onChange={setPrivacyConsent} testId="taxi-privacy-consent" />
+              <Button type="submit" disabled={sending || !privacyConsent} style={{ backgroundColor: GOLD }} className="w-full text-black font-bold uppercase text-xs tracking-wide py-6">
                 {sending ? "Envoi..." : "Recevoir le programme"} <CaretRight size={12} className="ml-1" weight="bold" />
               </Button>
             </form>
