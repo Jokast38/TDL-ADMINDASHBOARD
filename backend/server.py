@@ -18,9 +18,10 @@ from routers import (
     leads, employees, settings, dashboard, ai, blog,
     wordpress, stages, emargements, doc_templates,
     generated_docs, health, callback, tracking, reviews, chatbot, notifications,
-    custom_email, lead_automations, limova, payments, push,
+    custom_email, lead_automations, limova, payments, push, reminders,
 )
 from routers.lead_automations import run_due_automations
+from services.staff_notify import send_pending_callback_reminders
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -78,6 +79,7 @@ app.include_router(lead_automations.router, prefix=_PREFIX)
 app.include_router(limova.router,         prefix=_PREFIX)
 app.include_router(payments.router,       prefix=_PREFIX)
 app.include_router(push.router,           prefix=_PREFIX)
+app.include_router(reminders.router,      prefix=_PREFIX)
 
 # Fichiers uploadés depuis l'admin (ex: images de couverture d'articles de blog),
 # servis en statique — indépendant du service de stockage objet externe Emergent.
@@ -207,11 +209,28 @@ async def _automations_loop():
         await asyncio.sleep(3600)
 
 
+async def _callback_reminders_loop():
+    """Toutes les 4h, relance par email/push le personnel assigné pour chaque
+    demande de rappel encore non traitée depuis plus d'1h. Même limite que
+    _automations_loop sur le plan gratuit Render (le service peut dormir) —
+    POST /api/reminders/callbacks/run permet un déclenchement manuel/cron."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_pending_callback_reminders()
+            if notified:
+                log.info(f"Rappels demandes de rappel : {notified} employé(s) notifié(s)")
+        except Exception as e:
+            log.warning(f"Rappels demandes de rappel : erreur — {e}")
+        await asyncio.sleep(4 * 3600)
+
+
 @app.on_event("startup")
 async def startup():
     asyncio.create_task(_background_init())
     asyncio.create_task(asyncio.to_thread(init_storage))
     asyncio.create_task(_automations_loop())
+    asyncio.create_task(_callback_reminders_loop())
 
 
 @app.on_event("shutdown")
