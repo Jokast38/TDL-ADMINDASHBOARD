@@ -94,14 +94,14 @@ export default function PublicInscription() {
         {paiementResult === "succes" && (
           <div className="text-center py-12" data-testid="payment-success">
             <CheckCircle size={64} className="mx-auto text-[#0B7238] mb-4" weight="fill" />
-            <h1 className="font-display text-4xl font-bold tracking-tight">Paiement confirmé !</h1>
+            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">Paiement confirmé !</h1>
             <p className="text-gray-500 mt-3 max-w-md mx-auto">
               Merci, votre paiement a bien été enregistré. Un conseiller TDL Formation revient vers vous pour la suite
               de votre dossier.
             </p>
-            <div className="flex justify-center gap-3 mt-8">
-              <Link to="/"><Button variant="outline">Retour à l'accueil</Button></Link>
-              <Link to="/login"><Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Accéder à mon espace</Button></Link>
+            <div className="flex flex-col sm:flex-row justify-center gap-3 mt-8 px-4">
+              <Link to="/" className="w-full sm:w-auto"><Button variant="outline" className="w-full">Retour à l'accueil</Button></Link>
+              <Link to="/login" className="w-full sm:w-auto"><Button className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Accéder à mon espace</Button></Link>
             </div>
           </div>
         )}
@@ -109,18 +109,18 @@ export default function PublicInscription() {
         {paiementResult === "annule" && (
           <div className="text-center py-12" data-testid="payment-cancelled">
             <XCircle size={64} className="mx-auto text-amber-500 mb-4" weight="fill" />
-            <h1 className="font-display text-4xl font-bold tracking-tight">Paiement annulé</h1>
+            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">Paiement annulé</h1>
             <p className="text-gray-500 mt-3 max-w-md mx-auto">
               Votre inscription reste bien enregistrée — seul le paiement a été annulé. Vous pouvez réessayer à tout
               moment, ou nous contacter directement.
             </p>
-            <div className="flex justify-center gap-3 mt-8">
+            <div className="flex flex-col sm:flex-row justify-center gap-3 mt-8 px-4">
               {returnedInscriptionId && (
-                <Button onClick={() => payNow(returnedInscriptionId)} disabled={payLoading} className="bg-[#d4af37] text-black hover:bg-[#b8941f]">
+                <Button onClick={() => payNow(returnedInscriptionId)} disabled={payLoading} className="w-full sm:w-auto bg-[#d4af37] text-black hover:bg-[#b8941f]">
                   {payLoading ? "Redirection..." : "Réessayer le paiement"}
                 </Button>
               )}
-              <Link to="/"><Button variant="outline">Retour à l'accueil</Button></Link>
+              <Link to="/" className="w-full sm:w-auto"><Button variant="outline" className="w-full">Retour à l'accueil</Button></Link>
             </div>
           </div>
         )}
@@ -142,7 +142,7 @@ export default function PublicInscription() {
         {step === 1 && (
           <div data-testid="step-1">
             <p className="overline">Étape 1 / 3</p>
-            <h1 className="font-display text-4xl font-bold tracking-tight mt-1 mb-6">Choisir une formation</h1>
+            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-1 mb-6">Choisir une formation</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {formations.map((f) => (
                 <Card
@@ -166,7 +166,7 @@ export default function PublicInscription() {
         {step === 2 && selected && (
           <div data-testid="step-2">
             <p className="overline">Étape 2 / 3</p>
-            <h1 className="font-display text-4xl font-bold tracking-tight mt-1 mb-2">Vos informations</h1>
+            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-1 mb-2">Vos informations</h1>
             <p className="text-gray-500 mb-6">Formation choisie : <strong>{selected.title}</strong> — {selected.price}€</p>
             <Card className="p-6 border border-gray-200 rounded-md shadow-none">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -187,12 +187,12 @@ export default function PublicInscription() {
                   <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} data-testid="inscr-notes" />
                 </div>
               </div>
-              <div className="flex justify-between mt-6">
-                <Button variant="outline" onClick={() => setStep(1)}>← Modifier la formation</Button>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-6">
+                <Button variant="outline" onClick={() => setStep(1)} className="w-full sm:w-auto">← Modifier la formation</Button>
                 <Button
                   onClick={submit}
                   disabled={!form.student_name || !form.student_email}
-                  className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
+                  className="w-full sm:w-auto bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
                   data-testid="inscr-submit"
                 >
                   Valider mon inscription <ArrowRight size={16} className="ml-2" />
@@ -205,7 +205,7 @@ export default function PublicInscription() {
         {step === 3 && success && (
           <div data-testid="step-3" className="text-center py-12">
             <CheckCircle size={64} className="mx-auto text-[#0B7238] mb-4" weight="fill" />
-            <h1 className="font-display text-4xl font-bold tracking-tight">Inscription confirmée !</h1>
+            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight">Inscription confirmée !</h1>
             <p className="text-gray-500 mt-3 max-w-md mx-auto">
               Votre dossier <span className="font-mono">{success.dossier?.id?.slice(0, 8)}</span> a été créé.
               Vous allez recevoir un email avec les étapes suivantes.
@@ -244,9 +244,9 @@ export default function PublicInscription() {
               </Card>
             )}
 
-            <div className="flex justify-center gap-3 mt-8">
-              <Link to="/"><Button variant="outline">Retour à l'accueil</Button></Link>
-              <Link to="/login"><Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Accéder à mon espace</Button></Link>
+            <div className="flex flex-col sm:flex-row justify-center gap-3 mt-8 px-4">
+              <Link to="/" className="w-full sm:w-auto"><Button variant="outline" className="w-full">Retour à l'accueil</Button></Link>
+              <Link to="/login" className="w-full sm:w-auto"><Button className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Accéder à mon espace</Button></Link>
             </div>
           </div>
         )}
