@@ -109,6 +109,15 @@ async def cancel_inscription(iid: str, user: dict = Depends(require_role(*ROLES_
     return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
 
 
+@router.delete("/inscriptions/{iid}")
+async def delete_inscription(iid: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    existing = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    await db.inscriptions.delete_one({"id": iid})
+    return {"ok": True}
+
+
 @router.post("/inscriptions/{iid}/reactivate")
 async def reactivate_inscription(iid: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
     existing = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
@@ -202,3 +211,12 @@ async def update_dossier(did: str, payload: DossierUpdate, user: dict = Depends(
                 pass
 
     return await db.dossiers.find_one({"id": did}, {"_id": 0})
+
+
+@router.delete("/dossiers/{did}")
+async def delete_dossier(did: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    existing = await db.dossiers.find_one({"id": did}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Dossier introuvable")
+    await db.dossiers.delete_one({"id": did})
+    return {"ok": True}

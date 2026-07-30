@@ -119,6 +119,11 @@ export default function Inscriptions() {
     catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
   };
 
+  const deleteInscription = async (id) => {
+    try { await api.delete(`/inscriptions/${id}`); toast.success("Inscription supprimée"); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+  };
+
   const openEdit = (i) => {
     setEditItem(i);
     setEditForm({ student_name: i.student_name || "", student_phone: i.student_phone || "", notes: i.notes || "" });
@@ -300,6 +305,28 @@ export default function Inscriptions() {
                             </AlertDialogContent>
                           </AlertDialog>
                         )}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <button className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Supprimer définitivement">
+                              <Trash size={14} />
+                            </button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Supprimer définitivement cette inscription ?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                <span className="font-semibold">{i.student_name}</span> — {i.formation_title}. Cette action est irréversible
+                                (contrairement à "Annuler", qui garde une trace). Le dossier associé n'est pas supprimé.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Retour</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteInscription(i.id)} className="bg-red-600 hover:bg-red-700 text-white">
+                                Supprimer définitivement
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </td>
                   </tr>

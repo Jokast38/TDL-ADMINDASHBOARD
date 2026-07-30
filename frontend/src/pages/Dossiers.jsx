@@ -3,9 +3,13 @@ import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Kanban, FolderOpen, ArrowSquareOut, FileArrowUp, CheckCircle, XCircle, PaperPlaneTilt, Warning } from "@phosphor-icons/react";
+import { Kanban, FolderOpen, ArrowSquareOut, FileArrowUp, CheckCircle, XCircle, PaperPlaneTilt, Warning, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const COLUMNS = [
@@ -78,6 +82,17 @@ export default function Dossiers() {
     }
   };
 
+  const deleteDossier = async (id) => {
+    try {
+      await api.delete(`/dossiers/${id}`);
+      toast.success("Dossier supprimé");
+      if (selected?.id === id) setSelected(null);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
   const verifyDoc = async (docId, status) => {
     await api.put(`/documents/${docId}/verify`, null, { params: { status } });
     toast.success("Document " + (status === "approved" ? "approuvé" : "rejeté"));
@@ -118,11 +133,38 @@ export default function Dossiers() {
                     draggable
                     onDragStart={() => setDragging(d.id)}
                     onClick={() => openDossier(d)}
-                    className="kanban-card bg-white p-4 rounded-md border border-gray-200 shadow-sm hover:border-[#0a0a0a]"
+                    className="kanban-card relative group bg-white p-4 rounded-md border border-gray-200 shadow-sm hover:border-[#0a0a0a]"
                     data-testid={`dossier-card-${d.id}`}
                   >
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute top-2 right-2 p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Supprimer le dossier"
+                          data-testid={`delete-dossier-${d.id}`}
+                        >
+                          <Trash size={13} />
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Supprimer définitivement ce dossier ?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            <span className="font-semibold">{d.student_name}</span> — {d.formation_title}. Les documents liés et la carte Trello ne
+                            seront pas automatiquement supprimés. Cette action est irréversible.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Annuler</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteDossier(d.id)} className="bg-red-600 hover:bg-red-700 text-white">
+                            Supprimer définitivement
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                     <p className="text-xs text-gray-500 mb-1">{d.category}</p>
-                    <p className="font-semibold text-sm leading-tight">{d.student_name}</p>
+                    <p className="font-semibold text-sm leading-tight pr-4">{d.student_name}</p>
                     <p className="text-xs text-gray-600 mt-1 truncate">{d.formation_title}</p>
                     {d.nb_documents_manquants > 0 && (
                       <p className="text-[10px] text-amber-700 mt-2 flex items-center gap-1">
@@ -162,9 +204,33 @@ export default function Dossiers() {
           {selected && (
             <>
               <DialogHeader>
-                <DialogTitle className="font-display">
-                  Dossier — {selected.student_name}
-                </DialogTitle>
+                <div className="flex items-center justify-between gap-3 pr-6">
+                  <DialogTitle className="font-display">
+                    Dossier — {selected.student_name}
+                  </DialogTitle>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <button className="p-1.5 text-red-600 hover:bg-red-50 rounded shrink-0" title="Supprimer le dossier" data-testid="dossier-delete-btn">
+                        <Trash size={16} />
+                      </button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Supprimer définitivement ce dossier ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          <span className="font-semibold">{selected.student_name}</span> — {selected.formation_title}. Les documents liés et la
+                          carte Trello ne seront pas automatiquement supprimés. Cette action est irréversible.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteDossier(selected.id)} className="bg-red-600 hover:bg-red-700 text-white">
+                          Supprimer définitivement
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </DialogHeader>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-2">
                 <div>
