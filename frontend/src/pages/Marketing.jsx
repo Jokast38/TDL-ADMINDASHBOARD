@@ -24,10 +24,18 @@ import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
+import { useAuth } from "@/contexts/AuthContext";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
 
+// Onglet "Agents IA" (Limova) : déclenche de vraies actions payantes (appels,
+// LinkedIn) — réservé à l'admin et aux employés, pas ouvert à tout le
+// personnel comme le reste de la page Marketing.
+const AGENTS_TAB_ROLES = ["admin", "employe"];
+
 export default function Marketing() {
+  const { user } = useAuth();
+  const canSeeAgentsTab = AGENTS_TAB_ROLES.includes(user?.role);
   const [prompt, setPrompt] = useState("Plan marketing complet pour booster les inscriptions CACES et auto-école sur Paris");
   const [loading, setLoading] = useState(false);
   const [plan, setPlan] = useState("");
@@ -66,7 +74,9 @@ export default function Marketing() {
           <TabsTrigger value="emails" data-testid="tab-emails"><EnvelopeSimple size={14} className="mr-1" /> Emails</TabsTrigger>
           <TabsTrigger value="compose" data-testid="tab-compose"><PencilSimple size={14} className="mr-1" /> Email personnalisé</TabsTrigger>
           <TabsTrigger value="landing" data-testid="tab-landing"><Browser size={14} className="mr-1" /> Landing pages</TabsTrigger>
-          <TabsTrigger value="agents" data-testid="tab-agents"><Robot size={14} className="mr-1" /> Agents IA</TabsTrigger>
+          {canSeeAgentsTab && (
+            <TabsTrigger value="agents" data-testid="tab-agents"><Robot size={14} className="mr-1" /> Agents IA</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview">
@@ -106,9 +116,11 @@ export default function Marketing() {
           <LandingPagesTab />
         </TabsContent>
 
-        <TabsContent value="agents">
-          <AgentsIaTab />
-        </TabsContent>
+        {canSeeAgentsTab && (
+          <TabsContent value="agents">
+            <AgentsIaTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

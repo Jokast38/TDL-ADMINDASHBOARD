@@ -111,6 +111,41 @@ def _normalize_interest(raw: str) -> str:
     return raw.strip()
 
 
+# Catégorie de formation (alignée sur Formation.category : CACES, PERMIS,
+# AUTO_ECOLE, SSIAP, VTC_TAXI, ECSR, VENTE) déduite de l'intérêt normalisé —
+# sert à router les leads vers le bon commercial/chargé d'admission assigné
+# (voir assigned_categories sur le profil employé) sans devoir refaire cette
+# déduction fuzzy à chaque requête de liste.
+_LABEL_TO_CATEGORY = {
+    "Passerelle VTC": "VTC_TAXI", "Passerelle Taxi": "VTC_TAXI", "Passerelle": "VTC_TAXI",
+    "Mobilité Taxi": "VTC_TAXI", "Mobilité": "VTC_TAXI", "VTC": "VTC_TAXI", "Taxi": "VTC_TAXI",
+    "CACES": "CACES", "SSIAP": "SSIAP", "Permis B": "AUTO_ECOLE",
+}
+
+
+def _category_for_interest(interest: Optional[str]) -> Optional[str]:
+    if not interest:
+        return None
+    if interest in _LABEL_TO_CATEGORY:
+        return _LABEL_TO_CATEGORY[interest]
+    s = _strip_accents(interest).lower()
+    if "ecsr" in s or "enseignant" in s:
+        return "ECSR"
+    if "conseiller de vente" in s or "vente" in s:
+        return "VENTE"
+    if "recuperation" in s or "points" in s:
+        return "PERMIS"
+    if "caces" in s:
+        return "CACES"
+    if "ssiap" in s:
+        return "SSIAP"
+    if "vtc" in s or "taxi" in s or "passerelle" in s or "mobilit" in s:
+        return "VTC_TAXI"
+    if "permis" in s:
+        return "AUTO_ECOLE"
+    return None
+
+
 def _detect_tdl_planning_columns(headers: list) -> Optional[dict]:
     clean = [_clean_header(h) for h in headers]
     has_responsable = any("responsable" in c or "inscription" in c or "provenance" in c for c in clean)
@@ -344,6 +379,7 @@ async def _insert_leads_dedup(leads: list) -> dict:
         if existing:
             skipped += 1
             continue
+        lead.setdefault("category", _category_for_interest(lead.get("interest")))
         await db.leads.insert_one(lead)
         inserted += 1
     if inserted:
@@ -393,7 +429,18 @@ async def list_leads(
         if values:
             query["interest"] = {"$in": values}
 
-    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, page, page_size)
+    # Un commercial/responsable commercial avec des catégories assignées ne voit
+    # que ses leads (+ ceux sans catégorie déduite, pour ne jamais en perdre) —
+    # les autres rôles (admin, admission...) voient tout, comportement inchangé.
+    assigned = user.get("assigned_categories") or []
+    scoped = user["role"] in ("commercial", "responsable_commercial") and assigned
+    if scoped:
+        query["$and"] = query.get("$and", []) + [
+            {"$or": [{"category": {"$in": assigned}}, {"category": None}, {"category": {"$exists": False}}]}
+        ]
+
+    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, page, page_size,
+                 tuple(sorted(assigned)) if scoped else None)
     cached = _leads_cache_get(cache_key)
     if cached is not None:
         return cached
@@ -446,6 +493,7 @@ async def create_lead(payload: LeadIn, user: dict = Depends(require_role(*ROLES_
     lead["contacted"] = False
     lead["status"] = "nouveau"
     lead["source"] = "manuel"
+    lead["category"] = _category_for_interest(lead.get("interest"))
     lead["created_at"] = now_iso()
     lead["updated_at"] = now_iso()
     await db.leads.insert_one(lead)
@@ -460,6 +508,11 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
     if not existing:
         raise HTTPException(status_code=404, detail="Lead introuvable")
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if "interest" in update:
+        update["category"] = _category_for_interest(update["interest"])
+    if update.get("contacted") or update.get("status") in ("contacte", "interesse", "pas_interesse"):
+        update["last_contacted_by"] = user["id"]
+        update.setdefault("last_contacted_at", now_iso())
     update["updated_at"] = now_iso()
     await db.leads.update_one({"id": lid}, {"$set": update})
     _leads_cache_clear()
@@ -591,6 +644,7 @@ async def send_relance_single(payload: LeadRelanceSingleIn, user: dict = Depends
     if payload.mark_contacted:
         update["contacted"] = True
         update["last_contacted_at"] = now_iso()
+        update["last_contacted_by"] = user["id"]
         update["status"] = "contacte"
     await db.leads.update_one({"id": payload.lead_id}, {"$set": update})
     if payload.add_tag:
@@ -618,6 +672,7 @@ async def send_relance(payload: LeadRelanceIn, user: dict = Depends(require_role
         if payload.mark_contacted:
             update["contacted"] = True
             update["last_contacted_at"] = now_iso()
+            update["last_contacted_by"] = user["id"]
             update["status"] = "contacte"
         await db.leads.update_one({"id": lead["id"]}, {"$set": update})
         if payload.add_tag:
@@ -653,6 +708,7 @@ async def send_broadcast(payload: LeadBroadcastIn, user: dict = Depends(require_
         if payload.mark_contacted:
             update["contacted"] = True
             update["last_contacted_at"] = now_iso()
+            update["last_contacted_by"] = user["id"]
             update["status"] = "contacte"
         await db.leads.update_one({"id": lead["id"]}, {"$set": update})
         if payload.add_tag:

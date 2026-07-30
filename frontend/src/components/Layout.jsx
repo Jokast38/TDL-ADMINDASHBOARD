@@ -5,25 +5,26 @@ import NotificationBell from "@/components/NotificationBell";
 import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
-  CalendarCheck, FilePdf, FileText, UsersThree, Key
+  CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp
 } from "@phosphor-icons/react";
 
 const navAll = [
   { to: "/admin", label: "Dashboard", icon: House, roles: ["admin", "employe", "responsable_admission", "agent_admin", "responsable_commercial"], end: true },
   { to: "/admin/formations", label: "Formations", icon: GraduationCap, roles: ["admin", "employe", "responsable_admission"] },
   { to: "/admin/stages", label: "Sessions de stage", icon: CalendarCheck, roles: ["admin", "responsable_admission"] },
-  { to: "/admin/inscriptions", label: "Inscriptions", icon: IdentificationCard, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
+  { to: "/admin/inscriptions", label: "Inscriptions", icon: IdentificationCard, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
   { to: "/admin/dossiers", label: "Dossiers (Kanban)", icon: Folders, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/leads", label: "Leads", icon: UsersThree, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
   { to: "/admin/documents-library", label: "Bibliothèque PDF", icon: FilePdf, roles: ["admin", "responsable_admission", "agent_admin"] },
   { to: "/admin/doc-templates", label: "Modèles PDF", icon: FileText, roles: ["admin"] },
   { to: "/admin/kami-street", label: "KAMI STREET", icon: ShoppingCart, roles: ["admin", "employe", "commercial", "responsable_commercial"] },
   { to: "/admin/orders", label: "Commandes", icon: Storefront, roles: ["admin", "employe", "commercial", "responsable_commercial"] },
-  { to: "/admin/ai", label: "Assistant IA", icon: Robot, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
+  { to: "/admin/ai", label: "Assistant IA", icon: Robot, roles: ["admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
   { to: "/admin/blog", label: "Blog", icon: Article, roles: ["admin", "employe"] },
   { to: "/admin/employees", label: "Employés", icon: Users, roles: ["admin", "responsable_commercial"] },
+  { to: "/admin/activite", label: "Activité", icon: TrendUp, roles: ["admin"] },
   { to: "/admin/settings", label: "Paramètres", icon: Gear, roles: ["admin"] },
-  { to: "/admin/marketing", label: "Marketing", icon: ChartBar, roles: ["admin"] },
+  { to: "/admin/marketing", label: "Marketing", icon: ChartBar, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
 ];
 
 const NOTIFICATION_ROLES = ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"];

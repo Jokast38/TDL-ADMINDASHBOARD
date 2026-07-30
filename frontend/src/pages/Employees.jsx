@@ -7,14 +7,29 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { Plus, Trash, Pause, Play, Archive, Warning, Key } from "@phosphor-icons/react";
+import { Plus, Trash, Pause, Play, Archive, Warning, Key, Tag } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-const empty = { email: "", name: "", role: "employe", phone: "", department: "", password: "" };
+const empty = { email: "", name: "", role: "employe", phone: "", department: "", password: "", assigned_categories: [] };
+
+// Catégories de formation (alignées sur Formation.category) — un commercial ou
+// un chargé d'admission assigné à une ou plusieurs catégories ne reçoit que les
+// leads/demandes de rappel les concernant (dashboard + email + push).
+const CATEGORY_OPTIONS = [
+  { key: "CACES", label: "CACES" },
+  { key: "PERMIS", label: "Récupération de points" },
+  { key: "AUTO_ECOLE", label: "Auto-école" },
+  { key: "SSIAP", label: "SSIAP" },
+  { key: "VTC_TAXI", label: "VTC / Taxi" },
+  { key: "ECSR", label: "ECSR" },
+  { key: "VENTE", label: "Conseiller de Vente" },
+];
+const ROLES_WITH_ASSIGNMENT = ["commercial", "responsable_commercial", "responsable_admission", "agent_admin"];
 
 const STATUS_BADGE = {
   actif: "bg-green-100 text-green-700 hover:bg-green-100",
@@ -30,6 +45,9 @@ export default function Employees() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
   const [statusTarget, setStatusTarget] = useState(null); // { user, newStatus }
+  const [categoriesTarget, setCategoriesTarget] = useState(null); // employee being edited
+  const [categoriesDraft, setCategoriesDraft] = useState([]);
+  const [savingCategories, setSavingCategories] = useState(false);
 
   const load = () => api.get("/employees").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
@@ -79,6 +97,29 @@ export default function Employees() {
   };
 
   const accountStatus = (u) => u.account_status || (u.active === false ? "suspendu" : "actif");
+
+  const openCategories = (u) => {
+    setCategoriesTarget(u);
+    setCategoriesDraft(u.assigned_categories || []);
+  };
+
+  const toggleCategoryDraft = (key) =>
+    setCategoriesDraft((prev) => prev.includes(key) ? prev.filter((c) => c !== key) : [...prev, key]);
+
+  const saveCategories = async () => {
+    if (!categoriesTarget) return;
+    setSavingCategories(true);
+    try {
+      await api.put(`/employees/${categoriesTarget.id}/categories`, { assigned_categories: categoriesDraft });
+      toast.success("Catégories mises à jour");
+      setCategoriesTarget(null);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSavingCategories(false);
+    }
+  };
 
   return (
     <div className="space-y-6" data-testid="employees-page">
@@ -138,6 +179,28 @@ export default function Employees() {
                 <label className="text-sm font-medium">Mot de passe initial</label>
                 <Input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} data-testid="emp-password" />
               </div>
+              {ROLES_WITH_ASSIGNMENT.includes(form.role) && (
+                <div className="sm:col-span-2">
+                  <label className="text-sm font-medium mb-1 block">Formations attribuées</label>
+                  <p className="text-xs text-gray-500 mb-2">Détermine quels leads et demandes de rappel cette personne reçoit.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {CATEGORY_OPTIONS.map((c) => (
+                      <label key={c.key} className="flex items-center gap-2 p-2 rounded-md border border-gray-200 hover:bg-gray-50 cursor-pointer text-sm">
+                        <Checkbox
+                          checked={form.assigned_categories.includes(c.key)}
+                          onCheckedChange={() => setForm((f) => ({
+                            ...f,
+                            assigned_categories: f.assigned_categories.includes(c.key)
+                              ? f.assigned_categories.filter((x) => x !== c.key)
+                              : [...f.assigned_categories, c.key],
+                          }))}
+                        />
+                        {c.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
@@ -155,6 +218,7 @@ export default function Employees() {
                 <th className="py-3 px-4 overline">Nom</th>
                 <th className="py-3 px-4 overline">Email</th>
                 <th className="py-3 px-4 overline">Rôle</th>
+                <th className="py-3 px-4 overline">Formations</th>
                 <th className="py-3 px-4 overline">Département</th>
                 <th className="py-3 px-4 overline">Statut</th>
                 <th className="py-3 px-4 overline text-right">Actions</th>
@@ -171,6 +235,21 @@ export default function Employees() {
                       <Badge className={u.role === "admin" ? "bg-[#0a0a0a] text-white hover:bg-[#0a0a0a]" : ""} variant={u.role === "admin" ? "default" : "outline"}>
                         {u.role}
                       </Badge>
+                    </td>
+                    <td className="py-3 px-4">
+                      {ROLES_WITH_ASSIGNMENT.includes(u.role) ? (
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {(u.assigned_categories || []).length ? (
+                            u.assigned_categories.map((c) => (
+                              <Badge key={c} variant="outline" className="text-[10px]">
+                                {CATEGORY_OPTIONS.find((o) => o.key === c)?.label || c}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-xs text-gray-400">Toutes (non assigné)</span>
+                          )}
+                        </div>
+                      ) : <span className="text-xs text-gray-300">—</span>}
                     </td>
                     <td className="py-3 px-4 text-gray-600">{u.department || "—"}</td>
                     <td className="py-3 px-4">
@@ -212,6 +291,15 @@ export default function Employees() {
                             data-testid={`unarchive-${u.id}`}
                           >
                             <Play size={14} />
+                          </button>
+                        )}
+                        {ROLES_WITH_ASSIGNMENT.includes(u.role) && (
+                          <button
+                            onClick={() => openCategories(u)}
+                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded" title="Attribuer des formations"
+                            data-testid={`categories-${u.id}`}
+                          >
+                            <Tag size={14} />
                           </button>
                         )}
                         <button
@@ -263,6 +351,30 @@ export default function Employees() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!categoriesTarget} onOpenChange={(v) => !v && setCategoriesTarget(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Formations attribuées — {categoriesTarget?.name}</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-500 -mt-1">
+            Cette personne ne recevra que les leads et demandes de rappel correspondant aux catégories cochées.
+            Aucune case cochée = elle voit tout (comportement par défaut).
+          </p>
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            {CATEGORY_OPTIONS.map((c) => (
+              <label key={c.key} className="flex items-center gap-2 p-2 rounded-md border border-gray-200 hover:bg-gray-50 cursor-pointer text-sm">
+                <Checkbox checked={categoriesDraft.includes(c.key)} onCheckedChange={() => toggleCategoryDraft(c.key)} />
+                {c.label}
+              </label>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setCategoriesTarget(null)} disabled={savingCategories}>Annuler</Button>
+            <Button onClick={saveCategories} disabled={savingCategories} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+              {savingCategories ? "Enregistrement..." : "Enregistrer"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

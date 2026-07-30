@@ -18,7 +18,7 @@ from routers import (
     leads, employees, settings, dashboard, ai, blog,
     wordpress, stages, emargements, doc_templates,
     generated_docs, health, callback, tracking, reviews, chatbot, notifications,
-    custom_email, lead_automations, limova, payments,
+    custom_email, lead_automations, limova, payments, push,
 )
 from routers.lead_automations import run_due_automations
 
@@ -77,6 +77,7 @@ app.include_router(custom_email.router,   prefix=_PREFIX)
 app.include_router(lead_automations.router, prefix=_PREFIX)
 app.include_router(limova.router,         prefix=_PREFIX)
 app.include_router(payments.router,       prefix=_PREFIX)
+app.include_router(push.router,           prefix=_PREFIX)
 
 # Fichiers uploadés depuis l'admin (ex: images de couverture d'articles de blog),
 # servis en statique — indépendant du service de stockage objet externe Emergent.
@@ -119,6 +120,9 @@ async def _background_init():
         await db.lead_automations.create_index("id", unique=True)
         await db.limova_campaigns.create_index("id", unique=True)
         await db.call_outcomes.create_index("call_id", unique=True)
+        await db.push_subscriptions.create_index("endpoint", unique=True)
+        await db.push_subscriptions.create_index("user_id")
+        await db.leads.create_index("category")
     except Exception as e:
         log.warning(f"Index creation: {e}")
 

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -9,7 +9,12 @@ class EmployeeIn(BaseModel):
     phone: Optional[str] = None
     department: Optional[str] = None
     password: str = Field(min_length=6)
+    assigned_categories: List[str] = []
 
 
 class AccountStatusIn(BaseModel):
     account_status: str  # "actif" | "suspendu" | "archive"
+
+
+class AssignedCategoriesIn(BaseModel):
+    assigned_categories: List[str] = []

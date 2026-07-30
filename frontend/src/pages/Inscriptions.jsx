@@ -18,12 +18,19 @@ const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", curr
 
 const PAYMENT_LABEL = { pending: "En attente", paid: "Payé", refunded: "Remboursé" };
 
-// Rappel de l'intérêt de la personne selon l'origine du formulaire : la
-// landing "offre fidélité" ne collecte qu'une session choisie, le formulaire
-// de contact du site un message libre — sinon on affiche "Non précisé".
+// Catégorie de formation déduite côté backend (voir routers/callback.py) selon
+// l'origine du formulaire — mêmes libellés que Employees.jsx (attribution).
+const CATEGORY_LABELS = {
+  CACES: "CACES", PERMIS: "Récupération de points", AUTO_ECOLE: "Auto-école",
+  SSIAP: "SSIAP", VTC_TAXI: "VTC / Taxi", ECSR: "ECSR", VENTE: "Conseiller de Vente",
+};
+
 const callbackInterest = (c) => {
-  if (c.source === "offre_fidelite") {
-    return c.session ? `Offre fidélité — session du ${c.session}` : "Offre fidélité — récupération de points";
+  if (c.source === "offre_fidelite" && c.session) {
+    return `Offre fidélité — session du ${c.session}`;
+  }
+  if (c.interest && CATEGORY_LABELS[c.interest]) {
+    return CATEGORY_LABELS[c.interest];
   }
   if (c.source === "contact_form") {
     return c.message?.trim() ? c.message.trim() : "Formulaire de contact du site";

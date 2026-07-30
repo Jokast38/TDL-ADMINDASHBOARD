@@ -31,6 +31,7 @@ import KamiStreet from "@/pages/KamiStreet";
 import Orders from "@/pages/Orders";
 import AIAssistant from "@/pages/AIAssistant";
 import Employees from "@/pages/Employees";
+import Activity from "@/pages/Activity";
 import Settings from "@/pages/Settings";
 import Marketing from "@/pages/Marketing";
 import AdminBlog from "@/pages/AdminBlog";
@@ -114,7 +115,7 @@ function App() {
               <ProtectedRoute roles={["admin", "responsable_admission"]}><AdminLayout><Stages /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/inscriptions" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Inscriptions /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Inscriptions /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/dossiers" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Dossiers /></AdminLayout></ProtectedRoute>
@@ -138,16 +139,19 @@ function App() {
               <ProtectedRoute roles={["admin", "employe"]}><AdminLayout><AdminBlog /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/ai" element={
-              <ProtectedRoute roles={["admin", "employe"]}><AdminLayout><AIAssistant /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><AIAssistant /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/employees" element={
               <ProtectedRoute roles={["admin", "responsable_commercial"]}><AdminLayout><Employees /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/activite" element={
+              <ProtectedRoute roles={["admin"]}><AdminLayout><Activity /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/settings" element={
               <ProtectedRoute roles={["admin"]}><AdminLayout><Settings /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/marketing" element={
-              <ProtectedRoute roles={["admin"]}><AdminLayout><Marketing /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Marketing /></AdminLayout></ProtectedRoute>
             } />
 
             <Route path="*" element={<Navigate to="/" replace />} />

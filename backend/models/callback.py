@@ -10,6 +10,10 @@ class CallbackRequestIn(BaseModel):
     message: Optional[str] = ""
     session: Optional[str] = ""
     source: Optional[str] = "offre_fidelite"
+    # Catégorie de formation concernée (CACES, PERMIS, AUTO_ECOLE, SSIAP,
+    # VTC_TAXI, ECSR, VENTE) — si la landing page ne la précise pas
+    # explicitement, elle est déduite de `source` (voir routers/callback.py).
+    interest: Optional[str] = None
 
 
 class CallbackRequestUpdate(BaseModel):

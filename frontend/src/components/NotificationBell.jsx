@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { Bell, BellRinging, PhoneCall, ChatCircleText } from "@phosphor-icons/react";
+import { Bell, BellRinging, PhoneCall, ChatCircleText, BellSimple } from "@phosphor-icons/react";
+import { pushSupported, getPushSubscriptionStatus, enablePushNotifications } from "@/lib/push";
 
 const POLL_MS = 60_000;
 
@@ -12,6 +14,7 @@ const POLL_MS = 60_000;
 export default function NotificationBell() {
   const [summary, setSummary] = useState(null);
   const [open, setOpen] = useState(false);
+  const [pushStatus, setPushStatus] = useState("checking");
   const ref = useRef(null);
   const navigate = useNavigate();
 
@@ -22,6 +25,21 @@ export default function NotificationBell() {
     const id = setInterval(load, POLL_MS);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!pushSupported()) { setPushStatus("unsupported"); return; }
+    getPushSubscriptionStatus().then(setPushStatus).catch(() => setPushStatus("unsupported"));
+  }, []);
+
+  const activatePush = async () => {
+    try {
+      await enablePushNotifications();
+      setPushStatus("subscribed");
+      toast.success("Notifications push activées");
+    } catch (e) {
+      toast.error(e.message || "Impossible d'activer les notifications push");
+    }
+  };
 
   useEffect(() => {
     const onClickOutside = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -87,6 +105,20 @@ export default function NotificationBell() {
               </>
             )}
           </div>
+          {pushStatus === "not-subscribed" && (
+            <button
+              onClick={activatePush}
+              className="w-full flex items-center gap-2 p-3 text-left text-xs font-medium text-[#0a0a0a] hover:bg-gray-50 border-t border-gray-100"
+              data-testid="enable-push-btn"
+            >
+              <BellSimple size={14} /> Activer les notifications push
+            </button>
+          )}
+          {pushStatus === "denied" && (
+            <p className="p-3 text-[11px] text-gray-400 border-t border-gray-100">
+              Notifications bloquées par le navigateur — autorisez-les dans les réglages du site pour les recevoir en push.
+            </p>
+          )}
         </div>
       )}
     </div>

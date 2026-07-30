@@ -7,7 +7,7 @@ from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
-from models.employee import EmployeeIn, AccountStatusIn
+from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 
 router = APIRouter(tags=["employees"])
@@ -57,6 +57,7 @@ async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role
     doc = {
         "id": str(uuid.uuid4()), "email": payload.email.lower(), "name": payload.name,
         "role": role, "phone": payload.phone, "department": payload.department,
+        "assigned_categories": payload.assigned_categories,
         "password_hash": hash_password(payload.password),
         "created_at": now_iso(), "active": True, "account_status": "actif",
         "must_change_password": True,
@@ -99,6 +100,20 @@ async def update_employee_status(uid: str, payload: AccountStatusIn, user: dict 
         "active": payload.account_status == "actif",
         "updated_at": now_iso()
     }})
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+
+
+@router.put("/employees/{uid}/categories")
+async def update_employee_categories(uid: str, payload: AssignedCategoriesIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
+    """Catégories de formation (CACES, PERMIS, AUTO_ECOLE, SSIAP, VTC_TAXI,
+    ECSR, VENTE) attribuées à un commercial/responsable commercial/chargé
+    d'admission — détermine quels leads et demandes de rappel il reçoit."""
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user["role"] != "admin" and target.get("role") not in MANAGEABLE_ROLES_BY_MANAGER:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes commerciaux")
+    await db.users.update_one({"id": uid}, {"$set": {"assigned_categories": payload.assigned_categories, "updated_at": now_iso()}})
     return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
 
 
@@ -175,6 +190,48 @@ async def get_my_signature_image(user: dict = Depends(require_role(*ROLES_ALL_ST
         raise HTTPException(status_code=404, detail="Aucune signature enregistrée")
     data, ct = await get_object(u["signature_path"])
     return Response(content=data, media_type=ct or "image/png")
+
+
+@router.get("/employees/activity")
+async def employees_activity(user: dict = Depends(require_role("admin"))):
+    """Productivité par employé : nombre de leads traités (contactés par lui),
+    résultats (intéressé/pas intéressé), demandes de rappel traitées, et charge
+    actuelle (leads en attente dans ses catégories assignées). Repose sur
+    `last_contacted_by` (leads) et `handled_by` (demandes de rappel), renseignés
+    à chaque relance/mise à jour manuelle — les leads traités avant l'ajout de
+    ce suivi n'apparaissent pas rétroactivement."""
+    staff = await db.users.find(
+        {"role": {"$in": list(VALID_STAFF_ROLES)}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "assigned_categories": 1, "active": 1},
+    ).to_list(500)
+
+    result = []
+    for s in staff:
+        uid = s["id"]
+        leads_contacted = await db.leads.count_documents({"last_contacted_by": uid})
+        leads_interesse = await db.leads.count_documents({"last_contacted_by": uid, "status": "interesse"})
+        leads_pas_interesse = await db.leads.count_documents({"last_contacted_by": uid, "status": "pas_interesse"})
+        callbacks_handled = await db.callback_requests.count_documents({"handled_by": uid})
+
+        assigned = s.get("assigned_categories") or []
+        pending_workload = None
+        if assigned:
+            pending_workload = await db.leads.count_documents({
+                "category": {"$in": assigned},
+                "contacted": {"$ne": True},
+            })
+
+        result.append({
+            **s,
+            "leads_contacted": leads_contacted,
+            "leads_interesse": leads_interesse,
+            "leads_pas_interesse": leads_pas_interesse,
+            "callbacks_handled": callbacks_handled,
+            "pending_workload": pending_workload,
+        })
+
+    result.sort(key=lambda x: x["leads_contacted"], reverse=True)
+    return result
 
 
 @router.get("/staff/{uid}/profile")
