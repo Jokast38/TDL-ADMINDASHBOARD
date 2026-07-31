@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from core.database import db
 from core.security import require_role
 from core.utils import now_iso
-from core.config import EMERGENT_LLM_KEY
+from core.config import EMERGENT_LLM_KEY, OLLAMA_API_KEY
 from models.settings import SettingsIn
 from services.trello import TrelloService
 
@@ -46,6 +46,6 @@ async def integrations_status(user: dict = Depends(require_role("admin", "employ
             "dossier": bool(s.get("n8n_webhook_dossier")),
             "payment": bool(s.get("n8n_webhook_payment")),
         },
-        "ai": {"configured": bool(EMERGENT_LLM_KEY)},
+        "ai": {"configured": bool(OLLAMA_API_KEY)},
         "storage": {"configured": bool(EMERGENT_LLM_KEY)},
     }

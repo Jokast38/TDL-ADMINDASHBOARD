@@ -6,6 +6,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Robot, PaperPlaneTilt, Lightning } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const CONTEXTS = [
   { key: "general", label: "Général", desc: "Assistance client générale" },
@@ -75,7 +77,7 @@ export default function AIAssistant() {
   return (
     <div className="space-y-6" data-testid="ai-page">
       <div>
-        <p className="overline flex items-center gap-2"><Lightning size={12} weight="fill" /> Claude Sonnet 4.5</p>
+        <p className="overline flex items-center gap-2"><Lightning size={12} weight="fill" /> Gemma 4</p>
         <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Assistant IA</h1>
         <p className="text-gray-500 mt-2">Assistance client, vérification documents, propositions de prix, marketing.</p>
       </div>
@@ -109,10 +111,14 @@ export default function AIAssistant() {
           )}
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[80%] p-4 rounded-md text-sm whitespace-pre-wrap ${
+              <div className={`max-w-[80%] p-4 rounded-md text-sm ${
                 m.role === "user" ? "bg-[#0a0a0a] text-white" : "bg-gray-100 text-gray-900"
               }`} data-testid={`msg-${m.role}-${i}`}>
-                {m.text}
+                {m.role === "ai" ? (
+                  <div className="space-y-3 leading-relaxed [&_p]:m-0 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_li]:pl-1 [&_h1]:font-display [&_h1]:text-lg [&_h1]:font-bold [&_h1]:m-0 [&_h2]:font-display [&_h2]:text-base [&_h2]:font-bold [&_h2]:m-0 [&_h3]:font-display [&_h3]:font-bold [&_h3]:m-0 [&_a]:underline [&_a]:underline-offset-2">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown>
+                  </div>
+                ) : m.text}
               </div>
             </div>
           ))}

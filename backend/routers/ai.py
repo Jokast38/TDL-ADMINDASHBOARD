@@ -4,10 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.database import db
 from core.security import get_current_user
 from core.utils import now_iso
-from core.config import EMERGENT_LLM_KEY
 from models.settings import ChatIn
+from services.chatbot import call_ollama
 
 router = APIRouter(tags=["ai"])
+MAX_HISTORY_MESSAGES = 12
 
 CONTEXT_PROMPTS = {
     "general": "Tu es l'assistant IA de TDL Formation, organisme français de formation (CACES, permis, auto-école, SSIAP, VTC/Taxi) et vente de mobilité électrique (KAMI STREET). Tu réponds en français, de manière professionnelle, claire et concise.",
@@ -19,25 +20,28 @@ CONTEXT_PROMPTS = {
 
 @router.post("/ai/chat")
 async def ai_chat(payload: ChatIn, user: dict = Depends(get_current_user)):
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Intégration LLM indisponible: {e}")
-
     session_id = payload.session_id or str(uuid.uuid4())
     system = CONTEXT_PROMPTS.get(payload.context, CONTEXT_PROMPTS["general"])
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY, session_id=session_id, system_message=system
-    ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+    history = await db.ai_messages.find(
+        {"session_id": session_id, "user_id": user["id"]},
+        {"_id": 0, "user_message": 1, "ai_response": 1},
+    ).sort("created_at", -1).to_list(MAX_HISTORY_MESSAGES)
+    history.reverse()
+    messages = [{"role": "system", "content": system}]
+    for item in history:
+        messages.append({"role": "user", "content": item["user_message"]})
+        messages.append({"role": "assistant", "content": item["ai_response"]})
+    messages.append({"role": "user", "content": payload.message})
+
     try:
-        response = await chat.send_message(UserMessage(text=payload.message))
+        response = await call_ollama(messages)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur IA: {e}")
+        raise HTTPException(status_code=502, detail=f"Erreur IA Ollama: {e}")
 
     log = {
         "id": str(uuid.uuid4()), "session_id": session_id, "user_id": user["id"],
         "context": payload.context, "user_message": payload.message,
-        "ai_response": response if isinstance(response, str) else str(response),
+        "ai_response": response,
         "created_at": now_iso()
     }
     await db.ai_messages.insert_one(log)

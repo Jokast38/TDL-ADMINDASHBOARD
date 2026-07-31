@@ -12,7 +12,7 @@
    - `MONGO_URL`, `DB_NAME`, `JWT_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`
    - `CORS_ORIGINS` = URL Vercel du frontend une fois connue (ex: `https://ton-app.vercel.app`)
    - `COOKIE_SECURE=true`
-   - `SMTP_*`, `EMERGENT_LLM_KEY`, `TRELLO_*`, `WORDPRESS_*`, `WOOCOMMERCE_*`, `GA4_PROPERTY_ID*` selon besoin
+   - `SMTP_*`, `OLLAMA_API_KEY`, `OLLAMA_MODEL=gemma4:31b`, `TRELLO_*`, `WORDPRESS_*`, `WOOCOMMERCE_*`, `GA4_PROPERTY_ID*` selon besoin
    - `GA4_SERVICE_ACCOUNT_JSON` : coller le contenu **complet** du fichier JSON de service GA4 sur une seule ligne (Render n'a pas le fichier local `tdl-analtics-reader-*.json`).
 4. Déployer. Vérifier `https://<service>.onrender.com/api/` → `{"service": "TDL Formation API", "status": "ok"}`.
    - Plan gratuit Render : le service se met en veille après inactivité (cold start ~30-60s au premier appel).
