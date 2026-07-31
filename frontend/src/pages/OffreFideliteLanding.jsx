@@ -102,6 +102,8 @@ export default function OffreFideliteLanding() {
         city="Épinay-sur-Seine (93)"
         seats="Places limitées"
         price={189}
+        originalPrice={240}
+        discounted
         priceLabel="tarif fidélité (au lieu de 240 €)"
         onReserve={() => chooseSession(session || NEXT_SESSION_LABEL)}
       />
@@ -148,6 +150,8 @@ export default function OffreFideliteLanding() {
         sent={sent}
         onSubmit={submit}
         price={189}
+        originalPrice={240}
+        discounted
         priceLabel="tarif fidélité"
       />
 

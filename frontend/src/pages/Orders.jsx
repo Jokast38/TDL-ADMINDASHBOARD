@@ -352,7 +352,7 @@ export default function Orders() {
                         </div>
                       )}
                       {selectedOrder.discount_total && parseFloat(selectedOrder.discount_total) > 0 && (
-                        <div className="flex justify-between text-sm text-green-600">
+                        <div className="flex justify-between text-sm text-red-600">
                           <span>Réduction</span>
                           <span className="font-mono">-{fmtMoney(selectedOrder.discount_total)}</span>
                         </div>

@@ -200,7 +200,7 @@ function StepsSection({ title, steps }) {
 }
 
 // ─── Bandeau prochaine session ────────────────────────────────────────────────
-function SessionBanner({ image, dateLabel, city, seats, price, priceLabel, onReserve }) {
+function SessionBanner({ image, dateLabel, city, seats, price, priceLabel, originalPrice, discounted, onReserve }) {
   return (
     <div className="bg-black text-white">
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-6 flex flex-col md:flex-row items-stretch gap-6">
@@ -215,7 +215,8 @@ function SessionBanner({ image, dateLabel, city, seats, price, priceLabel, onRes
         </div>
         <div className="flex flex-col items-start md:items-end justify-center gap-2 shrink-0">
           <div className="text-right">
-            <p className="font-display text-4xl font-extrabold">{price} €</p>
+            <p className={`font-display text-4xl font-extrabold ${discounted ? "text-red-500" : ""}`}>{price} €</p>
+            {discounted && originalPrice && <p className="text-xs text-gray-400 line-through">{originalPrice} €</p>}
             {priceLabel && <p className="text-xs text-gray-400">{priceLabel}</p>}
           </div>
           <Button onClick={onReserve} style={{ backgroundColor: GOLD }} className="text-black font-bold uppercase text-xs tracking-wide" data-testid="reserve-session-btn">
@@ -283,7 +284,7 @@ function FaqGrid({ items }) {
 }
 
 // ─── Formulaire de réservation ────────────────────────────────────────────────
-function BookingForm({ formRef, form, setForm, session, sending, sent, onSubmit, price, priceLabel }) {
+function BookingForm({ formRef, form, setForm, session, sending, sent, onSubmit, price, priceLabel, originalPrice, discounted }) {
   return (
     <section id="form" ref={formRef} className="py-16 lg:py-20 bg-white scroll-mt-20">
       <div className="max-w-lg mx-auto px-6">
@@ -291,7 +292,9 @@ function BookingForm({ formRef, form, setForm, session, sending, sent, onSubmit,
           <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>Réservation</p>
           <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">Réservez votre session</h2>
           <p className="text-gray-500 text-sm">
-            {price} € {priceLabel && <span className="text-gray-400">· {priceLabel}</span>}
+            <span className={discounted ? "text-red-600 font-bold" : ""}>{price} €</span>
+            {discounted && originalPrice && <span className="text-gray-400 line-through ml-2">{originalPrice} €</span>}
+            {priceLabel && <span className="text-gray-400"> · {priceLabel}</span>}
             {session && <span className="block mt-1 font-semibold text-black">Session choisie : {session}</span>}
           </p>
         </div>
