@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import PasswordInput from "@/components/PasswordInput";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
@@ -15,7 +15,11 @@ import {
 import { Plus, Trash, Pause, Play, Archive, Warning, Key, Tag } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-const empty = { email: "", name: "", role: "employe", phone: "", department: "", password: "", assigned_categories: [] };
+const empty = { email: "", name: "", role: "employe", phone: "", department: "", password: "", assigned_categories: [], assigned_centers: [], assigned_training_assignments: [] };
+const CENTER_OPTIONS = [
+  { key: "Épinay-sur-Seine (93)", label: "Épinay-sur-Seine (93)" },
+  { key: "Creil (60)", label: "Creil (60)" },
+];
 
 // Catégories de formation (alignées sur Formation.category) — un commercial ou
 // un chargé d'admission assigné à une ou plusieurs catégories ne reçoit que les
@@ -47,12 +51,17 @@ export default function Employees() {
   const [statusTarget, setStatusTarget] = useState(null); // { user, newStatus }
   const [categoriesTarget, setCategoriesTarget] = useState(null); // employee being edited
   const [categoriesDraft, setCategoriesDraft] = useState([]);
+  const [centersDraft, setCentersDraft] = useState([]);
+  const [assignmentsDraft, setAssignmentsDraft] = useState([]);
   const [savingCategories, setSavingCategories] = useState(false);
 
   const load = () => api.get("/employees").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
 
   const save = async () => {
+    if (form.assigned_training_assignments.some((assignment) => !assignment.category || !assignment.center)) {
+      return toast.error("Complétez ou supprimez chaque attribution incomplète");
+    }
     try {
       await api.post("/employees", form);
       toast.success("Employé créé");
@@ -101,6 +110,10 @@ export default function Employees() {
   const openCategories = (u) => {
     setCategoriesTarget(u);
     setCategoriesDraft(u.assigned_categories || []);
+    setCentersDraft(u.assigned_centers || []);
+    setAssignmentsDraft(u.assigned_training_assignments?.length
+      ? u.assigned_training_assignments
+      : (u.assigned_categories || []).flatMap((category) => (u.assigned_centers || []).map((center) => ({ category, center }))));
   };
 
   const toggleCategoryDraft = (key) =>
@@ -108,9 +121,14 @@ export default function Employees() {
 
   const saveCategories = async () => {
     if (!categoriesTarget) return;
+    if (assignmentsDraft.some((assignment) => !assignment.category || !assignment.center)) {
+      return toast.error("Complétez ou supprimez chaque attribution incomplète");
+    }
     setSavingCategories(true);
     try {
       await api.put(`/employees/${categoriesTarget.id}/categories`, { assigned_categories: categoriesDraft });
+      await api.put(`/employees/${categoriesTarget.id}/centers`, { assigned_centers: centersDraft });
+      await api.put(`/employees/${categoriesTarget.id}/assignments`, { assigned_training_assignments: assignmentsDraft });
       toast.success("Catégories mises à jour");
       setCategoriesTarget(null);
       load();
@@ -177,28 +195,16 @@ export default function Employees() {
               </div>
               <div className="sm:col-span-2">
                 <label className="text-sm font-medium">Mot de passe initial</label>
-                <Input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} data-testid="emp-password" />
+                <PasswordInput value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} data-testid="emp-password" />
               </div>
               {ROLES_WITH_ASSIGNMENT.includes(form.role) && (
                 <div className="sm:col-span-2">
-                  <label className="text-sm font-medium mb-1 block">Formations attribuées</label>
-                  <p className="text-xs text-gray-500 mb-2">Détermine quels leads et demandes de rappel cette personne reçoit.</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {CATEGORY_OPTIONS.map((c) => (
-                      <label key={c.key} className="flex items-center gap-2 p-2 rounded-md border border-gray-200 hover:bg-gray-50 cursor-pointer text-sm">
-                        <Checkbox
-                          checked={form.assigned_categories.includes(c.key)}
-                          onCheckedChange={() => setForm((f) => ({
-                            ...f,
-                            assigned_categories: f.assigned_categories.includes(c.key)
-                              ? f.assigned_categories.filter((x) => x !== c.key)
-                              : [...f.assigned_categories, c.key],
-                          }))}
-                        />
-                        {c.label}
-                      </label>
-                    ))}
-                  </div>
+                  <label className="text-sm font-medium mb-1 block">Cours et centre attribués</label>
+                  <p className="text-xs text-gray-500 mb-2">Ajoutez chaque combinaison séparément. Exemple : SSIAP à Épinay et CACES à Creil.</p>
+                  <AssignmentEditor
+                    assignments={form.assigned_training_assignments}
+                    onChange={(assigned_training_assignments) => setForm((f) => ({ ...f, assigned_training_assignments }))}
+                  />
                 </div>
               )}
             </div>
@@ -219,6 +225,7 @@ export default function Employees() {
                 <th className="py-3 px-4 overline">Email</th>
                 <th className="py-3 px-4 overline">Rôle</th>
                 <th className="py-3 px-4 overline">Formations</th>
+                <th className="py-3 px-4 overline">Centres</th>
                 <th className="py-3 px-4 overline">Département</th>
                 <th className="py-3 px-4 overline">Statut</th>
                 <th className="py-3 px-4 overline text-right">Actions</th>
@@ -235,6 +242,19 @@ export default function Employees() {
                       <Badge className={u.role === "admin" ? "bg-[#0a0a0a] text-white hover:bg-[#0a0a0a]" : ""} variant={u.role === "admin" ? "default" : "outline"}>
                         {u.role}
                       </Badge>
+                    </td>
+                    <td className="py-3 px-4">
+                      {ROLES_WITH_ASSIGNMENT.includes(u.role) ? (
+                        (u.assigned_training_assignments || []).length ? (
+                          <div className="flex flex-wrap gap-1 max-w-[180px]">
+                            {u.assigned_training_assignments.map((assignment, index) => (
+                              <Badge key={`${assignment.category}-${assignment.center}-${index}`} variant="outline" className="text-[10px]">
+                                {CATEGORY_OPTIONS.find((o) => o.key === assignment.category)?.label || assignment.category} · {assignment.center}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : <span className="text-xs text-gray-400">Ancienne attribution / tous</span>
+                      ) : <span className="text-xs text-gray-300">—</span>}
                     </td>
                     <td className="py-3 px-4">
                       {ROLES_WITH_ASSIGNMENT.includes(u.role) ? (
@@ -359,13 +379,12 @@ export default function Employees() {
             Cette personne ne recevra que les leads et demandes de rappel correspondant aux catégories cochées.
             Aucune case cochée = elle voit tout (comportement par défaut).
           </p>
-          <div className="grid grid-cols-2 gap-2 mt-2">
-            {CATEGORY_OPTIONS.map((c) => (
-              <label key={c.key} className="flex items-center gap-2 p-2 rounded-md border border-gray-200 hover:bg-gray-50 cursor-pointer text-sm">
-                <Checkbox checked={categoriesDraft.includes(c.key)} onCheckedChange={() => toggleCategoryDraft(c.key)} />
-                {c.label}
-              </label>
-            ))}
+          <div className="space-y-5 mt-2">
+          <div>
+            <p className="text-sm font-medium mb-2 flex items-center gap-1"><Tag size={15} /> Cours et centres attribués</p>
+            <p className="text-xs text-gray-500 mb-2">Chaque ligne est indépendante : vous pouvez attribuer des cours à des centres différents.</p>
+            <AssignmentEditor assignments={assignmentsDraft} onChange={setAssignmentsDraft} />
+          </div>
           </div>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setCategoriesTarget(null)} disabled={savingCategories}>Annuler</Button>
@@ -375,6 +394,49 @@ export default function Employees() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function AssignmentEditor({ assignments, onChange }) {
+  const addAssignment = () => onChange([...assignments, { category: "", center: "" }]);
+  const updateAssignment = (index, field, value) => {
+    onChange(assignments.map((assignment, currentIndex) =>
+      currentIndex === index ? { ...assignment, [field]: value } : assignment
+    ));
+  };
+  const removeAssignment = (index) => onChange(assignments.filter((_, currentIndex) => currentIndex !== index));
+
+  return (
+    <div className="space-y-2">
+      {assignments.map((assignment, index) => (
+        <div key={`${index}-${assignment.category}-${assignment.center}`} className="flex items-center gap-2">
+          <Select value={assignment.category} onValueChange={(value) => updateAssignment(index, "category", value)}>
+            <SelectTrigger className="flex-1"><SelectValue placeholder="Choisir un cours" /></SelectTrigger>
+            <SelectContent>
+              {CATEGORY_OPTIONS.map((category) => <SelectItem key={category.key} value={category.key}>{category.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={assignment.center} onValueChange={(value) => updateAssignment(index, "center", value)}>
+            <SelectTrigger className="flex-1"><SelectValue placeholder="Choisir un centre" /></SelectTrigger>
+            <SelectContent>
+              {CENTER_OPTIONS.map((center) => <SelectItem key={center.key} value={center.key}>{center.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <button
+            type="button"
+            onClick={() => removeAssignment(index)}
+            className="p-2 text-red-600 hover:bg-red-50 rounded"
+            title="Supprimer cette attribution"
+            aria-label="Supprimer cette attribution"
+          >
+            <Trash size={15} />
+          </button>
+        </div>
+      ))}
+      <Button type="button" size="sm" variant="outline" onClick={addAssignment}>
+        <Plus size={14} className="mr-1" /> Ajouter un cours dans un centre
+      </Button>
     </div>
   );
 }

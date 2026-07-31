@@ -14,6 +14,7 @@ class CallbackRequestIn(BaseModel):
     # VTC_TAXI, ECSR, VENTE) — si la landing page ne la précise pas
     # explicitement, elle est déduite de `source` (voir routers/callback.py).
     interest: Optional[str] = None
+    center: Optional[str] = None
 
 
 class CallbackRequestUpdate(BaseModel):

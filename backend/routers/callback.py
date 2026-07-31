@@ -41,6 +41,7 @@ async def create_callback_request(payload: CallbackRequestIn):
         "telephone": payload.telephone, "email": payload.email or "",
         "message": payload.message or "", "session": payload.session or "",
         "source": payload.source or "offre_fidelite", "interest": category,
+        "center": payload.center or "",
         "handled": False, "notes": "",
         "created_at": now_iso(),
     }
@@ -61,6 +62,8 @@ async def create_callback_request(payload: CallbackRequestIn):
     lines.append("</p>")
     if category:
         lines.append(f"<p>Intérêt : <b>{CATEGORY_LABELS.get(category, category)}</b></p>")
+    if payload.center:
+        lines.append(f"<p>Centre : <b>{payload.center}</b></p>")
     if payload.session:
         lines.append(f"<p>Session souhaitée : <b>{payload.session}</b></p>")
     if payload.message:
@@ -72,6 +75,7 @@ async def create_callback_request(payload: CallbackRequestIn):
         push_title="Nouvelle demande de rappel",
         push_body=f"{payload.prenom} {payload.nom} — {CATEGORY_LABELS.get(category, 'formation non précisée')}",
         push_url="/admin/inscriptions",
+        center=payload.center,
     )
 
     doc.pop("_id", None)
@@ -82,8 +86,23 @@ async def create_callback_request(payload: CallbackRequestIn):
 async def list_callback_requests(user: dict = Depends(require_role(*(ROLES_DOSSIERS_MGMT + _NOTIFY_ROLES)))):
     query = {}
     assigned = user.get("assigned_categories") or []
-    if user["role"] in ("commercial", "responsable_commercial", "responsable_admission", "agent_admin") and assigned:
-        query["$or"] = [{"interest": {"$in": assigned}}, {"interest": None}, {"interest": {"$exists": False}}]
+    centers = user.get("assigned_centers") or []
+    assignments = user.get("assigned_training_assignments") or []
+    if user["role"] in ("commercial", "responsable_commercial", "responsable_admission", "agent_admin"):
+        filters = []
+        if assignments:
+            pair_filters = [{"interest": a.get("category"), "center": a.get("center")} for a in assignments]
+            filters.append({"$or": [
+                {"interest": None}, {"interest": {"$exists": False}},
+                {"center": None}, {"center": {"$exists": False}}, {"center": ""},
+                *pair_filters,
+            ]})
+        elif assigned:
+            filters.append({"$or": [{"interest": {"$in": assigned}}, {"interest": None}, {"interest": {"$exists": False}}]})
+        if centers and not assignments:
+            filters.append({"$or": [{"center": {"$in": centers}}, {"center": None}, {"center": {"$exists": False}}, {"center": ""}]})
+        if filters:
+            query["$and"] = filters
     return await db.callback_requests.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
 

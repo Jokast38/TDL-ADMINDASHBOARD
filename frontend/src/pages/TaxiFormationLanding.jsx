@@ -88,7 +88,7 @@ export default function TaxiFormationLanding() {
       const message = [form.financement && `Financement envisagé : ${form.financement}`, form.message].filter(Boolean).join("\n");
       await api.post("/callback-requests", {
         prenom: form.prenom, nom: form.nom, telephone: form.telephone, email: form.email,
-        session: form.formation, message, source: "meta_formation_taxi",
+        session: form.formation, message, center: "Épinay-sur-Seine (93)", source: "meta_formation_taxi",
       });
       setSent(true);
       trackLead({ content_name: "formation_taxi", session: form.formation });

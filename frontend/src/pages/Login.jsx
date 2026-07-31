@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
+import PasswordInput from "@/components/PasswordInput";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Lock, Envelope, User as UserIcon, Phone } from "@phosphor-icons/react";
@@ -126,12 +127,11 @@ export default function Login() {
                   <label className="text-sm font-medium">Mot de passe</label>
                   <div className="relative">
                     <Lock size={16} className="absolute left-3 top-3 text-gray-400" />
-                    <Input
-                      type="password"
+                    <PasswordInput
                       value={loginPwd}
                       onChange={(e) => setLoginPwd(e.target.value)}
                       required
-                      className="pl-9"
+                      showLock
                       data-testid="login-password"
                     />
                   </div>
@@ -179,7 +179,7 @@ export default function Login() {
                   <label className="text-sm font-medium">Mot de passe</label>
                   <div className="relative">
                     <Lock size={16} className="absolute left-3 top-3 text-gray-400" />
-                    <Input type="password" value={regPwd} onChange={(e) => setRegPwd(e.target.value)} required className="pl-9" data-testid="register-password" />
+                    <PasswordInput value={regPwd} onChange={(e) => setRegPwd(e.target.value)} required showLock data-testid="register-password" />
                   </div>
                 </div>
                 <Button

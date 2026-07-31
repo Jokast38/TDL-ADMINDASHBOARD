@@ -10,6 +10,8 @@ class EmployeeIn(BaseModel):
     department: Optional[str] = None
     password: str = Field(min_length=6)
     assigned_categories: List[str] = []
+    assigned_centers: List[str] = []
+    assigned_training_assignments: List[dict] = []
 
 
 class AccountStatusIn(BaseModel):
@@ -18,3 +20,11 @@ class AccountStatusIn(BaseModel):
 
 class AssignedCategoriesIn(BaseModel):
     assigned_categories: List[str] = []
+
+
+class AssignedCentersIn(BaseModel):
+    assigned_centers: List[str] = []
+
+
+class AssignedTrainingAssignmentsIn(BaseModel):
+    assigned_training_assignments: List[dict] = []

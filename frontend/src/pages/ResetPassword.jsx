@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Input } from "@/components/ui/input";
+import PasswordInput from "@/components/PasswordInput";
 import { Button } from "@/components/ui/button";
 import { Lock, ArrowLeft, Warning } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -55,14 +56,14 @@ export default function ResetPassword() {
                 <label className="text-sm font-medium">Nouveau mot de passe</label>
                 <div className="relative">
                   <Lock size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="pl-9" data-testid="reset-password-new" />
+                  <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required showLock data-testid="reset-password-new" />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Confirmer le mot de passe</label>
                 <div className="relative">
                   <Lock size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required className="pl-9" data-testid="reset-password-confirm" />
+                  <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} required showLock data-testid="reset-password-confirm" />
                 </div>
               </div>
               <Button type="submit" disabled={loading} className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="reset-password-submit">

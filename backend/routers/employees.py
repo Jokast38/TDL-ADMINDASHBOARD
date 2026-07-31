@@ -7,7 +7,7 @@ from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
-from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn
+from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 
 router = APIRouter(tags=["employees"])
@@ -58,6 +58,8 @@ async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role
         "id": str(uuid.uuid4()), "email": payload.email.lower(), "name": payload.name,
         "role": role, "phone": payload.phone, "department": payload.department,
         "assigned_categories": payload.assigned_categories,
+        "assigned_centers": payload.assigned_centers,
+        "assigned_training_assignments": payload.assigned_training_assignments,
         "password_hash": hash_password(payload.password),
         "created_at": now_iso(), "active": True, "account_status": "actif",
         "must_change_password": True,
@@ -114,6 +116,28 @@ async def update_employee_categories(uid: str, payload: AssignedCategoriesIn, us
     if user["role"] != "admin" and target.get("role") not in MANAGEABLE_ROLES_BY_MANAGER:
         raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes commerciaux")
     await db.users.update_one({"id": uid}, {"$set": {"assigned_categories": payload.assigned_categories, "updated_at": now_iso()}})
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+
+
+@router.put("/employees/{uid}/centers")
+async def update_employee_centers(uid: str, payload: AssignedCentersIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user["role"] != "admin" and target.get("role") not in MANAGEABLE_ROLES_BY_MANAGER:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes commerciaux")
+    await db.users.update_one({"id": uid}, {"$set": {"assigned_centers": payload.assigned_centers, "updated_at": now_iso()}})
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+
+
+@router.put("/employees/{uid}/assignments")
+async def update_employee_assignments(uid: str, payload: AssignedTrainingAssignmentsIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user["role"] != "admin" and target.get("role") not in MANAGEABLE_ROLES_BY_MANAGER:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes commerciaux")
+    await db.users.update_one({"id": uid}, {"$set": {"assigned_training_assignments": payload.assigned_training_assignments, "updated_at": now_iso()}})
     return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
 
 
@@ -203,6 +227,7 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
     staff = await db.users.find(
         {"role": {"$in": list(VALID_STAFF_ROLES)}},
         {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "assigned_categories": 1, "active": 1},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1, "active": 1},
     ).to_list(500)
 
     result = []

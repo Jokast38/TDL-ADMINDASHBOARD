@@ -28,6 +28,7 @@ const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 
 export default function OffreFideliteLanding() {
   const [session, setSession] = useState("");
+  const [center, setCenter] = useState("");
   const [form, setForm] = useState({ prenom: "", nom: "", telephone: "" });
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -48,7 +49,8 @@ export default function OffreFideliteLanding() {
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const handleFindSessions = () => {
+  const handleFindSessions = (ville) => {
+    setCenter(ville || "");
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -65,7 +67,7 @@ export default function OffreFideliteLanding() {
     }
     setSending(true);
     try {
-      await api.post("/callback-requests", { ...form, session, source: "offre_fidelite_189" });
+      await api.post("/callback-requests", { ...form, session, center, source: "offre_fidelite_189" });
       setSent(true);
       trackLead({ content_name: "offre_fidelite", value: 189, currency: "EUR", session });
     } catch {

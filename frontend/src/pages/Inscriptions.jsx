@@ -185,6 +185,7 @@ export default function Inscriptions() {
                   <p className="text-xs text-amber-700 mt-0.5">
                     Intérêt : {callbackInterest(c)}
                   </p>
+                  {c.center && <p className="text-xs text-gray-500 mt-0.5">Centre : {c.center}</p>}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
