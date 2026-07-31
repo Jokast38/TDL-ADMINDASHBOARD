@@ -438,45 +438,46 @@ const LANDING_PAGES = [
 function LandingPageCard({ page }) {
   const url = `${window.location.origin}${page.path}`;
   return (
-    <Card
-      className="overflow-hidden border border-gray-200 rounded-md shadow-none cursor-pointer group hover:-translate-y-1 hover:shadow-lg transition-all"
-      onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
-      role="link"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && window.open(url, "_blank", "noopener,noreferrer")}
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="block overflow-hidden rounded-md cursor-pointer group hover:-translate-y-1 hover:shadow-lg transition-all"
       data-testid={`landing-card-${page.path}`}
     >
-      <div className="relative h-44 bg-gray-100 overflow-hidden border-b border-gray-200">
+      <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
+        <div className="relative h-44 bg-gray-100 overflow-hidden border-b border-gray-200">
         {/* Aperçu miniature : la vraie page rendue dans un iframe, réduite à l'échelle.
             L'iframe garde sa largeur native (1280px) pour le rendu desktop, puis est
             recentrée via marginLeft (une fois réduite, elle est plus étroite que la
             carte, sans quoi elle restait collée à gauche avec du vide à droite). */}
-        <iframe
-          src={url}
-          title={page.title}
-          className="pointer-events-none border-0 absolute top-0 left-1/2"
-          style={{
-            width: "1280px", height: "1000px",
-            transform: "scale(0.235)", transformOrigin: "top left",
-            marginLeft: -(1280 * 0.235) / 2,
-          }}
-          tabIndex={-1}
-        />
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-          <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-sm font-medium flex items-center gap-1.5 bg-black/70 px-3 py-1.5 rounded-md">
-            <ArrowSquareOut size={16} /> Ouvrir la page
-          </span>
+          <iframe
+            src={url}
+            title={page.title}
+            className="pointer-events-none border-0 absolute top-0 left-1/2"
+            style={{
+              width: "1280px", height: "1000px",
+              transform: "scale(0.235)", transformOrigin: "top left",
+              marginLeft: -(1280 * 0.235) / 2,
+            }}
+            tabIndex={-1}
+          />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-sm font-medium flex items-center gap-1.5 bg-black/70 px-3 py-1.5 rounded-md">
+              <ArrowSquareOut size={16} /> Ouvrir la page
+            </span>
+          </div>
         </div>
-      </div>
-      <div className="p-4">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: page.color }} />
-          <h3 className="font-display font-bold text-sm truncate">{page.title}</h3>
+        <div className="p-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: page.color }} />
+            <h3 className="font-display font-bold text-sm truncate">{page.title}</h3>
+          </div>
+          <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{page.desc}</p>
+          <p className="text-[11px] text-gray-400 mt-2 font-mono truncate">{url}</p>
         </div>
-        <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{page.desc}</p>
-        <p className="text-[11px] text-gray-400 mt-2 font-mono truncate">{url}</p>
-      </div>
-    </Card>
+      </Card>
+    </a>
   );
 }
 
