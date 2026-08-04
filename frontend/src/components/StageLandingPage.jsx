@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Clock, MapPin, CaretDown, CaretRight, ShieldCheck, CalendarBlank, Plus, Certificate,
-  Star, Phone, UsersThree, Armchair, PersonSimple, ChatCircleText, X,
+  Star, Phone, UsersThree, Armchair, PersonSimple, ChatCircleText, X, Check,
 } from "@phosphor-icons/react";
 import { trackSchedule } from "@/lib/metaPixel";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
+import { toast } from "sonner";
+import { api } from "@/lib/api";
 
 const GOLD = "#d4af37";
 const NAVY = "#0a0a0a";
@@ -88,9 +90,174 @@ function StageNav({ ctaLabel = "Réserver une session", ctaHref = "#form" }) {
 }
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
-function Hero({ titleLine1, titleLine2Gold, subheadline, description, heroImage, badgeNumber, villes, onFindSessions }) {
+function Hero({
+  titleLine1,
+  titleLine2Gold,
+  subheadline,
+  description,
+  heroImage,
+  badgeNumber,
+  villes,
+  onFindSessions,
+  availableDates = [], // Données des dates disponibles
+}) {
   const [ville, setVille] = useState("");
-  const [date, setDate] = useState("");
+  const [session, setSession] = useState("");
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [selectedDate, setSelectedDate] = useState(null);
+
+  // Fonctions pour le calendrier
+  const toggleCalendar = () => {
+    setShowCalendar(!showCalendar);
+    if (!showCalendar) {
+      const now = new Date();
+      setCurrentMonth(now.getMonth());
+      setCurrentYear(now.getFullYear());
+    }
+  };
+
+  const goToPreviousMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(currentYear - 1);
+    } else {
+      setCurrentMonth(currentMonth - 1);
+    }
+  };
+
+  const goToNextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(currentYear + 1);
+    } else {
+      setCurrentMonth(currentMonth + 1);
+    }
+  };
+
+  const getDaysInMonth = (month, year) => {
+    return new Date(year, month + 1, 0).getDate();
+  };
+
+  const getFirstDayOfMonth = (month, year) => {
+    return new Date(year, month, 1).getDay();
+  };
+
+  // Vérifier si une date est disponible
+  const isDateAvailable = (day, month, year) => {
+    return availableDates.some(d =>
+      d.day === day && d.month === month && d.year === year
+    );
+  };
+
+  // Obtenir le label de la session pour une date
+  const getSessionLabel = (day, month, year) => {
+    const found = availableDates.find(d =>
+      d.day === day && d.month === month && d.year === year
+    );
+    return found ? found.label : null;
+  };
+
+  // Sélectionner une date
+  const handleDateSelect = (day, month, year) => {
+    const label = getSessionLabel(day, month, year);
+    if (label) {
+      setSelectedDate({ day, month, year });
+      setSession(label);
+      setShowCalendar(false);
+      trackSchedule({ content_name: label, value: 240, currency: "EUR" });
+    }
+  };
+
+  // Gérer la soumission
+  const handleFindSessions = () => {
+    if (!session) {
+      // Afficher une erreur
+      return;
+    }
+    onFindSessions?.(ville, session);
+  };
+
+  // Rendu du calendrier
+  const renderCalendar = () => {
+    const daysInMonth = getDaysInMonth(currentMonth, currentYear);
+    const firstDay = getFirstDayOfMonth(currentMonth, currentYear);
+    const today = new Date();
+    const monthNames = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+      'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const dayNames = ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di'];
+
+    const days = [];
+
+    for (let i = 0; i < firstDay; i++) {
+      days.push(<div key={`empty-${i}`} className="calendar-empty"></div>);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const isAvailable = isDateAvailable(day, currentMonth, currentYear);
+      const isSelected = selectedDate && selectedDate.day === day && selectedDate.month === currentMonth && selectedDate.year === currentYear;
+      const isToday = day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
+      const isPast = new Date(currentYear, currentMonth, day) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+      days.push(
+        <button
+          key={day}
+          onClick={() => isAvailable && !isPast && handleDateSelect(day, currentMonth, currentYear)}
+          disabled={!isAvailable || isPast}
+          className={`calendar-day ${isAvailable && !isPast ? 'available' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''} ${isPast ? 'past' : ''}`}
+          title={isAvailable && !isPast ? getSessionLabel(day, currentMonth, currentYear) || '' : ''}
+        >
+          {day}
+          {isAvailable && !isPast && (
+            <span className="availability-dot"></span>
+          )}
+        </button>
+      );
+    }
+
+    // Compter les jours disponibles dans le mois actuel
+    const availableDaysInMonth = availableDates.filter(d =>
+      d.month === currentMonth && d.year === currentYear
+    );
+
+    return (
+      <div className="calendar-dropdown">
+        <div className="calendar-header">
+          <button onClick={goToPreviousMonth} className="calendar-nav">←</button>
+          <span className="calendar-title">{monthNames[currentMonth]} {currentYear}</span>
+          <button onClick={goToNextMonth} className="calendar-nav">→</button>
+        </div>
+        <div className="calendar-weekdays">
+          {dayNames.map(day => (
+            <span key={day} className="calendar-weekday">{day}</span>
+          ))}
+        </div>
+        <div className="calendar-grid">
+          {days}
+        </div>
+        {availableDaysInMonth.length > 0 && (
+          <div className="calendar-available-count">
+            {availableDaysInMonth.length} session{availableDaysInMonth.length > 1 ? 's' : ''} disponible{availableDaysInMonth.length > 1 ? 's' : ''} ce mois-ci
+          </div>
+        )}
+        <div className="calendar-legend">
+          <span className="legend-item">
+            <span className="legend-dot available-dot"></span> Disponible
+          </span>
+          <span className="legend-item">
+            <span className="legend-dot selected-dot"></span> Sélectionné
+          </span>
+          <span className="legend-item">
+            <span className="legend-dot today-dot"></span> Aujourd'hui
+          </span>
+        </div>
+        <button className="calendar-close" onClick={() => setShowCalendar(false)}>
+          Fermer
+        </button>
+      </div>
+    );
+  };
 
   return (
     <section className="bg-white">
@@ -103,8 +270,11 @@ function Hero({ titleLine1, titleLine2Gold, subheadline, description, heroImage,
           <span className="block h-1 w-16 mt-5 mb-5" style={{ backgroundColor: NAVY }} />
           <p className="text-gray-500 max-w-md">{description}</p>
 
+          {/* Widget avec calendrier dynamique */}
           <div className="mt-8 bg-black rounded-lg p-5 max-w-md" data-testid="find-session-widget">
-            <p className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: GOLD }}>Trouver une session</p>
+            <p className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: GOLD }}>
+              Trouver une session
+            </p>
             <div className="grid grid-cols-2 gap-2 mb-3">
               <div className="relative">
                 <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -120,20 +290,30 @@ function Hero({ titleLine1, titleLine2Gold, subheadline, description, heroImage,
               <div className="relative">
                 <CalendarBlank size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full bg-[#1a1a1a] text-white text-sm rounded-md pl-8 pr-3 py-2.5 border border-white/10"
+                  className="w-full bg-[#1a1a1a] text-white text-sm rounded-md pl-8 pr-3 py-2.5 border border-white/10 cursor-pointer"
+                  type="text"
+                  readOnly
+                  value={session || "Choisir une date"}
+                  onClick={toggleCalendar}
+                  placeholder="Choisir une date"
                 />
+                {showCalendar && renderCalendar()}
               </div>
             </div>
+            {session && (
+              <div className="mb-3 px-2 py-1.5 bg-[#d4af37]/10 rounded-md border border-[#d4af37]/20">
+                <span className="text-xs text-[#d4af37]">
+                  ✓ {session}
+                </span>
+              </div>
+            )}
             <Button
-              onClick={() => onFindSessions?.(ville, date)}
+              onClick={handleFindSessions}
               style={{ backgroundColor: GOLD }}
               className="w-full text-black font-bold uppercase text-xs tracking-wide"
               data-testid="find-session-submit"
             >
-              Voir les disponibilités <CaretRight size={12} className="ml-1" weight="bold" />
+              Réservez une session <CaretRight size={12} className="ml-1" weight="bold" />
             </Button>
           </div>
         </div>
@@ -156,6 +336,220 @@ function Hero({ titleLine1, titleLine2Gold, subheadline, description, heroImage,
           )}
         </div>
       </div>
+
+      {/* Styles CSS pour le calendrier */}
+      <style>{`
+        .calendar-dropdown {
+          position: absolute;
+          top: calc(100% + 8px);
+          right: 0;
+          left: 0;
+          background: #1a1a1a;
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 12px;
+          padding: 16px;
+          z-index: 100;
+          min-width: 280px;
+          box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+          animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .calendar-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 12px;
+        }
+
+        .calendar-nav {
+          background: rgba(255,255,255,0.05);
+          border: none;
+          color: #fff;
+          font-size: 18px;
+          cursor: pointer;
+          padding: 2px 10px;
+          border-radius: 6px;
+          transition: background 0.2s;
+        }
+
+        .calendar-nav:hover {
+          background: rgba(255,255,255,0.1);
+        }
+
+        .calendar-title {
+          color: #fff;
+          font-size: 14px;
+          font-weight: 600;
+        }
+
+        .calendar-weekdays {
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          gap: 2px;
+          margin-bottom: 4px;
+        }
+
+        .calendar-weekday {
+          text-align: center;
+          font-size: 10px;
+          font-weight: 600;
+          color: #888;
+          padding: 4px 0;
+        }
+
+        .calendar-grid {
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          gap: 2px;
+        }
+
+        .calendar-empty {
+          padding: 4px;
+        }
+
+        .calendar-day {
+          aspect-ratio: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          border: none;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: default;
+          transition: all 0.2s;
+          position: relative;
+          background: transparent;
+          color: #666;
+        }
+
+        .calendar-day.available {
+          cursor: pointer;
+          color: #fff;
+          background: transparent;
+        }
+
+        .calendar-day.available:hover {
+          background: rgba(212, 175, 55, 0.2);
+          transform: scale(1.05);
+        }
+
+        .calendar-day.selected {
+          background: #d4af37;
+          color: #000;
+          font-weight: 600;
+          transform: scale(1.05);
+        }
+
+        .calendar-day.selected:hover {
+          background: #c49a2e;
+        }
+
+        .calendar-day.today {
+          border: 2px solid #d4af37;
+        }
+
+        .calendar-day.past {
+          opacity: 0.3;
+          cursor: not-allowed;
+        }
+
+        .calendar-day:disabled {
+          opacity: 0.3;
+          cursor: not-allowed;
+        }
+
+        .availability-dot {
+          width: 4px;
+          height: 4px;
+          border-radius: 50%;
+          background-color: #d4af37;
+          position: absolute;
+          bottom: 2px;
+        }
+
+        .calendar-day.selected .availability-dot {
+          background-color: #000;
+        }
+
+        .calendar-available-count {
+          text-align: center;
+          font-size: 11px;
+          color: #d4af37;
+          margin-top: 8px;
+          padding: 4px;
+          background: rgba(212, 175, 55, 0.1);
+          border-radius: 4px;
+        }
+
+        .calendar-legend {
+          display: flex;
+          justify-content: center;
+          gap: 12px;
+          margin-top: 10px;
+          flex-wrap: wrap;
+        }
+
+        .legend-item {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 10px;
+          color: #888;
+        }
+
+        .legend-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          display: inline-block;
+        }
+
+        .available-dot {
+          background-color: #d4af37;
+        }
+
+        .selected-dot {
+          background-color: #d4af37;
+          border: 1px solid #d4af37;
+        }
+
+        .today-dot {
+          background-color: transparent;
+          border: 2px solid #d4af37;
+          width: 10px;
+          height: 10px;
+        }
+
+        .calendar-close {
+          width: 100%;
+          margin-top: 10px;
+          padding: 6px;
+          background: rgba(255,255,255,0.05);
+          border: none;
+          border-radius: 6px;
+          font-size: 12px;
+          color: #888;
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+
+        .calendar-close:hover {
+          background: rgba(255,255,255,0.1);
+        }
+      `}</style>
     </section>
   );
 }
@@ -283,8 +677,99 @@ function FaqGrid({ items }) {
   );
 }
 
-// ─── Formulaire de réservation ────────────────────────────────────────────────
-function BookingForm({ formRef, form, setForm, session, sending, sent, onSubmit, price, priceLabel, originalPrice, discounted }) {
+// Dans StageLandingPage.jsx - remplacez le BookingForm existant
+function BookingForm({
+  formRef,
+  form,
+  setForm,
+  session,
+  center,
+  sending,
+  sent,
+  onSubmit,
+  price,
+  priceLabel,
+  originalPrice,
+  discounted,
+  onPaymentSuccess,
+  onInscriptionCreated
+}) {
+  const [showPayment, setShowPayment] = useState(false);
+  const [inscriptionId, setInscriptionId] = useState(null);
+  const [creatingInscription, setCreatingInscription] = useState(false);
+
+  useEffect(() => {
+    if (session && session !== form.session) {
+      setForm(prev => ({ ...prev, session: session }));
+    }
+  }, [session, setForm, form.session]);
+ // Dans StageLandingPage.jsx - fonction createInscription
+const createInscription = async () => {
+  if (!session) {
+    toast.error("Veuillez sélectionner une session");
+    return;
+  }
+
+  if (!form.prenom?.trim() || !form.nom?.trim() || !form.telephone?.trim()) {
+    toast.error("Veuillez remplir tous les champs obligatoires");
+    return;
+  }
+
+  if (!form.privacyConsent) {
+    toast.error("Merci d'accepter l'utilisation de vos données");
+    return;
+  }
+
+  setCreatingInscription(true);
+  try {
+    // Utiliser l'ID de formation fourni directement
+    const formationId = "e22bcca0-6656-4335-b6a6-8a06235a2770";
+
+    const response = await api.post("/inscriptions", {
+      formation_id: formationId,
+      student_name: `${form.prenom.trim()} ${form.nom.trim()}`,
+      student_phone: form.telephone.trim(),
+      student_email: form.email?.trim() || `${form.prenom.toLowerCase()}${form.nom.toLowerCase()}@temp.fr`,
+      price: price,
+      category: "PERMIS",
+      session: session,
+      center: center || "Non spécifié",
+      source: "stage_recuperation_points",
+      payment_status: "pending",
+      status: "active",
+      // Ajouter le titre comme information supplémentaire
+      formation_title: "Stage récupération de points"
+    });
+
+    const inscription = response.data;
+    setInscriptionId(inscription.id);
+    setShowPayment(true);
+    onInscriptionCreated?.(inscription);
+    toast.success("Inscription créée ! Vous pouvez procéder au paiement.");
+    
+  } catch (error) {
+    console.error("Erreur création inscription:", error);
+    
+    let errorMessage = "Erreur lors de la création de l'inscription";
+    if (error.response?.data) {
+      if (Array.isArray(error.response.data)) {
+        errorMessage = error.response.data.map(e => e.msg || e).join(', ');
+      } else if (typeof error.response.data === 'string') {
+        errorMessage = error.response.data;
+      } else if (error.response.data.detail) {
+        errorMessage = typeof error.response.data.detail === 'string' 
+          ? error.response.data.detail 
+          : JSON.stringify(error.response.data.detail);
+      }
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    toast.error(errorMessage);
+  } finally {
+    setCreatingInscription(false);
+  }
+};
+
   return (
     <section id="form" ref={formRef} className="py-16 lg:py-20 bg-white scroll-mt-20">
       <div className="max-w-lg mx-auto px-6">
@@ -295,54 +780,124 @@ function BookingForm({ formRef, form, setForm, session, sending, sent, onSubmit,
             <span className={discounted ? "text-red-600 font-bold" : ""}>{price} €</span>
             {discounted && originalPrice && <span className="text-gray-400 line-through ml-2">{originalPrice} €</span>}
             {priceLabel && <span className="text-gray-400"> · {priceLabel}</span>}
-            {session && <span className="block mt-1 font-semibold text-black">Session choisie : {session}</span>}
+            {session && <span className="block mt-1 font-semibold text-black">✓ Session choisie : {session}</span>}
           </p>
         </div>
 
         {sent ? (
           <div className="text-center bg-gray-50 border border-gray-200 rounded-md p-8" data-testid="booking-sent">
-            <ChatCircleText size={32} className="mx-auto mb-3" style={{ color: GOLD }} weight="fill" />
-            <p className="font-bold mb-1">Demande envoyée !</p>
-            <p className="text-sm text-gray-500">Un conseiller TDL Formation vous recontacte sous 24h ouvrées.</p>
+            <Check size={32} className="mx-auto mb-3" style={{ color: GOLD }} />
+            <p className="font-bold mb-1">✅ Inscription confirmée !</p>
+            <p className="text-sm text-gray-500">
+              {inscriptionId ? "Votre paiement a été validé et votre place est réservée." : "Un conseiller TDL Formation vous recontactera sous 24h."}
+            </p>
           </div>
         ) : (
-          <form onSubmit={onSubmit} className="space-y-3" data-testid="booking-form">
-            <input
-              value={form.prenom}
-              onChange={(e) => setForm({ ...form, prenom: e.target.value })}
-              placeholder="Prénom"
-              className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
-              data-testid="booking-prenom"
-            />
-            <input
-              value={form.nom}
-              onChange={(e) => setForm({ ...form, nom: e.target.value })}
-              placeholder="Nom"
-              className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
-              data-testid="booking-nom"
-            />
-            <input
-              value={form.telephone}
-              onChange={(e) => setForm({ ...form, telephone: e.target.value })}
-              placeholder="Téléphone"
-              className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
-              data-testid="booking-telephone"
-            />
-            <PrivacyConsentCheckbox
-              checked={!!form.privacyConsent}
-              onChange={(v) => setForm({ ...form, privacyConsent: v })}
-              testId="booking-privacy-consent"
-            />
-            <Button
-              type="submit"
-              disabled={sending || !form.privacyConsent}
-              style={{ backgroundColor: GOLD }}
-              className="w-full text-black font-bold uppercase text-xs tracking-wide py-6"
-              data-testid="booking-submit"
-            >
-              {sending ? "Envoi..." : "Être rappelé pour réserver"} <CaretRight size={12} className="ml-1" weight="bold" />
-            </Button>
-          </form>
+          <div className="space-y-4">
+            <form className="space-y-3" data-testid="booking-form">
+              {/* Session affichée mais désactivée */}
+              <div className="bg-gray-50 border border-gray-200 rounded-md px-4 py-2.5 text-sm flex items-center justify-between">
+                <span className="text-gray-500">Session sélectionnée :</span>
+                <span className="font-semibold">{session || "Aucune session sélectionnée"}</span>
+                <input type="hidden" name="session" value={session || ''} />
+              </div>
+
+              <input
+                value={form.prenom || ''}
+                onChange={(e) => setForm({ ...form, prenom: e.target.value })}
+                placeholder="Prénom *"
+                className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
+                data-testid="booking-prenom"
+                required
+                disabled={showPayment}
+              />
+              <input
+                value={form.nom || ''}
+                onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                placeholder="Nom *"
+                className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
+                data-testid="booking-nom"
+                required
+                disabled={showPayment}
+              />
+              <input
+                value={form.telephone || ''}
+                onChange={(e) => setForm({ ...form, telephone: e.target.value })}
+                placeholder="Téléphone *"
+                className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
+                data-testid="booking-telephone"
+                required
+                disabled={showPayment}
+              />
+              <input
+                value={form.email || ''}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="Email (optionnel)"
+                className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
+                data-testid="booking-email"
+                disabled={showPayment}
+              />
+              <PrivacyConsentCheckbox
+                checked={!!form.privacyConsent}
+                onChange={(v) => setForm({ ...form, privacyConsent: v })}
+                testId="booking-privacy-consent"
+                disabled={showPayment}
+              />
+
+              {!session ? (
+                <Button
+                  type="button"
+                  disabled={true}
+                  className="w-full text-white font-bold uppercase text-xs tracking-wide py-6 bg-gray-400 cursor-not-allowed"
+                >
+                  Veuillez d'abord sélectionner une session
+                </Button>
+              ) : !showPayment ? (
+                <Button
+                  type="button"
+                  onClick={createInscription}
+                  disabled={creatingInscription || !form.privacyConsent}
+                  style={{ backgroundColor: GOLD }}
+                  className="w-full text-black font-bold uppercase text-xs tracking-wide py-6"
+                >
+                  {creatingInscription ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Création de l'inscription...
+                    </>
+                  ) : (
+                    "Procéder au paiement"
+                  )}
+                </Button>
+              ) : null}
+            </form>
+
+            {showPayment && inscriptionId && (
+              <div className="mt-4 p-4 border border-gray-200 rounded-md bg-gray-50">
+                <StripeCheckout
+                  inscriptionId={inscriptionId}
+                  session={session}
+                  center={center}
+                  amount={price}
+                  customerName={`${form.prenom || ''} ${form.nom || ''}`}
+                  customerPhone={form.telephone || ''}
+                  customerEmail={form.email || ''}
+                  onSuccess={(data) => {
+                    setSent(true);
+                    onPaymentSuccess?.(data);
+                  }}
+                  onError={(error) => {
+                    console.error("Erreur paiement:", error);
+                    setShowPayment(false);
+                  }}
+                  allowKlarna={false}
+                />
+              </div>
+            )}
+          </div>
         )}
       </div>
     </section>

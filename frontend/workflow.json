@@ -1,0 +1,159 @@
+{
+  "name": "Automation Netlinking - Backlinks",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "hour": 9
+            }
+          ]
+        },
+        "documentId": {
+          "__wlHint": "1bSzjdIXGVU63N1TuqHsARER7Sg5GA_dKcIXyS28G8w8"
+        },
+        "sheetName": "Prospects",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Google Sheets Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.Statut }}",
+              "value2": "À contacter"
+            }
+          ]
+        }
+      },
+      "id": "2",
+      "name": "Est-ce un nouveau prospect ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email }}",
+        "subject": "Proposition de partenariat - {{ $json.Site }}",
+        "messageType": "html",
+        "message": "<p>Bonjour {{ $json.Prenom }},</p><p>J'ai adoré votre article sur {{ $json.URL }}. Je pense que notre ressource pourrait intéresser vos lecteurs...</p>",
+        "html": "<p>Bonjour {{ $json.Prenom }},</p><p>J'ai adoré votre article sur {{ $json.URL }}. Je pense que notre ressource pourrait intéresser vos lecteurs...</p>",
+        "options": {}
+      },
+      "id": "3",
+      "name": "Envoyer Email 1",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [690, 200]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "days"
+      },
+      "id": "4",
+      "name": "Attendre 5 jours",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [910, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.Statut }}",
+              "value2": "Contacté"
+            }
+          ]
+        }
+      },
+      "id": "5",
+      "name": "Toujours pas de réponse ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1130, 200]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email }}",
+        "subject": "Re: Proposition de partenariat - {{ $json.Site }}",
+        "messageType": "html",
+        "message": "<p>Bonjour {{ $json.Prenom }},</p><p>Je me permets de vous relancer rapidement pour savoir si vous aviez pu jeter un œil à mon message précédent ?</p>",
+        "html": "<p>Bonjour {{ $json.Prenom }},</p><p>Je me permets de vous relancer rapidement pour savoir si vous aviez pu jeter un œil à mon message précédent ?</p>",
+        "options": {}
+      },
+      "id": "6",
+      "name": "Envoyer Relance",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [1350, 100]
+    }
+  ],
+  "connections": {
+    "Google Sheets Trigger": {
+      "main": [
+        [
+          {
+            "node": "Est-ce un nouveau prospect ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Est-ce un nouveau prospect ?": {
+      "main": [
+        [
+          {
+            "node": "Envoyer Email 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer Email 1": {
+      "main": [
+        [
+          {
+            "node": "Attendre 5 jours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attendre 5 jours": {
+      "main": [
+        [
+          {
+            "node": "Toujours pas de réponse ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Toujours pas de réponse ?": {
+      "main": [
+        [
+          {
+            "node": "Envoyer Relance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
