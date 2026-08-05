@@ -65,12 +65,97 @@ export default function StageRecuperationPointsLanding() {
     console.log("Inscription créée:", inscription);
   };
 
+  const handleDirectPayment = async () => {
+    if (!session) {
+      toast.error("Veuillez sélectionner une session");
+      return;
+    }
+
+    if (!form.prenom?.trim() || !form.nom?.trim() || !form.telephone?.trim()) {
+      toast.error("Veuillez remplir tous les champs obligatoires");
+      return;
+    }
+
+    if (!form.privacyConsent) {
+      toast.error("Merci d'accepter l'utilisation de vos données");
+      return;
+    }
+
+    setSending(true);
+    try {
+      const formationId = "e22bcca0-6656-4335-b6a6-8a06235a2770";
+
+      const inscriptionResponse = await api.post("/inscriptions", {
+        formation_id: formationId,
+        student_name: `${form.prenom.trim()} ${form.nom.trim()}`,
+        student_phone: form.telephone.trim(),
+        student_email: form.email?.trim() || `${form.prenom.toLowerCase()}${form.nom.toLowerCase()}@temp.fr`,
+        price: 240,
+        category: "PERMIS",
+        session: session,
+        center: selectedVille || center,
+        source: "stage_recuperation_points",
+        payment_status: "pending",
+        status: "active",
+        formation_title: "Stage récupération de points"
+      });
+
+      const inscription = inscriptionResponse.data.inscription;
+
+      const checkoutResponse = await api.post("/payments/checkout", {
+        inscription_id: inscription.id,
+        allow_klarna: false
+      });
+
+      const { url } = checkoutResponse.data;
+
+      if (url) {
+        window.location.href = url;
+      } else {
+        toast.error("Erreur lors de la redirection vers le paiement");
+      }
+
+    } catch (error) {
+      console.error("Erreur:", error);
+      let errorMessage = "Erreur lors du paiement";
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.response?.data && Array.isArray(error.response.data)) {
+        errorMessage = error.response.data.map(e => e.msg || e).join(', ');
+      }
+      toast.error(errorMessage);
+    } finally {
+      setSending(false);
+    }
+  };
+
   useEffect(() => {
     setPageMeta({
       title: "Stage récupération de points — 240€ | TDL Formation",
       description: "Récupérez jusqu'à 4 points sur votre permis en 2 jours. Stage agréé, sessions à Épinay-sur-Seine et Creil.",
       path: "/stage-recuperation-points",
     });
+    // Vérifier le statut du paiement après redirection
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get("paiement");
+    const inscriptionIdParam = params.get("inscription");
+
+    if (paymentStatus === "succes" && inscriptionIdParam) {
+      setSent(true);
+      toast.success("✅ Paiement réussi ! Votre place est réservée.");
+      trackLead({
+        content_name: "stage_recuperation_points",
+        value: 240,
+        currency: "EUR",
+        session,
+        inscription_id: inscriptionIdParam
+      });
+      // Nettoyer l'URL
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (paymentStatus === "annule") {
+      toast.info("Paiement annulé. Vous pouvez réessayer quand vous voulez.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, []);
 
   // Version alternative : chaque item de session peut avoir 1 ou 2 jours
@@ -248,22 +333,6 @@ export default function StageRecuperationPointsLanding() {
       d.month === currentMonth && d.year === currentYear
     );
 
-    const handlePaymentSuccess = (paymentData) => {
-      toast.success("Paiement réussi ! Votre place est réservée.");
-      setSent(true);
-      trackLead({
-        content_name: "stage_recuperation_points",
-        value: 240,
-        currency: "EUR",
-        session,
-        inscription_id: paymentData.inscription_id
-      });
-    };
-
-    const handleInscriptionCreated = (inscription) => {
-      console.log("Inscription créée:", inscription);
-    };
-
     return (
       <div className="calendar-dropdown" ref={calendarRef}>
         <div className="calendar-header">
@@ -394,9 +463,13 @@ export default function StageRecuperationPointsLanding() {
         heroImage={heroTrainingImage}
         villes={VILLES}
         availableDates={availableDates}
-        onFindSessions={(ville, session) => {
+        onFindSessions={(ville, chosenSession) => {
           setSelectedVille(ville);
-          formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          setSession(chosenSession);
+          trackSchedule({ content_name: chosenSession, value: 240, currency: "EUR" });
+          setTimeout(() => {
+            formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 100);
         }}
       />
 
@@ -593,10 +666,12 @@ export default function StageRecuperationPointsLanding() {
         sending={sending}
         sent={sent}
         onSubmit={submit}
+        onDirectPayment={handleDirectPayment}
         price={240}
         priceLabel="tarif standard"
         onPaymentSuccess={handlePaymentSuccess}
         onInscriptionCreated={handleInscriptionCreated}
+
       />
       <FaqGrid items={FAQ} />
 

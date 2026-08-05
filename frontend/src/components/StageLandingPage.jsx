@@ -9,6 +9,7 @@ import { trackSchedule } from "@/lib/metaPixel";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import StripeCheckout from "@/components/StripeCheckout";
 
 const GOLD = "#d4af37";
 const NAVY = "#0a0a0a";
@@ -99,7 +100,7 @@ function Hero({
   badgeNumber,
   villes,
   onFindSessions,
-  availableDates = [], // Données des dates disponibles
+  availableDates = [],
 }) {
   const [ville, setVille] = useState("");
   const [session, setSession] = useState("");
@@ -108,7 +109,6 @@ function Hero({
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedDate, setSelectedDate] = useState(null);
 
-  // Fonctions pour le calendrier
   const toggleCalendar = () => {
     setShowCalendar(!showCalendar);
     if (!showCalendar) {
@@ -144,14 +144,12 @@ function Hero({
     return new Date(year, month, 1).getDay();
   };
 
-  // Vérifier si une date est disponible
   const isDateAvailable = (day, month, year) => {
     return availableDates.some(d =>
       d.day === day && d.month === month && d.year === year
     );
   };
 
-  // Obtenir le label de la session pour une date
   const getSessionLabel = (day, month, year) => {
     const found = availableDates.find(d =>
       d.day === day && d.month === month && d.year === year
@@ -159,7 +157,6 @@ function Hero({
     return found ? found.label : null;
   };
 
-  // Sélectionner une date
   const handleDateSelect = (day, month, year) => {
     const label = getSessionLabel(day, month, year);
     if (label) {
@@ -170,16 +167,13 @@ function Hero({
     }
   };
 
-  // Gérer la soumission
   const handleFindSessions = () => {
     if (!session) {
-      // Afficher une erreur
       return;
     }
     onFindSessions?.(ville, session);
   };
 
-  // Rendu du calendrier
   const renderCalendar = () => {
     const daysInMonth = getDaysInMonth(currentMonth, currentYear);
     const firstDay = getFirstDayOfMonth(currentMonth, currentYear);
@@ -216,7 +210,6 @@ function Hero({
       );
     }
 
-    // Compter les jours disponibles dans le mois actuel
     const availableDaysInMonth = availableDates.filter(d =>
       d.month === currentMonth && d.year === currentYear
     );
@@ -270,7 +263,6 @@ function Hero({
           <span className="block h-1 w-16 mt-5 mb-5" style={{ backgroundColor: NAVY }} />
           <p className="text-gray-500 max-w-md">{description}</p>
 
-          {/* Widget avec calendrier dynamique */}
           <div className="mt-8 bg-black rounded-lg p-5 max-w-md" data-testid="find-session-widget">
             <p className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: GOLD }}>
               Trouver une session
@@ -337,7 +329,6 @@ function Hero({
         </div>
       </div>
 
-      {/* Styles CSS pour le calendrier */}
       <style>{`
         .calendar-dropdown {
           position: absolute;
@@ -677,7 +668,7 @@ function FaqGrid({ items }) {
   );
 }
 
-// Dans StageLandingPage.jsx - remplacez le BookingForm existant
+// ─── Formulaire de réservation ────────────────────────────────────────────────
 function BookingForm({
   formRef,
   form,
@@ -687,6 +678,7 @@ function BookingForm({
   sending,
   sent,
   onSubmit,
+  onDirectPayment,
   price,
   priceLabel,
   originalPrice,
@@ -703,72 +695,90 @@ function BookingForm({
       setForm(prev => ({ ...prev, session: session }));
     }
   }, [session, setForm, form.session]);
- // Dans StageLandingPage.jsx - fonction createInscription
-const createInscription = async () => {
-  if (!session) {
-    toast.error("Veuillez sélectionner une session");
-    return;
-  }
 
-  if (!form.prenom?.trim() || !form.nom?.trim() || !form.telephone?.trim()) {
-    toast.error("Veuillez remplir tous les champs obligatoires");
-    return;
-  }
-
-  if (!form.privacyConsent) {
-    toast.error("Merci d'accepter l'utilisation de vos données");
-    return;
-  }
-
-  setCreatingInscription(true);
-  try {
-    // Utiliser l'ID de formation fourni directement
-    const formationId = "e22bcca0-6656-4335-b6a6-8a06235a2770";
-
-    const response = await api.post("/inscriptions", {
-      formation_id: formationId,
-      student_name: `${form.prenom.trim()} ${form.nom.trim()}`,
-      student_phone: form.telephone.trim(),
-      student_email: form.email?.trim() || `${form.prenom.toLowerCase()}${form.nom.toLowerCase()}@temp.fr`,
-      price: price,
-      category: "PERMIS",
-      session: session,
-      center: center || "Non spécifié",
-      source: "stage_recuperation_points",
-      payment_status: "pending",
-      status: "active",
-      // Ajouter le titre comme information supplémentaire
-      formation_title: "Stage récupération de points"
-    });
-
-    const inscription = response.data;
-    setInscriptionId(inscription.id);
-    setShowPayment(true);
-    onInscriptionCreated?.(inscription);
-    toast.success("Inscription créée ! Vous pouvez procéder au paiement.");
-    
-  } catch (error) {
-    console.error("Erreur création inscription:", error);
-    
-    let errorMessage = "Erreur lors de la création de l'inscription";
-    if (error.response?.data) {
-      if (Array.isArray(error.response.data)) {
-        errorMessage = error.response.data.map(e => e.msg || e).join(', ');
-      } else if (typeof error.response.data === 'string') {
-        errorMessage = error.response.data;
-      } else if (error.response.data.detail) {
-        errorMessage = typeof error.response.data.detail === 'string' 
-          ? error.response.data.detail 
-          : JSON.stringify(error.response.data.detail);
-      }
-    } else if (error.message) {
-      errorMessage = error.message;
+  const createInscription = async () => {
+    if (!session) {
+      toast.error("Veuillez sélectionner une session");
+      return;
     }
-    toast.error(errorMessage);
-  } finally {
-    setCreatingInscription(false);
-  }
-};
+
+    if (!form.prenom?.trim() || !form.nom?.trim() || !form.telephone?.trim()) {
+      toast.error("Veuillez remplir tous les champs obligatoires");
+      return;
+    }
+
+    if (!form.privacyConsent) {
+      toast.error("Merci d'accepter l'utilisation de vos données");
+      return;
+    }
+
+    setCreatingInscription(true);
+    try {
+      const formationId = "e22bcca0-6656-4335-b6a6-8a06235a2770";
+
+      const response = await api.post("/inscriptions", {
+        formation_id: formationId,
+        student_name: `${form.prenom.trim()} ${form.nom.trim()}`,
+        student_phone: form.telephone.trim(),
+        student_email: form.email?.trim() || `${form.prenom.toLowerCase()}${form.nom.toLowerCase()}@temp.fr`,
+        price: price,
+        category: "PERMIS",
+        session: session,
+        center: center || "Non spécifié",
+        source: "stage_recuperation_points",
+        payment_status: "pending",
+        status: "active",
+        formation_title: "Stage récupération de points"
+      });
+
+      const inscription = response.data.inscription;
+      setInscriptionId(inscription.id);
+      
+      try {
+        const checkoutResponse = await api.post("/payments/checkout", {
+          inscription_id: inscription.id,
+          allow_klarna: false
+        });
+
+        const { url } = checkoutResponse.data;
+        
+        if (url) {
+          window.location.href = url;
+        } else {
+          toast.error("Erreur lors de la redirection vers le paiement");
+          setShowPayment(true);
+        }
+        
+      } catch (paymentError) {
+        console.error("Erreur création session de paiement:", paymentError);
+        toast.error("Impossible de créer la session de paiement. Veuillez réessayer.");
+        setShowPayment(true);
+      }
+      
+      onInscriptionCreated?.(inscription);
+      
+    } catch (error) {
+      console.error("Erreur création inscription:", error);
+      
+      let errorMessage = "Erreur lors de la création de l'inscription";
+      if (error.response?.data) {
+        if (Array.isArray(error.response.data)) {
+          errorMessage = error.response.data.map(e => e.msg || e).join(', ');
+        } else if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data;
+        } else if (error.response.data.detail) {
+          errorMessage = typeof error.response.data.detail === 'string' 
+            ? error.response.data.detail 
+            : JSON.stringify(error.response.data.detail);
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      toast.error(errorMessage);
+    } finally {
+      setCreatingInscription(false);
+    }
+  };
 
   return (
     <section id="form" ref={formRef} className="py-16 lg:py-20 bg-white scroll-mt-20">
@@ -795,7 +805,6 @@ const createInscription = async () => {
         ) : (
           <div className="space-y-4">
             <form className="space-y-3" data-testid="booking-form">
-              {/* Session affichée mais désactivée */}
               <div className="bg-gray-50 border border-gray-200 rounded-md px-4 py-2.5 text-sm flex items-center justify-between">
                 <span className="text-gray-500">Session sélectionnée :</span>
                 <span className="font-semibold">{session || "Aucune session sélectionnée"}</span>
@@ -886,7 +895,6 @@ const createInscription = async () => {
                   customerPhone={form.telephone || ''}
                   customerEmail={form.email || ''}
                   onSuccess={(data) => {
-                    setSent(true);
                     onPaymentSuccess?.(data);
                   }}
                   onError={(error) => {
