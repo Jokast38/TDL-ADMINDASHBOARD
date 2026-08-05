@@ -17,6 +17,7 @@ export default function FormationCard({ formation: f, revealDelay }) {
           <img
             src={f.image_url || heroForCategory(f.category)}
             alt={f.title || "Formation TDL Formation"}
+            loading="lazy"
             className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
           />
         </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import Kit, { TopBar } from "@/components/StageLandingPage";
 import { api } from "@/lib/api";
@@ -20,15 +20,19 @@ import {
 import { toast } from "sonner";
 import { trackLead } from "@/lib/metaPixel";
 import HeroSlideshow from "@/components/HeroSlideshow";
-import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import FormationCard from "@/components/FormationCard";
-import ChatWidget from "@/components/ChatWidget";
 import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { setPageMeta } from "@/lib/seo";
-import FranceMapSection from "@/components/FranceMapSection";
+
+// Sections sous la ligne de flottaison + widget de chat : chargées à la
+// demande plutôt que dans le bundle initial, pour ne pas ralentir le premier
+// affichage (LCP) avec du JS qui ne sert qu'après le scroll.
+const GoogleReviewsCarousel = lazy(() => import("@/components/GoogleReviewsCarousel"));
+const FranceMapSection = lazy(() => import("@/components/FranceMapSection"));
+const ChatWidget = lazy(() => import("@/components/ChatWidget"));
 
 const HOME_FAQ = [
   {
@@ -467,6 +471,7 @@ export default function Landing() {
               <img
                 src="/Logo-Qualiopi-150dpi-Avec-Marianne-1.jpg.jpeg"
                 alt="Certifié Qualiopi - Processus certifié"
+                loading="lazy"
                 className="h-20 w-auto"
               />
             </div>
@@ -556,6 +561,7 @@ export default function Landing() {
               <img
                 src="/tdl-image/formation-conduite-taxi-vtc-tdl-Grande.jpeg"
                 alt="Chauffeur VTC formé par TDL Formation"
+                loading="lazy"
                 className="w-full h-full object-cover"
               />
             </div>
@@ -577,7 +583,9 @@ export default function Landing() {
           <p className="overline">Nos centres</p>
           <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2 mb-10">Où nous trouver</h2>
           <div className="w-full">
-            <FranceMapSection className="!bg-transparent !shadow-none !border-none" />
+            <Suspense fallback={null}>
+              <FranceMapSection className="!bg-transparent !shadow-none !border-none" />
+            </Suspense>
           </div>
         </div>
       </section>
@@ -610,7 +618,9 @@ export default function Landing() {
       </section>
 
       {/* Avis Google */}
-      <GoogleReviewsCarousel />
+      <Suspense fallback={null}>
+        <GoogleReviewsCarousel />
+      </Suspense>
 
       {/* FAQ locale — Épinay-sur-Seine, région parisienne, Creil */}
       <Kit.FaqGrid items={HOME_FAQ} />
@@ -715,6 +725,7 @@ export default function Landing() {
             <img
               src="https://images.unsplash.com/photo-1597260491619-bab87197869f?w=800"
               alt="KAMI STREET"
+              loading="lazy"
               className="w-full h-full object-cover rounded-md"
             />
           </div>
@@ -723,7 +734,9 @@ export default function Landing() {
 
       {/* Footer */}
       <SiteFooter />
-      <ChatWidget />
+      <Suspense fallback={null}>
+        <ChatWidget />
+      </Suspense>
     </div>
   );
 }
