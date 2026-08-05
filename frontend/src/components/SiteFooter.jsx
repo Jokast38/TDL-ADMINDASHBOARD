@@ -1,11 +1,13 @@
 import { Link } from "react-router-dom";
-import { InstagramLogo, TiktokLogo, FacebookLogo } from "@phosphor-icons/react";
+import { InstagramLogo, TiktokLogo, FacebookLogo, LinkedinLogo, YoutubeLogo } from "@phosphor-icons/react";
 import { openCookieSettings } from "@/lib/consent";
 
 const SOCIALS = [
   { icon: InstagramLogo, label: "Instagram", href: "https://www.instagram.com/tdlformation_?utm_source=ig_web_button_share_sheet&igsh=ZDNlZDc0MzIxNw%3D%3D" },
   { icon: TiktokLogo, label: "TikTok", href: "https://www.tiktok.com/@tdlformation?_r=1&_t=ZN-96iA2TYXyTK" },
   { icon: FacebookLogo, label: "Facebook", href: "https://www.facebook.com/tdlformationvtc93?mibextid=wwXIfr&rdid=3XjyqEuwkOTfSkAb&share_url=https%3A%2F%2Fwww.facebook.com%2Fshare%2F1FrpoXScxD%2F%3Fmibextid%3DwwXIfr" },
+  { icon: LinkedinLogo, label: "LinkedIn", href: "https://www.linkedin.com/company/tdlformation/" },
+  { icon: YoutubeLogo, label: "YouTube", href: "https://youtube.com/@tdlformationtaxivtc6584?si=4SVsQlU8DMZ1dsoz" },
 ];
 
 // Pied de page commun aux pages publiques : mentions légales, FAQ, réseaux sociaux.

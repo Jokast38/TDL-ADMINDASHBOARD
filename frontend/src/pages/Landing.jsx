@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { TopBar } from "@/components/StageLandingPage";
+import Kit, { TopBar } from "@/components/StageLandingPage";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -29,6 +29,29 @@ import { useReveal } from "@/hooks/useReveal";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { setPageMeta } from "@/lib/seo";
 import FranceMapSection from "@/components/FranceMapSection";
+
+const HOME_FAQ = [
+  {
+    q: "Où se trouve votre centre de formation près d'Épinay-sur-Seine ?",
+    a: "Notre centre principal est situé au 59 avenue Joffre, 93800 Épinay-sur-Seine, à quelques minutes du RER C. Il est facilement accessible depuis Paris, Saint-Denis, Argenteuil, Villetaneuse et l'ensemble du nord de l'Île-de-France.",
+  },
+  {
+    q: "Proposez-vous des formations à Creil, dans l'Oise ?",
+    a: "Oui, nous avons un second centre à Creil (60), qui accueille les mêmes formations qu'à Épinay-sur-Seine : CACES, permis, auto-école, SSIAP et VTC/Taxi. Vous pouvez choisir le centre le plus proche de chez vous lors de votre inscription.",
+  },
+  {
+    q: "Vos formations sont-elles accessibles depuis Paris ?",
+    a: "Tout à fait. Notre centre d'Épinay-sur-Seine est à moins de 20 minutes du centre de Paris en RER C, ce qui en fait une option pratique pour les habitants de Paris et de la petite couronne (92, 93, 95).",
+  },
+  {
+    q: "Quelles formations proposez-vous à Épinay-sur-Seine et à Creil ?",
+    a: "Sur nos deux centres, nous proposons les formations CACES (toutes catégories), le stage de récupération de points, l'auto-école (permis B accompagné ANTS), la formation SSIAP, ainsi que les formations VTC et Taxi (initiale, continue et passerelles).",
+  },
+  {
+    q: "Le centre est-il accessible en transport en commun depuis la région parisienne ?",
+    a: "Oui, le centre d'Épinay-sur-Seine est desservi par le RER C (gare d'Épinay-sur-Seine) et les bus 154 et 239, avec un stationnement sur place pour les personnes venant en voiture depuis le 92, le 93 ou le 95.",
+  },
+];
 
 const CATEGORIES = [
   { key: "CACES", label: "CACES", icon: Truck, desc: "Toutes catégories - chariots, nacelles, grues" },
@@ -588,6 +611,20 @@ export default function Landing() {
 
       {/* Avis Google */}
       <GoogleReviewsCarousel />
+
+      {/* FAQ locale — Épinay-sur-Seine, région parisienne, Creil */}
+      <Kit.FaqGrid items={HOME_FAQ} />
+      <script type="application/ld+json">
+        {JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: HOME_FAQ.map((f) => ({
+            "@type": "Question",
+            name: f.q,
+            acceptedAnswer: { "@type": "Answer", text: f.a },
+          })),
+        })}
+      </script>
 
       {/* Contact */}
       <section className="py-16 lg:py-24 border-t border-gray-200" id="contact">
