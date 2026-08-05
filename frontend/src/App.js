@@ -19,6 +19,8 @@ import OffreFideliteLanding from "@/pages/OffreFideliteLanding";
 import StageRecuperationPointsLanding from "@/pages/StageRecuperationPointsLanding";
 import SsiapLanding from "@/pages/SsiapLanding";
 import TaxiFormationLanding from "@/pages/TaxiFormationLanding";
+import MobiliteTaxiLanding from "@/pages/MobiliteTaxiLanding";
+import PasserelleTaxiBanlieueLanding from "@/pages/PasserelleTaxiBanlieueLanding";
 import MentionsLegales from "@/pages/MentionsLegales";
 import FAQ from "@/pages/FAQ";
 
@@ -98,6 +100,8 @@ function App() {
             <Route path="/stage-recuperation-points" element={<StageRecuperationPointsLanding />} />
             <Route path="/formation-ssiap" element={<SsiapLanding />} />
             <Route path="/formation-taxi" element={<TaxiFormationLanding />} />
+            <Route path="/mobilite-taxi" element={<MobiliteTaxiLanding />} />
+            <Route path="/passerelle-taxi-banlieue-parisien" element={<PasserelleTaxiBanlieueLanding />} />
             <Route path="/mentions-legales" element={<MentionsLegales />} />
             <Route path="/politique-de-confidentialite" element={<PolitiqueConfidentialite />} />
             <Route path="/faq" element={<FAQ />} />

@@ -43,7 +43,14 @@ const CATEGORIES = [
 // Menus déroulants navbar : chaque entrée est reliée par son titre exact en
 // base (voir /api/formations) à l'inscription pré-remplie correspondante.
 const NAV_VTC = ["Formation VTC", "Formation VTC en Ligne", "Formation Continue VTC", "Formation Passerelle Taxi → VTC"];
-const NAV_TAXI = ["Formation Taxi Initiale", "Formation Continue Taxi", "Formation Passerelle VTC vers Taxi", "Formation Mobilité Taxi Banlieue (60-93)"];
+const NAV_TAXI = ["Formation Taxi Initiale", "Formation Continue Taxi", "Formation Passerelle VTC vers Taxi", "Formation Mobilité Taxi Banlieue (60-93)", "Passerelle Taxi Banlieue vers Parisien"];
+
+// Entrées de menu qui pointent vers une landing page dédiée plutôt que vers
+// une fiche formation en base (pas toujours présentes/à jour côté base).
+const NAV_ROUTE_OVERRIDES = {
+  "Formation Mobilité Taxi Banlieue (60-93)": "/mobilite-taxi",
+  "Passerelle Taxi Banlieue vers Parisien": "/passerelle-taxi-banlieue-parisien",
+};
 
 const PARTENAIRES = ["Uber", "Bolt", "FreeNow", "Heetch", "Marcel", "LeCab"];
 
@@ -251,10 +258,11 @@ export default function Landing() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
         {titles.map((title) => {
+          const override = NAV_ROUTE_OVERRIDES[title];
           const f = byTitle(title);
           return (
             <DropdownMenuItem key={title} asChild>
-              <Link to={f ? `/formations/${f.id}` : "#formations"} className="text-sm">
+              <Link to={override || (f ? `/formations/${f.id}` : "#formations")} className="text-sm">
                 {title}
               </Link>
             </DropdownMenuItem>
@@ -274,7 +282,7 @@ export default function Landing() {
             <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
             <span className="font-display font-bold text-lg tracking-tight hidden sm:inline">TDL Formation</span>
           </Link>
-          <nav className="hidden md:flex items-center gap-7 text-sm">
+          <nav className="hidden lg:flex items-center gap-5 xl:gap-7 text-sm shrink-0 whitespace-nowrap">
             <NavDropdown label="Formations VTC" titles={NAV_VTC} />
             <NavDropdown label="Formations Taxi" titles={NAV_TAXI} />
             <Link to={autoEcole ? `/formations/${autoEcole.id}` : "#formations"} className="hover:text-[#d4af37]">Auto-école</Link>
@@ -283,17 +291,17 @@ export default function Landing() {
             <Link to="/blog" className="hover:text-[#d4af37]">Blog</Link>
             <a href="#contact" className="hover:text-[#d4af37]">Contact</a>
           </nav>
-          <div className="flex items-center gap-2">
-            <Link to="/login" className="hidden sm:block">
+          <div className="flex items-center gap-2 shrink-0">
+            <Link to="/login" className="hidden lg:block">
               <Button variant="outline" size="sm" data-testid="login-link">Connexion</Button>
             </Link>
-            <Link to="/inscription" className="hidden sm:block">
+            <Link to="/inscription" className="hidden lg:block">
               <Button size="sm" className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="inscription-cta">
                 S'inscrire <ArrowRight size={14} className="ml-1" />
               </Button>
             </Link>
             <button
-              className="md:hidden p-2 text-gray-700"
+              className="lg:hidden p-2 text-gray-700"
               onClick={() => setMobileOpen((v) => !v)}
               aria-label={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
               data-testid="mobile-menu-toggle"
@@ -305,7 +313,7 @@ export default function Landing() {
 
         {/* Panneau mobile */}
         {mobileOpen && (
-          <div className="md:hidden border-t border-gray-200 bg-white max-h-[calc(100vh-4rem)] overflow-y-auto" data-testid="mobile-menu-panel">
+          <div className="lg:hidden border-t border-gray-200 bg-white max-h-[calc(100vh-4rem)] overflow-y-auto" data-testid="mobile-menu-panel">
             <nav className="px-6 py-4 flex flex-col text-sm">
               <MobileSubMenu
                 label="Formations VTC" titles={NAV_VTC} byTitle={byTitle}
@@ -695,11 +703,12 @@ function MobileSubMenu({ label, titles, byTitle, open, onToggle, onNavigate }) {
       {open && (
         <div className="pb-2 pl-3 flex flex-col">
           {titles.map((title) => {
+            const override = NAV_ROUTE_OVERRIDES[title];
             const f = byTitle(title);
             return (
               <Link
                 key={title}
-                to={f ? `/formations/${f.id}` : "#formations"}
+                to={override || (f ? `/formations/${f.id}` : "#formations")}
                 className="py-2 text-gray-600 text-sm"
                 onClick={onNavigate}
               >
