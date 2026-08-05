@@ -277,12 +277,12 @@ export default function Landing() {
       {/* Header */}
       <TopBar />
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2" onClick={() => setMobileOpen(false)}>
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+          <Link to="/" className="flex items-center gap-2 shrink-0" onClick={() => setMobileOpen(false)}>
             <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
             <span className="font-display font-bold text-lg tracking-tight hidden sm:inline">TDL Formation</span>
           </Link>
-          <nav className="hidden lg:flex items-center gap-5 xl:gap-7 text-sm shrink-0 whitespace-nowrap">
+          <nav className="hidden xl:flex items-center gap-5 text-sm shrink min-w-0 whitespace-nowrap overflow-x-auto">
             <NavDropdown label="Formations VTC" titles={NAV_VTC} />
             <NavDropdown label="Formations Taxi" titles={NAV_TAXI} />
             <Link to={autoEcole ? `/formations/${autoEcole.id}` : "#formations"} className="hover:text-[#d4af37]">Auto-école</Link>
@@ -292,16 +292,16 @@ export default function Landing() {
             <a href="#contact" className="hover:text-[#d4af37]">Contact</a>
           </nav>
           <div className="flex items-center gap-2 shrink-0">
-            <Link to="/login" className="hidden lg:block">
+            <Link to="/login" className="hidden xl:block">
               <Button variant="outline" size="sm" data-testid="login-link">Connexion</Button>
             </Link>
-            <Link to="/inscription" className="hidden lg:block">
+            <Link to="/inscription" className="hidden xl:block">
               <Button size="sm" className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="inscription-cta">
                 S'inscrire <ArrowRight size={14} className="ml-1" />
               </Button>
             </Link>
             <button
-              className="lg:hidden p-2 text-gray-700"
+              className="xl:hidden p-2 text-gray-700"
               onClick={() => setMobileOpen((v) => !v)}
               aria-label={mobileOpen ? "Fermer le menu" : "Ouvrir le menu"}
               data-testid="mobile-menu-toggle"
@@ -313,7 +313,7 @@ export default function Landing() {
 
         {/* Panneau mobile */}
         {mobileOpen && (
-          <div className="lg:hidden border-t border-gray-200 bg-white max-h-[calc(100vh-4rem)] overflow-y-auto" data-testid="mobile-menu-panel">
+          <div className="xl:hidden border-t border-gray-200 bg-white max-h-[calc(100vh-4rem)] overflow-y-auto" data-testid="mobile-menu-panel">
             <nav className="px-6 py-4 flex flex-col text-sm">
               <MobileSubMenu
                 label="Formations VTC" titles={NAV_VTC} byTitle={byTitle}
@@ -402,18 +402,20 @@ export default function Landing() {
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             {CATEGORIES.map((c, idx) => (
-              <Card key={c.key} data-reveal className={`reveal reveal-delay-${(idx % 4) + 1} p-4 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-[#0a0a0a] transition-all min-w-0`} data-testid={`cat-${c.key}`}>
-                <c.icon size={24} className="text-[#0a0a0a]" weight="duotone" />
-                <h3 className="font-display font-bold text-sm mt-3 break-words">{c.label}</h3>
-                <p className="text-xs text-gray-500 mt-1 break-words">{c.desc}</p>
-              </Card>
+              <a key={c.key} href="#catalogue" className="block" data-testid={`cat-${c.key}`}>
+                <Card data-reveal className={`reveal reveal-delay-${(idx % 4) + 1} p-4 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-[#0a0a0a] transition-all min-w-0 cursor-pointer h-full`}>
+                  <c.icon size={24} className="text-[#0a0a0a]" weight="duotone" />
+                  <h3 className="font-display font-bold text-sm mt-3 break-words">{c.label}</h3>
+                  <p className="text-xs text-gray-500 mt-1 break-words">{c.desc}</p>
+                </Card>
+              </a>
             ))}
           </div>
         </div>
       </section>
 
       {/* Formations grid */}
-      <section className="py-16 lg:py-24 bg-gray-50 border-y border-gray-200">
+      <section id="catalogue" className="py-16 lg:py-24 bg-gray-50 border-y border-gray-200 scroll-mt-16">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <p className="overline">Catalogue</p>
           <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2 mb-10">Formations disponibles</h2>
