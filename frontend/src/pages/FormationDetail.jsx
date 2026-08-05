@@ -70,7 +70,7 @@ export default function FormationDetail() {
     "@type": "Course",
     name: f.title,
     description: f.description || f.title,
-    provider: { "@type": "EducationalOrganization", name: "TDL Formation", sameAs: "https://tdl-admindashboard.vercel.app" },
+    provider: { "@type": "EducationalOrganization", name: "TDL Formation", sameAs: "https://tdl-formation.fr" },
     ...(f.price > 0 && {
       offers: { "@type": "Offer", price: f.price, priceCurrency: "EUR", availability: "https://schema.org/InStock" },
     }),

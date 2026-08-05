@@ -5,4 +5,4 @@ Disallow: /api
 Disallow: /login
 Disallow: /espace-eleve
 
-Sitemap: https://tdl-admindashboard.vercel.app/sitemap.xml
+Sitemap: https://tdl-formation.fr/sitemap.xml

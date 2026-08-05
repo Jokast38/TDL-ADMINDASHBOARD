@@ -16,7 +16,7 @@ export default function FormationCard({ formation: f, revealDelay }) {
         <div className="aspect-video bg-gray-100 overflow-hidden">
           <img
             src={f.image_url || heroForCategory(f.category)}
-            alt={f.title}
+            alt={f.title || "Formation TDL Formation"}
             className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
           />
         </div>

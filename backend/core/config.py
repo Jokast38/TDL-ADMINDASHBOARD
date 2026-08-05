@@ -62,7 +62,7 @@ PUBLIC_BACKEND_URL = os.environ.get("PUBLIC_BACKEND_URL", "https://tdl-admindash
 # http://localhost:3000 (à définir dans .env) ; en prod, le domaine change
 # potentiellement — un seul endroit à mettre à jour, jamais de lien codé en dur
 # qui finirait en 404 après un changement de nom de domaine.
-PUBLIC_FRONTEND_URL = os.environ.get("PUBLIC_FRONTEND_URL", "https://tdl-admindashboard.vercel.app").rstrip("/")
+PUBLIC_FRONTEND_URL = os.environ.get("PUBLIC_FRONTEND_URL", "https://tdl-formation.fr").rstrip("/")
 
 # Permission groups
 ROLES_ALL_STAFF = ("admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial")

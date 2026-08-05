@@ -33,7 +33,7 @@ const ReviewCard = ({ review }) => {
         {review.profile_photo_url ? (
           <img
             src={review.profile_photo_url}
-            alt={review.author_name}
+            alt={review.author_name || "Avis Google"}
             className="w-11 h-11 rounded-full object-cover shrink-0"
             referrerPolicy="no-referrer"
           />

@@ -216,7 +216,7 @@ export default function Landing() {
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data));
     setPageMeta({
       title: "TDL Formation — CACES, Permis, Auto-école, SSIAP, VTC/Taxi",
-      description: "TDL Formation — Centre de formation professionnelle agréé Qualiopi à Épinay-sur-Seine (93) et Creil (60) : CACES, récupération de points, auto-école, SSIAP, VTC/Taxi. Inscription en ligne, dossiers ANTS suivis.",
+      description: "Centre agréé Qualiopi à Épinay-sur-Seine (93) et Creil (60) : CACES, récupération de points, auto-école, SSIAP, VTC/Taxi.",
       path: "/",
     });
   }, []);

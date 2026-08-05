@@ -1,0 +1,151 @@
+{
+  "name": "Filtrer mots-clés CSV",
+  "nodes": [
+    {
+      "id": "3656e515-2366-436f-82ba-c469b37095a4",
+      "name": "Formulaire de recherche",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "formTitle": "Filtrer les mots-clés",
+        "formDescription": "Dépose l'export CSV Keyword Planner et choisis tes critères de filtrage.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Fichier CSV (export Keyword Planner)",
+              "fieldName": "Fichier CSV (export Keyword Planner)",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".csv",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Mot-clé contient",
+              "fieldName": "Mot-clé contient",
+              "fieldType": "text",
+              "placeholder": "ex : trottinette",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Volume mensuel minimum",
+              "fieldName": "Volume mensuel minimum",
+              "fieldType": "number",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Volume mensuel maximum",
+              "fieldName": "Volume mensuel maximum",
+              "fieldType": "number",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Niveau de concurrence",
+              "fieldName": "Niveau de concurrence",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Tous"
+                  },
+                  {
+                    "option": "Faible"
+                  },
+                  {
+                    "option": "Moyen"
+                  },
+                  {
+                    "option": "Élevé"
+                  }
+                ]
+              },
+              "defaultValue": "Tous",
+              "requiredField": false
+            },
+            {
+              "fieldLabel": "Variation YoY minimum (%)",
+              "fieldName": "Variation YoY minimum (%)",
+              "fieldType": "number",
+              "placeholder": "ex : 20",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false,
+          "buttonLabel": "Filtrer"
+        }
+      },
+      "webhookId": "3230c2db-0d3f-4346-9c4d-9b5a8bee9217"
+    },
+    {
+      "id": "860a1218-8a27-461f-993b-d8ec81ff8680",
+      "name": "Filtrer les mots-clés",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst item = $input.first();\nconst binaryKeys = Object.keys(item.binary || {});\nif (binaryKeys.length === 0) {\n  throw new Error(\"Aucun fichier CSV reçu. Merci de joindre l'export CSV Keyword Planner.\");\n}\nconst buffer = await this.helpers.getBinaryDataBuffer(0, binaryKeys[0]);\n\nlet text;\nif (buffer[0] === 0xFF && buffer[1] === 0xFE) {\n  text = buffer.toString('utf16le');\n} else if (buffer[0] === 0xFE && buffer[1] === 0xFF) {\n  text = buffer.swap16().toString('utf16le');\n} else {\n  text = buffer.toString('utf8');\n}\ntext = text.replace(/^\\uFEFF/, '');\n\nconst lines = text.split(/\\r?\\n/).filter(l => l.length > 0);\nconst headerLineIndex = lines.findIndex(l => l.startsWith('Keyword\\t'));\nif (headerLineIndex === -1) {\n  throw new Error(\"Format de fichier non reconnu : en-tête 'Keyword' introuvable.\");\n}\nconst dataLines = lines.slice(headerLineIndex + 1);\n\nfunction parsePct(s) {\n  if (!s || s === '∞') return null;\n  const n = parseFloat(s.replace('%', '').replace(',', '.'));\n  return isNaN(n) ? null : n;\n}\n\nconst rows = dataLines.map(line => {\n  const cols = line.split('\\t');\n  return {\n    keyword: cols[0] || '',\n    avgMonthlySearches: cols[2] && cols[2].trim() !== '' ? parseInt(cols[2], 10) : null,\n    var3mPct: parsePct(cols[3]),\n    varYoyPct: parsePct(cols[4]),\n    competition: cols[5] && cols[5].trim() !== '' ? cols[5] : 'Inconnu',\n    competitionIndexed: cols[6] && /^[0-9]+$/.test(cols[6].trim()) ? parseInt(cols[6], 10) : null\n  };\n});\n\nconst form = item.json;\nconst contains = (form['Mot-clé contient'] || '').toString().toLowerCase().trim();\nconst minVol = form['Volume mensuel minimum'] !== undefined && form['Volume mensuel minimum'] !== '' && form['Volume mensuel minimum'] !== null ? Number(form['Volume mensuel minimum']) : null;\nconst maxVol = form['Volume mensuel maximum'] !== undefined && form['Volume mensuel maximum'] !== '' && form['Volume mensuel maximum'] !== null ? Number(form['Volume mensuel maximum']) : null;\nconst competitionFilter = form['Niveau de concurrence'] || 'Tous';\nconst minYoy = form['Variation YoY minimum (%)'] !== undefined && form['Variation YoY minimum (%)'] !== '' && form['Variation YoY minimum (%)'] !== null ? Number(form['Variation YoY minimum (%)']) : null;\n\nlet filtered = rows.filter(r => {\n  if (contains && !r.keyword.toLowerCase().includes(contains)) return false;\n  if (minVol !== null && (r.avgMonthlySearches === null || r.avgMonthlySearches < minVol)) return false;\n  if (maxVol !== null && (r.avgMonthlySearches === null || r.avgMonthlySearches > maxVol)) return false;\n  if (competitionFilter && competitionFilter !== 'Tous' && r.competition !== competitionFilter) return false;\n  if (minYoy !== null && (r.varYoyPct === null || r.varYoyPct < minYoy)) return false;\n  return true;\n});\n\nfiltered.sort((a, b) => (b.avgMonthlySearches || 0) - (a.avgMonthlySearches || 0));\n\nconst maxDisplay = 500;\nconst truncated = filtered.length > maxDisplay;\nconst displayRows = filtered.slice(0, maxDisplay);\n\nfunction escapeHtml(s) {\n  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n}\n\nconst tableRows = displayRows.map(function(r) {\n  return '<tr><td>' + escapeHtml(r.keyword) + '</td><td>' + (r.avgMonthlySearches !== null ? r.avgMonthlySearches : '') + '</td><td>' + escapeHtml(r.competition) + '</td><td>' + (r.varYoyPct !== null ? r.varYoyPct + '%' : '') + '</td></tr>';\n}).join('');\n\nconst html = '<div style=\"text-align:left;max-height:480px;overflow:auto;\">'\n  + '<p><strong>' + filtered.length + '</strong> mot(s)-clé(s) trouvé(s)' + (truncated ? ' (affichage limité aux 500 premiers, triés par volume décroissant)' : '') + '.</p>'\n  + '<table border=\"1\" cellpadding=\"4\" style=\"border-collapse:collapse;width:100%;font-size:13px;\">'\n  + '<tr><th>Mot-clé</th><th>Volume mensuel moyen</th><th>Concurrence</th><th>Variation YoY</th></tr>'\n  + tableRows\n  + '</table></div>';\n\nreturn [{ json: { resultHtml: html, count: filtered.length, keywords: filtered.map(r => r.keyword) } }];\n"
+      }
+    },
+    {
+      "id": "6ecdf904-4bef-4b88-8ff7-c20744474889",
+      "name": "Afficher les résultats",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        840,
+        300
+      ],
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "showText",
+        "responseText": "={{ $json.resultHtml }}"
+      },
+      "webhookId": "3dcb9554-49a1-43ff-bf5b-3780a18df0bb"
+    }
+  ],
+  "connections": {
+    "Formulaire de recherche": {
+      "main": [
+        [
+          {
+            "node": "Filtrer les mots-clés",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrer les mots-clés": {
+      "main": [
+        [
+          {
+            "node": "Afficher les résultats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

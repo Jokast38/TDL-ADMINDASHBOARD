@@ -1,4 +1,4 @@
-const SITE_URL = "https://tdl-admindashboard.vercel.app";
+const SITE_URL = "https://tdl-formation.fr";
 
 function upsertMeta(attr, key, content) {
   let el = document.head.querySelector(`meta[${attr}="${key}"]`);
