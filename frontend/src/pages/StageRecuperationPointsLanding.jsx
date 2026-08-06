@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { toast } from "sonner";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
@@ -17,6 +17,8 @@ import {
 } from "@phosphor-icons/react";
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
+
+const EpinayLocalMap = lazy(() => import("@/components/EpinayLocalMap"));
 
 
 const { TopBar, StageNav, Hero, StepsSection, FaqGrid, BookingForm } = Kit;
@@ -644,20 +646,9 @@ export default function StageRecuperationPointsLanding() {
           </div>
 
           <div className="location-grid">
-            <div className="local-map" role="img" aria-label="Carte stylisée situant TDL Épinay entre les départements 95, 93 et 92">
-              <span className="dept dept-95">95</span>
-              <span className="dept dept-93">93</span>
-              <span className="dept dept-92">92</span>
-              <span className="city city-enghien">Enghien-les-Bains</span>
-              <span className="city city-deuil">Deuil-la-Barre</span>
-              <span className="city city-argenteuil">Argenteuil</span>
-              <span className="city city-villetaneuse">Villetaneuse</span>
-              <span className="city city-saintdenis">Saint-Denis</span>
-              <span className="city city-colombes">Colombes</span>
-              <span className="city city-gennevilliers">Gennevilliers</span>
-              <span className="city city-vlg">Villeneuve-la-Garenne</span>
-              <div className="map-pin"><span /><strong>TDL ÉPINAY</strong></div>
-            </div>
+            <Suspense fallback={<div className="local-map" style={{ background: "#111113" }} />}>
+              <EpinayLocalMap className="local-map" />
+            </Suspense>
 
             <aside className="access-card">
               <p className="eyebrow">Venir au centre</p>
