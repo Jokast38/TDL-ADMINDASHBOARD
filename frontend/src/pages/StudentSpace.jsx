@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SignOut, FileArrowUp, FolderOpen, Warning, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 
 const STATUS_LABEL = {
   nouveau: "Nouveau", en_verification: "En vérification", complet: "Complet",
@@ -179,6 +181,8 @@ export default function StudentSpace() {
           )}
         </div>
       </main>
+      <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

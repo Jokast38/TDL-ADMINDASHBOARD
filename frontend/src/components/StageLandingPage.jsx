@@ -561,9 +561,9 @@ function FeatureStrip({ items }) {
 }
 
 // ─── Étapes ───────────────────────────────────────────────────────────────────
-function StepsSection({ title, steps }) {
+function StepsSection({ title, steps, id }) {
   return (
-    <section className="py-16 lg:py-20 bg-gray-50">
+    <section id={id} className="py-16 lg:py-20 bg-gray-50 scroll-mt-20">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight mb-10 max-w-sm">{title}</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
@@ -642,10 +642,10 @@ function TrustBar({ rating, totalReviews }) {
 }
 
 // ─── FAQ ──────────────────────────────────────────────────────────────────────
-function FaqGrid({ items }) {
+function FaqGrid({ items, id }) {
   const [open, setOpen] = useState(null);
   return (
-    <section className="py-16 lg:py-20 bg-gray-50">
+    <section id={id} className="py-16 lg:py-20 bg-gray-50 scroll-mt-20">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight mb-8">Questions fréquentes</h2>
         <div className="grid sm:grid-cols-2 gap-4">

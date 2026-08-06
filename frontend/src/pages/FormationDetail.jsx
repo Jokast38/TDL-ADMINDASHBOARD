@@ -14,6 +14,7 @@ import CareerOutlookSection from "@/components/CareerOutlookSection";
 import VideoPreview from "@/components/VideoPreview";
 import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
 
@@ -253,6 +254,7 @@ export default function FormationDetail() {
 
       <SiteFooter />
       <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

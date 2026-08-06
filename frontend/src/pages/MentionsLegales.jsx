@@ -4,6 +4,8 @@ import { Link } from "react-router-dom";
 import { TopBar } from "@/components/StageLandingPage";
 import { ArrowLeft, CaretRight } from "@phosphor-icons/react";
 import SiteFooter from "@/components/SiteFooter";
+import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 
 const SECTIONS = [
   {
@@ -154,6 +156,8 @@ export default function MentionsLegales() {
       </article>
 
       <SiteFooter />
+      <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

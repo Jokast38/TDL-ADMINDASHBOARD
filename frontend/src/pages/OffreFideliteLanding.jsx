@@ -8,6 +8,8 @@ import { setPageMeta } from "@/lib/seo";
 import { trackSchedule, trackLead } from "@/lib/metaPixel";
 import Kit, { DEFAULT_FEATURES, DEFAULT_STEPS } from "@/components/StageLandingPage";
 import { generateUpcomingSessions } from "@/lib/upcomingSessions";
+import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 
 const { TopBar, StageNav, Hero, FeatureStrip, StepsSection, SessionBanner, TrustBar, FaqGrid, BookingForm } = Kit;
 
@@ -159,6 +161,8 @@ export default function OffreFideliteLanding() {
       <FaqGrid items={FAQ} />
 
       <SiteFooter />
+      <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

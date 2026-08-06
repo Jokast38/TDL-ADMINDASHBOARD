@@ -4,16 +4,55 @@ import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
 import { trackSchedule, trackLead } from "@/lib/metaPixel";
 import { generateUpcomingSessions } from "@/lib/upcomingSessions";
-import Kit, { DEFAULT_FEATURES, DEFAULT_STEPS } from "@/components/StageLandingPage";
+import Kit from "@/components/StageLandingPage";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import { api } from "@/lib/api";
 import "@/styles/stage-recuperation-points.css";
 import heroTrainingImage from "@/assets/hero-training.jpeg";
 import logoTdlImage from "@/assets/logo-tdl.png";
 import StripeCheckout from "@/components/StripeCheckout";
+import {
+  Check, CreditCard, Star, UsersThree, Envelope, Briefcase, Hourglass, CalendarBlank,
+  Car, Warning, MapPin, Handshake, CurrencyEur, Phone,
+} from "@phosphor-icons/react";
+import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 
 
-const { TopBar, StageNav, Hero, FeatureStrip, StepsSection, SessionBanner, TrustBar, FaqGrid, BookingForm } = Kit;
+const { TopBar, StageNav, Hero, StepsSection, FaqGrid, BookingForm } = Kit;
+
+const FIT_FOR_YOU = [
+  { icon: Car, text: "Vous avez perdu des points sur votre permis." },
+  { icon: Warning, text: "Votre solde de points devient faible." },
+  { icon: Envelope, text: "Vous avez reçu un courrier concernant votre permis (48N, 48M, etc.)." },
+  { icon: Briefcase, text: "Vous avez besoin de votre permis pour travailler." },
+  { icon: Hourglass, text: "Vous souhaitez récupérer rapidement jusqu'à 4 points." },
+  { icon: CalendarBlank, text: "Vous recherchez une session disponible rapidement en Île-de-France." },
+];
+
+const STEPS_CUSTOM = [
+  { title: "Réservez votre place", desc: "Choisissez la session qui vous convient et finalisez votre inscription en quelques minutes." },
+  { title: "Recevez votre confirmation", desc: "Vous recevez rapidement toutes les informations utiles concernant votre stage." },
+  { title: "Participez au stage", desc: "Présentez-vous au centre d'Épinay-sur-Seine aux dates prévues et suivez votre formation." },
+  { title: "Récupérez jusqu'à 4 points", desc: "Une fois le stage terminé, les démarches administratives sont effectuées conformément à la réglementation." },
+];
+
+const GALLERY_IMAGES = [
+  { src: heroTrainingImage, alt: "Formation au centre TDL Formation" },
+  { src: "/tdl-image/banniere-stade-de-recuperation-de-points-Moyenne.jpeg", alt: "Stage de récupération de points" },
+  { src: "/tdl-image/reussite-examen-1er-coup-tdl-1024x700-1.webp", alt: "Réussite à l'examen du premier coup" },
+  { src: "/tdl-image/about-1.jpg", alt: "Ambiance du centre de formation TDL" },
+  { src: "/tdl-image/about-2.jpg", alt: "Salle de formation TDL Formation" },
+];
+
+const BENEFITS_6 = [
+  { icon: CurrencyEur, title: "Prix direct, sans intermédiaire", desc: "Profitez d'un tarif attractif en réservant directement auprès de notre centre, sans passer par des plateformes qui ajoutent leurs commissions." },
+  { icon: CreditCard, title: "Paiement en plusieurs fois", desc: "Réservez votre stage et étalez votre paiement selon les modalités proposées." },
+  { icon: MapPin, title: "Facile d'accès", desc: "Situé à Épinay-sur-Seine, notre centre est facilement accessible depuis les départements 92, 93 et 95, en transports en commun comme en voiture." },
+  { icon: CalendarBlank, title: "Sessions régulières", desc: "Des dates disponibles tout au long de l'année pour s'adapter à votre planning." },
+  { icon: Handshake, title: "Une équipe qui vous accompagne", desc: "Notre équipe vous guide avant votre inscription et répond à toutes vos questions." },
+  { icon: Star, title: "Une réputation reconnue", desc: "Des centaines de conducteurs nous ont déjà fait confiance, comme en témoignent nos avis Google." },
+];
 
 const VILLES = ["Épinay-sur-Seine (93)", "Creil (60)"];
 
@@ -21,10 +60,14 @@ const SESSIONS = generateUpcomingSessions();
 const NEXT_SESSION_LABEL = SESSIONS[0]?.items[0] || "Dates à venir — être informé";
 
 const FAQ = [
-  { q: "Combien de points puis-je récupérer ?", a: "Le stage permet de récupérer jusqu'à quatre points, dans la limite du plafond de votre permis et selon les conditions réglementaires." },
-  { q: "Le stage comporte-t-il un examen ?", a: "Non. Il n'y a pas d'examen final. Votre présence pendant les deux journées complètes est obligatoire." },
-  { q: "Quand mes points sont-ils crédités ?", a: "Les points prennent effet réglementairement dès le lendemain de la deuxième journée, puis apparaissent après traitement administratif." },
-  { q: "Peut-on payer en plusieurs fois ?", a: "Oui, le paiement en plusieurs fois est disponible lors de la réservation en ligne, selon les modalités proposées." },
+  { q: "Combien de points puis-je récupérer ?", a: "Jusqu'à 4 points, conformément à la réglementation, dans la limite du plafond de votre permis." },
+  { q: "Combien de temps dure le stage ?", a: "Le stage se déroule sur 2 jours consécutifs. Il n'y a pas d'examen final, votre présence pendant les deux journées complètes est obligatoire." },
+  { q: "Puis-je payer en plusieurs fois ?", a: "Oui, nous proposons un paiement en plusieurs fois selon les modalités disponibles au moment de la réservation en ligne." },
+  { q: "Où se déroule le stage ?", a: "Dans notre centre situé au 59 avenue Joffre, 93800 Épinay-sur-Seine, facilement accessible depuis les départements 92, 93 et 95. Un second centre est disponible à Creil (60)." },
+  { q: "Quand les points sont-ils crédités ?", a: "Les démarches administratives sont réalisées conformément à la réglementation après votre participation complète au stage." },
+  { q: "Que dois-je apporter le jour du stage ?", a: "Les documents nécessaires (pièce d'identité, permis de conduire...) vous seront communiqués dans votre confirmation d'inscription." },
+  { q: "Puis-je annuler ou modifier ma réservation ?", a: "Contactez notre équipe dès que possible par téléphone ou via le formulaire de contact : nous étudions chaque situation au cas par cas pour trouver la meilleure solution." },
+  { q: "Comment réserver ?", a: "Choisissez une session disponible dans le calendrier ci-dessus, puis remplissez le formulaire de réservation — c'est rapide et se fait entièrement en ligne." },
 ];
 
 const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
@@ -131,8 +174,8 @@ export default function StageRecuperationPointsLanding() {
 
   useEffect(() => {
     setPageMeta({
-      title: "Stage récupération de points — 240€ | TDL Formation",
-      description: "Récupérez jusqu'à 4 points sur votre permis en 2 jours. Stage agréé, sessions à Épinay-sur-Seine et Creil.",
+      title: "Stage Récupération de Points Épinay-sur-Seine (93) | TDL Formation",
+      description: "Récupérez jusqu'à 4 points sur votre permis en 2 jours à Épinay-sur-Seine (93), aussi à Creil (60). Stage agréé — 240€, réservation en ligne.",
       path: "/stage-recuperation-points",
     });
     // Vérifier le statut du paiement après redirection
@@ -456,9 +499,9 @@ export default function StageRecuperationPointsLanding() {
       <StageNav ctaLabel="Réserver une session" ctaHref="#form" />
 
       <Hero
-        titleLine1="Stage de récupération"
-        titleLine2Gold="de points à 240 €"
-        subheadline="Stage agréé • Épinay-sur-Seine et Creil"
+        titleLine1="Récupérez jusqu'à"
+        titleLine2Gold="4 points en 2 jours"
+        subheadline="Stage agréé à Épinay-sur-Seine • Paiement en plusieurs fois • Réservation simple et rapide"
         description="Jusqu'à +4 points sur votre permis en 2 jours. Une formation sans examen, aux portes du 93, du 95 et du 92."
         heroImage={heroTrainingImage}
         villes={VILLES}
@@ -475,9 +518,120 @@ export default function StageRecuperationPointsLanding() {
 
 
 
-      <FeatureStrip items={DEFAULT_FEATURES} />
+      {/* //Badges de confiance sous le CTA du hero  */}
+      <div className="max-w-xl mx-auto px-6 flex flex-col items-center gap-2 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-x-6 sm:gap-y-2 pb-8 text-[13px] font-bold text-gray-700 text-center">
+        <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> Jusqu'à 4 points récupérés</span>
+        <span className="inline-flex items-center gap-1.5"><CreditCard size={15} weight="bold" style={{ color: "#d4af37" }} /> Paiement en plusieurs fois</span>
+        <span className="inline-flex items-center gap-1.5"><Star size={15} weight="fill" style={{ color: "#d4af37" }} /> Avis Google 4,9/5</span>
+      </div>
 
-      <StepsSection title="Une démarche simple, un résultat concret." steps={DEFAULT_STEPS} />
+      {/* SECTION 2 — Pourquoi des centaines de conducteurs nous font confiance */}
+      <section className="trust-section">
+        <div className="container">
+          <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-center mb-8">
+            Pourquoi des centaines de conducteurs nous font confiance ?
+          </h2>
+          <div className="trust-grid">
+            <div className="trust-item">
+              <img
+                src="/Logo-Qualiopi-150dpi-Avec-Marianne-1.jpg.jpeg"
+                alt="Certifié Qualiopi"
+                className="badge-logo"
+                loading="lazy"
+              />
+              <div>
+                <strong>Centre de formation certifié</strong>
+                <small>Certification Qualiopi</small>
+              </div>
+            </div>
+            <div className="trust-item">
+              <span><Check size={22} weight="bold" /></span>
+              <div>
+                <strong>Des centaines de conducteurs</strong>
+                <small>récupèrent leurs points dans notre centre</small>
+              </div>
+            </div>
+            <div className="trust-item">
+              <img
+                src="/tdl-image/Préfet_de_la_Seine-Saint-Denis.svg.webp"
+                alt="Préfecture de la Seine-Saint-Denis"
+                className="badge-logo"
+                loading="lazy"
+              />
+              <div>
+                <strong>Centre agréé par la Préfecture</strong>
+                <small>Stage officiel conforme à la réglementation</small>
+              </div>
+            </div>
+            <a className="trust-phone" href="tel:+33180907249">
+              <span><Phone size={22} weight="bold" /></span>
+              <div>
+                <small>Besoin d'aide ?</small>
+                <strong>01 80 90 72 49</strong>
+              </div>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <GoogleReviewsCarousel />
+
+      {/* SECTION 3 — Ce stage est fait pour vous si... */}
+      <section className="py-16 lg:py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-6 lg:px-8">
+          <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-center mb-10">
+            Ce stage est fait pour vous si…
+          </h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {FIT_FOR_YOU.map((item) => (
+              <div key={item.text} className="bg-gray-50 border border-gray-200 rounded-md p-5 flex items-start gap-3" data-reveal>
+                <item.icon size={24} weight="bold" className="shrink-0" style={{ color: "#d4af37" }} />
+                <p className="text-sm text-gray-700 leading-relaxed">{item.text}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-10 max-w-2xl mx-auto text-center bg-gray-50 border border-[#d4af37]/30 rounded-md p-5">
+            <p className="text-sm text-gray-600">
+              Quelle que soit votre situation, notre équipe vous accompagne pour choisir la session adaptée à votre dossier.
+            </p>
+          </div>
+          <div className="text-center mt-8">
+            <a href="#form" style={{ backgroundColor: "#d4af37" }} className="inline-flex items-center text-black font-bold uppercase text-xs tracking-wide px-8 py-4 rounded-md">
+              Réservez une session
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 4 — Comment se déroule votre stage ? */}
+      <StepsSection id="etapes" title="Votre stage en 4 étapes simples" steps={STEPS_CUSTOM} />
+
+      <section className="py-4 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {GALLERY_IMAGES.map((img) => (
+              <div key={img.src} className="aspect-square overflow-hidden rounded-md bg-black">
+                <img src={img.src} alt={img.alt} loading="lazy" className="w-full h-full object-cover" />
+              </div>
+            ))}
+          </div>
+{/* 
+          <div className="mt-10 max-w-2xl mx-auto text-center bg-white border border-gray-200 rounded-md p-5">
+            <p className="text-sm text-gray-600 flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+              <span className="inline-flex items-center gap-1"><Check size={14} weight="bold" style={{ color: "#d4af37" }} /> Centre agréé (Qualiopi & Préfecture)</span>
+              <span>·</span>
+              <span className="inline-flex items-center gap-1"><Check size={14} weight="bold" style={{ color: "#d4af37" }} /> Paiement en plusieurs fois</span>
+              <span>·</span>
+              <span className="inline-flex items-center gap-1"><Check size={14} weight="bold" style={{ color: "#d4af37" }} /> Équipe disponible pour vous accompagner</span>
+            </p>
+          </div> */}
+          <div className="text-center mt-8 pb-6">
+            <a href="#form" style={{ backgroundColor: "#d4af37" }} className="inline-flex items-center text-black font-bold uppercase text-xs tracking-wide px-8 py-4 rounded-md">
+              Réservez une session
+            </a>
+          </div>
+        </div>
+      </section>
 
       <section className="location-section" id="acces">
         <div className="container">
@@ -520,10 +674,50 @@ export default function StageRecuperationPointsLanding() {
         </div>
       </section>
 
+      {/* SECTION 5 — Avantages */}
+      <section id="avantages" className="py-16 lg:py-20 bg-gray-50 scroll-mt-20">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-center mb-10">
+            Pourquoi réserver directement avec nous ?
+          </h2>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-12">
+            {BENEFITS_6.map((b) => (
+              <div key={b.title} className="bg-white border border-gray-200 rounded-md p-5" data-reveal>
+                <p className="font-bold text-sm mb-1 flex items-center gap-1.5"><b.icon size={18} weight="bold" style={{ color: "#d4af37" }} /> {b.title}</p>
+                <p className="text-sm text-gray-500 leading-relaxed">{b.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="payment-section" style={{ border: "1px solid #e5e7eb", borderRadius: 8 }}>
+            <div className="container payment-grid">
+              <div>
+                <span className="payment-icon">◇</span>
+                <div>
+                  <strong>Paiement 100 % sécurisé</strong>
+                  <small>Vos informations sont protégées</small>
+                </div>
+              </div>
+              <p>Carte bancaire <b>•</b> PayPal <b>•</b> Apple Pay <b>•</b> Google Pay</p>
+              <div className="payment-logos" aria-label="Moyens de paiement">
+                <img src="https://cdn.simpleicons.org/visa/1A1F71" alt="Visa" loading="lazy" />
+                <img src="https://cdn.simpleicons.org/mastercard" alt="Mastercard" loading="lazy" />
+                <img src="https://cdn.simpleicons.org/paypal/00457C" alt="PayPal" loading="lazy" />
+                <img src="https://cdn.simpleicons.org/applepay/000000" alt="Apple Pay" loading="lazy" />
+                <img src="https://cdn.simpleicons.org/googlepay/4285F4" alt="Google Pay" loading="lazy" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 6 — Choisissez votre prochaine session */}
       <section className="py-16 lg:py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#d4af37" }}>Calendrier</p>
-          <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-10">Les prochaines sessions</h2>
+          <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-3">Réservez votre place pour la prochaine session</h2>
+          <p className="text-gray-500 mb-6">Choisissez la date qui vous convient et réservez votre stage directement en ligne.</p>
+          <p className="text-sm text-gray-500 italic mb-10">Les places sont limitées pour chaque session. Nous vous conseillons de réserver dès que possible.</p>
 
           {SESSIONS.map(({ mois, items }, index) => {
             const isExpanded = expandedMonths[mois] || false;
@@ -611,52 +805,45 @@ export default function StageRecuperationPointsLanding() {
         </div>
       </section>
 
-      <section className="payment-section">
-        <div className="container payment-grid">
-          <div>
-            <span className="payment-icon">◇</span>
-            <div>
-              <strong>Paiement 100 % sécurisé</strong>
-              <small>Vos informations sont protégées</small>
-            </div>
-          </div>
-          <p>Carte bancaire <b>•</b> PayPal <b>•</b> Apple Pay <b>•</b> Google Pay</p>
-          <div className="payment-logos" aria-label="Moyens de paiement">
-            <span>CB</span>
-            <span>PayPal</span>
-            <span> Pay</span>
-            <span>G Pay</span>
-          </div>
-        </div>
-      </section>
+      {/* SECTION 7 — FAQ */}
+      <FaqGrid id="faq" items={FAQ} />
+      <div className="text-center py-8 bg-gray-50 border-t border-gray-200">
+        <a href="tel:+33180907249" className="inline-flex items-center gap-1.5 text-sm font-semibold text-gray-600 hover:text-[#d4af37]">
+          <Phone size={16} weight="bold" /> Une question ? Contactez-nous au 01 80 90 72 49
+        </a>
+      </div>
 
-      <section className="trust-section">
-        <div className="container trust-grid">
-          <div className="rating">
-            <span className="quote">"</span>
-            <div>
-              <strong>Excellent — 4,9/5</strong>
-              <span className="stars">★★★★★</span>
-            </div>
+      {/* SECTION 8 — Dernier appel à l'action */}
+      <section className="py-16 lg:py-20 bg-black text-white text-center">
+        <div className="max-w-3xl mx-auto px-6 lg:px-8">
+          <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">
+            Réservez votre stage et récupérez jusqu'à 4 points en seulement 2 jours.
+          </h2>
+          <p className="text-gray-400 mb-8">
+            Choisissez votre prochaine session à Épinay-sur-Seine et réservez votre place en quelques minutes.
+          </p>
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-semibold mb-10">
+            <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> Jusqu'à 4 points récupérés</span>
+            <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> Paiement en plusieurs fois</span>
+            <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> À partir de 240 €</span>
+            <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> Réservation rapide</span>
           </div>
-          <div className="trust-item">
-            <span>✓</span>
-            <div>
-              <strong>Centre de confiance</strong>
-              <small>Une équipe à votre écoute</small>
-            </div>
-          </div>
-          <a className="trust-phone" href="tel:+33180907249">
-            <span>☎</span>
-            <div>
-              <small>Besoin d'aide ?</small>
-              <strong>01 80 90 72 49</strong>
-            </div>
+          <a href="#form" style={{ backgroundColor: "#d4af37" }} className="inline-flex items-center text-black font-bold uppercase text-sm tracking-wide px-12 py-5 rounded-md">
+            Réservez une session
           </a>
+
+          <div className="mt-12 pt-8 border-t border-white/10 flex flex-wrap justify-center gap-x-10 gap-y-4 text-sm text-gray-300">
+            <a href="tel:+33180907249" className="inline-flex items-center gap-1.5 hover:text-[#d4af37]"><Phone size={15} weight="bold" /> 01 80 90 72 49</a>
+            <a href="mailto:contact@tdl-formation.fr" className="inline-flex items-center gap-1.5 hover:text-[#d4af37]"><Envelope size={15} weight="bold" /> contact@tdl-formation.fr</a>
+            <span className="inline-flex items-center gap-1.5"><MapPin size={15} weight="bold" /> 59 avenue Joffre, 93800 Épinay-sur-Seine</span>
+          </div>
+          <p className="mt-6 text-xs text-gray-500 flex items-center justify-center gap-1">
+            {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={12} weight="fill" style={{ color: "#d4af37" }} />)}
+            4,9/5 sur Google · Des centaines de conducteurs accompagnés
+          </p>
         </div>
       </section>
 
-      <GoogleReviewsCarousel />
       <BookingForm
         formRef={formRef}
         form={form}
@@ -673,7 +860,6 @@ export default function StageRecuperationPointsLanding() {
         onInscriptionCreated={handleInscriptionCreated}
 
       />
-      <FaqGrid items={FAQ} />
 
       <footer className="site-footer">
         <div className="container footer-grid">
@@ -916,6 +1102,8 @@ export default function StageRecuperationPointsLanding() {
           background: rgba(255,255,255,0.1);
         }
       `}</style>
+      <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

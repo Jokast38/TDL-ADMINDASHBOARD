@@ -9,6 +9,7 @@ import { ArrowLeft, ArrowRight, Calendar, Tag, Eye } from "@phosphor-icons/react
 import { useReveal } from "@/hooks/useReveal";
 import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 import { setPageMeta } from "@/lib/seo";
 
 const CATEGORIES = [
@@ -152,6 +153,7 @@ export default function Blog() {
 
       <SiteFooter className="border-t border-gray-200 py-8 bg-gray-50" />
       <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

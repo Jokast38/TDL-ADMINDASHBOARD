@@ -119,13 +119,14 @@ button, select { font: inherit; }
 .payment-grid { display: grid; grid-template-columns: 1fr 1fr auto; align-items: center; gap: 30px; }
 .payment-grid > div:first-child { display: flex; align-items: center; gap: 15px; }.payment-icon { font-size: 34px; color: var(--yellow-deep); }.payment-grid strong,.payment-grid small { display: block; }.payment-grid small { color: var(--muted); }
 .payment-grid p { text-align: center; color: var(--muted); }.payment-grid b { color: var(--yellow-deep); }
-.payment-logos { display: flex; gap: 7px; }.payment-logos span { padding: 6px 9px; border: 1px solid #bbb; border-radius: 4px; font-size: 12px; font-weight: 700; }
+.payment-logos { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }.payment-logos span { padding: 6px 9px; border: 1px solid #bbb; border-radius: 4px; font-size: 12px; font-weight: 700; }.payment-logos img { height: 26px; width: auto; object-fit: contain; }
 
 .trust-section { padding: 32px 0; }
-.trust-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; }
-.trust-grid > * { min-height: 80px; padding: 0 34px; display: flex; align-items: center; gap: 18px; border-right: 1px solid var(--line); }.trust-grid > *:last-child { border-right: 0; }
+.trust-grid { display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; }
+.trust-grid > * { min-height: 80px; padding: 0 24px; display: flex; align-items: center; gap: 14px; border-right: 1px solid var(--line); }.trust-grid > *:last-child { border-right: 0; }
 .quote { color: var(--yellow-deep); font-family: Georgia; font-size: 76px; line-height: .7; }.rating strong,.rating .stars { display: block; }.stars { color: var(--yellow-deep); font-size: 21px; letter-spacing: 4px; }
 .trust-item > span,.trust-phone > span { width: 54px; height: 54px; display: grid; place-items: center; border: 2px solid var(--yellow-deep); border-radius: 50%; font-size: 24px; }.trust-item strong,.trust-item small,.trust-phone strong,.trust-phone small { display: block; }.trust-item small,.trust-phone small { color: var(--muted); }
+.trust-item img.badge-logo { width: 54px; height: 54px; shrink: 0; flex-shrink: 0; object-fit: contain; border-radius: 50%; border: 2px solid var(--yellow-deep); background: #fff; padding: 6px; }
 
 .faq-section { padding: 100px 0; background: var(--soft); }
 .faq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -148,6 +149,7 @@ button, select { font: inherit; }
   .location-grid { grid-template-columns: 1.3fr .8fr; }.access-card { padding: 40px 28px; }
   .session-card { grid-template-columns: auto 1fr auto; }.session-card .button { grid-column: 2 / -1; }.session-price { border: 0; }
   .payment-grid { grid-template-columns: 1fr 1fr; }.payment-logos { grid-column: 1 / -1; justify-content: center; }
+  .trust-grid { grid-template-columns: 1fr 1fr; }.trust-grid > * { border-bottom: 1px solid var(--line); }.trust-grid > *:nth-child(2n) { border-right: 0; }
 }
 
 @media (max-width: 760px) {

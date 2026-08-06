@@ -10,6 +10,7 @@ import { CATEGORY_LABELS } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
 import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 import { setPageMeta } from "@/lib/seo";
 
 const CATEGORY_ORDER = ["VTC_TAXI", "CACES", "PERMIS", "AUTO_ECOLE", "SSIAP", "ECSR", "VENTE"];
@@ -180,6 +181,7 @@ export default function FAQ() {
 
       <SiteFooter />
       <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

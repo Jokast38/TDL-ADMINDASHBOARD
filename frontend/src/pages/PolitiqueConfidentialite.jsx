@@ -5,6 +5,8 @@ import { TopBar } from "@/components/StageLandingPage";
 import { ArrowLeft, CaretRight } from "@phosphor-icons/react";
 import SiteFooter from "@/components/SiteFooter";
 import { openCookieSettings } from "@/lib/consent";
+import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 
 const SECTIONS = [
   {
@@ -219,6 +221,8 @@ export default function PolitiqueConfidentialite() {
       </article>
 
       <SiteFooter />
+      <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

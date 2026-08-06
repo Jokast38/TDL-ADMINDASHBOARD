@@ -12,6 +12,8 @@ import Kit from "@/components/StageLandingPage";
 import {
   CaretRight, CalendarBlank, Certificate, Taxi, ChatCircleText, MapPin,
 } from "@phosphor-icons/react";
+import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 
 const { TopBar, StageNav, FeatureStrip, StepsSection, TrustBar, FaqGrid, GOLD } = Kit;
 
@@ -200,6 +202,8 @@ export default function MobiliteTaxiLanding() {
       <FaqGrid items={FAQ} />
 
       <SiteFooter />
+      <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

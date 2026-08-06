@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { TopBar } from "@/components/StageLandingPage";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { CATEGORY_LABELS, HOME_HERO_SLIDES } from "@/constants/formationAssets";
 import FormationCard from "@/components/FormationCard";
 import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
@@ -20,7 +21,9 @@ export default function PublicFormations() {
   const [formations, setFormations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("all");
+  const [searchParams] = useSearchParams();
+  // Permet un lien direct filtré, ex. /formations?category=ECSR depuis la navbar.
+  const [category, setCategory] = useState(searchParams.get("category") || "all");
   const revealRef = useReveal();
 
   useEffect(() => {
@@ -186,6 +189,7 @@ export default function PublicFormations() {
 
       <SiteFooter />
       <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

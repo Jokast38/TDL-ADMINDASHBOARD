@@ -33,6 +33,7 @@ import { setPageMeta } from "@/lib/seo";
 const GoogleReviewsCarousel = lazy(() => import("@/components/GoogleReviewsCarousel"));
 const FranceMapSection = lazy(() => import("@/components/FranceMapSection"));
 const ChatWidget = lazy(() => import("@/components/ChatWidget"));
+const ContactBubble = lazy(() => import("@/components/ContactBubble"));
 
 const HOME_FAQ = [
   {
@@ -69,12 +70,14 @@ const CATEGORIES = [
 
 // Menus déroulants navbar : chaque entrée est reliée par son titre exact en
 // base (voir /api/formations) à l'inscription pré-remplie correspondante.
-const NAV_VTC = ["Formation VTC", "Formation VTC en Ligne", "Formation Continue VTC", "Formation Passerelle Taxi → VTC"];
-const NAV_TAXI = ["Formation Taxi Initiale", "Formation Continue Taxi", "Formation Passerelle VTC vers Taxi", "Formation Mobilité Taxi Banlieue (60-93)", "Passerelle Taxi Banlieue vers Parisien"];
+const NAV_VTC = ["Formation VTC 93 & 60", "Formation VTC en Ligne", "Formation Continue VTC", "Formation Passerelle Taxi → VTC"];
+const NAV_TAXI = ["Formation Taxi 93 & 60", "Formation Continue Taxi", "Formation Passerelle VTC vers Taxi", "Formation Mobilité Taxi Banlieue (60-93)", "Passerelle Taxi Banlieue vers Parisien"];
 
 // Entrées de menu qui pointent vers une landing page dédiée plutôt que vers
 // une fiche formation en base (pas toujours présentes/à jour côté base).
 const NAV_ROUTE_OVERRIDES = {
+  "Formation VTC 93 & 60": "/formation-vtc",
+  "Formation Taxi 93 & 60": "/formation-taxi",
   "Formation Mobilité Taxi Banlieue (60-93)": "/mobilite-taxi",
   "Passerelle Taxi Banlieue vers Parisien": "/passerelle-taxi-banlieue-parisien",
 };
@@ -249,7 +252,8 @@ export default function Landing() {
   }, []);
 
   const byTitle = (title) => formations.find((f) => f.title === title);
-  const autoEcole = byTitle("Permis B - Forfait complet");
+  // Auto-école retiré de la navbar pour l'instant (à réactiver plus tard) :
+  // const autoEcole = byTitle("Permis B - Forfait complet");
   const conseillerVente = byTitle("Titre Professionnel Conseiller de Vente");
 
   const submitContact = async (e) => {
@@ -312,11 +316,11 @@ export default function Landing() {
           <nav className="hidden xl:flex items-center gap-5 text-sm shrink min-w-0 whitespace-nowrap overflow-x-auto">
             <NavDropdown label="Formations VTC" titles={NAV_VTC} />
             <NavDropdown label="Formations Taxi" titles={NAV_TAXI} />
-            <Link to={autoEcole ? `/formations/${autoEcole.id}` : "#formations"} className="hover:text-[#d4af37]">Auto-école</Link>
+            <Link to="/formation-caces" className="hover:text-[#d4af37]">CACES 93 & 60</Link>
+            <Link to="/formations?category=ECSR" className="hover:text-[#d4af37]">ECSR</Link>
             <Link to={conseillerVente ? `/formations/${conseillerVente.id}` : "#formations"} className="hover:text-[#d4af37]">Conseiller de Vente</Link>
-            <Link to="/formations" className="hover:text-[#d4af37]">Toutes les formations</Link>
+            <Link to="/formations" className="hover:text-[#d4af37]">Nos formations</Link>
             <Link to="/blog" className="hover:text-[#d4af37]">Blog</Link>
-            <a href="#contact" className="hover:text-[#d4af37]">Contact</a>
           </nav>
           <div className="flex items-center gap-2 shrink-0">
             <Link to="/login" className="hidden xl:block">
@@ -352,15 +356,17 @@ export default function Landing() {
                 open={mobileSubOpen === "taxi"} onToggle={() => setMobileSubOpen((v) => (v === "taxi" ? null : "taxi"))}
                 onNavigate={() => setMobileOpen(false)}
               />
-              <Link to={autoEcole ? `/formations/${autoEcole.id}` : "#formations"} className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
-                Auto-école
+              <Link to="/formation-caces" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
+                CACES 93 & 60
+              </Link>
+              <Link to="/formations?category=ECSR" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
+                ECSR
               </Link>
               <Link to={conseillerVente ? `/formations/${conseillerVente.id}` : "#formations"} className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
                 Conseiller de Vente
               </Link>
-              <Link to="/formations" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Toutes les formations</Link>
+              <Link to="/formations" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Nos formations</Link>
               <Link to="/blog" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Blog</Link>
-              <a href="#contact" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Contact</a>
               <div className="flex gap-2 pt-4">
                 <Link to="/login" className="flex-1" onClick={() => setMobileOpen(false)}>
                   <Button variant="outline" size="sm" className="w-full">Connexion</Button>
@@ -736,6 +742,7 @@ export default function Landing() {
       <SiteFooter />
       <Suspense fallback={null}>
         <ChatWidget />
+        <ContactBubble />
       </Suspense>
     </div>
   );

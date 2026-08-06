@@ -12,6 +12,8 @@ import Kit from "@/components/StageLandingPage";
 import {
   CaretRight, ShieldCheck, CalendarBlank, Certificate, Taxi, ChatCircleText,
 } from "@phosphor-icons/react";
+import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 
 const { TopBar, StageNav, FeatureStrip, StepsSection, TrustBar, FaqGrid, GOLD } = Kit;
 
@@ -43,7 +45,7 @@ const FAQ = [
   { q: "La formation Taxi est-elle finançable ?", a: "Plusieurs solutions peuvent être envisagées selon votre situation : CPF, France Travail, employeur ou financement personnel. La prise en charge dépend de votre éligibilité." },
   { q: "Comment se déroule l'examen Taxi ?", a: "L'examen comprend une épreuve théorique d'admissibilité, puis une épreuve pratique d'admission évaluant notamment la conduite, la sécurité, le parcours et la relation client." },
   { q: "Le véhicule est-il fourni pour l'épreuve pratique ?", a: "Les modalités de mise à disposition du véhicule sont précisées avec votre conseiller lors de votre inscription à la préparation pratique." },
-  { q: "Où se déroule la formation ?", a: "La formation se déroule dans notre centre d'Épinay-sur-Seine, en Seine-Saint-Denis, facilement accessible depuis Paris et le nord francilien." },
+  { q: "Où se déroule la formation Taxi dans le 93 et le 60 ?", a: "Nous formons sur deux centres : à Épinay-sur-Seine en Seine-Saint-Denis (93), facilement accessible depuis Paris et le nord francilien, et à Creil dans l'Oise (60)." },
   { q: "La formation est-elle accessible en situation de handicap ?", a: "Oui. Contactez notre référent handicap afin d'étudier vos besoins et les adaptations possibles avant l'entrée en formation." },
 ];
 
@@ -64,8 +66,8 @@ export default function TaxiFormationLanding() {
 
   useEffect(() => {
     setPageMeta({
-      title: "Formation Taxi à Épinay-sur-Seine | TDL Formation",
-      description: "Formation Taxi initiale et continue à Épinay-sur-Seine : préparation à l'examen T3P, accompagnement administratif, financement étudié. Centre agréé Qualiopi.",
+      title: "Formation Taxi 93 et 60 — Épinay-sur-Seine & Creil | TDL Formation",
+      description: "Formation Taxi initiale et continue dans le 93 (Épinay-sur-Seine) et le 60 (Creil) : préparation examen T3P, accompagnement administratif, financement. Qualiopi.",
       path: "/formation-taxi",
     });
   }, []);
@@ -109,13 +111,13 @@ export default function TaxiFormationLanding() {
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-14 lg:py-20 grid lg:grid-cols-2 gap-10 items-center">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: GOLD }}>
-              Formation initiale · Épinay-sur-Seine
+              Formation initiale · Seine-Saint-Denis (93) & Oise (60)
             </p>
             <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold tracking-tight leading-[0.95] uppercase">
-              Formation <span style={{ color: GOLD }}>Taxi</span><br />prenez la route de votre avenir
+              Formation <span style={{ color: GOLD }}>Taxi</span><br />dans le 93 et le 60
             </h1>
             <p className="text-gray-500 max-w-md mt-5">
-              Préparez votre examen Taxi avec un accompagnement complet, de la théorie à la pratique, dans un centre à taille humaine.
+              Préparez votre examen Taxi avec un accompagnement complet, de la théorie à la pratique, à Épinay-sur-Seine (93) ou à Creil (60).
             </p>
             <div className="flex flex-wrap gap-3 mt-8">
               <Button onClick={scrollToForm} style={{ backgroundColor: GOLD }} className="text-black font-bold uppercase text-xs tracking-wide">
@@ -206,6 +208,8 @@ export default function TaxiFormationLanding() {
       <FaqGrid items={FAQ} />
 
       <SiteFooter />
+      <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

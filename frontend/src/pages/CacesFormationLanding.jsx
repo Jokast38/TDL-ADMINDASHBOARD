@@ -10,7 +10,7 @@ import { useReveal } from "@/hooks/useReveal";
 import { trackLead } from "@/lib/metaPixel";
 import Kit from "@/components/StageLandingPage";
 import {
-  CaretRight, ShieldCheck, CalendarBlank, Certificate, Fire, ChatCircleText,
+  CaretRight, ShieldCheck, CalendarBlank, Certificate, Truck, ChatCircleText,
 } from "@phosphor-icons/react";
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
@@ -18,42 +18,42 @@ import ContactBubble from "@/components/ContactBubble";
 const { TopBar, StageNav, FeatureStrip, StepsSection, TrustBar, FaqGrid, GOLD } = Kit;
 
 const FEATURES = [
-  { icon: ShieldCheck, label: "Centre agréé Préfecture" },
-  { icon: CalendarBlank, label: "Journée ou soirée" },
-  { icon: Fire, label: "Théorie & pratique" },
-  { icon: Certificate, label: "Certifié Qualiopi" },
+  { icon: ShieldCheck, label: "Toutes catégories CACES" },
+  { icon: CalendarBlank, label: "Théorie & pratique" },
+  { icon: Truck, label: "Chariots, nacelles, grues" },
+  { icon: Certificate, label: "Épinay-sur-Seine (93) & Creil (60)" },
 ];
 
-const LEVELS = [
-  { level: "01", name: "SSIAP 1", role: "Agent de sécurité incendie", desc: "Pour débuter dans la prévention incendie, la surveillance des installations et l'assistance aux personnes.", hours: "67 h + examen" },
-  { level: "02", name: "SSIAP 2", role: "Chef d'équipe", desc: "Pour encadrer une équipe, organiser les interventions et gérer le poste de sécurité.", hours: "70 h + examen" },
-  { level: "03", name: "SSIAP 3", role: "Chef de service", desc: "Pour piloter un service, assurer le suivi réglementaire et conseiller la direction.", hours: "216 h + examen" },
+const MODULES = [
+  { n: "01", title: "Réglementation & sécurité", desc: "Cadre réglementaire des équipements de travail, responsabilités de l'opérateur et prévention des risques." },
+  { n: "02", title: "Technologie de l'engin", desc: "Fonctionnement, organes de sécurité, vérifications avant/après utilisation selon la catégorie visée." },
+  { n: "03", title: "Conduite en sécurité", desc: "Prise en main, manœuvres, gestes et postures, circulation sur site et zones à risque." },
+  { n: "04", title: "Préparation à l'examen", desc: "Entraînement au test théorique (QCM) et aux épreuves pratiques du CACES." },
 ];
 
 const STEPS = [
-  { title: "Prérequis vérifiés", desc: "Secourisme à jour, aptitude médicale, diplôme et expérience selon le niveau visé." },
-  { title: "Formation", desc: "Cours structurés, manipulation des équipements et mises en situation professionnelles." },
-  { title: "Évaluation", desc: "Entraînements intermédiaires pour se préparer aux épreuves réglementaires." },
-  { title: "Examen SSIAP", desc: "Épreuve écrite (QCM) et épreuve pratique (ronde avec anomalies et sinistre)." },
+  { title: "Choisir sa catégorie", desc: "Chariots, nacelles élévatrices, grues... selon votre métier et votre projet professionnel." },
+  { title: "Suivre la théorie", desc: "Réglementation, technologie de l'engin et prévention des risques." },
+  { title: "S'entraîner à la pratique", desc: "Manœuvres encadrées sur engin, en conditions réelles." },
+  { title: "Passer les tests CACES", desc: "Épreuves théorique et pratique avec un testeur certifié." },
 ];
 
 const FAQ = [
-  { q: "Que signifie SSIAP ?", a: "SSIAP signifie Service de sécurité incendie et d'assistance à personnes. Il existe trois niveaux correspondant aux fonctions d'agent, de chef d'équipe et de chef de service." },
-  { q: "Quels sont les prérequis du SSIAP 1 ?", a: "Une attestation de secourisme conforme et à jour, une aptitude médicale de moins de trois mois et les conditions réglementaires de compréhension et de retranscription." },
-  { q: "Combien de temps dure la formation SSIAP 1 ?", a: "La durée réglementaire minimale est de 67 heures, hors temps d'examen. Le calendrier détaillé est communiqué avec le programme de la session." },
-  { q: "Comment se déroule l'examen SSIAP 1 ?", a: "L'examen comprend une épreuve écrite sous forme de QCM et une épreuve pratique. Le diplôme est délivré sous réserve de réussite aux épreuves." },
-  { q: "Quelle différence entre recyclage et remise à niveau ?", a: "Le recyclage maintient une qualification encore conforme aux conditions réglementaires. La remise à niveau concerne les personnes ayant dépassé l'échéance." },
-  { q: "Comment financer ma formation SSIAP ?", a: "Selon votre situation, un financement peut être étudié avec votre employeur, un OPCO, France Travail ou à titre personnel, selon votre éligibilité." },
-  { q: "Où se déroule la formation SSIAP dans le 93 et le 60 ?", a: "Nous formons sur deux centres : à Épinay-sur-Seine en Seine-Saint-Denis (93), et à Creil dans l'Oise (60). Choisissez le centre le plus proche de chez vous lors de votre inscription." },
+  { q: "Qu'est-ce que le CACES ?", a: "Le CACES (Certificat d'Aptitude à la Conduite En Sécurité) atteste qu'un salarié a les connaissances et savoir-faire nécessaires pour conduire un équipement de travail en sécurité (chariot, nacelle, grue...)." },
+  { q: "Quelles catégories de CACES proposez-vous ?", a: "Nous formons sur l'ensemble des catégories principales : chariots élévateurs, nacelles élévatrices de personnel (PEMP) et grues, à Épinay-sur-Seine (93) et à Creil (60)." },
+  { q: "Le CACES est-il obligatoire pour conduire un chariot ou une nacelle ?", a: "L'employeur doit s'assurer que le salarié dispose d'une autorisation de conduite, généralement délivrée sur la base d'un CACES en cours de validité, en plus d'une aptitude médicale." },
+  { q: "Quelle est la durée de validité d'un CACES ?", a: "La durée de validité dépend de la catégorie d'équipement (généralement 5 ans pour les chariots et les nacelles, 10 ans pour certaines grues) — un recyclage est nécessaire avant expiration." },
+  { q: "Le CACES est-il finançable ?", a: "Plusieurs solutions peuvent être envisagées selon votre situation : employeur, OPCO, France Travail ou financement personnel." },
+  { q: "Où se déroule la formation CACES dans le 93 et le 60 ?", a: "Nous formons sur deux centres : à Épinay-sur-Seine en Seine-Saint-Denis (93), et à Creil dans l'Oise (60). Choisissez le centre le plus proche de chez vous lors de votre inscription." },
 ];
 
-const FORMATIONS = ["SSIAP 1", "SSIAP 2", "SSIAP 3", "Recyclage", "Remise à niveau"];
+const FORMATIONS = ["CACES Chariots élévateurs", "CACES Nacelles (PEMP)", "CACES Grues", "Recyclage CACES"];
 const FINANCEMENTS = ["Employeur / OPCO", "France Travail", "Personnel", "À déterminer"];
 
 const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
 const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 
-export default function SsiapLanding() {
+export default function CacesFormationLanding() {
   const [form, setForm] = useState({ prenom: "", nom: "", email: "", telephone: "", formation: FORMATIONS[0], financement: "", message: "" });
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -64,9 +64,9 @@ export default function SsiapLanding() {
 
   useEffect(() => {
     setPageMeta({
-      title: "Formation SSIAP 93 et 60 — Épinay-sur-Seine & Creil | TDL Formation",
-      description: "Formations SSIAP 1, 2 et 3 dans le 93 (Épinay-sur-Seine) et le 60 (Creil) : prérequis, programme, examen, financement. Centre agréé Qualiopi.",
-      path: "/formation-ssiap",
+      title: "Formation CACES 93 et 60 — Épinay-sur-Seine & Creil | TDL Formation",
+      description: "Formation CACES (chariots, nacelles, grues) dans le 93 (Épinay-sur-Seine) et le 60 (Creil) : théorie, pratique, financement. Centre agréé Qualiopi.",
+      path: "/formation-caces",
     });
   }, []);
 
@@ -88,10 +88,10 @@ export default function SsiapLanding() {
       const message = [form.financement && `Financement envisagé : ${form.financement}`, form.message].filter(Boolean).join("\n");
       await api.post("/callback-requests", {
         prenom: form.prenom, nom: form.nom, telephone: form.telephone, email: form.email,
-        session: form.formation, message, center: "Épinay-sur-Seine (93)", source: "meta_formation_ssiap",
+        session: form.formation, message, center: "Épinay-sur-Seine (93)", source: "meta_formation_caces",
       });
       setSent(true);
-      trackLead({ content_name: "formation_ssiap", session: form.formation });
+      trackLead({ content_name: "formation_caces", session: form.formation });
     } catch {
       toast.error("Erreur lors de l'envoi, merci de réessayer ou de nous appeler directement.");
     } finally {
@@ -100,7 +100,7 @@ export default function SsiapLanding() {
   };
 
   return (
-    <div className="min-h-screen bg-white" data-testid="ssiap-landing-page" ref={revealRef}>
+    <div className="min-h-screen bg-white" data-testid="caces-landing-page" ref={revealRef}>
       <TopBar />
       <StageNav ctaLabel="Demander un devis" ctaHref="#contact" />
 
@@ -109,17 +109,17 @@ export default function SsiapLanding() {
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-14 lg:py-20 grid lg:grid-cols-2 gap-10 items-center">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: GOLD }}>
-              Sécurité incendie · Seine-Saint-Denis (93) & Oise (60)
+              Toutes catégories · Seine-Saint-Denis (93) & Oise (60)
             </p>
             <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold tracking-tight leading-[0.95] uppercase">
-              Formation <span style={{ color: GOLD }}>SSIAP</span><br />dans le 93 et le 60
+              Formation <span style={{ color: GOLD }}>CACES</span><br />dans le 93 et le 60
             </h1>
             <p className="text-gray-500 max-w-md mt-5">
-              Préparez votre diplôme SSIAP 1, 2 ou 3 avec une formation concrète, encadrée et orientée vers l'emploi, à Épinay-sur-Seine (93) ou à Creil (60).
+              Chariots, nacelles, grues : préparez votre CACES avec un accompagnement complet, de la théorie à la pratique, à Épinay-sur-Seine (93) ou à Creil (60).
             </p>
             <div className="flex flex-wrap gap-3 mt-8">
               <Button onClick={scrollToForm} style={{ backgroundColor: GOLD }} className="text-black font-bold uppercase text-xs tracking-wide">
-                Demander un devis <CaretRight size={12} className="ml-1" weight="bold" />
+                Recevoir le programme <CaretRight size={12} className="ml-1" weight="bold" />
               </Button>
               <a href="#programme">
                 <Button variant="outline" className="font-bold uppercase text-xs tracking-wide">Voir le programme</Button>
@@ -128,7 +128,7 @@ export default function SsiapLanding() {
           </div>
           <div className="relative">
             <div className="relative aspect-[4/3] overflow-hidden bg-black" style={{ clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%, 0 32%)" }}>
-              <img src="/tdl-image/banniere-formation-ssiap-inspection-equipement-incendie-Moyenne.jpeg" alt="Formation SSIAP" className="w-full h-full object-cover" />
+              <img src="https://images.unsplash.com/photo-1541976590-713941681591?w=900" alt="Formation CACES" className="w-full h-full object-cover" loading="eager" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
             </div>
           </div>
@@ -137,28 +137,26 @@ export default function SsiapLanding() {
 
       <FeatureStrip items={FEATURES} />
 
-      {/* Niveaux */}
+      {/* Programme */}
       <section id="programme" className="py-16 lg:py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>Trouvez votre parcours</p>
+          <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>Contenu pédagogique</p>
           <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-10 max-w-xl">
-            SSIAP 1, 2 ou 3 : quelle formation choisir ?
+            Un programme pensé pour l'examen et le terrain.
           </h2>
-          <div className="grid sm:grid-cols-3 gap-6">
-            {LEVELS.map((l) => (
-              <div key={l.name} className="bg-white border border-gray-200 rounded-md p-6" data-reveal>
-                <span className="font-display text-3xl font-extrabold text-gray-300">{l.level}</span>
-                <h3 className="font-display text-xl font-bold mt-2">{l.name}</h3>
-                <p className="text-sm font-semibold text-gray-600">{l.role}</p>
-                <p className="text-sm text-gray-500 mt-2 leading-relaxed">{l.desc}</p>
-                <p className="text-xs font-bold uppercase tracking-wide mt-4" style={{ color: GOLD }}>{l.hours}</p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {MODULES.map((m) => (
+              <div key={m.n} className="bg-white border border-gray-200 rounded-md p-6" data-reveal>
+                <span className="font-display text-3xl font-extrabold text-gray-300">{m.n}</span>
+                <h3 className="font-bold text-sm mt-2 mb-1">{m.title}</h3>
+                <p className="text-sm text-gray-500 leading-relaxed">{m.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      <StepsSection title="Comment se déroule l'examen SSIAP ?" steps={STEPS} />
+      <StepsSection title="De l'inscription au certificat CACES." steps={STEPS} />
 
       <GoogleReviewsCarousel />
 
@@ -167,18 +165,18 @@ export default function SsiapLanding() {
         <div className="max-w-lg mx-auto px-6">
           <div className="text-center mb-8">
             <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>Votre projet</p>
-            <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">Prêt à commencer votre formation SSIAP ?</h2>
-            <p className="text-gray-500 text-sm">Un conseiller vérifie avec vous la formation adaptée, vos prérequis et votre financement.</p>
+            <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">Prêt à passer à l'action ?</h2>
+            <p className="text-gray-500 text-sm">Recevez le programme et les prochaines dates. Un conseiller vous recontacte pour étudier votre projet et votre financement.</p>
           </div>
 
           {sent ? (
-            <div className="text-center bg-gray-50 border border-gray-200 rounded-md p-8" data-testid="ssiap-form-sent">
+            <div className="text-center bg-gray-50 border border-gray-200 rounded-md p-8" data-testid="caces-form-sent">
               <ChatCircleText size={32} className="mx-auto mb-3" style={{ color: GOLD }} weight="fill" />
               <p className="font-bold mb-1">Demande envoyée !</p>
               <p className="text-sm text-gray-500">Un conseiller TDL Formation vous recontacte sous 24h ouvrées.</p>
             </div>
           ) : (
-            <form onSubmit={submit} className="space-y-3" data-testid="ssiap-form">
+            <form onSubmit={submit} className="space-y-3" data-testid="caces-form">
               <div className="grid grid-cols-2 gap-3">
                 <input value={form.prenom} onChange={(e) => set("prenom", e.target.value)} placeholder="Prénom" className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
                 <input value={form.nom} onChange={(e) => set("nom", e.target.value)} placeholder="Nom" className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
@@ -195,9 +193,9 @@ export default function SsiapLanding() {
                 </select>
               </div>
               <textarea value={form.message} onChange={(e) => set("message", e.target.value)} placeholder="Parlez-nous brièvement de votre projet (facultatif)" rows={3} className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
-              <PrivacyConsentCheckbox checked={privacyConsent} onChange={setPrivacyConsent} testId="ssiap-privacy-consent" />
+              <PrivacyConsentCheckbox checked={privacyConsent} onChange={setPrivacyConsent} testId="caces-privacy-consent" />
               <Button type="submit" disabled={sending || !privacyConsent} style={{ backgroundColor: GOLD }} className="w-full text-black font-bold uppercase text-xs tracking-wide py-6">
-                {sending ? "Envoi..." : "Envoyer ma demande"} <CaretRight size={12} className="ml-1" weight="bold" />
+                {sending ? "Envoi..." : "Recevoir le programme"} <CaretRight size={12} className="ml-1" weight="bold" />
               </Button>
             </form>
           )}

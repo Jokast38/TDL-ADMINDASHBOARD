@@ -21,6 +21,8 @@ import SsiapLanding from "@/pages/SsiapLanding";
 import TaxiFormationLanding from "@/pages/TaxiFormationLanding";
 import MobiliteTaxiLanding from "@/pages/MobiliteTaxiLanding";
 import PasserelleTaxiBanlieueLanding from "@/pages/PasserelleTaxiBanlieueLanding";
+import VtcFormationLanding from "@/pages/VtcFormationLanding";
+import CacesFormationLanding from "@/pages/CacesFormationLanding";
 import MentionsLegales from "@/pages/MentionsLegales";
 import FAQ from "@/pages/FAQ";
 
@@ -102,6 +104,8 @@ function App() {
             <Route path="/formation-taxi" element={<TaxiFormationLanding />} />
             <Route path="/mobilite-taxi" element={<MobiliteTaxiLanding />} />
             <Route path="/passerelle-taxi-banlieue-parisien" element={<PasserelleTaxiBanlieueLanding />} />
+            <Route path="/formation-vtc" element={<VtcFormationLanding />} />
+            <Route path="/formation-caces" element={<CacesFormationLanding />} />
             <Route path="/mentions-legales" element={<MentionsLegales />} />
             <Route path="/politique-de-confidentialite" element={<PolitiqueConfidentialite />} />
             <Route path="/faq" element={<FAQ />} />

@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { trackCompleteRegistration } from "@/lib/metaPixel";
 import { setPageMeta } from "@/lib/seo";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
+import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 
 // Validation basique : téléphone français (avec ou sans +33, espaces/points/
 // tirets tolérés) et email — pour éviter les dossiers avec un numéro
@@ -261,6 +263,8 @@ export default function PublicInscription() {
         </>
         )}
       </main>
+      <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }

@@ -13,6 +13,8 @@ import { faqsForCategory } from "@/constants/formationFaqs";
 import { heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
+import ChatWidget from "@/components/ChatWidget";
+import ContactBubble from "@/components/ContactBubble";
 
 const CATEGORY_TO_FORMATION = {
   actualites: "VTC_TAXI",
@@ -141,6 +143,8 @@ export default function BlogPost() {
           </Link>
         </div>
       </article>
+      <ChatWidget />
+      <ContactBubble />
     </div>
   );
 }
