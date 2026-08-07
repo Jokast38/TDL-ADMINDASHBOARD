@@ -38,6 +38,30 @@ FORMATIONS = [
         "cpf_eligible": True,
     },
     {
+        "title": "CACES R486 Cat. B - Nacelle élévatrice",
+        "category": "CACES",
+        "description": "Formation à la conduite en sécurité d'une nacelle élévatrice multidirectionnelle (CACES R486 catégorie B), théorie et pratique, avec passage de l'examen en fin de formation.",
+        "duration_hours": 21,
+        "price": 650,
+        "sessions_per_month": 3,
+        "active": True,
+        "documents_requis": ["identite", "photo"],
+        "cpf_eligible": True,
+    },
+    {
+        # Prix/durée alignés provisoirement sur CACES R489 Cat. 3, à la demande
+        # de l'utilisateur, en attendant un tarif officiel confirmé pour le R482.
+        "title": "CACES R482 - Engins de chantier",
+        "category": "CACES",
+        "description": "Formation à la conduite en sécurité des engins de chantier (pelles, chargeuses, bulldozers...) — CACES R482, théorie et pratique, avec passage de l'examen en fin de formation.",
+        "duration_hours": 35,
+        "price": 850,
+        "sessions_per_month": 3,
+        "active": True,
+        "documents_requis": ["identite", "photo"],
+        "cpf_eligible": True,
+    },
+    {
         "title": "SSIAP 1 - Agent de sécurité incendie",
         "category": "SSIAP",
         "description": "Formation d'agent de sécurité incendie en ERP (Établissement Recevant du Public) et IGH (Immeuble de Grande Hauteur) : réglementation incendie, manipulation des équipements, mises en situation, examen final.",
