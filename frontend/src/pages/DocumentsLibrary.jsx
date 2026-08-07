@@ -14,6 +14,12 @@ import SignatureCanvas from "react-signature-canvas";
 
 const TYPES = ["all", "attestation_presence", "attestation", "facture", "devis", "convention", "autre"];
 
+// Signatures prédéfinies proposées dans le dropdown (en plus du dessin manuel).
+// La première est celle utilisée par défaut à l'ouverture du dialogue.
+const PRESET_SIGNATURES = [
+  { id: "tdl-default", label: "Signature TDL (par défaut)", src: "/doc/signature-withoutbg.png" },
+];
+
 // --- Infos fixes de l'entreprise, pré-remplies automatiquement dans le
 // contexte de génération pour chaque modèle (évite de les retaper à chaque fois). ---
 const COMPANY_DEFAULTS = {
@@ -76,6 +82,7 @@ export default function DocumentsLibrary() {
   const [hasSignature, setHasSignature] = useState(false);
   const [signatureUrl, setSignatureUrl] = useState(null);
   const [savingSig, setSavingSig] = useState(false);
+  const [sigMode, setSigMode] = useState(PRESET_SIGNATURES[0].id); // "draw" ou l'id d'une signature prédéfinie
   const sigPadRef = useRef(null);
 
   const checkSignature = () => {
@@ -156,11 +163,22 @@ export default function DocumentsLibrary() {
   };
 
   const saveSignature = async () => {
-    if (!sigPadRef.current || sigPadRef.current.isEmpty()) return toast.error("Dessinez votre signature d'abord");
     setSavingSig(true);
     try {
-      const dataUrl = sigPadRef.current.getCanvas().toDataURL("image/png");
-      const blob = dataUrlToBlob(dataUrl);
+      let blob;
+      if (sigMode === "draw") {
+        if (!sigPadRef.current || sigPadRef.current.isEmpty()) {
+          toast.error("Dessinez votre signature d'abord");
+          setSavingSig(false);
+          return;
+        }
+        const dataUrl = sigPadRef.current.getCanvas().toDataURL("image/png");
+        blob = dataUrlToBlob(dataUrl);
+      } else {
+        const preset = PRESET_SIGNATURES.find((p) => p.id === sigMode);
+        const res = await fetch(preset.src);
+        blob = await res.blob();
+      }
       const fd = new FormData();
       fd.append("file", blob, "signature.png");
       await api.post("/me/signature", fd, { headers: { "Content-Type": "multipart/form-data" } });
@@ -218,22 +236,48 @@ export default function DocumentsLibrary() {
             {hasSignature && signatureUrl && (
               <div className="border border-gray-200 rounded-md p-3 bg-gray-50">
                 <p className="text-xs font-medium mb-1">Signature actuelle :</p>
-                <img src={signatureUrl} alt="Signature enregistrée" className="h-16" />
+                <img src={signatureUrl} alt="Signature enregistrée" className="h-28" />
               </div>
             )}
             <div>
-              <p className="text-sm font-medium mb-1">{hasSignature ? "Remplacer par une nouvelle signature" : "Dessinez votre signature"}</p>
-              <div className="border-2 border-dashed border-gray-300 rounded-md bg-white">
-                <SignatureCanvas
-                  ref={sigPadRef}
-                  canvasProps={{ width: 460, height: 160, className: "w-full rounded-md" }}
-                  penColor="#0a0a0a"
-                />
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => sigPadRef.current?.clear()} className="mt-1">
-                <Eraser size={12} className="mr-1" /> Effacer
-              </Button>
+              <label className="text-sm font-medium mb-1 block">Source de la signature</label>
+              <Select value={sigMode} onValueChange={setSigMode}>
+                <SelectTrigger data-testid="sig-mode-select"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {PRESET_SIGNATURES.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.label}</SelectItem>
+                  ))}
+                  <SelectItem value="draw">Dessiner ma propre signature</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {sigMode === "draw" ? (
+              <div>
+                <p className="text-sm font-medium mb-1">{hasSignature ? "Remplacer par une nouvelle signature" : "Dessinez votre signature"}</p>
+                <div className="border-2 border-dashed border-gray-300 rounded-md bg-white">
+                  <SignatureCanvas
+                    ref={sigPadRef}
+                    canvasProps={{ width: 460, height: 160, className: "w-full rounded-md" }}
+                    penColor="#0a0a0a"
+                  />
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => sigPadRef.current?.clear()} className="mt-1">
+                  <Eraser size={12} className="mr-1" /> Effacer
+                </Button>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm font-medium mb-1">Aperçu</p>
+                <div className="border border-gray-200 rounded-md bg-gray-50 p-4 flex items-center justify-center">
+                  <img
+                    src={PRESET_SIGNATURES.find((p) => p.id === sigMode)?.src}
+                    alt="Signature prédéfinie"
+                    className="h-28"
+                  />
+                </div>
+              </div>
+            )}
             <div className="flex justify-between gap-2 mt-2">
               {hasSignature ? (
                 <Button variant="outline" className="border-red-300 text-red-600 hover:bg-red-50" onClick={removeSignature}>

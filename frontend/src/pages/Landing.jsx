@@ -50,7 +50,7 @@ const HOME_FAQ = [
   },
   {
     q: "Quelles formations proposez-vous à Épinay-sur-Seine et à Creil ?",
-    a: "Sur nos deux centres, nous proposons les formations CACES (toutes catégories), le stage de récupération de points, l'auto-école (permis B accompagné ANTS), la formation SSIAP, ainsi que les formations VTC et Taxi (initiale, continue et passerelles).",
+    a: "Le stage de récupération de points, l'auto-école (permis B accompagné ANTS), la formation SSIAP, ainsi que les formations VTC et Taxi (initiale, continue et passerelles) sont proposés sur nos deux centres. Le CACES (toutes catégories) est proposé uniquement à Épinay-sur-Seine.",
   },
   {
     q: "Le centre est-il accessible en transport en commun depuis la région parisienne ?",
@@ -67,6 +67,8 @@ const CATEGORIES = [
   { key: "ECSR", label: "ECSR", icon: GraduationCap, desc: "Enseignant de la conduite" },
   { key: "VENTE", label: "Conseiller de Vente", icon: Storefront, desc: "Titre pro RNCP37098 en alternance" },
 ];
+
+const CATEGORY_LABELS_HOME = Object.fromEntries(CATEGORIES.map((c) => [c.key, c.label]));
 
 // Menus déroulants navbar : chaque entrée est reliée par son titre exact en
 // base (voir /api/formations) à l'inscription pré-remplie correspondante.
@@ -233,6 +235,7 @@ const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 
 export default function Landing() {
   const [formations, setFormations] = useState([]);
+  const [catalogueFilter, setCatalogueFilter] = useState(null);
 
   const [contactForm, setContactForm] = useState({ prenom: "", nom: "", email: "", telephone: "", message: "" });
   const [contactPrivacyConsent, setContactPrivacyConsent] = useState(false);
@@ -316,7 +319,7 @@ export default function Landing() {
           <nav className="hidden xl:flex items-center gap-5 text-sm shrink min-w-0 whitespace-nowrap overflow-x-auto">
             <NavDropdown label="Formations VTC" titles={NAV_VTC} />
             <NavDropdown label="Formations Taxi" titles={NAV_TAXI} />
-            <Link to="/formation-caces" className="hover:text-[#d4af37]">CACES 93 & 60</Link>
+            <Link to="/formation-caces" className="hover:text-[#d4af37]">CACES 93</Link>
             <Link to="/formations?category=ECSR" className="hover:text-[#d4af37]">ECSR</Link>
             <Link to={conseillerVente ? `/formations/${conseillerVente.id}` : "#formations"} className="hover:text-[#d4af37]">Conseiller de Vente</Link>
             <Link to="/formations" className="hover:text-[#d4af37]">Nos formations</Link>
@@ -357,7 +360,7 @@ export default function Landing() {
                 onNavigate={() => setMobileOpen(false)}
               />
               <Link to="/formation-caces" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
-                CACES 93 & 60
+                CACES 93
               </Link>
               <Link to="/formations?category=ECSR" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
                 ECSR
@@ -435,7 +438,13 @@ export default function Landing() {
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             {CATEGORIES.map((c, idx) => (
-              <a key={c.key} href="#catalogue" className="block" data-testid={`cat-${c.key}`}>
+              <a
+                key={c.key}
+                href="#catalogue"
+                className="block"
+                data-testid={`cat-${c.key}`}
+                onClick={() => setCatalogueFilter(c.key)}
+              >
                 <Card data-reveal className={`reveal reveal-delay-${(idx % 4) + 1} p-4 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-[#0a0a0a] transition-all min-w-0 cursor-pointer h-full`}>
                   <c.icon size={24} className="text-[#0a0a0a]" weight="duotone" />
                   <h3 className="font-display font-bold text-sm mt-3 break-words">{c.label}</h3>
@@ -451,15 +460,45 @@ export default function Landing() {
       <section id="catalogue" className="py-16 lg:py-24 bg-gray-50 border-y border-gray-200 scroll-mt-16">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <p className="overline">Catalogue</p>
-          <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2 mb-10">Formations disponibles</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {formations.slice(0, 6).map((f, idx) => (
-              <FormationCard key={f.id} formation={f} revealDelay={(idx % 4) + 1} />
-            ))}
+          <div className="flex items-center justify-between flex-wrap gap-3 mb-10">
+            <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2">
+              {catalogueFilter
+                ? `Formations ${CATEGORY_LABELS_HOME[catalogueFilter] || catalogueFilter}`
+                : "Formations disponibles"}
+            </h2>
+            {catalogueFilter && (
+              <button
+                onClick={() => setCatalogueFilter(null)}
+                className="text-sm font-medium text-[#d4af37] hover:text-[#b8962f] transition-colors"
+                data-testid="clear-catalogue-filter"
+              >
+                Voir toutes les formations ✕
+              </button>
+            )}
           </div>
+          {(() => {
+            const visibleFormations = catalogueFilter
+              ? formations.filter((f) => f.category === catalogueFilter)
+              : formations;
+            if (catalogueFilter && visibleFormations.length === 0) {
+              return (
+                <p className="text-gray-500 text-sm">
+                  Aucune formation {CATEGORY_LABELS_HOME[catalogueFilter] || catalogueFilter} disponible pour le moment —{" "}
+                  <Link to="/formations" className="underline hover:text-[#d4af37]">voir tout le catalogue</Link>.
+                </p>
+              );
+            }
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {visibleFormations.slice(0, 6).map((f, idx) => (
+                  <FormationCard key={f.id} formation={f} revealDelay={(idx % 4) + 1} />
+                ))}
+              </div>
+            );
+          })()}
           {formations.length > 6 && (
             <div className="flex justify-center mt-10">
-              <Link to="/formations">
+              <Link to={catalogueFilter ? `/formations?category=${catalogueFilter}` : "/formations"}>
                 <Button size="lg" variant="outline" data-testid="see-all-formations-btn">
                   Voir toutes nos formations <ArrowRight size={16} className="ml-2" />
                 </Button>

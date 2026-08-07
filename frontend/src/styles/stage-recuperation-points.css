@@ -82,7 +82,7 @@ button, select { font: inherit; }
 .section-heading > p { max-width: 540px; margin: 0; color: var(--muted); font-size: 17px; }
 .location-heading { padding-left: 30px; border-left: 7px solid var(--yellow); }
 .location-grid { display: grid; grid-template-columns: 1.55fr .75fr; box-shadow: var(--shadow); }
-.local-map { position: relative; min-height: 610px; overflow: hidden; color: #fff; background-color: #101113; background-image: linear-gradient(28deg,transparent 48%,rgba(255,255,255,.06) 49%,rgba(255,255,255,.06) 50%,transparent 51%), linear-gradient(-31deg,transparent 48%,rgba(255,255,255,.05) 49%,rgba(255,255,255,.05) 50%,transparent 51%), radial-gradient(circle at 48% 48%,transparent 0 22%,rgba(107,121,139,.22) 22.5% 24%,transparent 24.5%); background-size: 180px 140px,220px 190px,100% 100%; }
+.local-map { position: relative; z-index: 0; isolation: isolate; min-height: 610px; overflow: hidden; color: #fff; background-color: #101113; background-image: linear-gradient(28deg,transparent 48%,rgba(255,255,255,.06) 49%,rgba(255,255,255,.06) 50%,transparent 51%), linear-gradient(-31deg,transparent 48%,rgba(255,255,255,.05) 49%,rgba(255,255,255,.05) 50%,transparent 51%), radial-gradient(circle at 48% 48%,transparent 0 22%,rgba(107,121,139,.22) 22.5% 24%,transparent 24.5%); background-size: 180px 140px,220px 190px,100% 100%; }
 .local-map::before, .local-map::after { content: ""; position: absolute; width: 90%; height: 22%; left: 7%; top: 42%; border: 6px solid rgba(87,101,120,.23); border-left-color: transparent; border-radius: 50%; transform: rotate(-12deg); }
 .local-map::after { width: 65%; height: 8%; left: 18%; top: 48%; border-width: 2px; }
 .dept { position: absolute; z-index: 2; font-family: Lexend; font-size: 68px; font-weight: 700; }

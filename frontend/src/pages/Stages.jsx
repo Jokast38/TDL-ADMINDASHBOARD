@@ -7,14 +7,17 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar, MapPin, Plus, Users } from "@phosphor-icons/react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Calendar, MapPin, Plus, Users, PencilSimple, Trash } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const empty = {
   formation_id: "", date_debut: "", date_fin: "",
   lieu_adresse: "", lieu_ville: "", capacite_max: 20,
-  animateur_id: "", notes: ""
+  animateur_id: "", statut: "planifie", notes: ""
 };
+
+const STATUTS = ["planifie", "en_cours", "termine", "annule"];
 
 export default function Stages() {
   const [items, setItems] = useState([]);
@@ -22,6 +25,8 @@ export default function Stages() {
   const [animateurs, setAnimateurs] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
+  const [editingId, setEditingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const load = () => api.get("/stages").then((r) => setItems(r.data));
   useEffect(() => {
@@ -30,17 +35,45 @@ export default function Stages() {
     api.get("/employees").then((r) => setAnimateurs(r.data.filter((u) => u.role === "animateur" || u.role === "admin"))).catch(() => {});
   }, []);
 
+  const openCreate = () => { setEditingId(null); setForm(empty); setOpen(true); };
+  const openEdit = (s) => {
+    setEditingId(s.id);
+    setForm({
+      formation_id: s.formation_id || "", date_debut: s.date_debut || "", date_fin: s.date_fin || "",
+      lieu_adresse: s.lieu_adresse || "", lieu_ville: s.lieu_ville || "", capacite_max: s.capacite_max ?? 20,
+      animateur_id: s.animateur_id || "", statut: s.statut || "planifie", notes: s.notes || "",
+    });
+    setOpen(true);
+  };
+
   const save = async () => {
     try {
       const payload = { ...form, capacite_max: +form.capacite_max };
       if (!payload.animateur_id) delete payload.animateur_id;
-      await api.post("/stages", payload);
-      toast.success("Session planifiée");
-      setOpen(false); setForm(empty);
+      if (editingId) {
+        await api.put(`/stages/${editingId}`, payload);
+        toast.success("Session mise à jour");
+      } else {
+        delete payload.statut;
+        await api.post("/stages", payload);
+        toast.success("Session planifiée");
+      }
+      setOpen(false); setForm(empty); setEditingId(null);
       load();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
     }
+  };
+
+  const remove = async (id) => {
+    try {
+      await api.delete(`/stages/${id}`);
+      toast.success("Session supprimée");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la suppression");
+    }
+    setDeletingId(null);
   };
 
   return (
@@ -51,14 +84,14 @@ export default function Stages() {
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Sessions de stage</h1>
           <p className="text-gray-500 mt-2">{items.length} session(s) planifiée(s).</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditingId(null); setForm(empty); } }}>
           <DialogTrigger asChild>
-            <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="new-stage-btn">
+            <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="new-stage-btn" onClick={openCreate}>
               <Plus size={16} className="mr-1" /> Planifier une session
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
-            <DialogHeader><DialogTitle>Nouvelle session de stage</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editingId ? "Modifier la session" : "Nouvelle session de stage"}</DialogTitle></DialogHeader>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
               <div className="sm:col-span-2">
                 <label className="text-sm font-medium">Formation</label>
@@ -87,6 +120,15 @@ export default function Stages() {
                 <label className="text-sm font-medium">Capacité max</label>
                 <Input type="number" value={form.capacite_max} onChange={(e) => setForm({ ...form, capacite_max: e.target.value })} />
               </div>
+              {editingId && (
+                <div>
+                  <label className="text-sm font-medium">Statut</label>
+                  <Select value={form.statut} onValueChange={(v) => setForm({ ...form, statut: v })}>
+                    <SelectTrigger data-testid="stage-statut"><SelectValue /></SelectTrigger>
+                    <SelectContent>{STATUTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              )}
               <div>
                 <label className="text-sm font-medium">Animateur</label>
                 <Select value={form.animateur_id} onValueChange={(v) => setForm({ ...form, animateur_id: v })}>
@@ -101,7 +143,9 @@ export default function Stages() {
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
-              <Button onClick={save} className="bg-[#d4af37] text-black hover:bg-[#b8941f]" data-testid="stage-save">Planifier</Button>
+              <Button onClick={save} className="bg-[#d4af37] text-black hover:bg-[#b8941f]" data-testid="stage-save">
+                {editingId ? "Enregistrer" : "Planifier"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -109,10 +153,41 @@ export default function Stages() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {items.map((s) => (
-          <Card key={s.id} className="p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all" data-testid={`stage-card-${s.id}`}>
+          <Card
+            key={s.id}
+            className="p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all cursor-pointer relative group"
+            data-testid={`stage-card-${s.id}`}
+            onClick={() => openEdit(s)}
+          >
             <div className="flex items-start justify-between mb-2">
               <Badge variant="outline">{s.statut}</Badge>
-              <p className="text-xs text-gray-500"><Users size={12} className="inline mr-1" />{s.nb_inscrits || 0}/{s.capacite_max}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-gray-500"><Users size={12} className="inline mr-1" />{s.nb_inscrits || 0}/{s.capacite_max}</p>
+                <PencilSimple size={14} className="text-gray-300 group-hover:text-[#d4af37] transition-colors" />
+                <AlertDialog open={deletingId === s.id} onOpenChange={(v) => !v && setDeletingId(null)}>
+                  <AlertDialogTrigger asChild>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeletingId(s.id); }}
+                      className="text-gray-300 hover:text-red-600 transition-colors"
+                      data-testid={`stage-delete-${s.id}`}
+                    >
+                      <Trash size={14} />
+                    </button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Supprimer cette session ?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Cette action est irréversible et supprimera aussi les émargements liés à cette session.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel onClick={() => setDeletingId(null)}>Annuler</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => remove(s.id)} className="bg-red-600 hover:bg-red-700">Supprimer</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </div>
             <h3 className="font-display font-bold leading-tight">{s.formation_titre}</h3>
             <div className="text-xs text-gray-500 mt-3 space-y-1">
