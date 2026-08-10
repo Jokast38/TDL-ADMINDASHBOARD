@@ -2,6 +2,10 @@ import { useEffect } from "react";
 import { api } from "@/lib/api";
 import { hasConsent, CONSENT_CHANGED_EVENT } from "@/lib/consent";
 
+// Pages sur lesquelles le Meta Pixel doit être chargé — pour l'instant
+// uniquement la landing page ciblée par la campagne publicitaire en cours.
+const META_PIXEL_PAGES = ["/stage-recuperation-points"];
+
 /**
  * Injects analytics scripts (GA4 and/or Plausible) and the Meta Pixel based on
  * public site config — mais seulement si le visiteur y a consenti (bandeau
@@ -45,7 +49,11 @@ export default function AnalyticsLoader() {
       // Meta (Facebook) Pixel — nécessite le consentement "publicité/marketing".
       // Les événements custom (lib/metaPixel.js) vérifient eux aussi le
       // consentement avant d'appeler fbq(), en plus de cette garde ici.
-      if (cfg.meta_pixel_id && hasConsent("marketing") && !document.getElementById("meta-pixel-tag")) {
+      // Restreint à la landing page "Stage récupération de points" : c'est la
+      // seule sur laquelle une campagne est menée pour le moment — inutile
+      // (et faux pour les stats) de charger le pixel ailleurs sur le site.
+      // Élargir META_PIXEL_PAGES le jour où d'autres landing pages sont ciblées.
+      if (cfg.meta_pixel_id && hasConsent("marketing") && META_PIXEL_PAGES.includes(path) && !document.getElementById("meta-pixel-tag")) {
         const s = document.createElement("script");
         s.id = "meta-pixel-tag";
         s.innerHTML = `
