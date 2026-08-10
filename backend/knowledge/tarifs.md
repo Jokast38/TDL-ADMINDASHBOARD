@@ -5,7 +5,7 @@
 | SSIAP 1 - Agent de sécurité incendie | 67h | 720 € |
 | CACES R489 Cat. 3 - Chariot élévateur | 35h | 850 € |
 | CACES R486 Cat. B - Nacelle élévatrice | 21h | 650 € |
-| Stage de récupération de points de permis | 14h (2 jours) | 240 € (189 € tarif fidélité) |
+| Stage de récupération de points de permis | 14h (2 jours) | 179 € (189 € tarif fidélité) |
 | Permis B - Forfait complet (auto-école) | 20h de conduite + code | 1 290 € |
 | ECSR - Enseignant de la Conduite | 1 190h | Sur devis |
 | Formation VTC (présentiel) | 50h | 1 490 € |

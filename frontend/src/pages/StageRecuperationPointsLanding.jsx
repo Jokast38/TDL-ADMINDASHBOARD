@@ -99,7 +99,7 @@ export default function StageRecuperationPointsLanding() {
     setSent(true);
     trackPurchase({
       content_name: "stage_recuperation_points",
-      value: 240,
+      value: 179,
       currency: "EUR",
       session,
       inscription_id: paymentData?.inscription_id
@@ -135,7 +135,7 @@ export default function StageRecuperationPointsLanding() {
         student_name: `${form.prenom.trim()} ${form.nom.trim()}`,
         student_phone: form.telephone.trim(),
         student_email: form.email?.trim() || `${form.prenom.toLowerCase()}${form.nom.toLowerCase()}@temp.fr`,
-        price: 240,
+        price: 179,
         category: "PERMIS",
         session: session,
         center: selectedVille || center,
@@ -147,7 +147,7 @@ export default function StageRecuperationPointsLanding() {
       });
 
       const inscription = inscriptionResponse.data.inscription;
-      trackInitiateCheckout({ content_name: "stage_recuperation_points", value: 240, currency: "EUR", session });
+      trackInitiateCheckout({ content_name: "stage_recuperation_points", value: 179, currency: "EUR", session });
 
       const checkoutResponse = await api.post("/payments/checkout", {
         inscription_id: inscription.id,
@@ -179,7 +179,7 @@ export default function StageRecuperationPointsLanding() {
   useEffect(() => {
     setPageMeta({
       title: "Stage Récupération de Points Épinay-sur-Seine (93) | TDL Formation",
-      description: "Récupérez jusqu'à 4 points sur votre permis en 2 jours à Épinay-sur-Seine (93), aussi à Creil (60). Stage agréé — 240€, réservation en ligne.",
+      description: "Récupérez jusqu'à 4 points sur votre permis en 2 jours à Épinay-sur-Seine (93), aussi à Creil (60). Stage agréé — 179€, réservation en ligne.",
       path: "/stage-recuperation-points",
     });
     // Vérifier le statut du paiement après redirection
@@ -192,7 +192,7 @@ export default function StageRecuperationPointsLanding() {
       toast.success("✅ Paiement réussi ! Votre place est réservée.");
       trackPurchase({
         content_name: "stage_recuperation_points",
-        value: 240,
+        value: 179,
         currency: "EUR",
         session,
         inscription_id: inscriptionIdParam
@@ -322,7 +322,7 @@ export default function StageRecuperationPointsLanding() {
       setSelectedDate({ day, month, year });
       setSession(label);
       setShowCalendar(false);
-      trackSchedule({ content_name: label, value: 240, currency: "EUR" });
+      trackSchedule({ content_name: label, value: 179, currency: "EUR" });
       toast.success(`Session sélectionnée : ${label}`);
     }
   };
@@ -420,7 +420,7 @@ export default function StageRecuperationPointsLanding() {
 
   const chooseSession = (label) => {
     setSession(label);
-    trackSchedule({ content_name: label, value: 240, currency: "EUR" });
+    trackSchedule({ content_name: label, value: 179, currency: "EUR" });
 
     // Mettre à jour la date sélectionnée
     const found = availableDates.find(d => d.label === label);
@@ -466,11 +466,11 @@ export default function StageRecuperationPointsLanding() {
         telephone: form.telephone,
         session: session, // La session sélectionnée
         center: selectedVille || center,
-        source: "stage_recuperation_points_240",
+        source: "stage_recuperation_points_179",
         page_url: window.location.href,
       });
       setSent(true);
-      trackLead({ content_name: "stage_recuperation_points", value: 240, currency: "EUR", session });
+      trackLead({ content_name: "stage_recuperation_points", value: 179, currency: "EUR", session });
       toast.success("Votre demande a bien été enregistrée. Nous vous recontacterons sous 24h.");
       // Réinitialiser le formulaire après envoi
       setForm({ prenom: "", nom: "", telephone: "", privacyConsent: false });
@@ -500,7 +500,7 @@ export default function StageRecuperationPointsLanding() {
         onFindSessions={(ville, chosenSession) => {
           setSelectedVille(ville);
           setSession(chosenSession);
-          trackSchedule({ content_name: chosenSession, value: 240, currency: "EUR" });
+          trackSchedule({ content_name: chosenSession, value: 179, currency: "EUR" });
           setTimeout(() => {
             formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
           }, 100);
@@ -809,7 +809,7 @@ export default function StageRecuperationPointsLanding() {
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-semibold mb-10">
             <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> Jusqu'à 4 points récupérés</span>
             <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> Paiement en plusieurs fois</span>
-            <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> À partir de 240 €</span>
+            <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> À partir de 179 €</span>
             <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> Réservation rapide</span>
           </div>
           <a href="#form" style={{ backgroundColor: "#d4af37" }} className="inline-flex items-center text-black font-bold uppercase text-sm tracking-wide px-12 py-5 rounded-md">
@@ -838,7 +838,7 @@ export default function StageRecuperationPointsLanding() {
         sent={sent}
         onSubmit={submit}
         onDirectPayment={handleDirectPayment}
-        price={240}
+        price={179}
         priceLabel="tarif standard"
         onPaymentSuccess={handlePaymentSuccess}
         onInscriptionCreated={handleInscriptionCreated}

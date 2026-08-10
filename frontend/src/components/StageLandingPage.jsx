@@ -163,7 +163,7 @@ function Hero({
       setSelectedDate({ day, month, year });
       setSession(label);
       setShowCalendar(false);
-      trackSchedule({ content_name: label, value: 240, currency: "EUR" });
+      trackSchedule({ content_name: label, value: 179, currency: "EUR" });
     }
   };
 

@@ -99,7 +99,7 @@ Toutes les formations sont dispensées à **Épinay-sur-Seine (93)**, certaines
 - Code + 20h de conduite, accompagnement ANTS inclus.
 
 ### Récupération de points de permis
-- **Prix** : 240 €
+- **Prix** : 179 €
 - **Durée** : 14h (2 jours)
 - **Éligible CPF** : non précisé — orienter vers un conseiller
 - Stage agréé de récupération de 4 points sur 2 jours.

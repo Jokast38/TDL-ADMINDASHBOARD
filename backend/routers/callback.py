@@ -18,7 +18,7 @@ router = APIRouter(prefix="/callback-requests", tags=["callback-requests"])
 _SOURCE_TO_CATEGORY = {
     "offre_fidelite": "PERMIS",
     "offre_fidelite_189": "PERMIS",
-    "meta_stage_recuperation_points_240": "PERMIS",
+    "meta_stage_recuperation_points_179": "PERMIS",
     "meta_formation_ssiap": "SSIAP",
     "meta_formation_taxi": "VTC_TAXI",
 }

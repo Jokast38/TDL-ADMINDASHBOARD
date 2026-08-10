@@ -10,7 +10,7 @@ export default function StripeCheckout({
   inscriptionId,
   session, 
   center, 
-  amount = 240, 
+  amount = 179, 
   customerName, 
   customerPhone, 
   customerEmail,
