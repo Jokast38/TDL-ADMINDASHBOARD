@@ -689,14 +689,18 @@ export default function StageRecuperationPointsLanding() {
                   <small>Vos informations sont protégées</small>
                 </div>
               </div>
-              <p>Carte bancaire <b>•</b> PayPal <b>•</b> Apple Pay <b>•</b> Google Pay</p>
+              <p>Carte bancaire <b>•</b> PayPal <b>•</b> Apple Pay <b>•</b> Google Pay <b>•</b> Klarna (paiement en plusieurs fois)</p>
               <div className="payment-logos" aria-label="Moyens de paiement">
                 <img src="https://cdn.simpleicons.org/visa/1A1F71" alt="Visa" loading="lazy" />
                 <img src="https://cdn.simpleicons.org/mastercard" alt="Mastercard" loading="lazy" />
                 <img src="https://cdn.simpleicons.org/paypal/00457C" alt="PayPal" loading="lazy" />
                 <img src="https://cdn.simpleicons.org/applepay/000000" alt="Apple Pay" loading="lazy" />
                 <img src="https://cdn.simpleicons.org/googlepay/4285F4" alt="Google Pay" loading="lazy" />
+                <img src="https://cdn.simpleicons.org/klarna/FFB3C7" alt="Klarna" loading="lazy" style={{ background: "#0a0a0a", borderRadius: 4, padding: "3px 5px" }} />
               </div>
+              <p className="text-center" style={{ fontSize: 11, color: "#d4af37", fontWeight: 700, marginTop: 6 }}>
+                Paiement en plusieurs fois disponible avec Klarna
+              </p>
             </div>
           </div>
         </div>

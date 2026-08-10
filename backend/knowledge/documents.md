@@ -30,8 +30,10 @@
 - Contrat d'apprentissage signé avec l'entreprise d'accueil (ou en cours de recherche/validation)
 
 ## Stage de récupération de points
-- Permis de conduire
 - Pièce d'identité
+- Permis de conduire
+- Justificatif de domicile (adresse postale)
+- Lettre 48N, si le stagiaire en a reçu une
 
 ## Important
 Ne jamais inventer une pièce non listée ici — en cas de doute sur un document spécifique, orienter vers un conseiller.

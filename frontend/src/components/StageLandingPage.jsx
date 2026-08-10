@@ -687,6 +687,7 @@ function BookingForm({
   onInscriptionCreated
 }) {
   const [showPayment, setShowPayment] = useState(false);
+  const [showRecap, setShowRecap] = useState(false);
   const [inscriptionId, setInscriptionId] = useState(null);
   const [creatingInscription, setCreatingInscription] = useState(false);
 
@@ -696,7 +697,7 @@ function BookingForm({
     }
   }, [session, setForm, form.session]);
 
-  const createInscription = async () => {
+  const openRecap = () => {
     if (!session) {
       toast.error("Veuillez sélectionner une session");
       return;
@@ -712,6 +713,10 @@ function BookingForm({
       return;
     }
 
+    setShowRecap(true);
+  };
+
+  const createInscription = async () => {
     setCreatingInscription(true);
     try {
       const formationId = "e22bcca0-6656-4335-b6a6-8a06235a2770";
@@ -737,7 +742,7 @@ function BookingForm({
       try {
         const checkoutResponse = await api.post("/payments/checkout", {
           inscription_id: inscription.id,
-          allow_klarna: false
+          allow_klarna: true
         });
 
         const { url } = checkoutResponse.data;
@@ -804,85 +809,164 @@ function BookingForm({
           </div>
         ) : (
           <div className="space-y-4">
-            <form className="space-y-3" data-testid="booking-form">
-              <div className="bg-gray-50 border border-gray-200 rounded-md px-4 py-2.5 text-sm flex items-center justify-between">
-                <span className="text-gray-500">Session sélectionnée :</span>
-                <span className="font-semibold">{session || "Aucune session sélectionnée"}</span>
-                <input type="hidden" name="session" value={session || ''} />
-              </div>
+            {!showRecap && (
+              <form className="space-y-3" data-testid="booking-form">
+                <div className="bg-gray-50 border border-gray-200 rounded-md px-4 py-2.5 text-sm flex items-center justify-between">
+                  <span className="text-gray-500">Session sélectionnée :</span>
+                  <span className="font-semibold">{session || "Aucune session sélectionnée"}</span>
+                  <input type="hidden" name="session" value={session || ''} />
+                </div>
 
-              <input
-                value={form.prenom || ''}
-                onChange={(e) => setForm({ ...form, prenom: e.target.value })}
-                placeholder="Prénom *"
-                className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
-                data-testid="booking-prenom"
-                required
-                disabled={showPayment}
-              />
-              <input
-                value={form.nom || ''}
-                onChange={(e) => setForm({ ...form, nom: e.target.value })}
-                placeholder="Nom *"
-                className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
-                data-testid="booking-nom"
-                required
-                disabled={showPayment}
-              />
-              <input
-                value={form.telephone || ''}
-                onChange={(e) => setForm({ ...form, telephone: e.target.value })}
-                placeholder="Téléphone *"
-                className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
-                data-testid="booking-telephone"
-                required
-                disabled={showPayment}
-              />
-              <input
-                value={form.email || ''}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="Email (optionnel)"
-                className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
-                data-testid="booking-email"
-                disabled={showPayment}
-              />
-              <PrivacyConsentCheckbox
-                checked={!!form.privacyConsent}
-                onChange={(v) => setForm({ ...form, privacyConsent: v })}
-                testId="booking-privacy-consent"
-                disabled={showPayment}
-              />
+                <input
+                  value={form.prenom || ''}
+                  onChange={(e) => setForm({ ...form, prenom: e.target.value })}
+                  placeholder="Prénom *"
+                  className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
+                  data-testid="booking-prenom"
+                  required
+                />
+                <input
+                  value={form.nom || ''}
+                  onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                  placeholder="Nom *"
+                  className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
+                  data-testid="booking-nom"
+                  required
+                />
+                <input
+                  value={form.telephone || ''}
+                  onChange={(e) => setForm({ ...form, telephone: e.target.value })}
+                  placeholder="Téléphone *"
+                  className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
+                  data-testid="booking-telephone"
+                  required
+                />
+                <input
+                  value={form.email || ''}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  placeholder="Email (optionnel)"
+                  className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
+                  data-testid="booking-email"
+                />
+                <PrivacyConsentCheckbox
+                  checked={!!form.privacyConsent}
+                  onChange={(v) => setForm({ ...form, privacyConsent: v })}
+                  testId="booking-privacy-consent"
+                />
 
-              {!session ? (
-                <Button
-                  type="button"
-                  disabled={true}
-                  className="w-full text-white font-bold uppercase text-xs tracking-wide py-6 bg-gray-400 cursor-not-allowed"
-                >
-                  Veuillez d'abord sélectionner une session
-                </Button>
-              ) : !showPayment ? (
-                <Button
-                  type="button"
-                  onClick={createInscription}
-                  disabled={creatingInscription || !form.privacyConsent}
-                  style={{ backgroundColor: GOLD }}
-                  className="w-full text-black font-bold uppercase text-xs tracking-wide py-6"
-                >
-                  {creatingInscription ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Création de l'inscription...
-                    </>
-                  ) : (
-                    "Procéder au paiement"
+                {!session ? (
+                  <Button
+                    type="button"
+                    disabled={true}
+                    className="w-full text-white font-bold uppercase text-xs tracking-wide py-6 bg-gray-400 cursor-not-allowed"
+                  >
+                    Veuillez d'abord sélectionner une session
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={openRecap}
+                    disabled={!form.privacyConsent}
+                    style={{ backgroundColor: GOLD }}
+                    className="w-full text-black font-bold uppercase text-xs tracking-wide py-6"
+                    data-testid="booking-open-recap"
+                  >
+                    Vérifier et procéder au paiement
+                  </Button>
+                )}
+              </form>
+            )}
+
+            {showRecap && !showPayment && (
+              <div className="border border-gray-200 rounded-md overflow-hidden" data-testid="booking-recap">
+                <div className="bg-gray-50 border-b border-gray-200 px-5 py-4">
+                  <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: GOLD }}>Récapitulatif</p>
+                  <h3 className="font-display font-bold text-lg">Vérifiez vos informations</h3>
+                </div>
+
+                <div className="px-5 py-4 space-y-3 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">Formation</span>
+                    <span className="font-semibold text-right">Stage récupération de points</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">Session</span>
+                    <span className="font-semibold text-right">{session}</span>
+                  </div>
+                  {center && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500">Centre</span>
+                      <span className="font-semibold text-right">{center}</span>
+                    </div>
                   )}
-                </Button>
-              ) : null}
-            </form>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">Stagiaire</span>
+                    <span className="font-semibold text-right">{form.prenom} {form.nom}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">Téléphone</span>
+                    <span className="font-semibold text-right">{form.telephone}</span>
+                  </div>
+                  {form.email && (
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500">Email</span>
+                      <span className="font-semibold text-right break-all">{form.email}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-3 pt-3 border-t border-gray-100">
+                    <span className="text-gray-500">Montant</span>
+                    <span className="font-bold text-lg">{price} €</span>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Paiement en 1 fois ou en plusieurs fois avec Klarna, au choix sur la page de paiement sécurisée.
+                  </p>
+                </div>
+
+                <div className="px-5 py-4 bg-[#fff8e1] border-t border-[#d4af37]/30">
+                  <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>
+                    À apporter le jour du stage
+                  </p>
+                  <ul className="text-sm text-gray-700 space-y-1.5">
+                    <li className="flex items-start gap-2"><Check size={14} className="mt-0.5 shrink-0" style={{ color: GOLD }} /> Une pièce d'identité valide</li>
+                    <li className="flex items-start gap-2"><Check size={14} className="mt-0.5 shrink-0" style={{ color: GOLD }} /> Votre permis de conduire</li>
+                    <li className="flex items-start gap-2"><Check size={14} className="mt-0.5 shrink-0" style={{ color: GOLD }} /> Un justificatif d'adresse postale</li>
+                    <li className="flex items-start gap-2"><Check size={14} className="mt-0.5 shrink-0" style={{ color: GOLD }} /> Votre lettre 48N, si vous en avez reçu une</li>
+                  </ul>
+                </div>
+
+                <div className="px-5 py-4 flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowRecap(false)}
+                    className="flex-1 font-bold uppercase text-xs tracking-wide"
+                    data-testid="booking-recap-edit"
+                  >
+                    Modifier
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={createInscription}
+                    disabled={creatingInscription}
+                    style={{ backgroundColor: GOLD }}
+                    className="flex-1 text-black font-bold uppercase text-xs tracking-wide"
+                    data-testid="booking-recap-confirm"
+                  >
+                    {creatingInscription ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-black inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Redirection...
+                      </>
+                    ) : (
+                      "Confirmer et payer"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {showPayment && inscriptionId && (
               <div className="mt-4 p-4 border border-gray-200 rounded-md bg-gray-50">
@@ -901,7 +985,7 @@ function BookingForm({
                     console.error("Erreur paiement:", error);
                     setShowPayment(false);
                   }}
-                  allowKlarna={false}
+                  allowKlarna={true}
                 />
               </div>
             )}
