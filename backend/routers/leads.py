@@ -368,6 +368,38 @@ def _normalize_lead_from_colmap(row: tuple, col_map: dict, source: str) -> Optio
     }
 
 
+async def create_lead_from_contact(
+    name: str, email: Optional[str], phone: Optional[str],
+    interest: str = "", notes: str = "", source: str = "contact",
+) -> Optional[dict]:
+    """Crée (ou retrouve, dédoublonné par email/téléphone) un lead à partir
+    d'un formulaire de contact public — appelé par tous les points d'entrée
+    du site (callback-requests, chatbot...) pour que chaque visiteur qui
+    laisse ses coordonnées apparaisse à la fois dans les Leads et dans les
+    Demandes de rappel, sans décalage entre les deux pages."""
+    if not email and not phone:
+        return None
+    existing = None
+    if email:
+        existing = await db.leads.find_one({"email": email}, {"_id": 0})
+    if not existing and phone:
+        existing = await db.leads.find_one({"phone": phone}, {"_id": 0})
+    if existing:
+        return existing
+    lead = {
+        "id": str(uuid.uuid4()), "name": name or email or phone or "Lead sans nom",
+        "email": email, "phone": phone, "interest": interest, "notes": notes,
+        "tags": ["a_appeler"] if phone and not email else [],
+        "contacted": False, "status": "nouveau", "source": source,
+        "category": _category_for_interest(interest),
+        "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    await db.leads.insert_one(lead)
+    _leads_cache_clear()
+    lead.pop("_id", None)
+    return lead
+
+
 async def _insert_leads_dedup(leads: list) -> dict:
     inserted, skipped = 0, 0
     for lead in leads:

@@ -115,8 +115,8 @@ async def stripe_webhook(request: Request):
                     "Purchase",
                     email=inscription.get("student_email"),
                     phone=inscription.get("student_phone"),
-                    custom_data={"value": amount_paid, "currency": "EUR", "content_name": "inscription_formation"},
-                    event_source_url=f"{PUBLIC_FRONTEND_URL}/inscription",
+                    custom_data={"value": amount_paid, "currency": "EUR", "content_name": inscription.get("source") or "inscription_formation"},
+                    event_source_url=inscription.get("landing_url") or f"{PUBLIC_FRONTEND_URL}/inscription",
                 )
     elif event["type"] in ("checkout.session.expired",):
         session = event["data"]["object"]

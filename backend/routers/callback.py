@@ -8,6 +8,7 @@ from core.config import ROLES_DOSSIERS_MGMT
 from models.callback import CallbackRequestIn, CallbackRequestUpdate
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS
 from services.meta_capi import send_capi_event
+from routers.leads import create_lead_from_contact
 
 router = APIRouter(prefix="/callback-requests", tags=["callback-requests"])
 
@@ -48,6 +49,20 @@ async def create_callback_request(payload: CallbackRequestIn):
     }
     await db.callback_requests.insert_one(doc)
 
+    # Chaque demande de rappel/contact public doit aussi apparaître dans les
+    # Leads (dédoublonné par email/téléphone) — avant, seules certaines
+    # landing pages créaient un lead en plus, d'où le décalage entre les deux
+    # pages. `session` porte le libellé de la formation choisie, plus lisible
+    # que le code de catégorie interne comme intérêt affiché sur le lead.
+    lead = await create_lead_from_contact(
+        name=f"{payload.prenom} {payload.nom}".strip(),
+        email=payload.email or None, phone=payload.telephone or None,
+        interest=payload.session or CATEGORY_LABELS.get(category, "") or "",
+        notes=payload.message or "", source=doc["source"],
+    )
+    if lead:
+        await db.callback_requests.update_one({"id": doc["id"]}, {"$set": {"lead_id": lead["id"]}})
+
     is_contact_form = doc["source"] == "contact_form"
     subject = (
         f"Nouveau message de contact — {payload.prenom} {payload.nom}" if is_contact_form
@@ -83,6 +98,7 @@ async def create_callback_request(payload: CallbackRequestIn):
         "Lead",
         email=payload.email, phone=payload.telephone,
         custom_data={"content_name": doc["source"], "session": doc["session"]},
+        event_source_url=payload.page_url,
     )
 
     doc.pop("_id", None)

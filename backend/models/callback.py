@@ -15,6 +15,10 @@ class CallbackRequestIn(BaseModel):
     # explicitement, elle est déduite de `source` (voir routers/callback.py).
     interest: Optional[str] = None
     center: Optional[str] = None
+    # URL exacte de la landing page au moment de l'envoi — utilisée pour que
+    # l'événement Lead envoyé côté serveur (Meta CAPI) soit rattaché à la
+    # bonne page de campagne plutôt qu'au domaine générique.
+    page_url: Optional[str] = None
 
 
 class CallbackRequestUpdate(BaseModel):

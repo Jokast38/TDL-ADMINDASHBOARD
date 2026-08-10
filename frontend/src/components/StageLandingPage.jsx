@@ -731,6 +731,7 @@ function BookingForm({
         session: session,
         center: center || "Non spécifié",
         source: "stage_recuperation_points",
+        landing_url: window.location.href,
         payment_status: "pending",
         status: "active",
         formation_title: "Stage récupération de points"

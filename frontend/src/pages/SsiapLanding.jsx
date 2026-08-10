@@ -92,6 +92,7 @@ export default function SsiapLanding() {
       await api.post("/callback-requests", {
         prenom: form.prenom, nom: form.nom, telephone: form.telephone, email: form.email,
         session: form.formation, message, center: "Épinay-sur-Seine (93)", source: "meta_formation_ssiap",
+        page_url: window.location.href,
       });
       setSent(true);
       trackLead({ content_name: "formation_ssiap", session: form.formation });

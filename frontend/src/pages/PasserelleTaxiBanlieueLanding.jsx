@@ -92,6 +92,7 @@ export default function PasserelleTaxiBanlieueLanding() {
       await api.post("/callback-requests", {
         prenom: form.prenom, nom: form.nom, telephone: form.telephone, email: form.email,
         session: form.formation, message, center: "Épinay-sur-Seine (93)", source: "meta_passerelle_taxi_banlieue",
+        page_url: window.location.href,
       });
       setSent(true);
       trackLead({ content_name: "passerelle_taxi_banlieue_parisien", value: 750, currency: "EUR", session: form.formation });

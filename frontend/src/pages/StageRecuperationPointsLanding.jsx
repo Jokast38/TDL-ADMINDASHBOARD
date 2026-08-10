@@ -140,6 +140,7 @@ export default function StageRecuperationPointsLanding() {
         session: session,
         center: selectedVille || center,
         source: "stage_recuperation_points",
+        landing_url: window.location.href,
         payment_status: "pending",
         status: "active",
         formation_title: "Stage récupération de points"
@@ -465,7 +466,8 @@ export default function StageRecuperationPointsLanding() {
         telephone: form.telephone,
         session: session, // La session sélectionnée
         center: selectedVille || center,
-        source: "stage_recuperation_points_240"
+        source: "stage_recuperation_points_240",
+        page_url: window.location.href,
       });
       setSent(true);
       trackLead({ content_name: "stage_recuperation_points", value: 240, currency: "EUR", session });

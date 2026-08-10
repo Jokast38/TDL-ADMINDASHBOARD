@@ -275,7 +275,7 @@ export default function Landing() {
     }
     setContactSending(true);
     try {
-      await api.post("/callback-requests", { ...contactForm, source: "contact_form" });
+      await api.post("/callback-requests", { ...contactForm, source: "contact_form", page_url: window.location.href });
       setContactSent(true);
       trackLead({ content_name: "contact_form" });
     } catch {

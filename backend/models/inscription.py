@@ -8,6 +8,12 @@ class InscriptionIn(BaseModel):
     student_email: EmailStr
     student_phone: Optional[str] = None
     notes: Optional[str] = ""
+    # Attribution marketing — quelle landing page a généré cette inscription
+    # (ex: "stage_recuperation_points") et son URL exacte au moment de l'envoi,
+    # utilisées pour que l'événement Purchase envoyé au Meta Pixel/CAPI soit
+    # rattaché à la bonne page plutôt qu'à /inscription par défaut.
+    source: Optional[str] = None
+    landing_url: Optional[str] = None
 
 
 class InscriptionUpdate(BaseModel):

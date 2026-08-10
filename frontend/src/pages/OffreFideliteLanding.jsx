@@ -70,7 +70,7 @@ export default function OffreFideliteLanding() {
     }
     setSending(true);
     try {
-      await api.post("/callback-requests", { ...form, session, center, source: "offre_fidelite_189" });
+      await api.post("/callback-requests", { ...form, session, center, source: "offre_fidelite_189", page_url: window.location.href });
       setSent(true);
       trackLead({ content_name: "offre_fidelite", value: 189, currency: "EUR", session });
     } catch {
