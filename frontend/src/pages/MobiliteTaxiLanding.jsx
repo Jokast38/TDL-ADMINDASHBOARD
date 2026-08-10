@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
-import { trackLead } from "@/lib/metaPixel";
+import { trackLead, trackViewContent } from "@/lib/metaPixel";
 import Kit from "@/components/StageLandingPage";
 import {
   CaretRight, CalendarBlank, Certificate, Taxi, ChatCircleText, MapPin,
@@ -70,7 +70,10 @@ export default function MobiliteTaxiLanding() {
     });
   }, []);
 
-  const scrollToForm = () => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollToForm = () => {
+    trackViewContent({ content_name: "mobilite_taxi_banlieue" });
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const submit = async (e) => {
     e.preventDefault();

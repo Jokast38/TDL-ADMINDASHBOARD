@@ -7,6 +7,7 @@ from core.utils import now_iso
 from core.config import PUBLIC_FRONTEND_URL
 from models.payment import PaymentToggleIn, CheckoutIn
 from services import stripe_service
+from services.meta_capi import send_capi_event
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 log = logging.getLogger(__name__)
@@ -99,14 +100,24 @@ async def stripe_webhook(request: Request):
         session = event["data"]["object"]
         inscription_id = (session.get("metadata") or {}).get("inscription_id")
         if inscription_id:
+            amount_paid = (session.get("amount_total") or 0) / 100
             await db.inscriptions.update_one(
                 {"id": inscription_id},
                 {"$set": {
-                    "payment_status": "paid", "amount_paid": (session.get("amount_total") or 0) / 100,
+                    "payment_status": "paid", "amount_paid": amount_paid,
                     "stripe_payment_intent": session.get("payment_intent"), "paid_at": now_iso(),
                     "updated_at": now_iso(),
                 }},
             )
+            inscription = await db.inscriptions.find_one({"id": inscription_id}, {"_id": 0})
+            if inscription:
+                await send_capi_event(
+                    "Purchase",
+                    email=inscription.get("student_email"),
+                    phone=inscription.get("student_phone"),
+                    custom_data={"value": amount_paid, "currency": "EUR", "content_name": "inscription_formation"},
+                    event_source_url=f"{PUBLIC_FRONTEND_URL}/inscription",
+                )
     elif event["type"] in ("checkout.session.expired",):
         session = event["data"]["object"]
         inscription_id = (session.get("metadata") or {}).get("inscription_id")

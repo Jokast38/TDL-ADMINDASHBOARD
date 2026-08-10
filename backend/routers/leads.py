@@ -398,6 +398,8 @@ async def list_leads(
     has_phone: Optional[bool] = None,
     q: Optional[str] = None,
     interest_in: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
     user: dict = Depends(require_role(*ROLES_LEADS))
@@ -428,6 +430,15 @@ async def list_leads(
         values = [v for v in interest_in.split("|") if v]
         if values:
             query["interest"] = {"$in": values}
+    if date_from or date_to:
+        # created_at est stocké en ISO 8601 (now_iso()) — la comparaison
+        # lexicographique de chaînes ISO suit bien l'ordre chronologique.
+        date_range = {}
+        if date_from:
+            date_range["$gte"] = date_from
+        if date_to:
+            date_range["$lte"] = f"{date_to}T23:59:59.999999"
+        query["created_at"] = date_range
 
     # Un commercial/responsable commercial avec des catégories assignées ne voit
     # que ses leads (+ ceux sans catégorie déduite, pour ne jamais en perdre) —
@@ -439,7 +450,7 @@ async def list_leads(
             {"$or": [{"category": {"$in": assigned}}, {"category": None}, {"category": {"$exists": False}}]}
         ]
 
-    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, page, page_size,
+    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, page, page_size,
                  tuple(sorted(assigned)) if scoped else None)
     cached = _leads_cache_get(cache_key)
     if cached is not None:

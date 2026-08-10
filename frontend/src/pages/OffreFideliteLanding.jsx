@@ -5,7 +5,7 @@ import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
-import { trackSchedule, trackLead } from "@/lib/metaPixel";
+import { trackSchedule, trackLead, trackViewContent } from "@/lib/metaPixel";
 import Kit, { DEFAULT_FEATURES, DEFAULT_STEPS } from "@/components/StageLandingPage";
 import { generateUpcomingSessions } from "@/lib/upcomingSessions";
 import ChatWidget from "@/components/ChatWidget";
@@ -52,6 +52,7 @@ export default function OffreFideliteLanding() {
   };
 
   const handleFindSessions = (ville) => {
+    trackViewContent({ content_name: "offre_fidelite", ville: ville || "" });
     setCenter(ville || "");
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };

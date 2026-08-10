@@ -6,6 +6,8 @@ from core.database import db
 from core.utils import now_iso
 from models.chatbot import ChatMessageIn
 from services.chatbot import SYSTEM_PROMPT, build_context, call_ollama, split_reply_and_lead
+from services.staff_notify import notify_new_contact, CATEGORY_LABELS, CALLBACK_NOTIFY_ROLES
+from routers.leads import _category_for_interest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chatbot"])
@@ -85,12 +87,15 @@ async def _upsert_lead_from_chat(session_id: str, lead_data: dict):
     if not name or not (lead_data.get("telephone") or lead_data.get("email")):
         return
 
+    interest = lead_data.get("formation") or ""
+    category = _category_for_interest(interest)
     doc = {
         "id": str(uuid.uuid4()),
         "name": name,
         "email": lead_data.get("email"),
         "phone": lead_data.get("telephone"),
-        "interest": lead_data.get("formation") or "",
+        "interest": interest,
+        "category": category,
         "notes": lead_data.get("commentaire") or "",
         "tags": ["chatbot"],
         "status": "nouveau",
@@ -100,3 +105,42 @@ async def _upsert_lead_from_chat(session_id: str, lead_data: dict):
         "updated_at": now_iso(),
     }
     await db.leads.insert_one(doc)
+
+    # Un lead venant du chatbot doit être traité comme une vraie demande de
+    # rappel (visible dans la file "Demandes de rappel" du dashboard, pas
+    # seulement dans la page Leads) + notifier immédiatement le personnel
+    # assigné (email + push), exactement comme le formulaire de contact.
+    callback_doc = {
+        "id": str(uuid.uuid4()),
+        "prenom": firstname or name, "nom": lastname,
+        "telephone": lead_data.get("telephone") or "", "email": lead_data.get("email") or "",
+        "message": lead_data.get("commentaire") or "", "session": "",
+        "source": "chatbot", "interest": category,
+        "center": "", "handled": False, "notes": "",
+        "lead_id": doc["id"], "created_at": now_iso(),
+    }
+    if callback_doc["telephone"] or callback_doc["email"]:
+        await db.callback_requests.insert_one(callback_doc)
+
+    lines = [
+        "<p>Nouveau contact via l'assistant chatbot du site :</p>",
+        f"<p>Nom : <b>{name}</b><br>",
+    ]
+    if lead_data.get("telephone"):
+        lines.append(f"Téléphone : <b>{lead_data['telephone']}</b><br>")
+    if lead_data.get("email"):
+        lines.append(f"Email : <b>{lead_data['email']}</b><br>")
+    lines.append("</p>")
+    if interest:
+        lines.append(f"<p>Intérêt : <b>{CATEGORY_LABELS.get(category, interest)}</b></p>")
+    if lead_data.get("commentaire"):
+        lines.append(f"<p>Message :<br>{lead_data['commentaire']}</p>")
+
+    await notify_new_contact(
+        category=category, roles=CALLBACK_NOTIFY_ROLES,
+        email_subject=f"Nouveau lead chatbot — {name}",
+        email_body_html="".join(lines),
+        push_title="Nouveau lead — Chatbot",
+        push_body=f"{name} — {CATEGORY_LABELS.get(category, 'formation non précisée')}",
+        push_url="/admin/leads",
+    )

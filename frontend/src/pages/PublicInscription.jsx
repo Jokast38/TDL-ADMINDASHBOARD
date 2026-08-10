@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, ArrowRight, ArrowLeft, CreditCard, XCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
-import { trackCompleteRegistration } from "@/lib/metaPixel";
+import { trackCompleteRegistration, trackInitiateCheckout, trackPurchase } from "@/lib/metaPixel";
 import { setPageMeta } from "@/lib/seo";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import ChatWidget from "@/components/ChatWidget";
@@ -49,8 +49,15 @@ export default function PublicInscription() {
     setPageMeta({ title: "Inscription — TDL Formation", description: "Inscrivez-vous en ligne à votre formation TDL Formation en 3 étapes simples.", path: "/inscription" });
   }, []);
 
-  const payNow = async (inscriptionId) => {
+  // Retour de paiement Stripe réussi : on ne peut le déclencher qu'une fois
+  // (sinon un refresh de la page renverrait l'événement Purchase à l'infini).
+  useEffect(() => {
+    if (paiementResult === "succes") trackPurchase({ content_name: "inscription_formation" });
+  }, [paiementResult]);
+
+  const payNow = async (inscriptionId, priceForTracking) => {
     setPayLoading(true);
+    trackInitiateCheckout({ content_name: selected?.title, value: priceForTracking, currency: "EUR" });
     try {
       const { data } = await api.post("/payments/checkout", { inscription_id: inscriptionId, allow_klarna: allowKlarna });
       window.location.href = data.url;
@@ -244,7 +251,7 @@ export default function PublicInscription() {
                   </span>
                 </label>
                 <Button
-                  onClick={() => payNow(success.inscription.id)}
+                  onClick={() => payNow(success.inscription.id, selected?.price)}
                   disabled={payLoading}
                   className="w-full bg-[#d4af37] text-black hover:bg-[#b8941f]"
                   data-testid="pay-now-btn"

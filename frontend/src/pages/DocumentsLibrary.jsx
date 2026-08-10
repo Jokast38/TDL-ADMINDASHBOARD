@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { FilePdf, DownloadSimple, MagnifyingGlass, Plus, FileText, Trash, Warning, PenNib, Eraser } from "@phosphor-icons/react";
+import { FilePdf, DownloadSimple, MagnifyingGlass, Plus, FileText, Trash, Warning, PenNib, Eraser, Eye, Link as LinkIcon, Copy, ClipboardText } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import SignatureCanvas from "react-signature-canvas";
@@ -75,8 +74,17 @@ export default function DocumentsLibrary() {
   const [q, setQ] = useState("");
   const [genOpen, setGenOpen] = useState(false);
   const [tplId, setTplId] = useState("");
-  const [ctxJson, setCtxJson] = useState('{\n  "_info": "Sélectionnez un modèle ci-dessus : le contexte se pré-remplit automatiquement."\n}');
+  const [ctx, setCtx] = useState({});
+  const [previewing, setPreviewing] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+
+  const [tests, setTests] = useState([]);
+  const [testOpen, setTestOpen] = useState(false);
+  const [testNom, setTestNom] = useState("");
+  const [testSession, setTestSession] = useState("");
+  const [testEvaluateur, setTestEvaluateur] = useState("");
+  const [staff, setStaff] = useState([]);
+  const [creatingTest, setCreatingTest] = useState(false);
 
   const [sigOpen, setSigOpen] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -96,9 +104,13 @@ export default function DocumentsLibrary() {
     api.get("/documents-generated", params).then((r) => setItems(r.data));
   };
 
+  const loadTests = () => { api.get("/positioning-tests").then((r) => setTests(r.data)); };
+
   useEffect(() => { load(); }, [type]);
   useEffect(() => { api.get("/doc-templates").then((r) => setTemplates(r.data)); }, []);
   useEffect(() => { checkSignature(); }, []);
+  useEffect(() => { loadTests(); }, []);
+  useEffect(() => { api.get("/employees").then((r) => setStaff(r.data)).catch(() => {}); }, []);
 
   const filtered = items.filter((d) => (d.nom_fichier + (d.template_nom || "") + (d.type_doc || "")).toLowerCase().includes(q.toLowerCase()));
 
@@ -121,22 +133,61 @@ export default function DocumentsLibrary() {
   const selectTemplate = (id) => {
     setTplId(id);
     const tpl = templates.find((t) => t.id === id);
-    if (tpl) {
-      setCtxJson(JSON.stringify(buildDefaultContext(tpl), null, 2));
-    }
+    if (tpl) setCtx(buildDefaultContext(tpl));
   };
 
   const generate = async () => {
     if (!tplId) return toast.error("Choisissez un modèle");
-    let context = {};
-    try { context = JSON.parse(ctxJson); } catch { return toast.error("JSON invalide dans contexte"); }
     try {
-      await api.post("/documents-generated", { template_id: tplId, context });
+      await api.post("/documents-generated", { template_id: tplId, context: ctx });
       toast.success("Document PDF généré");
       setGenOpen(false);
       load();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur génération");
+    }
+  };
+
+  const previewTemplate = async () => {
+    if (!tplId) return toast.error("Choisissez un modèle");
+    setPreviewing(true);
+    try {
+      const res = await api.post("/documents-generated/preview", { template_id: tplId, context: ctx }, { responseType: "blob" });
+      window.open(URL.createObjectURL(res.data), "_blank");
+    } catch (e) {
+      toast.error("Erreur lors de l'aperçu");
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  const createTest = async () => {
+    if (!testNom.trim()) return toast.error("Indiquez le nom du candidat");
+    setCreatingTest(true);
+    try {
+      const res = await api.post("/positioning-tests", { stagiaire_nom: testNom, session: testSession, evaluateur: testEvaluateur });
+      await navigator.clipboard.writeText(res.data.link).catch(() => {});
+      toast.success("Lien créé et copié dans le presse-papiers");
+      setTestOpen(false);
+      setTestNom(""); setTestSession(""); setTestEvaluateur("");
+      loadTests();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur création du lien");
+    } finally {
+      setCreatingTest(false);
+    }
+  };
+
+  const copyTestLink = (link) => {
+    navigator.clipboard.writeText(link).then(() => toast.success("Lien copié")).catch(() => toast.error("Erreur copie"));
+  };
+
+  const downloadTestResult = async (t) => {
+    try {
+      const res = await api.get(`/positioning-tests/${t.id}/result/download`, { responseType: "blob" });
+      window.open(URL.createObjectURL(res.data), "_blank");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Résultat non disponible");
     }
   };
 
@@ -293,6 +344,46 @@ export default function DocumentsLibrary() {
             </div>
           </DialogContent>
         </Dialog>
+        <Dialog open={testOpen} onOpenChange={setTestOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" data-testid="new-test-btn">
+              <LinkIcon size={16} className="mr-1" /> Test de positionnement
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Envoyer un test de positionnement</DialogTitle></DialogHeader>
+            <p className="text-xs text-gray-500">
+              Génère un lien unique à envoyer au candidat : il répond en ligne, sans compte à créer.
+              Le PDF récapitulatif (réponses cochées) est généré automatiquement à la soumission ; la partie évaluateur reste à compléter manuellement.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium">Nom du candidat</label>
+                <Input value={testNom} onChange={(e) => setTestNom(e.target.value)} data-testid="test-nom" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Session (optionnel)</label>
+                <Input value={testSession} onChange={(e) => setTestSession(e.target.value)} data-testid="test-session" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Évaluateur assigné</label>
+                <Select value={testEvaluateur} onValueChange={setTestEvaluateur}>
+                  <SelectTrigger data-testid="test-evaluateur"><SelectValue placeholder="Choisir un évaluateur" /></SelectTrigger>
+                  <SelectContent>
+                    {staff.map((s) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">La personne qui complètera la partie évaluateur (score, niveau, conclusion) sur le PDF résultat.</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-2">
+              <Button variant="outline" onClick={() => setTestOpen(false)}>Annuler</Button>
+              <Button onClick={createTest} disabled={creatingTest} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="test-create-submit">
+                {creatingTest ? "Création..." : "Créer le lien"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
         <Dialog open={genOpen} onOpenChange={setGenOpen}>
           <DialogTrigger asChild>
             <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="gen-doc-btn">
@@ -311,10 +402,10 @@ export default function DocumentsLibrary() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium">Contexte (JSON)</label>
-                  {tplId && (
+              {tplId && (
+                <div>
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">Champs du modèle</label>
                     <button
                       type="button"
                       onClick={() => selectTemplate(tplId)}
@@ -322,23 +413,85 @@ export default function DocumentsLibrary() {
                     >
                       Réinitialiser depuis le modèle
                     </button>
-                  )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 max-h-80 overflow-y-auto pr-1">
+                    {Object.keys(ctx).map((k) => (
+                      <div key={k}>
+                        <label className="text-xs text-gray-500 block mb-1 font-mono">{k}</label>
+                        <Input
+                          value={ctx[k]}
+                          onChange={(e) => setCtx((c) => ({ ...c, [k]: e.target.value }))}
+                          data-testid={`gen-field-${k}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Les infos entreprise et les dates sont pré-remplies automatiquement. Complétez les champs propres à l'élève / la formation.
+                  </p>
                 </div>
-                <Textarea rows={10} value={ctxJson} onChange={(e) => setCtxJson(e.target.value)} className="font-mono text-xs" data-testid="gen-context" />
-                <p className="text-xs text-gray-500 mt-1">
-                  Les infos entreprise et les dates sont pré-remplies automatiquement. Complétez les champs propres à l'élève / la formation
-                  (clés vides <code className="font-mono bg-gray-100 px-1">""</code>), en respectant les variables <code className="font-mono bg-gray-100 px-1">{`{{ variable }}`}</code> du modèle.
-                </p>
-              </div>
+              )}
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setGenOpen(false)}>Annuler</Button>
+              <Button variant="outline" onClick={previewTemplate} disabled={!tplId || previewing} data-testid="gen-preview">
+                <Eye size={16} className="mr-1" /> {previewing ? "Aperçu..." : "Aperçu"}
+              </Button>
               <Button onClick={generate} className="bg-[#d4af37] text-black hover:bg-[#b8941f]" data-testid="gen-submit">Générer</Button>
             </div>
           </DialogContent>
         </Dialog>
         </div>
       </div>
+
+      {tests.length > 0 && (
+        <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
+          <div className="px-4 py-3 border-b border-gray-200">
+            <p className="overline">Tests de positionnement envoyés</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left border-b border-gray-200">
+                <tr>
+                  <th className="py-2 px-4 overline">Candidat</th>
+                  <th className="py-2 px-4 overline">Session</th>
+                  <th className="py-2 px-4 overline">Évaluateur</th>
+                  <th className="py-2 px-4 overline">Statut</th>
+                  <th className="py-2 px-4 overline text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tests.map((t) => (
+                  <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2 px-4 font-medium">{t.stagiaire_nom}</td>
+                    <td className="py-2 px-4 text-xs text-gray-500">{t.session || "—"}</td>
+                    <td className="py-2 px-4 text-xs text-gray-500">{t.evaluateur || "—"}</td>
+                    <td className="py-2 px-4">
+                      {t.status === "submitted"
+                        ? <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10 text-xs">Complété</Badge>
+                        : <Badge variant="outline" className="text-xs">En attente</Badge>}
+                    </td>
+                    <td className="py-2 px-4 text-right">
+                      <div className="inline-flex gap-1">
+                        {t.status === "pending" && (
+                          <button onClick={() => copyTestLink(t.link)} className="p-1.5 hover:bg-gray-100 rounded" title="Copier le lien">
+                            <Copy size={14} />
+                          </button>
+                        )}
+                        {t.status === "submitted" && (
+                          <button onClick={() => downloadTestResult(t)} className="p-1.5 hover:bg-gray-100 rounded" title="Voir le résultat">
+                            <ClipboardText size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <div className="flex flex-wrap gap-2 items-center">
         <Select value={type} onValueChange={setType}>

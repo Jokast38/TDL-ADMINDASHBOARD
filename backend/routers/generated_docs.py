@@ -15,6 +15,21 @@ from services.pdf import render_html_pdf, overlay_signature_on_pdf
 router = APIRouter(prefix="/documents-generated", tags=["generated-docs"])
 
 
+@router.post("/preview")
+async def preview_doc_from_template(payload: GeneratedDocIn, user: dict = Depends(require_role(*ROLES_DOCS_VIEW))):
+    """Rendu PDF réel à partir du modèle + contexte fourni, SANS l'enregistrer
+    dans la bibliothèque — pour prévisualiser avant de générer pour de bon
+    (voir bouton Aperçu du formulaire de génération)."""
+    tpl = await db.doc_templates.find_one({"id": payload.template_id, "actif": True}, {"_id": 0})
+    if not tpl:
+        raise HTTPException(status_code=404, detail="Modèle introuvable")
+    html = tpl["contenu_html"]
+    for k, v in payload.context.items():
+        html = html.replace("{{ " + k + " }}", str(v)).replace("{{" + k + "}}", str(v))
+    pdf_bytes = await asyncio.to_thread(render_html_pdf, html)
+    return Response(content=pdf_bytes, media_type="application/pdf")
+
+
 @router.post("")
 async def generate_doc_from_template(payload: GeneratedDocIn, user: dict = Depends(require_role(*ROLES_DOCS_VIEW))):
     tpl = await db.doc_templates.find_one({"id": payload.template_id, "actif": True}, {"_id": 0})

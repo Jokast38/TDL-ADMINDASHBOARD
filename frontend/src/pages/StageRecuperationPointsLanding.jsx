@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { toast } from "sonner";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
-import { trackSchedule, trackLead } from "@/lib/metaPixel";
+import { trackSchedule, trackLead, trackInitiateCheckout, trackPurchase } from "@/lib/metaPixel";
 import { generateUpcomingSessions } from "@/lib/upcomingSessions";
 import Kit from "@/components/StageLandingPage";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
@@ -97,7 +97,7 @@ export default function StageRecuperationPointsLanding() {
   const handlePaymentSuccess = (paymentData) => {
     toast.success("Paiement réussi ! Votre place est réservée.");
     setSent(true);
-    trackLead({
+    trackPurchase({
       content_name: "stage_recuperation_points",
       value: 240,
       currency: "EUR",
@@ -146,6 +146,7 @@ export default function StageRecuperationPointsLanding() {
       });
 
       const inscription = inscriptionResponse.data.inscription;
+      trackInitiateCheckout({ content_name: "stage_recuperation_points", value: 240, currency: "EUR", session });
 
       const checkoutResponse = await api.post("/payments/checkout", {
         inscription_id: inscription.id,
@@ -188,7 +189,7 @@ export default function StageRecuperationPointsLanding() {
     if (paymentStatus === "succes" && inscriptionIdParam) {
       setSent(true);
       toast.success("✅ Paiement réussi ! Votre place est réservée.");
-      trackLead({
+      trackPurchase({
         content_name: "stage_recuperation_points",
         value: 240,
         currency: "EUR",
@@ -414,20 +415,6 @@ export default function StageRecuperationPointsLanding() {
         </button>
       </div>
     );
-  };
-
-  const handleFindSessions = () => {
-    if (!session) {
-      toast.error("Veuillez sélectionner une date");
-      return;
-    }
-    const selectedCenter = tempCenter || center;
-    setSelectedVille(selectedCenter);
-
-    // Scroll vers le formulaire avec un délai pour laisser le temps au DOM de se mettre à jour
-    setTimeout(() => {
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
   };
 
   const chooseSession = (label) => {

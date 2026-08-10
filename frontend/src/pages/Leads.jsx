@@ -435,6 +435,8 @@ export default function Leads() {
   const [contactedFilter, setContactedFilter] = useState("all");
   const [callOnlyFilter, setCallOnlyFilter] = useState(false);
   const [interestFilter, setInterestFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   // Autocomplétion : suggestions issues de TOUTE la base (pas seulement la
   // page affichée), indépendante de la recherche/pagination principale.
@@ -543,6 +545,8 @@ export default function Leads() {
       if (statusFilter !== "all") params.status = statusFilter;
       if (contactedFilter !== "all") params.contacted = contactedFilter === "yes";
       if (callOnlyFilter) params.has_email = false;
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo) params.date_to = dateTo;
       if (interestFilter !== "all") {
         // Le regroupement (VTC, Taxi, ...) est calculé côté client via
         // canonicalizeInterest() ; on envoie au backend les valeurs brutes
@@ -561,13 +565,13 @@ export default function Leads() {
     }
   };
 
-  useEffect(() => { load(); }, [page, statusFilter, contactedFilter, callOnlyFilter, interestFilter]);
-  // Un changement de filtre (statut/contacté/à appeler/intérêt) doit revenir à la page 1.
+  useEffect(() => { load(); }, [page, statusFilter, contactedFilter, callOnlyFilter, interestFilter, dateFrom, dateTo]);
+  // Un changement de filtre (statut/contacté/à appeler/intérêt/date) doit revenir à la page 1.
   const isFirstFilterRun = useRef(true);
   useEffect(() => {
     if (isFirstFilterRun.current) { isFirstFilterRun.current = false; return; }
     setPage(1);
-  }, [statusFilter, contactedFilter, callOnlyFilter, interestFilter]);
+  }, [statusFilter, contactedFilter, callOnlyFilter, interestFilter, dateFrom, dateTo]);
   // Recherche texte : debounce, et retour à la page 1 (sinon "page 3" pourrait
   // se retrouver vide après une nouvelle recherche plus étroite).
   useEffect(() => {
@@ -1604,6 +1608,35 @@ export default function Leads() {
           <Phone size={12} /> À appeler (sans email)
         </button>
 
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="w-36 text-xs"
+            title="Créés à partir du"
+            data-testid="lead-date-from"
+          />
+          <span className="text-gray-400 text-xs">→</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="w-36 text-xs"
+            title="Créés jusqu'au"
+            data-testid="lead-date-to"
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => { setDateFrom(""); setDateTo(""); }}
+              className="text-xs text-gray-400 hover:text-gray-700"
+              title="Réinitialiser les dates"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
         {/* Actions groupées */}
         {selected.size > 0 && (
           <div className="ml-auto flex items-center gap-2">
@@ -1768,6 +1801,7 @@ export default function Leads() {
                 <th className="py-3 px-4 overline">Intérêt</th>
                 <th className="py-3 px-4 overline">Tags</th>
                 <th className="py-3 px-4 overline">Statut</th>
+                <th className="py-3 px-4 overline">Date</th>
                 <th className="py-3 px-4 overline text-right">Actions</th>
               </tr>
             </thead>
@@ -1813,6 +1847,9 @@ export default function Leads() {
                         {Object.entries(STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                  </td>
+                  <td className="py-3 px-4 text-xs text-gray-500 whitespace-nowrap">
+                    {l.created_at ? new Date(l.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—"}
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="flex justify-end items-center gap-1">
@@ -1866,7 +1903,7 @@ export default function Leads() {
               ))}
               {!filteredItems.length && !loading && (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-gray-400">
+                  <td colSpan="8" className="py-12 text-center text-gray-400">
                     Aucun lead. Importez un fichier ou ajoutez-en un manuellement.
                   </td>
                 </tr>

@@ -24,6 +24,7 @@ import PasserelleTaxiBanlieueLanding from "@/pages/PasserelleTaxiBanlieueLanding
 import VtcFormationLanding from "@/pages/VtcFormationLanding";
 import CacesFormationLanding from "@/pages/CacesFormationLanding";
 import MentionsLegales from "@/pages/MentionsLegales";
+import PositioningTest from "@/pages/PositioningTest";
 import FAQ from "@/pages/FAQ";
 
 import Layout from "@/components/Layout";
@@ -43,6 +44,7 @@ import Stages from "@/pages/Stages";
 import AnimateurSpace from "@/pages/AnimateurSpace";
 import DocumentsLibrary from "@/pages/DocumentsLibrary";
 import DocTemplates from "@/pages/DocTemplates";
+import CompanyDocuments from "@/pages/CompanyDocuments";
 import Leads from "@/pages/Leads";
 import AnalyticsLoader from "@/components/AnalyticsLoader";
 import CookieConsent from "@/components/CookieConsent";
@@ -109,6 +111,7 @@ function App() {
             <Route path="/mentions-legales" element={<MentionsLegales />} />
             <Route path="/politique-de-confidentialite" element={<PolitiqueConfidentialite />} />
             <Route path="/faq" element={<FAQ />} />
+            <Route path="/test-positionnement/:token" element={<PositioningTest />} />
 
             <Route path="/espace-eleve" element={
               <ProtectedRoute roles={["etudiant"]}><StudentSpace /></ProtectedRoute>
@@ -140,6 +143,9 @@ function App() {
             } />
             <Route path="/admin/doc-templates" element={
               <ProtectedRoute roles={["admin"]}><AdminLayout><DocTemplates /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/company-documents" element={
+              <ProtectedRoute roles={["admin", "responsable_admission", "agent_admin"]}><AdminLayout><CompanyDocuments /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/kami-street" element={
               <ProtectedRoute roles={["admin", "employe", "commercial", "responsable_commercial"]}><AdminLayout><KamiStreet /></AdminLayout></ProtectedRoute>

@@ -27,9 +27,12 @@ export function generateUpcomingSessions() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // Une session qui démarre aujourd'hui a déjà commencé (le centre ouvre en
+  // matinée) — on ne la propose plus à la réservation, seules les sessions à
+  // partir de demain sont de vraies "prochaines sessions".
   const upcoming = STAGE_SESSIONS_2026
     .map(formatSession)
-    .filter((s) => s.start >= today)
+    .filter((s) => s.start > today)
     .sort((a, b) => a.start - b.start);
 
   const groups = [];

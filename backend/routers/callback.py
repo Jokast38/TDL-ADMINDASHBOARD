@@ -7,6 +7,7 @@ from core.utils import now_iso
 from core.config import ROLES_DOSSIERS_MGMT
 from models.callback import CallbackRequestIn, CallbackRequestUpdate
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS
+from services.meta_capi import send_capi_event
 
 router = APIRouter(prefix="/callback-requests", tags=["callback-requests"])
 
@@ -76,6 +77,12 @@ async def create_callback_request(payload: CallbackRequestIn):
         push_body=f"{payload.prenom} {payload.nom} — {CATEGORY_LABELS.get(category, 'formation non précisée')}",
         push_url="/admin/inscriptions",
         center=payload.center,
+    )
+
+    await send_capi_event(
+        "Lead",
+        email=payload.email, phone=payload.telephone,
+        custom_data={"content_name": doc["source"], "session": doc["session"]},
     )
 
     doc.pop("_id", None)

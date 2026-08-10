@@ -39,6 +39,15 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
+# Meta Pixel + Conversions API (CAPI) — le pixel navigateur (frontend) peut
+# être bloqué par un ad-blocker ; l'envoi serveur via l'API token est le
+# doublon fiable pour les événements de conversion (Purchase notamment).
+# META_PIXEL_ID sert aussi de valeur par défaut si Paramètres > Pixel ID (db.settings)
+# n'a pas encore été renseigné manuellement.
+META_PIXEL_ID = os.getenv("META_PIXEL_ID")
+META_API_TOKEN = os.getenv("META_API_TOKEN")
+META_PIXEL_TEST_ID = os.getenv("META_PIXEL_TEST_ID")  # renseigné = events visibles dans l'onglet "Test Events" sans polluer les stats prod
+
 # Notifications push navigateur (Web Push / VAPID).
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")

@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { CreditCard, LockKey, Check } from "@phosphor-icons/react";
+import { trackInitiateCheckout } from "@/lib/metaPixel";
 
 export default function StripeCheckout({ 
   inscriptionId,
@@ -27,7 +28,8 @@ export default function StripeCheckout({
     }
 
     setLoading(true);
-    
+    trackInitiateCheckout({ content_name: "stage_recuperation_points", value: amount, currency: "EUR", session });
+
     try {
       // Appeler votre endpoint /payments/checkout
       const response = await api.post("/payments/checkout", {

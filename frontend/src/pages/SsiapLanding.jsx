@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
-import { trackLead } from "@/lib/metaPixel";
+import { trackLead, trackViewContent, trackSchedule } from "@/lib/metaPixel";
 import Kit from "@/components/StageLandingPage";
 import {
   CaretRight, ShieldCheck, CalendarBlank, Certificate, Fire, ChatCircleText,
@@ -70,7 +70,10 @@ export default function SsiapLanding() {
     });
   }, []);
 
-  const scrollToForm = () => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollToForm = () => {
+    trackViewContent({ content_name: "formation_ssiap" });
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -186,7 +189,7 @@ export default function SsiapLanding() {
               <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="E-mail" className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
               <input value={form.telephone} onChange={(e) => set("telephone", e.target.value)} placeholder="Téléphone" className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
               <div className="grid grid-cols-2 gap-3">
-                <select value={form.formation} onChange={(e) => set("formation", e.target.value)} className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm bg-white">
+                <select value={form.formation} onChange={(e) => { set("formation", e.target.value); trackSchedule({ content_name: e.target.value }); }} className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm bg-white">
                   {FORMATIONS.map((f) => <option key={f} value={f}>{f}</option>)}
                 </select>
                 <select value={form.financement} onChange={(e) => set("financement", e.target.value)} className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm bg-white">
