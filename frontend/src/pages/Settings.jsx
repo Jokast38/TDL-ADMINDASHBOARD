@@ -62,7 +62,7 @@ export default function Settings() {
                     <SelectItem value="mock">Mock (logs serveur)</SelectItem>
                     <SelectItem value="resend">Resend (recommandé)</SelectItem>
                     <SelectItem value="brevo">Brevo</SelectItem>
-                    <SelectItem value="smtp">SMTP Gmail</SelectItem>
+                    <SelectItem value="smtp">SMTP</SelectItem>
                     <SelectItem value="sendgrid">SendGrid</SelectItem>
                   </SelectContent>
                 </Select>
@@ -97,34 +97,42 @@ export default function Settings() {
               {(s.email_provider === "smtp" || s.email_provider === "resend") && (
                 <div className="space-y-4 pt-4 border-t border-gray-200">
                   <p className="text-sm font-semibold">
-                    {s.email_provider === "resend" ? "SMTP Gmail (secours, optionnel)" : "SMTP Gmail (principal)"}
+                    {s.email_provider === "resend" ? "SMTP (secours, optionnel)" : "SMTP (principal)"}
                   </p>
                   <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900" data-testid="gmail-helper">
-                    <b>📧 Gmail SMTP :</b> Activez la <b>validation en 2 étapes</b> sur votre compte Google, puis créez un <b>mot de passe d'application</b> ici :
-                    <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="underline ml-1 text-[#d4af37] hover:text-[#b8941f]">myaccount.google.com/apppasswords</a>. Utilisez ce mot de passe ci-dessous (et non votre mot de passe Gmail classique).
+                    <b>📧 SMTP :</b> renseignez les identifiants fournis par votre hébergeur mail (ex: o2switch) ou, pour Gmail,
+                    activez la <b>validation en 2 étapes</b> puis créez un <b>mot de passe d'application</b> sur
+                    <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="underline ml-1 text-[#d4af37] hover:text-[#b8941f]">myaccount.google.com/apppasswords</a>.
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Hôte SMTP" value={s.smtp_host || "smtp.gmail.com"} onChange={(v) => update("smtp_host", v)} testid="smtp-host" />
+                    <Field label="Hôte SMTP" value={s.smtp_host} onChange={(v) => update("smtp_host", v)} testid="smtp-host" placeholder="montage.o2switch.net" />
                     <Field label="Port" type="number" value={s.smtp_port || 587} onChange={(v) => update("smtp_port", +v)} testid="smtp-port" />
                   </div>
-                  <Field label="Compte / utilisateur (email Gmail)" value={s.smtp_user} onChange={(v) => update("smtp_user", v)} testid="smtp-user" placeholder="exemple@gmail.com" />
-                  <Field label="Mot de passe d'application (16 chars)" type="password" value={s.smtp_password} onChange={(v) => update("smtp_password", v)} testid="smtp-password" placeholder="abcd efgh ijkl mnop" />
+                  <Field label="Compte / utilisateur" value={s.smtp_user} onChange={(v) => update("smtp_user", v)} testid="smtp-user" placeholder="administration@tdl-formation.fr" />
+                  <Field label="Mot de passe" type="password" value={s.smtp_password} onChange={(v) => update("smtp_password", v)} testid="smtp-password" />
                   <div className="flex items-center gap-2">
                     <Switch checked={s.smtp_tls !== false} onCheckedChange={(v) => update("smtp_tls", v)} data-testid="smtp-tls" />
-                    <label className="text-sm">STARTTLS (recommandé port 587)</label>
+                    <label className="text-sm">STARTTLS (décochez pour SSL direct, ex: port 465)</label>
                   </div>
                 </div>
               )}
 
               {s.email_provider === "smtp" && (
                 <div className="space-y-4 pt-4 border-t border-gray-200">
-                  <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900" data-testid="resend-fallback-helper">
-                    <b>🔁 Secours automatique :</b> renseignez une clé <b>Resend</b> ci-dessous pour qu'un email parte
-                    automatiquement par cette voie si les 3 tentatives SMTP échouent — gratuit jusqu'à 3000 emails/mois sur
-                    <a href="https://resend.com" target="_blank" rel="noreferrer" className="underline ml-1">resend.com</a>.
+                  <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs text-blue-900" data-testid="fallback-helper">
+                    <b>🔁 Secours automatique :</b> si les 3 tentatives SMTP échouent, un email part automatiquement via
+                    Brevo puis, à défaut, via Resend — renseignez au moins une des deux clés ci-dessous.
                   </div>
                   <Field
-                    label="Clé API Resend (secours si SMTP échoue)"
+                    label="Clé API Brevo (secours si SMTP échoue, prioritaire)"
+                    value={s.brevo_fallback_api_key}
+                    onChange={(v) => update("brevo_fallback_api_key", v)}
+                    testid="brevo-fallback-key"
+                    type="password"
+                    placeholder="xkeysib-..."
+                  />
+                  <Field
+                    label="Clé API Resend (secours si SMTP et Brevo échouent)"
                     value={s.resend_fallback_api_key}
                     onChange={(v) => update("resend_fallback_api_key", v)}
                     testid="resend-fallback-key"

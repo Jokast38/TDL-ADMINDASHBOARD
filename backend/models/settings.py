@@ -19,6 +19,7 @@ class SettingsIn(BaseModel):
     smtp_password: Optional[str] = None
     smtp_tls: Optional[bool] = None
     resend_fallback_api_key: Optional[str] = None
+    brevo_fallback_api_key: Optional[str] = None
     n8n_webhook_inscription: Optional[str] = None
     n8n_webhook_dossier: Optional[str] = None
     n8n_webhook_payment: Optional[str] = None

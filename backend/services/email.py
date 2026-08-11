@@ -233,7 +233,12 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
 
     elif provider == "smtp" and _smtp_configured(s):
         log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment)
-        if log["status"] != "sent" and s.get("resend_fallback_api_key"):
+        if log["status"] != "sent" and s.get("brevo_fallback_api_key"):
+            logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Brevo en secours...")
+            log["smtp_error"] = log["status"]
+            log["status"] = await _send_via_brevo(s["brevo_fallback_api_key"], from_addr, to, subject, tracked_body, attachment)
+            log["fallback_provider"] = "brevo"
+        elif log["status"] != "sent" and s.get("resend_fallback_api_key"):
             logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Resend en secours...")
             log["smtp_error"] = log["status"]
             log["status"] = await _send_via_resend(s["resend_fallback_api_key"], from_addr, to, subject, tracked_body, attachment)
