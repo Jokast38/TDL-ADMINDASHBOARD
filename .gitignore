@@ -5,6 +5,7 @@ backend/.venv/
 !**/.env.example
 
 # Secrets
+backend/*.json
 !backend/package.json
 
 # Python
