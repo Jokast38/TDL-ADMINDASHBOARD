@@ -7,7 +7,7 @@ import html
 
 TDL_SITE = "https://tdl-formation.fr"
 TDL_PHONE = "01 80 90 72 49"
-TDL_LOGO = "https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png"
+TDL_LOGO = "https://tdl-formation.fr/tdl.png"
 
 _HEADER = f"""
 <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 0;font-family:Helvetica,Arial,sans-serif;">
