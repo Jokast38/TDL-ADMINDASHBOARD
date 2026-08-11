@@ -414,6 +414,8 @@ export default function Landing() {
               <Stat label="Réussite examen Taxi" value="95%" accent="#0B7238" />
               <Stat label="Examens réussis" value="5000+" accent="#d4af37" />
               <Stat label="Formateurs qualifiés" value="15" accent="#d4af37" />
+              <Stat label="Inscrits par mois" value="30-40" accent="#0B7238" />
+              <Stat label="Taux de satisfaction" value="90%" accent="#0B7238" />
             </div>
           </div>
 
