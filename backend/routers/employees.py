@@ -226,7 +226,6 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
     ce suivi n'apparaissent pas rétroactivement."""
     staff = await db.users.find(
         {"role": {"$in": list(VALID_STAFF_ROLES)}},
-        {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "assigned_categories": 1, "active": 1},
         {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1, "active": 1},
     ).to_list(500)
 
