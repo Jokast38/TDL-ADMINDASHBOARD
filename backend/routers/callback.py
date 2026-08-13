@@ -102,6 +102,7 @@ async def create_callback_request(payload: CallbackRequestIn, request: Request):
         event_source_url=payload.page_url,
         client_ip_address=(request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or (request.client.host if request.client else None),
         client_user_agent=request.headers.get("user-agent"),
+        fbc=payload.fbc, fbp=payload.fbp, external_id=doc["id"],
     )
 
     doc.pop("_id", None)

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { toast } from "sonner";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
-import { trackSchedule, trackLead, trackInitiateCheckout, trackPurchase, newEventId } from "@/lib/metaPixel";
+import { trackSchedule, trackLead, trackInitiateCheckout, trackPurchase, newEventId, getFbCookies } from "@/lib/metaPixel";
 import { generateUpcomingSessions } from "@/lib/upcomingSessions";
 import Kit from "@/components/StageLandingPage";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
@@ -459,6 +459,7 @@ export default function StageRecuperationPointsLanding() {
         source: "stage_recuperation_points_179",
         page_url: window.location.href,
         event_id: eventId,
+        ...getFbCookies(),
       });
       setSent(true);
       trackLead({ content_name: "stage_recuperation_points", value: 179, currency: "EUR", session }, eventId);

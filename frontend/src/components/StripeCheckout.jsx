@@ -4,7 +4,7 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { CreditCard, LockKey, Check } from "@phosphor-icons/react";
-import { trackInitiateCheckout } from "@/lib/metaPixel";
+import { trackInitiateCheckout, getFbCookies } from "@/lib/metaPixel";
 
 export default function StripeCheckout({ 
   inscriptionId,
@@ -34,7 +34,8 @@ export default function StripeCheckout({
       // Appeler votre endpoint /payments/checkout
       const response = await api.post("/payments/checkout", {
         inscription_id: inscriptionId,
-        allow_klarna: allowKlarna
+        allow_klarna: allowKlarna,
+        ...getFbCookies(),
       });
 
       const { url } = response.data;

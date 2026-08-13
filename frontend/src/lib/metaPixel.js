@@ -45,3 +45,18 @@ export const trackCompleteRegistration = (params) => trackMetaEvent("CompleteReg
 // l'évènement pixel de la même action.
 export const newEventId = () =>
   (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+function readCookie(name) {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+// `_fbc`/`_fbp` sont posés automatiquement par le script du pixel Meta une
+// fois chargé (voir AnalyticsLoader) — les transmettre au backend pour les
+// évènements CAPI (Lead, Purchase) augmente significativement la qualité de
+// correspondance (fbc: +33%, fbp: +25% d'après le Gestionnaire d'évènements).
+// `_fbc` n'existe que si le visiteur est arrivé via un clic sur une pub Meta
+// (paramètre fbclid dans l'URL) — normal qu'il soit souvent absent hors pub.
+export function getFbCookies() {
+  return { fbc: readCookie("_fbc"), fbp: readCookie("_fbp") };
+}

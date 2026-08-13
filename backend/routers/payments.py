@@ -102,6 +102,7 @@ async def create_checkout(payload: CheckoutIn, request: Request):
             # bonne qualité de correspondance (voir services/meta_capi.py).
             "checkout_client_ip": (request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or (request.client.host if request.client else None),
             "checkout_user_agent": request.headers.get("user-agent"),
+            "checkout_fbc": payload.fbc, "checkout_fbp": payload.fbp,
         }},
     )
     return {"url": session.url}
@@ -147,6 +148,8 @@ async def stripe_webhook(request: Request):
                     event_source_url=inscription.get("landing_url") or f"{PUBLIC_FRONTEND_URL}/inscription",
                     client_ip_address=inscription.get("checkout_client_ip"),
                     client_user_agent=inscription.get("checkout_user_agent"),
+                    fbc=inscription.get("checkout_fbc"), fbp=inscription.get("checkout_fbp"),
+                    external_id=inscription_id,
                 )
     elif event["type"] in ("checkout.session.expired",):
         session = event["data"]["object"]

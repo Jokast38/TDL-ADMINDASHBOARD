@@ -23,6 +23,11 @@ class CallbackRequestIn(BaseModel):
     # tel quel pour l'évènement Lead pixel ET l'évènement Lead CAPI — permet
     # à Meta de dédupliquer les deux au lieu de compter le lead deux fois.
     event_id: Optional[str] = None
+    # Cookies posés par le pixel Meta (voir lib/metaPixel.js getFbCookies) —
+    # transmis tels quels au serveur pour l'évènement Lead CAPI, améliorent
+    # significativement la qualité de correspondance des évènements.
+    fbc: Optional[str] = None
+    fbp: Optional[str] = None
 
 
 class CallbackRequestUpdate(BaseModel):

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
-import { trackLead, trackViewContent, trackSchedule, newEventId } from "@/lib/metaPixel";
+import { trackLead, trackViewContent, trackSchedule, newEventId, getFbCookies } from "@/lib/metaPixel";
 import Kit from "@/components/StageLandingPage";
 import {
   CaretRight, ShieldCheck, CalendarBlank, Certificate, Truck, ChatCircleText,
@@ -93,7 +93,7 @@ export default function CacesFormationLanding() {
       await api.post("/callback-requests", {
         prenom: form.prenom, nom: form.nom, telephone: form.telephone, email: form.email,
         session: form.formation, message, center: "Épinay-sur-Seine (93)", source: "meta_formation_caces",
-        page_url: window.location.href, event_id: eventId,
+        page_url: window.location.href, event_id: eventId, ...getFbCookies(),
       });
       setSent(true);
       trackLead({ content_name: "formation_caces", session: form.formation }, eventId);

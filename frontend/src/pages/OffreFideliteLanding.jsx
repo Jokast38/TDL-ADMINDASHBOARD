@@ -5,7 +5,7 @@ import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
-import { trackSchedule, trackLead, trackViewContent, newEventId } from "@/lib/metaPixel";
+import { trackSchedule, trackLead, trackViewContent, newEventId, getFbCookies } from "@/lib/metaPixel";
 import Kit, { DEFAULT_FEATURES, DEFAULT_STEPS } from "@/components/StageLandingPage";
 import { generateUpcomingSessions } from "@/lib/upcomingSessions";
 import ChatWidget from "@/components/ChatWidget";
@@ -71,7 +71,7 @@ export default function OffreFideliteLanding() {
     setSending(true);
     try {
       const eventId = newEventId();
-      await api.post("/callback-requests", { ...form, session, center, source: "offre_fidelite_189", page_url: window.location.href, event_id: eventId });
+      await api.post("/callback-requests", { ...form, session, center, source: "offre_fidelite_189", page_url: window.location.href, event_id: eventId, ...getFbCookies() });
       setSent(true);
       trackLead({ content_name: "offre_fidelite", value: 189, currency: "EUR", session }, eventId);
     } catch {

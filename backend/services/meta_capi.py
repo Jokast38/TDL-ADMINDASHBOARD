@@ -27,6 +27,9 @@ async def send_capi_event(
     event_source_url: Optional[str] = None,
     client_ip_address: Optional[str] = None,
     client_user_agent: Optional[str] = None,
+    fbc: Optional[str] = None,
+    fbp: Optional[str] = None,
+    external_id: Optional[str] = None,
 ) -> None:
     """Envoie un événement de conversion côté serveur (Meta Conversions API) —
     doublon fiable de l'événement navigateur (lib/metaPixel.js), non bloqué
@@ -49,6 +52,14 @@ async def send_capi_event(
         user_data["client_ip_address"] = client_ip_address
     if client_user_agent:
         user_data["client_user_agent"] = client_user_agent
+    # fbc/fbp sont des tokens opaques déjà formatés par Meta — envoyés tels
+    # quels, jamais hachés (contrairement à em/ph/external_id).
+    if fbc:
+        user_data["fbc"] = fbc
+    if fbp:
+        user_data["fbp"] = fbp
+    if external_id:
+        user_data["external_id"] = [_hash(external_id)]
 
     payload = {
         "data": [{

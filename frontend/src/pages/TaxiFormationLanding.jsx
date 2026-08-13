@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
-import { trackLead, trackViewContent, trackSchedule, newEventId } from "@/lib/metaPixel";
+import { trackLead, trackViewContent, trackSchedule, newEventId, getFbCookies } from "@/lib/metaPixel";
 import Kit from "@/components/StageLandingPage";
 import {
   CaretRight, ShieldCheck, CalendarBlank, Certificate, Taxi, ChatCircleText,
@@ -95,7 +95,7 @@ export default function TaxiFormationLanding() {
       await api.post("/callback-requests", {
         prenom: form.prenom, nom: form.nom, telephone: form.telephone, email: form.email,
         session: form.formation, message, center: "Épinay-sur-Seine (93)", source: "meta_formation_taxi",
-        page_url: window.location.href, event_id: eventId,
+        page_url: window.location.href, event_id: eventId, ...getFbCookies(),
       });
       setSent(true);
       trackLead({ content_name: "formation_taxi", session: form.formation }, eventId);

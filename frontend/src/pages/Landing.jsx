@@ -18,7 +18,7 @@ import {
   Clock, PiggyBank, NotePencil, Wheelchair, Storefront,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
-import { trackLead, newEventId } from "@/lib/metaPixel";
+import { trackLead, newEventId, getFbCookies } from "@/lib/metaPixel";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import SiteFooter from "@/components/SiteFooter";
 import FormationCard from "@/components/FormationCard";
@@ -276,7 +276,7 @@ export default function Landing() {
     setContactSending(true);
     try {
       const eventId = newEventId();
-      await api.post("/callback-requests", { ...contactForm, source: "contact_form", page_url: window.location.href, event_id: eventId });
+      await api.post("/callback-requests", { ...contactForm, source: "contact_form", page_url: window.location.href, event_id: eventId, ...getFbCookies() });
       setContactSent(true);
       trackLead({ content_name: "contact_form" }, eventId);
     } catch {
