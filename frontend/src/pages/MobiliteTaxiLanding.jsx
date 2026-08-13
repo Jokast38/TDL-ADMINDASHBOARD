@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
-import { trackLead, trackViewContent } from "@/lib/metaPixel";
+import { trackLead, trackViewContent, newEventId } from "@/lib/metaPixel";
 import Kit from "@/components/StageLandingPage";
 import {
   CaretRight, CalendarBlank, Certificate, Taxi, ChatCircleText, MapPin,
@@ -89,13 +89,14 @@ export default function MobiliteTaxiLanding() {
     setSending(true);
     try {
       const message = [form.financement && `Financement envisagé : ${form.financement}`, form.message].filter(Boolean).join("\n");
+      const eventId = newEventId();
       await api.post("/callback-requests", {
         prenom: form.prenom, nom: form.nom, telephone: form.telephone, email: form.email,
         session: form.formation, message, center: "Épinay-sur-Seine (93)", source: "meta_mobilite_taxi",
-        page_url: window.location.href,
+        page_url: window.location.href, event_id: eventId,
       });
       setSent(true);
-      trackLead({ content_name: "mobilite_taxi_banlieue", value: 390, currency: "EUR", session: form.formation });
+      trackLead({ content_name: "mobilite_taxi_banlieue", value: 390, currency: "EUR", session: form.formation }, eventId);
     } catch {
       toast.error("Erreur lors de l'envoi, merci de réessayer ou de nous appeler directement.");
     } finally {

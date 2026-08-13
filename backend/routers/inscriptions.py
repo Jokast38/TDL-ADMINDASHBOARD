@@ -47,6 +47,7 @@ async def create_inscription(payload: InscriptionIn):
         "price": formation.get("price", 0), "payment_status": "pending",
         "status": "active", "notes": payload.notes or "", "created_at": now_iso(),
         "source": payload.source or "", "landing_url": payload.landing_url or "",
+        "session": payload.session or "", "center": payload.center or "",
     }
     await db.inscriptions.insert_one(inscription)
 

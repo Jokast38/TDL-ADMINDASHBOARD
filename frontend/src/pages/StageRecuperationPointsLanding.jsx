@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
 import { toast } from "sonner";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
-import { trackSchedule, trackLead, trackInitiateCheckout, trackPurchase } from "@/lib/metaPixel";
+import { trackSchedule, trackLead, trackInitiateCheckout, trackPurchase, newEventId } from "@/lib/metaPixel";
 import { generateUpcomingSessions } from "@/lib/upcomingSessions";
 import Kit from "@/components/StageLandingPage";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
@@ -182,24 +182,13 @@ export default function StageRecuperationPointsLanding() {
       description: "Récupérez jusqu'à 4 points sur votre permis en 2 jours à Épinay-sur-Seine (93), aussi à Creil (60). Stage agréé — 179€, réservation en ligne.",
       path: "/stage-recuperation-points",
     });
-    // Vérifier le statut du paiement après redirection
+    // Un paiement réussi redirige désormais vers /stage-recuperation-points/merci
+    // (voir routers/payments.py _LANDING_THANK_YOU_PATHS) — seul un paiement
+    // annulé revient sur cette page.
     const params = new URLSearchParams(window.location.search);
     const paymentStatus = params.get("paiement");
-    const inscriptionIdParam = params.get("inscription");
 
-    if (paymentStatus === "succes" && inscriptionIdParam) {
-      setSent(true);
-      toast.success("✅ Paiement réussi ! Votre place est réservée.");
-      trackPurchase({
-        content_name: "stage_recuperation_points",
-        value: 179,
-        currency: "EUR",
-        session,
-        inscription_id: inscriptionIdParam
-      });
-      // Nettoyer l'URL
-      window.history.replaceState({}, "", window.location.pathname);
-    } else if (paymentStatus === "annule") {
+    if (paymentStatus === "annule") {
       toast.info("Paiement annulé. Vous pouvez réessayer quand vous voulez.");
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -460,6 +449,7 @@ export default function StageRecuperationPointsLanding() {
 
     setSending(true);
     try {
+      const eventId = newEventId();
       await api.post("/callback-requests", {
         prenom: form.prenom,
         nom: form.nom,
@@ -468,9 +458,10 @@ export default function StageRecuperationPointsLanding() {
         center: selectedVille || center,
         source: "stage_recuperation_points_179",
         page_url: window.location.href,
+        event_id: eventId,
       });
       setSent(true);
-      trackLead({ content_name: "stage_recuperation_points", value: 179, currency: "EUR", session });
+      trackLead({ content_name: "stage_recuperation_points", value: 179, currency: "EUR", session }, eventId);
       toast.success("Votre demande a bien été enregistrée. Nous vous recontacterons sous 24h.");
       // Réinitialiser le formulaire après envoi
       setForm({ prenom: "", nom: "", telephone: "", privacyConsent: false });

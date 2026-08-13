@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from core.database import db
 from core.security import require_role
@@ -30,7 +30,7 @@ _NOTIFY_ROLES = ("responsable_admission", "agent_admin", "commercial", "responsa
 
 
 @router.post("")
-async def create_callback_request(payload: CallbackRequestIn):
+async def create_callback_request(payload: CallbackRequestIn, request: Request):
     """Formulaire public (landing page 'offre fidélité' ou formulaire de
     contact du site) : demande de rappel, sans inscription formelle. Notifie
     le personnel assigné à la catégorie concernée (email + push), avec repli
@@ -96,9 +96,12 @@ async def create_callback_request(payload: CallbackRequestIn):
 
     await send_capi_event(
         "Lead",
+        event_id=payload.event_id,
         email=payload.email, phone=payload.telephone,
         custom_data={"content_name": doc["source"], "session": doc["session"]},
         event_source_url=payload.page_url,
+        client_ip_address=(request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or (request.client.host if request.client else None),
+        client_user_agent=request.headers.get("user-agent"),
     )
 
     doc.pop("_id", None)

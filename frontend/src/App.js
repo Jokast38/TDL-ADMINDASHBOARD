@@ -25,6 +25,7 @@ import VtcFormationLanding from "@/pages/VtcFormationLanding";
 import CacesFormationLanding from "@/pages/CacesFormationLanding";
 import MentionsLegales from "@/pages/MentionsLegales";
 import PositioningTest from "@/pages/PositioningTest";
+import StageRecuperationMerci from "@/pages/StageRecuperationMerci";
 import FAQ from "@/pages/FAQ";
 
 import Layout from "@/components/Layout";
@@ -102,6 +103,7 @@ function App() {
             <Route path="/blog/:slug" element={<BlogPost />} />
             <Route path="/offre-fidelite" element={<OffreFideliteLanding />} />
             <Route path="/stage-recuperation-points" element={<StageRecuperationPointsLanding />} />
+            <Route path="/stage-recuperation-points/merci" element={<StageRecuperationMerci />} />
             <Route path="/formation-ssiap" element={<SsiapLanding />} />
             <Route path="/formation-taxi" element={<TaxiFormationLanding />} />
             <Route path="/mobilite-taxi" element={<MobiliteTaxiLanding />} />

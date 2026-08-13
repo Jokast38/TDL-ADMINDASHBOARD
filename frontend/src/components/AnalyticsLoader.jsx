@@ -4,7 +4,7 @@ import { hasConsent, CONSENT_CHANGED_EVENT } from "@/lib/consent";
 
 // Pages sur lesquelles le Meta Pixel doit être chargé — pour l'instant
 // uniquement la landing page ciblée par la campagne publicitaire en cours.
-const META_PIXEL_PAGES = ["/stage-recuperation-points"];
+const META_PIXEL_PAGES = ["/stage-recuperation-points", "/stage-recuperation-points/merci"];
 
 /**
  * Injects analytics scripts (GA4 and/or Plausible) and the Meta Pixel based on

@@ -14,6 +14,8 @@ class InscriptionIn(BaseModel):
     # rattaché à la bonne page plutôt qu'à /inscription par défaut.
     source: Optional[str] = None
     landing_url: Optional[str] = None
+    session: Optional[str] = None
+    center: Optional[str] = None
 
 
 class InscriptionUpdate(BaseModel):

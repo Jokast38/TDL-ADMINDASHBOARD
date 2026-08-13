@@ -7,11 +7,16 @@ import { hasConsent } from "@/lib/consent";
 // consentement "marketing" en plus de la garde déjà côté AnalyticsLoader
 // (défense en profondeur : même si le script était chargé par un autre biais,
 // aucun événement ne part sans consentement).
-export function trackMetaEvent(eventName, params = {}) {
+// `eventID` (optionnel) doit être identique à celui envoyé côté serveur
+// (Meta Conversions API, voir backend/services/meta_capi.py) pour la même
+// action réelle — c'est ce qui permet à Meta de dédupliquer l'évènement
+// pixel et l'évènement CAPI au lieu de compter la conversion deux fois.
+export function trackMetaEvent(eventName, params = {}, eventID = null) {
   if (typeof window === "undefined" || typeof window.fbq !== "function") return;
   if (!hasConsent("marketing")) return;
   try {
-    window.fbq("track", eventName, params);
+    if (eventID) window.fbq("track", eventName, params, { eventID });
+    else window.fbq("track", eventName, params);
   } catch {
     // silencieux — le tracking ne doit jamais interrompre le parcours utilisateur
   }
@@ -30,7 +35,13 @@ export const trackPageView = () => trackMetaEvent("PageView");
 export const trackViewContent = (params) => trackMetaEvent("ViewContent", params);
 export const trackSearch = (searchString) => trackMetaEvent("Search", { search_string: searchString });
 export const trackSchedule = (params) => trackMetaEvent("Schedule", params);
-export const trackLead = (params) => trackMetaEvent("Lead", params);
+export const trackLead = (params, eventID) => trackMetaEvent("Lead", params, eventID);
 export const trackInitiateCheckout = (params) => trackMetaEvent("InitiateCheckout", params);
-export const trackPurchase = (params) => trackMetaEvent("Purchase", params);
+export const trackPurchase = (params, eventID) => trackMetaEvent("Purchase", params, eventID);
 export const trackCompleteRegistration = (params) => trackMetaEvent("CompleteRegistration", params);
+
+// Génère un identifiant unique côté navigateur, à envoyer tel quel au backend
+// (payload.event_id) pour que l'évènement CAPI corresponde exactement à
+// l'évènement pixel de la même action.
+export const newEventId = () =>
+  (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;

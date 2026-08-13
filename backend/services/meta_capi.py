@@ -25,11 +25,18 @@ async def send_capi_event(
     phone: Optional[str] = None,
     custom_data: Optional[dict] = None,
     event_source_url: Optional[str] = None,
+    client_ip_address: Optional[str] = None,
+    client_user_agent: Optional[str] = None,
 ) -> None:
     """Envoie un événement de conversion côté serveur (Meta Conversions API) —
     doublon fiable de l'événement navigateur (lib/metaPixel.js), non bloqué
     par un ad-blocker. `event_id` doit être identique à celui du pixel
-    navigateur pour la même action afin que Meta déduplique les deux envois.
+    navigateur pour la même action afin que Meta déduplique les deux envois
+    (voir trackMetaEvent côté frontend, qui prend le même eventID en 3e argument
+    de fbq). `client_ip_address`/`client_user_agent` améliorent la qualité de
+    correspondance des évènements quand ils sont disponibles (ex: requête
+    directe du navigateur) — absents pour les évènements déclenchés par un
+    webhook serveur-à-serveur (Stripe) qui n'a pas ce contexte.
     No-op silencieux si les identifiants ne sont pas configurés (dev/local)."""
     if not META_PIXEL_ID or not META_API_TOKEN:
         return
@@ -38,6 +45,10 @@ async def send_capi_event(
         user_data["em"] = [_hash(email)]
     if phone:
         user_data["ph"] = [_hash(phone)]
+    if client_ip_address:
+        user_data["client_ip_address"] = client_ip_address
+    if client_user_agent:
+        user_data["client_user_agent"] = client_user_agent
 
     payload = {
         "data": [{
