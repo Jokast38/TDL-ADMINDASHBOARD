@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from core.database import db
 from core.security import require_role
 from core.utils import now_iso, slugify
-from core.config import EMERGENT_LLM_KEY, PUBLIC_BACKEND_URL
+from core.config import PUBLIC_BACKEND_URL
 from models.blog import BlogPostIn, BlogPostUpdate, BlogGenerateIn
+from services.chatbot import call_ollama
 
 router = APIRouter(prefix="/blog", tags=["blog"])
 
@@ -116,31 +117,26 @@ async def blog_delete(post_id: str, user: dict = Depends(require_role("admin")))
 
 @router.post("/generate")
 async def blog_generate(payload: BlogGenerateIn, user: dict = Depends(require_role("admin", "employe"))):
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Intégration LLM indisponible: {e}")
     system = (
         "Tu es un rédacteur SEO senior pour TDL Formation (organisme de formation français : CACES, permis, "
         "auto-école, SSIAP, VTC/Taxi) et KAMI STREET (mobilité électrique). Tu écris des articles de blog "
         f"structurés (H2/H3, listes), optimisés SEO, en français, ton {payload.tone}. "
-        "Tu réponds STRICTEMENT en JSON valide avec ce format exact :\n"
+        "Tu réponds STRICTEMENT en JSON valide avec ce format exact, sans aucun texte avant ou après :\n"
         '{"title": "...", "excerpt": "résumé 1-2 phrases", "seo_title": "...max 60 chars", '
         '"seo_description": "...max 160 chars", "tags": ["...","..."], "content": "markdown complet 600-900 mots avec H2/H3, liste, FAQ courte à la fin"}'
     )
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY, session_id=f"blog-{uuid.uuid4()}", system_message=system
-    ).with_model("anthropic", "claude-sonnet-4-5-20250929")
     prompt = (
         f"Sujet : {payload.topic}\nCatégorie : {payload.category}\n"
         f"Mots-clés à intégrer : {payload.keywords or 'aucun en particulier'}\n"
         "Génère l'article en JSON strict (aucun texte hors JSON)."
     )
     try:
-        response = await chat.send_message(UserMessage(text=prompt))
+        text = await call_ollama([
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ])
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur IA: {e}")
-    text = response if isinstance(response, str) else str(response)
+        raise HTTPException(status_code=500, detail=f"Erreur IA Ollama: {e}")
     start = text.find("{"); end = text.rfind("}")
     parsed = {}
     if start != -1 and end != -1:
@@ -162,15 +158,11 @@ async def blog_generate(payload: BlogGenerateIn, user: dict = Depends(require_ro
 
 @router.post("/seed")
 async def blog_seed(user: dict = Depends(require_role("admin"))):
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Intégration LLM indisponible: {e}")
     results = []
     system = (
         "Tu es un rédacteur SEO senior pour TDL Formation (CACES, permis, auto-école, SSIAP, VTC) "
         "et KAMI STREET (mobilité électrique). Tu écris en français, ton professionnel et accessible. "
-        "Tu réponds STRICTEMENT en JSON valide avec ce format exact :\n"
+        "Tu réponds STRICTEMENT en JSON valide avec ce format exact, sans aucun texte avant ou après :\n"
         '{"title": "...", "excerpt": "résumé 1-2 phrases", "seo_title": "...max 60 chars", '
         '"seo_description": "...max 160 chars", "tags": ["...","..."], "content": "markdown 700-1000 mots avec H2/H3, listes, FAQ courte"}'
     )
@@ -181,12 +173,11 @@ async def blog_seed(user: dict = Depends(require_role("admin"))):
             results.append({"topic": t["topic"], "status": "skipped", "slug": exists.get("slug")})
             continue
         try:
-            chat = LlmChat(
-                api_key=EMERGENT_LLM_KEY, session_id=f"seed-{uuid.uuid4()}", system_message=system
-            ).with_model("anthropic", "claude-sonnet-4-5-20250929")
             prompt = f"Sujet : {t['topic']}\nCatégorie : {t['category']}\nMots-clés : {t['keywords']}\nGénère l'article en JSON strict."
-            response = await chat.send_message(UserMessage(text=prompt))
-            text = response if isinstance(response, str) else str(response)
+            text = await call_ollama([
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ])
             start = text.find("{"); end = text.rfind("}")
             parsed = _json.loads(text[start:end + 1]) if start != -1 and end != -1 else {}
             title = parsed.get("title") or t["topic"]
