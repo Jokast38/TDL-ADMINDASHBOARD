@@ -390,7 +390,7 @@ export default function Landing() {
           <div className="animate-fade-in-up">
             <p className="overline mb-4">Organisme certifié Qualiopi · Épinay-sur-Seine (93) & Creil (60)</p>
             <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold tracking-tight leading-[0.95] uppercase">
-              Formez-vous.<br /><span className="text-[#d4af37]">Certifiez-vous.</span>
+              Formez-vous.<br /><span className="text-[#d4af37]">Lancez-vous.</span>
             </h1>
             <p className="font-display text-xl sm:text-2xl font-bold mt-5 leading-snug">Professionnel, en toute confiance.</p>
             <span className="block h-1 w-16 mt-5 mb-5 bg-[#0a0a0a]" />

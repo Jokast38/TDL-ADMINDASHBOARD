@@ -133,7 +133,7 @@ export default function CacesFormationLanding() {
           </div>
           <div className="relative">
             <div className="relative aspect-[4/3] overflow-hidden bg-black" style={{ clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%, 0 32%)" }}>
-              <img src="https://images.unsplash.com/photo-1541976590-713941681591?w=900" alt="Formation CACES" className="w-full h-full object-cover" loading="eager" />
+              <img src="https://images.unsplash.com/photo-1532635026-d12867005472?w=800" alt="Formation CACES" className="w-full h-full object-cover" loading="eager" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
             </div>
           </div>
