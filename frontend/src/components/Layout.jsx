@@ -5,7 +5,7 @@ import NotificationBell from "@/components/NotificationBell";
 import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
-  CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive
+  CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive, Question
 } from "@phosphor-icons/react";
 
 const navAll = [
@@ -26,6 +26,7 @@ const navAll = [
   { to: "/admin/activite", label: "Activité", icon: TrendUp, roles: ["admin"] },
   { to: "/admin/settings", label: "Paramètres", icon: Gear, roles: ["admin"] },
   { to: "/admin/marketing", label: "Marketing", icon: ChartBar, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
+  { to: "/admin/aide", label: "Centre d'aide", icon: Question, roles: ["admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
 ];
 
 const NOTIFICATION_ROLES = ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"];

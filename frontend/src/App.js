@@ -47,6 +47,9 @@ import DocumentsLibrary from "@/pages/DocumentsLibrary";
 import DocTemplates from "@/pages/DocTemplates";
 import CompanyDocuments from "@/pages/CompanyDocuments";
 import Leads from "@/pages/Leads";
+import HelpCenter from "@/pages/HelpCenter";
+import { TourProvider } from "@/contexts/TourContext";
+import TourOverlay from "@/components/TourOverlay";
 import AnalyticsLoader from "@/components/AnalyticsLoader";
 import CookieConsent from "@/components/CookieConsent";
 import PolitiqueConfidentialite from "@/pages/PolitiqueConfidentialite";
@@ -85,8 +88,10 @@ function App() {
     <div className="App">
       <BrowserRouter>
         <AuthProvider>
+          <TourProvider>
           <AnalyticsLoader />
           <CookieConsent />
+          <TourOverlay />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
@@ -170,6 +175,9 @@ function App() {
             <Route path="/admin/settings" element={
               <ProtectedRoute roles={["admin"]}><AdminLayout><Settings /></AdminLayout></ProtectedRoute>
             } />
+            <Route path="/admin/aide" element={
+              <ProtectedRoute roles={["admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><HelpCenter /></AdminLayout></ProtectedRoute>
+            } />
             <Route path="/admin/marketing" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Marketing /></AdminLayout></ProtectedRoute>
             } />
@@ -177,6 +185,7 @@ function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <Toaster position="top-right" richColors />
+          </TourProvider>
         </AuthProvider>
       </BrowserRouter>
     </div>
