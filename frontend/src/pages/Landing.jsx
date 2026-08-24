@@ -58,17 +58,36 @@ const HOME_FAQ = [
   },
 ];
 
+// VTC/Taxi en premier : c'est notre cœur de métier, mis en avant dans les
+// spécialités affichées sur l'accueil (voir aussi le tri de `formations`).
 const CATEGORIES = [
+  { key: "VTC_TAXI", label: "VTC / Taxi", icon: Car, desc: "Examen + carte pro" },
   { key: "CACES", label: "CACES", icon: Truck, desc: "Toutes catégories - chariots, nacelles, grues" },
   { key: "PERMIS", label: "Récup. Permis", icon: IdentificationCard, desc: "Stages agréés 2 jours" },
   { key: "AUTO_ECOLE", label: "Auto-école", icon: Car, desc: "Permis B accompagné ANTS" },
   { key: "SSIAP", label: "SSIAP 1/2/3", icon: FireSimple, desc: "Sécurité incendie" },
-  { key: "VTC_TAXI", label: "VTC / Taxi", icon: Car, desc: "Examen + carte pro" },
   { key: "ECSR", label: "ECSR", icon: GraduationCap, desc: "Enseignant de la conduite" },
   { key: "VENTE", label: "Conseiller de Vente", icon: Storefront, desc: "Titre pro RNCP37098 en alternance" },
 ];
 
 const CATEGORY_LABELS_HOME = Object.fromEntries(CATEGORIES.map((c) => [c.key, c.label]));
+
+// Ordre d'apparition des 6 premières formations affichées sur l'accueil :
+// 2 VTC/Taxi (cœur de métier) puis une formation de chacun des autres
+// domaines représentés (CACES, SSIAP, ECSR, Permis, Auto-école, Vente),
+// avant de compléter avec le reste du catalogue.
+function buildHomeFormationsOrder(list) {
+  const byCategory = {};
+  list.forEach((f) => {
+    (byCategory[f.category] ||= []).push(f);
+  });
+  const curated = (byCategory["VTC_TAXI"] || []).slice(0, 2);
+  ["CACES", "SSIAP", "ECSR", "PERMIS", "AUTO_ECOLE", "VENTE"].forEach((cat) => {
+    if (byCategory[cat]?.length) curated.push(byCategory[cat][0]);
+  });
+  const usedIds = new Set(curated.map((f) => f.id));
+  return [...curated, ...list.filter((f) => !usedIds.has(f.id))];
+}
 
 // Menus déroulants navbar : chaque entrée est reliée par son titre exact en
 // base (voir /api/formations) à l'inscription pré-remplie correspondante.
@@ -246,7 +265,14 @@ export default function Landing() {
   const revealRef = useReveal();
 
   useEffect(() => {
-    api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data));
+    // VTC/Taxi est notre cœur de métier — mis en avant en premier dans le
+    // catalogue affiché sur l'accueil, mais sans noyer les 5 autres domaines
+    // (CACES, SSIAP, ECSR...) sous la dizaine de formations VTC/Taxi qu'on
+    // propose : on garde 2 VTC/Taxi puis une de chaque autre catégorie
+    // représentée, avant de compléter avec le reste (voir slice(0,6) plus bas).
+    api.get("/formations", { params: { active_only: true } }).then((r) => {
+      setFormations(buildHomeFormationsOrder(r.data));
+    });
     setPageMeta({
       title: "TDL Formation — CACES, Permis, Auto-école, SSIAP, VTC/Taxi",
       description: "Centre agréé Qualiopi à Épinay-sur-Seine (93) et Creil (60) : CACES, récupération de points, auto-école, SSIAP, VTC/Taxi.",
@@ -437,7 +463,7 @@ export default function Landing() {
           <p className="overline">Domaines</p>
           <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2 mb-2">Nos spécialités</h2>
           <p className="text-gray-600 max-w-2xl mb-10">
-            6 domaines de formation professionnelle agréés, plus la mobilité électrique KAMI STREET.
+            6 domaines de formation professionnelle agréés.
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             {CATEGORIES.map((c, idx) => (
