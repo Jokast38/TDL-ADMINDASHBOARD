@@ -172,9 +172,17 @@ export default function PublicFormations() {
           ) : filtered.length ? (
             <>
               <p className="text-sm text-gray-500 mb-6">{filtered.length} formation(s)</p>
+              {/* Pas d'animation "reveal au scroll" ici : cette grille se
+                  redessine à chaque changement de filtre/recherche, et selon
+                  la position de scroll au moment du clic, certaines cartes ne
+                  franchissaient jamais le seuil de détection de l'observateur
+                  — elles restaient invisibles (opacity: 0) alors que bien
+                  présentes dans le DOM. Un rendu immédiat est plus fiable
+                  pour un résultat de filtre que pour une page qu'on descend
+                  une seule fois. */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filtered.map((f, idx) => (
-                  <FormationCard key={f.id} formation={f} revealDelay={(idx % 4) + 1} />
+                {filtered.map((f) => (
+                  <FormationCard key={f.id} formation={f} />
                 ))}
               </div>
             </>

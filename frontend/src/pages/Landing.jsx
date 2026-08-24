@@ -15,7 +15,7 @@ import {
   IdentificationCard, Truck, FireSimple, Car, Phone, EnvelopeSimple, MapPin,
   List, X, DownloadSimple, ArrowUp,
   Certificate, UsersThree, ClipboardText, Target, CalendarBlank, DoorOpen,
-  Clock, PiggyBank, NotePencil, Wheelchair, Storefront,
+  Clock, PiggyBank, NotePencil, Wheelchair, Storefront, Star,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { trackLead, newEventId, getFbCookies } from "@/lib/metaPixel";
@@ -412,7 +412,7 @@ export default function Landing() {
 
       {/* Hero */}
       <section className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-14 lg:py-20 grid lg:grid-cols-2 gap-10 items-start">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-14 lg:py-20 grid lg:grid-cols-2 gap-10 items-stretch">
           <div className="animate-fade-in-up">
             <p className="overline mb-4">Organisme certifié Qualiopi · Épinay-sur-Seine (93) & Creil (60)</p>
             <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.4rem] font-extrabold tracking-tight leading-[0.95] uppercase">
@@ -446,12 +446,33 @@ export default function Landing() {
             </div>
           </div>
 
-          <div className="relative">
+          <div className="relative flex flex-col">
             <div
               className="relative aspect-[4/3] overflow-hidden bg-black"
               style={{ clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%, 0 32%)" }}
             >
               <HeroSlideshow slides={HOME_HERO_SLIDES} />
+            </div>
+            {/* Comble le vide laissé par l'image (ratio fixe 4/3) sous le bloc
+                stats plus haut à gauche — bandeau de confiance plutôt qu'un
+                espace vide. */}
+            <div className="flex-1 mt-6 flex items-center justify-center gap-6 lg:gap-10 border border-gray-200 rounded-md bg-gray-50 p-6 lg:p-10">
+              <img
+                src="/Logo-Qualiopi-150dpi-Avec-Marianne-1.jpg.jpeg"
+                alt="Certifié Qualiopi"
+                loading="lazy"
+                className="h-14 lg:h-28 w-auto shrink-0"
+              />
+              <span className="h-12 lg:h-20 w-px bg-gray-200 shrink-0" />
+              <div>
+                <div className="flex items-center gap-1 lg:gap-1.5">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Star key={i} size={20} weight="fill" className="text-[#d4af37] lg:w-7 lg:h-7" />
+                  ))}
+                  <span className="font-display font-bold text-base lg:text-2xl ml-1">4,9/5</span>
+                </div>
+                <p className="text-sm lg:text-base text-gray-500 mt-1 lg:mt-2">705+ avis Google · Centres Épinay-sur-Seine & Creil</p>
+              </div>
             </div>
           </div>
         </div>
@@ -517,10 +538,15 @@ export default function Landing() {
                 </p>
               );
             }
+            // Pas de reveal-au-scroll ici : cette grille se redessine à chaque
+            // clic sur une spécialité (voir setCatalogueFilter), et certaines
+            // cartes pouvaient rester bloquées à opacity:0 si l'observateur ne
+            // les détectait pas à temps après le changement de filtre — voir
+            // PublicFormations.jsx.
             return (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {visibleFormations.slice(0, 6).map((f, idx) => (
-                  <FormationCard key={f.id} formation={f} revealDelay={(idx % 4) + 1} />
+                {visibleFormations.slice(0, 6).map((f) => (
+                  <FormationCard key={f.id} formation={f} />
                 ))}
               </div>
             );
