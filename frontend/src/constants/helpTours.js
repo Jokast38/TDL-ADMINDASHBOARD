@@ -1,7 +1,7 @@
 import {
   House, GraduationCap, Folders, IdentificationCard, UsersThree, FilePdf, FileText,
   Archive, ShoppingCart, Storefront, Robot, Article, Users, Gear, ChartBar,
-  CalendarCheck, PenNib, TrendUp,
+  CalendarCheck, PenNib, TrendUp, LinkSimple,
 } from "@phosphor-icons/react";
 
 // Contenu du Centre d'aide (visites guidées) — une catégorie par profil
@@ -225,6 +225,14 @@ export const HELP_CATEGORIES = [
         targetSelector: '[data-testid="marketing-page"]',
         description:
           "Statistiques de trafic et de conversion du site public, campagnes email, automatisations de relance des leads.",
+      },
+      {
+        title: "Demandes de backlinks",
+        icon: LinkSimple,
+        route: "/admin/marketing",
+        targetSelector: '[data-testid="tab-backlinks"]',
+        description:
+          "Onglet Marketing → Backlinks : importez votre liste de sites (fichier Excel), puis pour chacun proposez un prix et des mots-clés et envoyez la demande par email directement depuis le dashboard — le statut (à contacter, demande envoyée, accepté...) est suivi automatiquement.",
       },
     ],
   },

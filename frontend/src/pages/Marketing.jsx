@@ -18,6 +18,7 @@ import {
   ChartLineUp, MagnifyingGlass, Megaphone, EnvelopeSimple, ShareNetwork, Sparkle,
   EnvelopeOpen, Cursor, PaperPlaneTilt, WarningCircle, Paperclip, X as XIcon, PencilSimple,
   Browser, ArrowSquareOut, Robot, PhoneCall, LinkedinLogo, Phone, Headset,
+  LinkSimple, UploadSimple, Tag,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {
@@ -74,6 +75,7 @@ export default function Marketing() {
           <TabsTrigger value="emails" data-testid="tab-emails"><EnvelopeSimple size={14} className="mr-1" /> Emails</TabsTrigger>
           <TabsTrigger value="compose" data-testid="tab-compose"><PencilSimple size={14} className="mr-1" /> Email personnalisé</TabsTrigger>
           <TabsTrigger value="landing" data-testid="tab-landing"><Browser size={14} className="mr-1" /> Landing pages</TabsTrigger>
+          <TabsTrigger value="backlinks" data-testid="tab-backlinks"><LinkSimple size={14} className="mr-1" /> Backlinks</TabsTrigger>
           {canSeeAgentsTab && (
             <TabsTrigger value="agents" data-testid="tab-agents"><Robot size={14} className="mr-1" /> Agents IA</TabsTrigger>
           )}
@@ -114,6 +116,10 @@ export default function Marketing() {
 
         <TabsContent value="landing">
           <LandingPagesTab />
+        </TabsContent>
+
+        <TabsContent value="backlinks">
+          <BacklinksTab />
         </TabsContent>
 
         {canSeeAgentsTab && (
@@ -495,6 +501,273 @@ function LandingPagesTab() {
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {LANDING_PAGES.map((page) => <LandingPageCard key={page.path} page={page} />)}
+      </div>
+    </div>
+  );
+}
+
+// ─── Backlinks ──────────────────────────────────────────────────────────────
+// Liste de sites où demander un backlink (importée depuis un export Excel),
+// avec envoi d'une demande par email (prix proposé + mots-clés visés) et
+// suivi du statut de chaque démarche directement depuis le dashboard.
+const BACKLINK_STATUS_COLORS = {
+  a_contacter: "bg-gray-100 text-gray-600 hover:bg-gray-100",
+  demande_envoyee: "bg-[#0052CC]/10 text-[#0052CC] hover:bg-[#0052CC]/10",
+  relance_envoyee: "bg-amber-100 text-amber-700 hover:bg-amber-100",
+  accepte: "bg-green-100 text-green-700 hover:bg-green-100",
+  refuse: "bg-red-100 text-red-700 hover:bg-red-100",
+  publie: "bg-[#d4af37]/20 text-[#8a6d1f] hover:bg-[#d4af37]/20",
+};
+
+const PRIORITY_COLORS = { Haute: "text-red-600", Moyenne: "text-amber-600", Basse: "text-gray-400" };
+
+function BacklinksTab() {
+  const [items, setItems] = useState([]);
+  const [statusOptions, setStatusOptions] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [requestFor, setRequestFor] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    const params = {};
+    if (search.trim()) params.search = search.trim();
+    if (statusFilter) params.status = statusFilter;
+    api.get("/backlinks", { params })
+      .then(({ data }) => { setItems(data.items); setStatusOptions(data.status_options); })
+      .catch(() => toast.error("Erreur de chargement des backlinks"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, [search, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await api.post("/backlinks/import-excel", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success(`Import terminé — ${data.imported} nouveau(x), ${data.updated} mis à jour`);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur lors de l'import");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const updateStatus = async (id, status) => {
+    try {
+      const { data } = await api.patch(`/backlinks/${id}`, { status });
+      setItems((prev) => prev.map((b) => (b.id === id ? data : b)));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur");
+    }
+  };
+
+  const onRequestSent = (updated) => {
+    setItems((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+    setRequestFor(null);
+  };
+
+  return (
+    <div className="space-y-4 mt-2">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <LinkSimple size={16} className="text-[#d4af37]" />
+            <p className="overline">Netlinking</p>
+          </div>
+          <h2 className="font-display text-2xl font-bold -mt-1">Demandes de backlinks</h2>
+          <p className="text-sm text-gray-500 max-w-2xl mt-1">
+            Sélectionnez un site dans la liste, proposez un prix et les mots-clés visés, puis envoyez la demande par
+            email — le statut de chaque démarche est suivi ici.
+          </p>
+        </div>
+        <label className="inline-flex items-center gap-2 text-sm cursor-pointer px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 shrink-0">
+          <UploadSimple size={14} /> {importing ? "Import..." : "Importer / actualiser la liste (Excel)"}
+          <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} disabled={importing} data-testid="backlinks-import-input" />
+        </label>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher un site, une catégorie..."
+          className="max-w-xs"
+          data-testid="backlinks-search"
+        />
+        <Select value={statusFilter || "all"} onValueChange={(v) => setStatusFilter(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-56"><SelectValue placeholder="Tous les statuts" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les statuts</SelectItem>
+            {Object.entries(statusOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="backlinks-table">
+            <thead className="bg-gray-50 text-left border-y border-gray-200">
+              <tr>
+                <th className="py-2.5 px-4 overline">Site</th>
+                <th className="py-2.5 px-4 overline">Catégorie</th>
+                <th className="py-2.5 px-4 overline">Type de lien</th>
+                <th className="py-2.5 px-4 overline">Priorité</th>
+                <th className="py-2.5 px-4 overline">Statut</th>
+                <th className="py-2.5 px-4 overline text-right">Dernier prix</th>
+                <th className="py-2.5 px-4 overline text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr><td colSpan="7" className="py-8 text-center text-gray-400">Chargement...</td></tr>
+              )}
+              {!loading && !items.length && (
+                <tr><td colSpan="7" className="py-10 text-center text-gray-400">
+                  Aucun backlink — importez votre liste Excel pour commencer.
+                </td></tr>
+              )}
+              {items.map((b) => (
+                <tr key={b.id} className="border-b border-gray-100 align-top">
+                  <td className="py-2.5 px-4 max-w-[220px]">
+                    <p className="font-medium truncate">{b.site_name}</p>
+                    <a href={b.url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#0052CC] hover:underline truncate block">
+                      {b.url}
+                    </a>
+                    {b.contact_email && <p className="text-[11px] text-gray-400 mt-0.5 truncate">{b.contact_email}</p>}
+                  </td>
+                  <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[160px]">
+                    <p>{b.category}</p>
+                    <p className="text-gray-400 truncate">{b.niche}</p>
+                  </td>
+                  <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[160px]">{b.link_type}</td>
+                  <td className={`py-2.5 px-4 text-xs font-medium ${PRIORITY_COLORS[b.priority] || "text-gray-500"}`}>{b.priority}</td>
+                  <td className="py-2.5 px-4">
+                    <Select value={b.status} onValueChange={(v) => updateStatus(b.id, v)}>
+                      <SelectTrigger className={`h-7 text-xs border-0 ${BACKLINK_STATUS_COLORS[b.status] || "bg-gray-100"}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(statusOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    {b.request_count > 0 && (
+                      <p className="text-[11px] text-gray-400 mt-1">{b.request_count} demande(s) envoyée(s)</p>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-4 text-right font-mono text-xs">
+                    {b.last_request?.price != null ? `${b.last_request.price} €` : "—"}
+                  </td>
+                  <td className="py-2.5 px-4 text-right">
+                    <Button size="sm" variant="outline" onClick={() => setRequestFor(b)} data-testid={`backlink-request-btn-${b.id}`}>
+                      <EnvelopeSimple size={13} className="mr-1" /> {b.request_count > 0 ? "Relancer" : "Demander"}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Dialog open={!!requestFor} onOpenChange={(open) => !open && setRequestFor(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Demande de backlink — {requestFor?.site_name}</DialogTitle></DialogHeader>
+          {requestFor && <BacklinkRequestForm backlink={requestFor} onSent={onRequestSent} onCancel={() => setRequestFor(null)} />}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function BacklinkRequestForm({ backlink, onSent, onCancel }) {
+  const [toEmail, setToEmail] = useState(backlink.contact_email || "");
+  const [price, setPrice] = useState(backlink.last_request?.price ?? "");
+  const [keywordInput, setKeywordInput] = useState("");
+  const [keywords, setKeywords] = useState(backlink.last_request?.keywords || []);
+  const [message, setMessage] = useState(
+    backlink.last_request?.message ||
+    `Bonjour,\n\nNous sommes TDL Formation, organisme de formation certifié Qualiopi (permis, CACES, SSIAP, VTC/Taxi) basé en Île-de-France.\n\nNous souhaiterions obtenir un lien depuis votre site (${backlink.url}) vers le nôtre (https://tdl-formation.fr), idéalement sur les mots-clés ci-dessous. Nous sommes disposés à rémunérer cet emplacement.\n\nN'hésitez pas à nous indiquer vos conditions si celles proposées ne conviennent pas.\n\nBien cordialement,\nL'équipe TDL Formation`
+  );
+  const [sending, setSending] = useState(false);
+
+  const addKeyword = () => {
+    const v = keywordInput.trim();
+    if (v && !keywords.includes(v)) setKeywords((k) => [...k, v]);
+    setKeywordInput("");
+  };
+  const removeKeyword = (v) => setKeywords((k) => k.filter((x) => x !== v));
+
+  const send = async () => {
+    if (!toEmail.trim()) return toast.error("Adresse email destinataire requise");
+    if (!price || Number(price) <= 0) return toast.error("Indiquez un prix proposé");
+    if (!message.trim()) return toast.error("Le message ne peut pas être vide");
+    setSending(true);
+    try {
+      const { data } = await api.post(`/backlinks/${backlink.id}/request`, {
+        to_email: toEmail.trim(),
+        price: Number(price),
+        keywords,
+        message,
+      });
+      toast.success("Demande envoyée");
+      onSent(data);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de l'envoi");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 mt-1">
+      <div>
+        <label className="text-sm font-medium">Email destinataire</label>
+        <Input type="email" value={toEmail} onChange={(e) => setToEmail(e.target.value)} placeholder="contact@site.fr" data-testid="backlink-to-email" />
+      </div>
+      <div>
+        <label className="text-sm font-medium">Prix proposé (€)</label>
+        <Input type="number" min="0" step="1" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="ex: 80" data-testid="backlink-price" />
+      </div>
+      <div>
+        <label className="text-sm font-medium mb-1 block">Mots-clés visés</label>
+        <div className="flex gap-2">
+          <Input
+            value={keywordInput}
+            onChange={(e) => setKeywordInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKeyword(); } }}
+            placeholder="ex: formation CACES Paris"
+            data-testid="backlink-keyword-input"
+          />
+          <Button type="button" variant="outline" onClick={addKeyword}><Tag size={14} /></Button>
+        </div>
+        {!!keywords.length && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {keywords.map((k) => (
+              <Badge key={k} className="bg-gray-100 text-gray-700 hover:bg-gray-100 gap-1">
+                {k}
+                <button onClick={() => removeKeyword(k)} className="hover:text-red-600"><XIcon size={11} /></button>
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+      <div>
+        <label className="text-sm font-medium">Message</label>
+        <Textarea rows={8} value={message} onChange={(e) => setMessage(e.target.value)} data-testid="backlink-message" />
+      </div>
+      <div className="flex justify-end gap-2 pt-2">
+        <Button variant="outline" onClick={onCancel} disabled={sending}>Annuler</Button>
+        <Button onClick={send} disabled={sending} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="backlink-send-btn">
+          <PaperPlaneTilt size={14} className="mr-2" /> {sending ? "Envoi..." : "Envoyer la demande"}
+        </Button>
       </div>
     </div>
   );

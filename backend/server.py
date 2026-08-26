@@ -19,7 +19,7 @@ from routers import (
     wordpress, stages, emargements, doc_templates,
     generated_docs, health, callback, tracking, reviews, chatbot, notifications,
     custom_email, lead_automations, limova, payments, push, reminders,
-    company_documents, positioning_tests,
+    company_documents, positioning_tests, backlinks,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import send_pending_callback_reminders
@@ -83,6 +83,7 @@ app.include_router(push.router,           prefix=_PREFIX)
 app.include_router(reminders.router,      prefix=_PREFIX)
 app.include_router(company_documents.router, prefix=_PREFIX)
 app.include_router(positioning_tests.router, prefix=_PREFIX)
+app.include_router(backlinks.router,      prefix=_PREFIX)
 
 # Fichiers uploadés depuis l'admin (ex: images de couverture d'articles de blog),
 # servis en statique — indépendant du service de stockage objet externe Emergent.
