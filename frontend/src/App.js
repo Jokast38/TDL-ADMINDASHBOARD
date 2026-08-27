@@ -48,6 +48,7 @@ import DocTemplates from "@/pages/DocTemplates";
 import CompanyDocuments from "@/pages/CompanyDocuments";
 import Leads from "@/pages/Leads";
 import HelpCenter from "@/pages/HelpCenter";
+import Documentation from "@/pages/Documentation";
 import { TourProvider } from "@/contexts/TourContext";
 import TourOverlay from "@/components/TourOverlay";
 import AnalyticsLoader from "@/components/AnalyticsLoader";
@@ -177,6 +178,9 @@ function App() {
             } />
             <Route path="/admin/aide" element={
               <ProtectedRoute roles={["admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><HelpCenter /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/documentation" element={
+              <ProtectedRoute roles={["admin"]}><AdminLayout><Documentation /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/marketing" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Marketing /></AdminLayout></ProtectedRoute>
