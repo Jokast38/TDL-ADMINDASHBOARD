@@ -521,12 +521,73 @@ const BACKLINK_STATUS_COLORS = {
 
 const PRIORITY_COLORS = { Haute: "text-red-600", Moyenne: "text-amber-600", Basse: "text-gray-400" };
 
+// Mots-clés SEO par catégorie de formation — utilisés pour suggérer, pour
+// chaque site de backlink, les mots-clés les plus pertinents à demander selon
+// sa catégorie/thématique (mêmes catégories que le catalogue public, voir
+// Landing.jsx). Si aucune catégorie ne correspond, on retombe sur des
+// mots-clés génériques (annuaires généralistes, portails formation...).
+const FORMATION_LABELS = {
+  VTC_TAXI: "VTC / Taxi",
+  CACES: "CACES",
+  PERMIS: "Permis à points",
+  AUTO_ECOLE: "Auto-école",
+  SSIAP: "SSIAP",
+  ECSR: "ECSR",
+  VENTE: "Conseiller de vente",
+  GENERALISTE: "Généraliste (toutes formations)",
+};
+const FORMATION_KEYWORDS = {
+  VTC_TAXI: ["formation VTC Paris", "formation taxi Île-de-France", "carte professionnelle VTC"],
+  CACES: ["formation CACES Paris", "formation CACES chariot élévateur", "certificat CACES"],
+  PERMIS: ["stage récupération de points", "stage permis à points Paris"],
+  AUTO_ECOLE: ["auto-école Paris", "permis B accompagné"],
+  SSIAP: ["formation SSIAP 1 2 3", "formation sécurité incendie Paris"],
+  ECSR: ["formation enseignant de la conduite", "titre ECSR"],
+  VENTE: ["titre pro conseiller de vente", "formation vente en alternance"],
+  // Sites généralistes (annuaires tous secteurs, portails formation...) : plutôt
+  // qu'un mot-clé unique, on demande un lien sur un mix de nos formations phares
+  // pour capter du trafic sur toutes nos activités depuis un seul backlink.
+  GENERALISTE: [
+    "formation professionnelle Paris",
+    "formation VTC taxi",
+    "formation CACES",
+    "formation SSIAP",
+    "organisme de formation Qualiopi",
+  ],
+};
+const _KEYWORD_TRIGGERS = [
+  ["VTC_TAXI", ["vtc", "taxi"]],
+  ["CACES", ["caces", "chariot", "nacelle", "grue", "engin"]],
+  ["PERMIS", ["permis à points", "récupération de points", "stage de points"]],
+  ["AUTO_ECOLE", ["auto-école", "auto ecole", "conduite accompagnée"]],
+  ["SSIAP", ["ssiap", "incendie", "sécurité"]],
+  ["ECSR", ["ecsr", "enseignant de la conduite"]],
+  ["VENTE", ["vente", "commerc"]],
+];
+
+function suggestFormationKey(backlink) {
+  const text = `${backlink.category || ""} ${backlink.niche || ""} ${backlink.link_type || ""}`.toLowerCase();
+  for (const [key, triggers] of _KEYWORD_TRIGGERS) {
+    if (triggers.some((t) => text.includes(t))) return key;
+  }
+  return "GENERALISTE";
+}
+
+function suggestKeywords(backlink) {
+  return FORMATION_KEYWORDS[suggestFormationKey(backlink)];
+}
+
 function BacklinksTab() {
   const [items, setItems] = useState([]);
   const [statusOptions, setStatusOptions] = useState({});
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [linkTypeOptions, setLinkTypeOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [linkTypeFilter, setLinkTypeFilter] = useState("");
+  const [formationFilter, setFormationFilter] = useState("");
   const [importing, setImporting] = useState(false);
   const [requestFor, setRequestFor] = useState(null);
 
@@ -535,12 +596,33 @@ function BacklinksTab() {
     const params = {};
     if (search.trim()) params.search = search.trim();
     if (statusFilter) params.status = statusFilter;
+    if (categoryFilter) params.category = categoryFilter;
+    if (linkTypeFilter) params.link_type = linkTypeFilter;
     api.get("/backlinks", { params })
-      .then(({ data }) => { setItems(data.items); setStatusOptions(data.status_options); })
+      .then(({ data }) => {
+        setItems(data.items);
+        setStatusOptions(data.status_options);
+        setCategoryOptions(data.category_options || []);
+        setLinkTypeOptions(data.link_type_options || []);
+      })
       .catch(() => toast.error("Erreur de chargement des backlinks"))
       .finally(() => setLoading(false));
   };
-  useEffect(load, [search, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [search, statusFilter, categoryFilter, linkTypeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Filtre par formation ciblée : calculé côté client à partir de la catégorie/
+  // niche du site (voir suggestFormationKey), pas une colonne en base — pas
+  // besoin d'aller-retour serveur pour ce filtre. La plupart des sites de la
+  // liste sont des annuaires généralistes (pas de mention explicite "CACES"
+  // ou "SSIAP" dans leurs colonnes) : on leur demande justement un lien mixte
+  // couvrant toutes nos formations (voir FORMATION_KEYWORDS.GENERALISTE), donc
+  // ils restent pertinents — et donc visibles — quel que soit le filtre formation.
+  const filteredItems = formationFilter
+    ? items.filter((b) => {
+        const key = suggestFormationKey(b);
+        return key === formationFilter || key === "GENERALISTE";
+      })
+    : items;
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
@@ -609,6 +691,27 @@ function BacklinksTab() {
             {Object.entries(statusOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={categoryFilter || "all"} onValueChange={(v) => setCategoryFilter(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-56" data-testid="backlinks-category-filter"><SelectValue placeholder="Toutes les catégories" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les catégories</SelectItem>
+            {categoryOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={linkTypeFilter || "all"} onValueChange={(v) => setLinkTypeFilter(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-56" data-testid="backlinks-link-type-filter"><SelectValue placeholder="Tous les types de lien" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les types de lien</SelectItem>
+            {linkTypeOptions.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={formationFilter || "all"} onValueChange={(v) => setFormationFilter(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-64" data-testid="backlinks-formation-filter"><SelectValue placeholder="Toutes les formations" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les formations</SelectItem>
+            {Object.entries(FORMATION_LABELS).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
@@ -619,6 +722,7 @@ function BacklinksTab() {
                 <th className="py-2.5 px-4 overline">Site</th>
                 <th className="py-2.5 px-4 overline">Catégorie</th>
                 <th className="py-2.5 px-4 overline">Type de lien</th>
+                <th className="py-2.5 px-4 overline">Mots-clés suggérés</th>
                 <th className="py-2.5 px-4 overline">Priorité</th>
                 <th className="py-2.5 px-4 overline">Statut</th>
                 <th className="py-2.5 px-4 overline text-right">Dernier prix</th>
@@ -627,14 +731,14 @@ function BacklinksTab() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan="7" className="py-8 text-center text-gray-400">Chargement...</td></tr>
+                <tr><td colSpan="8" className="py-8 text-center text-gray-400">Chargement...</td></tr>
               )}
-              {!loading && !items.length && (
-                <tr><td colSpan="7" className="py-10 text-center text-gray-400">
-                  Aucun backlink — importez votre liste Excel pour commencer.
+              {!loading && !filteredItems.length && (
+                <tr><td colSpan="8" className="py-10 text-center text-gray-400">
+                  {items.length ? "Aucun backlink pour ce filtre." : "Aucun backlink — importez votre liste Excel pour commencer."}
                 </td></tr>
               )}
-              {items.map((b) => (
+              {filteredItems.map((b) => (
                 <tr key={b.id} className="border-b border-gray-100 align-top">
                   <td className="py-2.5 px-4 max-w-[220px]">
                     <p className="font-medium truncate">{b.site_name}</p>
@@ -648,6 +752,21 @@ function BacklinksTab() {
                     <p className="text-gray-400 truncate">{b.niche}</p>
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[160px]">{b.link_type}</td>
+                  <td className="py-2.5 px-4 max-w-[200px]">
+                    <div className="flex flex-wrap gap-1">
+                      {(b.last_request?.keywords?.length
+                        ? b.last_request.keywords
+                        // Sous un filtre formation donné, un site généraliste doit afficher
+                        // les mots-clés de CETTE formation (c'est ce qu'on lui demanderait),
+                        // pas tout le mix généraliste — sinon le lien avec le filtre n'est pas clair.
+                        : formationFilter && suggestFormationKey(b) === "GENERALISTE"
+                          ? FORMATION_KEYWORDS[formationFilter]
+                          : suggestKeywords(b)
+                      ).map((k) => (
+                        <Badge key={k} className="bg-gray-100 text-gray-600 hover:bg-gray-100 text-[10px] font-normal">{k}</Badge>
+                      ))}
+                    </div>
+                  </td>
                   <td className={`py-2.5 px-4 text-xs font-medium ${PRIORITY_COLORS[b.priority] || "text-gray-500"}`}>{b.priority}</td>
                   <td className="py-2.5 px-4">
                     <Select value={b.status} onValueChange={(v) => updateStatus(b.id, v)}>
@@ -666,7 +785,7 @@ function BacklinksTab() {
                     {b.last_request?.price != null ? `${b.last_request.price} €` : "—"}
                   </td>
                   <td className="py-2.5 px-4 text-right">
-                    <Button size="sm" variant="outline" onClick={() => setRequestFor(b)} data-testid={`backlink-request-btn-${b.id}`}>
+                    <Button size="sm" variant="outline" onClick={() => setRequestFor({ ...b, _filterHint: formationFilter })} data-testid={`backlink-request-btn-${b.id}`}>
                       <EnvelopeSimple size={13} className="mr-1" /> {b.request_count > 0 ? "Relancer" : "Demander"}
                     </Button>
                   </td>
@@ -691,7 +810,13 @@ function BacklinkRequestForm({ backlink, onSent, onCancel }) {
   const [toEmail, setToEmail] = useState(backlink.contact_email || "");
   const [price, setPrice] = useState(backlink.last_request?.price ?? "");
   const [keywordInput, setKeywordInput] = useState("");
-  const [keywords, setKeywords] = useState(backlink.last_request?.keywords || []);
+  const [keywords, setKeywords] = useState(
+    backlink.last_request?.keywords?.length
+      ? backlink.last_request.keywords
+      : backlink._filterHint && suggestFormationKey(backlink) === "GENERALISTE"
+        ? FORMATION_KEYWORDS[backlink._filterHint]
+        : suggestKeywords(backlink)
+  );
   const [message, setMessage] = useState(
     backlink.last_request?.message ||
     `Bonjour,\n\nNous sommes TDL Formation, organisme de formation certifié Qualiopi (permis, CACES, SSIAP, VTC/Taxi) basé en Île-de-France.\n\nNous souhaiterions obtenir un lien depuis votre site (${backlink.url}) vers le nôtre (https://tdl-formation.fr), idéalement sur les mots-clés ci-dessous. Nous sommes disposés à rémunérer cet emplacement.\n\nN'hésitez pas à nous indiquer vos conditions si celles proposées ne conviennent pas.\n\nBien cordialement,\nL'équipe TDL Formation`

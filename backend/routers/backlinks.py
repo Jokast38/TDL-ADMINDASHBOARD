@@ -43,12 +43,18 @@ def _serialize(doc: dict) -> dict:
 @router.get("")
 async def list_backlinks(
     status: Optional[str] = None,
+    category: Optional[str] = None,
+    link_type: Optional[str] = None,
     search: Optional[str] = None,
     user: dict = Depends(require_role(*ROLES_LEADS)),
 ):
     query = {}
     if status:
         query["status"] = status
+    if category:
+        query["category"] = category
+    if link_type:
+        query["link_type"] = link_type
     if search:
         query["$or"] = [
             {"site_name": {"$regex": search, "$options": "i"}},
@@ -57,10 +63,14 @@ async def list_backlinks(
             {"niche": {"$regex": search, "$options": "i"}},
         ]
     docs = await db.backlinks.find(query).sort("priority_rank", 1).to_list(2000)
+    categories = sorted([c for c in await db.backlinks.distinct("category") if c])
+    link_types = sorted([t for t in await db.backlinks.distinct("link_type") if t])
     return {
         "items": [_serialize(d) for d in docs],
         "total": len(docs),
         "status_options": STATUS_LABELS,
+        "category_options": categories,
+        "link_type_options": link_types,
     }
 
 
