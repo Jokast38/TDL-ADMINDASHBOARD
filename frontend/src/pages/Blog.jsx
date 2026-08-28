@@ -24,6 +24,7 @@ const CATEGORIES = [
 export default function Blog() {
   const [posts, setPosts] = useState([]);
   const [category, setCategory] = useState("all");
+  const [brokenCovers, setBrokenCovers] = useState({});
 
   useEffect(() => {
     setPageMeta({
@@ -102,8 +103,13 @@ export default function Blog() {
             <Link to={`/blog/${featured.slug}`} className="block mb-12" data-testid={`featured-${featured.slug}`}>
               <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all grid md:grid-cols-2 gap-0">
                 <div className="aspect-video md:aspect-auto bg-gray-100 overflow-hidden">
-                  {featured.cover_image ? (
-                    <img src={featured.cover_image} alt={featured.title} className="w-full h-full object-cover" />
+                  {featured.cover_image && !brokenCovers[featured.id] ? (
+                    <img
+                      src={featured.cover_image}
+                      alt={featured.title}
+                      className="w-full h-full object-cover"
+                      onError={() => setBrokenCovers((b) => ({ ...b, [featured.id]: true }))}
+                    />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-black to-[#d4af37]" />
                   )}
@@ -129,8 +135,13 @@ export default function Blog() {
               <Link key={p.id} to={`/blog/${p.slug}`} data-testid={`post-${p.slug}`} data-reveal className={`reveal reveal-delay-${(idx % 4) + 1}`}>
                 <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all h-full">
                   <div className="aspect-video bg-gray-100 overflow-hidden">
-                    {p.cover_image ? (
-                      <img src={p.cover_image} alt={p.title} className="w-full h-full object-cover" />
+                    {p.cover_image && !brokenCovers[p.id] ? (
+                      <img
+                        src={p.cover_image}
+                        alt={p.title}
+                        className="w-full h-full object-cover"
+                        onError={() => setBrokenCovers((b) => ({ ...b, [p.id]: true }))}
+                      />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-black to-[#d4af37]" />
                     )}

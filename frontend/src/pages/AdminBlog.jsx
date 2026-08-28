@@ -8,13 +8,24 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, PencilSimple, Trash, Sparkle, Eye, ArrowSquareOut, MagicWand, UploadSimple, Image as ImageIcon, CloudArrowDown, CheckCircle, CloudArrowUp, ArrowCounterClockwise } from "@phosphor-icons/react";
+import { Plus, PencilSimple, Trash, Sparkle, Eye, ArrowSquareOut, MagicWand, UploadSimple, Image as ImageIcon, CloudArrowDown, CheckCircle, CloudArrowUp, ArrowCounterClockwise, X, ArrowLineDown } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const CATEGORIES = ["actualites", "conseils", "formations", "kami", "seo"];
+const CONTENT_IMAGE_RE = /!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/g;
+
+function extractContentImages(markdown) {
+  const urls = [];
+  let match;
+  while ((match = CONTENT_IMAGE_RE.exec(markdown)) !== null) {
+    if (!urls.includes(match[1])) urls.push(match[1]);
+  }
+  return urls;
+}
+
 const empty = {
   title: "", slug: "", excerpt: "", content: "", category: "actualites",
-  cover_image: "", tags: [], seo_title: "", seo_description: "", status: "draft"
+  cover_image: "", images: [], tags: [], seo_title: "", seo_description: "", status: "draft"
 };
 
 export default function AdminBlog() {
@@ -29,7 +40,9 @@ export default function AdminBlog() {
   const [aiLoading, setAiLoading] = useState(false);
   const [tagsInput, setTagsInput] = useState("");
   const [coverUploading, setCoverUploading] = useState(false);
+  const [galleryUploading, setGalleryUploading] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [fixingImages, setFixingImages] = useState(false);
   const [wpOpen, setWpOpen] = useState(false);
   const [wpLoading, setWpLoading] = useState(false);
   const [wpImporting, setWpImporting] = useState(false);
@@ -42,7 +55,10 @@ export default function AdminBlog() {
 
   const openEdit = async (id) => {
     const { data } = await api.get(`/blog/admin/posts/${id}`);
-    setForm({ ...empty, ...data });
+    const existingImages = data.images || [];
+    const contentImages = extractContentImages(data.content || "");
+    const mergedImages = [...existingImages, ...contentImages.filter((u) => !existingImages.includes(u))];
+    setForm({ ...empty, ...data, images: mergedImages });
     setTagsInput((data.tags || []).join(", "));
     setEditId(id);
     setOpen(true);
@@ -83,6 +99,39 @@ export default function AdminBlog() {
       setCoverUploading(false);
       e.target.value = "";
     }
+  };
+
+  const uploadGalleryImages = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setGalleryUploading(true);
+    try {
+      const urls = [];
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const { data } = await api.post("/blog/upload-image", fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        urls.push(data.url);
+      }
+      setForm((f) => ({ ...f, images: [...(f.images || []), ...urls] }));
+      toast.success(`${urls.length} image(s) téléversée(s)`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur upload image");
+    } finally {
+      setGalleryUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const removeGalleryImage = (url) => {
+    setForm((f) => ({ ...f, images: (f.images || []).filter((u) => u !== url) }));
+  };
+
+  const insertImageInContent = (url) => {
+    setForm((f) => ({ ...f, content: `${f.content}${f.content.endsWith("\n") || !f.content ? "" : "\n\n"}![](${url})\n` }));
+    toast.success("Image insérée dans le contenu");
   };
 
   const remove = async (id) => {
@@ -141,6 +190,19 @@ export default function AdminBlog() {
     }
   };
 
+  const fixImageHosts = async () => {
+    setFixingImages(true);
+    try {
+      const { data } = await api.post("/wordpress/blog/fix-image-hosts");
+      toast.success(`${data.fixed.length} article(s) corrigé(s) sur ${data.checked}`);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la correction des images");
+    } finally {
+      setFixingImages(false);
+    }
+  };
+
   const openWpImport = async () => {
     setWpOpen(true);
     setWpLoading(true);
@@ -188,6 +250,9 @@ export default function AdminBlog() {
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={seedArticles} disabled={seeding} className="border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37]/10 hover:text-[#d4af37]" data-testid="seed-btn">
             <MagicWand size={16} className="mr-1" weight="fill" /> {seeding ? "Génération..." : "Seed 8 articles SEO"}
+          </Button>
+          <Button variant="outline" onClick={fixImageHosts} disabled={fixingImages} title="Corrige les images d'articles importés dont l'URL pointe vers un domaine cassé/parqué" data-testid="fix-images-btn">
+            <ImageIcon size={16} className="mr-1" /> {fixingImages ? "Correction..." : "Réparer les images"}
           </Button>
           <Dialog open={wpOpen} onOpenChange={setWpOpen}>
             <DialogTrigger asChild>
@@ -339,11 +404,58 @@ export default function AdminBlog() {
                   </div>
                   {form.cover_image ? (
                     <div className="mt-3 aspect-video w-full max-w-xs bg-gray-100 rounded-md overflow-hidden border border-gray-200">
-                      <img src={form.cover_image} alt="Aperçu couverture" className="w-full h-full object-cover" />
+                      <img
+                        src={form.cover_image}
+                        alt="Aperçu couverture"
+                        className="w-full h-full object-cover"
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = ""; e.currentTarget.classList.add("opacity-0"); }}
+                      />
                     </div>
                   ) : (
                     <div className="mt-3 aspect-video w-full max-w-xs bg-gray-50 rounded-md border border-dashed border-gray-200 flex items-center justify-center text-gray-400">
                       <ImageIcon size={24} />
+                    </div>
+                  )}
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-sm font-medium">Images supplémentaires</label>
+                  <p className="text-xs text-gray-400 mb-2">Détectées automatiquement dans le contenu Markdown, plus celles que vous téléversez ici. Cliquez sur une image pour l'insérer dans le contenu, ou pour la retirer.</p>
+                  <label className="inline-block">
+                    <input type="file" accept="image/*" multiple className="hidden" onChange={uploadGalleryImages} data-testid="post-images-upload" />
+                    <Button type="button" variant="outline" disabled={galleryUploading} className="cursor-pointer">
+                      <UploadSimple size={14} className="mr-1" /> {galleryUploading ? "Envoi..." : "Ajouter des images"}
+                    </Button>
+                  </label>
+                  {form.images?.length > 0 && (
+                    <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-3">
+                      {form.images.map((url) => (
+                        <div key={url} className="relative group aspect-square bg-gray-100 rounded-md overflow-hidden border border-gray-200">
+                          <img
+                            src={url}
+                            alt="Image supplémentaire"
+                            className="w-full h-full object-cover"
+                            onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.classList.add("opacity-0"); }}
+                          />
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              title="Insérer dans le contenu"
+                              onClick={() => insertImageInContent(url)}
+                              className="p-1.5 bg-white/90 rounded hover:bg-white"
+                            >
+                              <ArrowLineDown size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              title="Supprimer"
+                              onClick={() => removeGalleryImage(url)}
+                              className="p-1.5 bg-white/90 rounded hover:bg-white text-red-600"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

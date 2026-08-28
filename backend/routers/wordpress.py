@@ -1,4 +1,5 @@
 import asyncio
+import re
 import uuid
 import html2text
 import requests
@@ -42,7 +43,89 @@ def _map_category(wp_categories: list) -> str:
     return "actualites"
 
 
-def _html_to_markdown(html: str) -> str:
+_IMG_TAG_RE = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
+_ATTR_RE = re.compile(r'([a-zA-Z0-9_:-]+)\s*=\s*"([^"]*)"|([a-zA-Z0-9_:-]+)\s*=\s*\'([^\']*)\'')
+_LAZY_SRC_ATTRS = ("data-src", "data-lazy-src", "data-original", "data-srcset", "data-lazy-srcset")
+
+
+def _resolve_lazy_images(html: str) -> str:
+    """WordPress sert souvent les images du corps en lazy-loading : l'attribut
+    `src` contient un placeholder (pixel transparent / SVG vide) tandis que la
+    vraie URL est dans data-src/data-lazy-src/srcset. html2text ne lit que
+    `src`, donc sans cette étape ces images apparaissent manquantes ou cassées
+    une fois importées. On réécrit `src` à partir du premier attribut lazy
+    disponible avant la conversion en markdown."""
+    def _fix_tag(match: "re.Match") -> str:
+        tag = match.group(0)
+        attrs = {}
+        for m in _ATTR_RE.finditer(tag):
+            key = m.group(1) or m.group(3)
+            val = m.group(2) if m.group(2) is not None else m.group(4)
+            attrs[key.lower()] = val
+
+        real_src = None
+        for key in _LAZY_SRC_ATTRS:
+            val = attrs.get(key)
+            if not val:
+                continue
+            # srcset: "url1 480w, url2 800w" -> on prend la première URL
+            real_src = val.split(",")[0].strip().split(" ")[0].strip()
+            if real_src:
+                break
+
+        current_src = attrs.get("src", "")
+        is_placeholder = (not current_src) or current_src.startswith("data:")
+        if real_src and is_placeholder:
+            if attrs.get("src") is not None:
+                tag = re.sub(r'src\s*=\s*(".*?"|\'.*?\')', f'src="{real_src}"', tag, count=1, flags=re.IGNORECASE)
+            else:
+                tag = tag.replace("<img", f'<img src="{real_src}"', 1)
+        return tag
+
+    return _IMG_TAG_RE.sub(_fix_tag, html or "")
+
+
+_UPLOADS_HOST_RE = re.compile(r'(src|href)\s*=\s*"https?://[^"/]+(/wp-content/uploads/[^"]*)"', re.IGNORECASE)
+_UPLOADS_URL_RE = re.compile(r'^https?://[^/]+(/wp-content/uploads/.*)$', re.IGNORECASE)
+
+
+def _fix_uploads_host(html: str, canonical_site_url: str) -> str:
+    """Certains articles WordPress référencent leurs médias via un host différent
+    du site principal (ex: un sous-domaine "blog." créé pour un import/migration
+    puis jamais rattaché en DNS, laissant le domaine "parqué" chez l'hébergeur).
+    Les fichiers /wp-content/uploads/... vivent toujours sur le site WordPress
+    lui-même : on réécrit systématiquement leur host vers le domaine canonique
+    configuré (WORDPRESS_SITE) pour éviter des images mortes."""
+    canonical = canonical_site_url.rstrip("/")
+    return _UPLOADS_HOST_RE.sub(lambda m: f'{m.group(1)}="{canonical}{m.group(2)}"', html or "")
+
+
+def _fix_uploads_host_url(url: str, canonical_site_url: str) -> str:
+    if not url:
+        return url
+    match = _UPLOADS_URL_RE.match(url)
+    if not match:
+        return url
+    return f"{canonical_site_url.rstrip('/')}{match.group(1)}"
+
+
+def _extract_image_urls(html: str) -> list:
+    urls = []
+    for match in _IMG_TAG_RE.finditer(html or ""):
+        tag = match.group(0)
+        src_match = re.search(r'src\s*=\s*"([^"]*)"|src\s*=\s*\'([^\']*)\'', tag, re.IGNORECASE)
+        if not src_match:
+            continue
+        src = src_match.group(1) or src_match.group(2)
+        if src and not src.startswith("data:") and src not in urls:
+            urls.append(src)
+    return urls
+
+
+def _html_to_markdown(html: str, canonical_site_url: str = "") -> str:
+    html = _resolve_lazy_images(html)
+    if canonical_site_url:
+        html = _fix_uploads_host(html, canonical_site_url)
     converter = html2text.HTML2Text()
     converter.body_width = 0  # ne pas forcer de retour à la ligne arbitraire
     converter.ignore_images = False
@@ -111,15 +194,22 @@ async def wordpress_blog_import(
             slug = f"{base_slug}-{i}"
             i += 1
 
-        excerpt_md = _html_to_markdown(p["excerpt_html"])[:300]
+        excerpt_md = _html_to_markdown(p["excerpt_html"], site_url)[:300]
+        content_html_resolved = _fix_uploads_host(_resolve_lazy_images(p["content_html"]), site_url)
+        cover_image = _fix_uploads_host_url(p.get("cover_image"), site_url)
+        body_images = [
+            url for url in _extract_image_urls(content_html_resolved)
+            if url != cover_image
+        ]
         doc = {
             "id": str(uuid.uuid4()),
             "slug": slug,
             "title": p["title"],
             "excerpt": excerpt_md or p["title"],
-            "content": _html_to_markdown(p["content_html"]),
+            "content": _html_to_markdown(p["content_html"], site_url),
             "category": _map_category(p["categories"]),
-            "cover_image": p.get("cover_image"),
+            "cover_image": cover_image,
+            "images": body_images,
             "tags": p.get("categories", []),
             "seo_title": (p.get("rank_math_title") or p["title"])[:60],
             "seo_description": (p.get("rank_math_description") or excerpt_md)[:160],
@@ -137,6 +227,51 @@ async def wordpress_blog_import(
         results.append({"wp_id": p["wp_id"], "title": p["title"], "status": "imported", "slug": slug})
 
     return {"results": results}
+
+
+_ANY_UPLOADS_URL_RE = re.compile(r'https?://[^\s")\]]+/wp-content/uploads/[^\s")\]]*', re.IGNORECASE)
+
+
+@router.post("/blog/fix-image-hosts")
+async def wordpress_blog_fix_image_hosts(user: dict = Depends(require_role("admin", "employe"))):
+    """Corrige les articles déjà importés dont les images pointent vers un host
+    différent du site WordPress configuré (ex: un sous-domaine "blog." resté
+    parqué chez l'hébergeur au lieu du domaine réel) — ces images sont mortes
+    même si l'article a été importé correctement à l'époque. Réécrit
+    cover_image, images[] et le markdown de content pour tous les articles
+    dont un /wp-content/uploads/... pointe vers un host différent du site
+    WordPress configuré."""
+    if not WORDPRESS_SITE:
+        raise HTTPException(status_code=500, detail="Variable WORDPRESS_SITE manquante")
+    site_url = wp_site_url(WORDPRESS_SITE).rstrip("/")
+
+    def _rewrite(url):
+        return _fix_uploads_host_url(url, site_url)
+
+    fixed = []
+    async for post in db.blog_posts.find({}, {"_id": 0}):
+        update = {}
+
+        new_cover = _rewrite(post.get("cover_image"))
+        if new_cover and new_cover != post.get("cover_image"):
+            update["cover_image"] = new_cover
+
+        images = post.get("images") or []
+        new_images = [_rewrite(u) for u in images]
+        if new_images != images:
+            update["images"] = new_images
+
+        content = post.get("content") or ""
+        new_content = _ANY_UPLOADS_URL_RE.sub(lambda m: _rewrite(m.group(0)) or m.group(0), content)
+        if new_content != content:
+            update["content"] = new_content
+
+        if update:
+            update["updated_at"] = now_iso()
+            await db.blog_posts.update_one({"id": post["id"]}, {"$set": update})
+            fixed.append({"id": post["id"], "title": post.get("title"), "fields": list(update.keys())})
+
+    return {"checked": await db.blog_posts.count_documents({}), "fixed": fixed}
 
 
 @router.get("/stats")

@@ -9,6 +9,7 @@ class BlogPostIn(BaseModel):
     content: str
     category: str = "actualites"
     cover_image: Optional[str] = None
+    images: List[str] = []
     tags: List[str] = []
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None
@@ -22,6 +23,7 @@ class BlogPostUpdate(BaseModel):
     content: Optional[str] = None
     category: Optional[str] = None
     cover_image: Optional[str] = None
+    images: Optional[List[str]] = None
     tags: Optional[List[str]] = None
     seo_title: Optional[str] = None
     seo_description: Optional[str] = None

@@ -102,6 +102,10 @@ export default function BlogPost() {
             src={post.cover_image || heroForCategory(faqCategory || "VTC_TAXI")}
             alt={post.title}
             className="w-full h-full object-cover"
+            onError={(e) => {
+              const fallback = heroForCategory(faqCategory || "VTC_TAXI");
+              if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
+            }}
           />
         </div>
 
@@ -116,7 +120,21 @@ export default function BlogPost() {
           prose-blockquote:border-l-[#d4af37] prose-blockquote:bg-gray-50 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:not-italic
           prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:before:content-none prose-code:after:content-none
         " data-testid="post-content">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.content}</ReactMarkdown>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              img: ({ node, ...props }) => (
+                <img
+                  {...props}
+                  loading="lazy"
+                  className="rounded-md"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+              ),
+            }}
+          >
+            {post.content}
+          </ReactMarkdown>
         </div>
 
         {post.tags?.length > 0 && (
