@@ -141,18 +141,29 @@ async def send_pending_callback_reminders() -> int:
     return notified
 
 
-async def send_daily_pending_dossiers_digest() -> int:
+async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None) -> int:
     """Envoie chaque matin (10h — voir _daily_dossiers_digest_loop dans
     server.py) à chaque employé assigné un récapitulatif des dossiers
-    d'inscription pas encore terminés ("nouveau", "en_verification",
-    "complet", "soumis_ants", "rejete"), avec les dossiers arrivés depuis le
-    dernier envoi mis en avant séparément. Appelée aussi une fois
-    immédiatement au démarrage du serveur (premier mail dès l'ouverture) et
-    via POST /reminders/dossiers-digest/run pour un test/cron externe."""
+    d'inscription encore au statut "nouveau" (= pas encore pris en charge),
+    avec ceux arrivés depuis le dernier envoi mis en avant séparément. Dès
+    qu'un employé fait avancer un dossier (bouton "Traitement en cours" dans
+    Inscriptions.jsx, qui passe le statut à "en_verification", ou tout autre
+    statut suivant), il sort automatiquement de ce récap — pas besoin d'un
+    champ dédié pour le "mute".
+
+    `min_gap` évite les envois en rafale si le process redémarre plusieurs
+    fois de suite (déploiements, rechargement en dev) : si le dernier envoi
+    date de moins de `min_gap`, on ne renvoie rien. Utilisé par l'envoi
+    immédiat au démarrage et par la boucle planifiée ; le déclenchement
+    manuel (POST /reminders/dossiers-digest/run) ne le passe pas, donc force
+    toujours l'envoi pour permettre de tester à la demande."""
     settings = await db.settings.find_one({"id": "global"}, {"_id": 0, "dossiers_digest_last_sent_at": 1}) or {}
     last_sent = _parse_iso(settings.get("dossiers_digest_last_sent_at"))
 
-    pending = await db.dossiers.find({"status": {"$ne": "termine"}}, {"_id": 0}).to_list(2000)
+    if min_gap and last_sent and (datetime.now(timezone.utc) - last_sent) < min_gap:
+        return 0
+
+    pending = await db.dossiers.find({"status": "nouveau"}, {"_id": 0}).to_list(2000)
     if not pending:
         await db.settings.update_one({"id": "global"}, {"$set": {"dossiers_digest_last_sent_at": now_iso()}}, upsert=True)
         return 0

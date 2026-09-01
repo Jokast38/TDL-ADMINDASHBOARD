@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Calendar, MapPin, Plus, Users, PencilSimple, Trash } from "@phosphor-icons/react";
+import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import AddressAutocomplete from "@/components/AddressAutocomplete";
 
 const empty = {
   formation_id: "", date_debut: "", date_fin: "",
@@ -27,6 +28,15 @@ export default function Stages() {
   const [form, setForm] = useState(empty);
   const [editingId, setEditingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [collapsed, setCollapsed] = useState(() => new Set());
+
+  const toggleCollapsed = (formationId) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(formationId)) next.delete(formationId); else next.add(formationId);
+      return next;
+    });
+  };
 
   const load = () => api.get("/stages").then((r) => setItems(r.data));
   useEffect(() => {
@@ -64,6 +74,38 @@ export default function Stages() {
       toast.error(e.response?.data?.detail || "Erreur");
     }
   };
+
+  const groupedByFormation = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const groups = new Map();
+    for (const s of items) {
+      const key = s.formation_id || "sans-formation";
+      if (!groups.has(key)) groups.set(key, { formation_id: key, formation_titre: s.formation_titre || "Autre", sessions: [] });
+      groups.get(key).sessions.push(s);
+    }
+    const result = Array.from(groups.values()).map((g) => {
+      const upcoming = g.sessions
+        .filter((s) => (s.date_fin || s.date_debut) >= today)
+        .sort((a, b) => (a.date_debut || "").localeCompare(b.date_debut || ""));
+      const past = g.sessions
+        .filter((s) => (s.date_fin || s.date_debut) < today)
+        .sort((a, b) => (b.date_debut || "").localeCompare(a.date_debut || ""));
+      return { ...g, upcoming, past };
+    });
+    // Groupes avec des sessions à venir en premier (triés par la plus proche
+    // échéance) ; groupes uniquement passés ensuite (triés par la session la
+    // plus récente) — pour remonter les formations actives en priorité.
+    result.sort((a, b) => {
+      if (a.upcoming.length && b.upcoming.length) {
+        return a.upcoming[0].date_debut.localeCompare(b.upcoming[0].date_debut);
+      }
+      if (a.upcoming.length !== b.upcoming.length) return b.upcoming.length - a.upcoming.length;
+      const aDate = a.past[0]?.date_debut || "";
+      const bDate = b.past[0]?.date_debut || "";
+      return bDate.localeCompare(aDate);
+    });
+    return result;
+  }, [items]);
 
   const remove = async (id) => {
     try {
@@ -110,7 +152,13 @@ export default function Stages() {
               </div>
               <div>
                 <label className="text-sm font-medium">Adresse</label>
-                <Input value={form.lieu_adresse} onChange={(e) => setForm({ ...form, lieu_adresse: e.target.value })} />
+                <AddressAutocomplete
+                  value={form.lieu_adresse}
+                  onChange={(v) => setForm((f) => ({ ...f, lieu_adresse: v }))}
+                  onSelect={(ville) => setForm((f) => ({ ...f, lieu_ville: ville || f.lieu_ville }))}
+                  placeholder="Numéro, rue..."
+                  testId="stage-adresse"
+                />
               </div>
               <div>
                 <label className="text-sm font-medium">Ville</label>
@@ -151,54 +199,111 @@ export default function Stages() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.map((s) => (
-          <Card
-            key={s.id}
-            className="p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all cursor-pointer relative group"
-            data-testid={`stage-card-${s.id}`}
-            onClick={() => openEdit(s)}
-          >
-            <div className="flex items-start justify-between mb-2">
-              <Badge variant="outline">{s.statut}</Badge>
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-gray-500"><Users size={12} className="inline mr-1" />{s.nb_inscrits || 0}/{s.capacite_max}</p>
-                <PencilSimple size={14} className="text-gray-300 group-hover:text-[#d4af37] transition-colors" />
-                <AlertDialog open={deletingId === s.id} onOpenChange={(v) => !v && setDeletingId(null)}>
-                  <AlertDialogTrigger asChild>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setDeletingId(s.id); }}
-                      className="text-gray-300 hover:text-red-600 transition-colors"
-                      data-testid={`stage-delete-${s.id}`}
-                    >
-                      <Trash size={14} />
-                    </button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Supprimer cette session ?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Cette action est irréversible et supprimera aussi les émargements liés à cette session.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel onClick={() => setDeletingId(null)}>Annuler</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => remove(s.id)} className="bg-red-600 hover:bg-red-700">Supprimer</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+      {!items.length && <Card className="p-12 text-center border-dashed"><p className="text-gray-500">Aucune session.</p></Card>}
+
+      {items.length > 0 && (
+        <div className="flex justify-end gap-3 -mb-4">
+          <button className="text-xs text-gray-500 hover:text-[#d4af37]" onClick={() => setCollapsed(new Set(groupedByFormation.map((g) => g.formation_id)))}>
+            Tout replier
+          </button>
+          <button className="text-xs text-gray-500 hover:text-[#d4af37]" onClick={() => setCollapsed(new Set())}>
+            Tout déplier
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-10">
+        {groupedByFormation.map((g) => {
+          const isCollapsed = collapsed.has(g.formation_id);
+          return (
+          <div key={g.formation_id}>
+            <button
+              type="button"
+              onClick={() => toggleCollapsed(g.formation_id)}
+              className="flex items-center gap-2 w-full text-left mb-3 pb-2 border-b border-gray-200"
+              data-testid={`stage-group-toggle-${g.formation_id}`}
+            >
+              {isCollapsed ? <CaretRight size={16} className="text-gray-400" /> : <CaretDown size={16} className="text-gray-400" />}
+              <h2 className="font-display text-xl font-bold">{g.formation_titre}</h2>
+              <span className="text-xs text-gray-400">{g.sessions.length} session(s)</span>
+            </button>
+
+            {!isCollapsed && (
+            <>
+            {g.upcoming.length > 0 && (
+              <div className="mb-6">
+                <p className="overline text-[#0B7238] mb-2">À venir</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {g.upcoming.map((s) => (
+                    <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} />
+                  ))}
+                </div>
               </div>
-            </div>
-            <h3 className="font-display font-bold leading-tight">{s.formation_titre}</h3>
-            <div className="text-xs text-gray-500 mt-3 space-y-1">
-              <p className="flex items-center gap-1"><Calendar size={12} /> {s.date_debut} → {s.date_fin}</p>
-              <p className="flex items-center gap-1"><MapPin size={12} /> {s.lieu_ville}</p>
-              {s.animateur_id && <p className="text-[10px]">Animateur : {animateurs.find((a) => a.id === s.animateur_id)?.name || "—"}</p>}
-            </div>
-          </Card>
-        ))}
-        {!items.length && <Card className="p-12 text-center border-dashed col-span-full"><p className="text-gray-500">Aucune session.</p></Card>}
+            )}
+
+            {g.past.length > 0 && (
+              <div>
+                <p className="overline text-gray-400 mb-2">Sessions passées</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {g.past.map((s) => (
+                    <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} muted />
+                  ))}
+                </div>
+              </div>
+            )}
+            </>
+            )}
+          </div>
+          );
+        })}
       </div>
     </div>
+  );
+}
+
+function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete, muted }) {
+  return (
+    <Card
+      className={`p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all cursor-pointer relative group ${muted ? "opacity-70" : ""}`}
+      data-testid={`stage-card-${s.id}`}
+      onClick={() => onEdit(s)}
+    >
+      <div className="flex items-start justify-between mb-2">
+        <Badge variant="outline">{s.statut}</Badge>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-gray-500"><Users size={12} className="inline mr-1" />{s.nb_inscrits || 0}/{s.capacite_max}</p>
+          <PencilSimple size={14} className="text-gray-300 group-hover:text-[#d4af37] transition-colors" />
+          <AlertDialog open={deletingId === s.id} onOpenChange={(v) => !v && setDeletingId(null)}>
+            <AlertDialogTrigger asChild>
+              <button
+                onClick={(e) => { e.stopPropagation(); setDeletingId(s.id); }}
+                className="text-gray-300 hover:text-red-600 transition-colors"
+                data-testid={`stage-delete-${s.id}`}
+              >
+                <Trash size={14} />
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Supprimer cette session ?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Cette action est irréversible et supprimera aussi les émargements liés à cette session.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setDeletingId(null)}>Annuler</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onDelete(s.id)} className="bg-red-600 hover:bg-red-700">Supprimer</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+      <h3 className="font-display font-bold leading-tight">{s.formation_titre}</h3>
+      <div className="text-xs text-gray-500 mt-3 space-y-1">
+        <p className="flex items-center gap-1"><Calendar size={12} /> {s.date_debut} → {s.date_fin}</p>
+        <p className="flex items-center gap-1"><MapPin size={12} /> {s.lieu_ville}</p>
+        {s.animateur_id && <p className="text-[10px]">Animateur : {animateurs.find((a) => a.id === s.animateur_id)?.name || "—"}</p>}
+      </div>
+    </Card>
   );
 }

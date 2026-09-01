@@ -20,7 +20,7 @@ from routers import (
     wordpress, stages, emargements, doc_templates,
     generated_docs, health, callback, tracking, reviews, chatbot, notifications,
     custom_email, lead_automations, limova, payments, push, reminders,
-    company_documents, positioning_tests, backlinks, docs,
+    company_documents, positioning_tests, backlinks, docs, places,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest
@@ -86,6 +86,7 @@ app.include_router(company_documents.router, prefix=_PREFIX)
 app.include_router(positioning_tests.router, prefix=_PREFIX)
 app.include_router(backlinks.router,      prefix=_PREFIX)
 app.include_router(docs.router,           prefix=_PREFIX)
+app.include_router(places.router,         prefix=_PREFIX)
 
 # Fichiers uploadés depuis l'admin (ex: images de couverture d'articles de blog),
 # servis en statique — indépendant du service de stockage objet externe Emergent.
@@ -253,7 +254,10 @@ async def _daily_dossiers_digest_loop():
     POST /reminders/dossiers-digest/run permet un déclenchement manuel/cron."""
     log = logging.getLogger(__name__)
     try:
-        notified = await send_daily_pending_dossiers_digest()
+        # min_gap=6h : si le serveur redémarre plusieurs fois de suite
+        # (déploiement, rechargement en dev), on ne renvoie pas un mail à
+        # chaque redémarrage — seulement si le dernier envoi date vraiment.
+        notified = await send_daily_pending_dossiers_digest(min_gap=timedelta(hours=6))
         if notified:
             log.info(f"Récap dossiers en attente (démarrage) : {notified} employé(s) notifié(s)")
     except Exception as e:
@@ -261,7 +265,7 @@ async def _daily_dossiers_digest_loop():
     while True:
         await asyncio.sleep(_seconds_until_next_digest())
         try:
-            notified = await send_daily_pending_dossiers_digest()
+            notified = await send_daily_pending_dossiers_digest(min_gap=timedelta(hours=12))
             if notified:
                 log.info(f"Récap dossiers en attente : {notified} employé(s) notifié(s)")
         except Exception as e:

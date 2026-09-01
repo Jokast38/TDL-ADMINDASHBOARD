@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +11,21 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise, PhoneCall, Check, Trash, GraduationCap } from "@phosphor-icons/react";
+import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise, PhoneCall, Check, Trash, GraduationCap, Hourglass, CaretRight, CaretDown } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n || 0);
 
 const PAYMENT_LABEL = { pending: "En attente", paid: "Payé", refunded: "Remboursé" };
+
+// Statut du dossier de traitement (voir backend/routers/inscriptions.py — collection
+// dossiers). "nouveau" est le seul statut qui déclenche le récap matinal envoyé aux
+// employés (voir services/staff_notify.py) : dès qu'on le fait passer à un statut
+// suivant, le dossier sort automatiquement de ce récap.
+const DOSSIER_STATUS_LABEL = {
+  nouveau: "À traiter", en_verification: "En cours", complet: "Complet",
+  soumis_ants: "Soumis ANTS", termine: "Terminé", rejete: "À corriger",
+};
 
 // Catégorie de formation déduite côté backend (voir routers/callback.py) selon
 // l'origine du formulaire — mêmes libellés que Employees.jsx (attribution).
@@ -38,9 +47,22 @@ const callbackInterest = (c) => {
   return "Non précisé";
 };
 
+const PAGE_SIZE = 25;
+
 export default function Inscriptions() {
   const [items, setItems] = useState([]);
   const [q, setQ] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState("all"); // all | paid | unpaid
+  const [traitementFilter, setTraitementFilter] = useState("all"); // all | traite | non_traite
+  const [statusFilter, setStatusFilter] = useState("all"); // all | active | cloturee
+  const [page, setPage] = useState(1);
+
+  // Section "Demandes de rappel" : repliée par défaut pour laisser la place à
+  // la liste des inscriptions ; dépliée automatiquement s'il y a de nouvelles
+  // demandes non traitées, tant que l'utilisateur n'a pas lui-même choisi un
+  // état (callbacksToggled).
+  const [callbacksCollapsed, setCallbacksCollapsed] = useState(true);
+  const [callbacksToggled, setCallbacksToggled] = useState(false);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -63,6 +85,11 @@ export default function Inscriptions() {
     loadCallbacks();
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (callbacksToggled) return;
+    setCallbacksCollapsed(callbacks.filter((c) => !c.handled).length === 0);
+  }, [callbacks, callbacksToggled]);
 
   const markCallbackHandled = async (id, handled) => {
     try { await api.put(`/callback-requests/${id}`, { handled }); loadCallbacks(); }
@@ -107,9 +134,27 @@ export default function Inscriptions() {
     finally { setEnrolling(false); }
   };
 
-  const filtered = items.filter((i) =>
-    (i.student_name + i.student_email + i.formation_title).toLowerCase().includes(q.toLowerCase())
-  );
+  const filtered = useMemo(() => items.filter((i) => {
+    const matchesQuery = (i.student_name + i.student_email + i.formation_title).toLowerCase().includes(q.toLowerCase());
+    const matchesPayment =
+      paymentFilter === "all" ? true :
+      paymentFilter === "paid" ? i.payment_status === "paid" :
+      i.payment_status !== "paid";
+    const matchesTraitement =
+      traitementFilter === "all" ? true :
+      traitementFilter === "traite" ? !!i.dossier_status && i.dossier_status !== "nouveau" :
+      !i.dossier_status || i.dossier_status === "nouveau";
+    const matchesStatus =
+      statusFilter === "all" ? true :
+      statusFilter === "cloturee" ? i.status === "annulee" :
+      i.status !== "annulee";
+    return matchesQuery && matchesPayment && matchesTraitement && matchesStatus;
+  }), [items, q, paymentFilter, traitementFilter, statusFilter]);
+
+  useEffect(() => { setPage(1); }, [q, paymentFilter, traitementFilter, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const updatePaymentStatus = async (id, payment_status) => {
     try { await api.put(`/inscriptions/${id}`, { payment_status }); toast.success("Statut de paiement mis à jour"); load(); }
@@ -129,6 +174,14 @@ export default function Inscriptions() {
   const deleteInscription = async (id) => {
     try { await api.delete(`/inscriptions/${id}`); toast.success("Inscription supprimée"); load(); }
     catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+  };
+
+  const startProcessing = async (dossierId) => {
+    try {
+      await api.put(`/dossiers/${dossierId}`, { status: "en_verification" });
+      toast.success("Traitement en cours — ne recevra plus le récap matinal");
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
   };
 
   const openEdit = (i) => {
@@ -161,13 +214,23 @@ export default function Inscriptions() {
 
       {callbacks.length > 0 && (
         <Card className="border border-amber-200 bg-amber-50/50 rounded-md shadow-none p-5" data-testid="callback-requests-card">
-          <div className="flex items-center gap-2 mb-1">
+          <button
+            type="button"
+            onClick={() => { setCallbacksToggled(true); setCallbacksCollapsed((v) => !v); }}
+            className="flex items-center gap-2 mb-1 w-full text-left"
+            data-testid="callback-requests-toggle"
+          >
+            {callbacksCollapsed ? <CaretRight size={14} className="text-amber-700" /> : <CaretDown size={14} className="text-amber-700" />}
             <PhoneCall size={16} className="text-amber-700" />
             <h2 className="font-display text-lg font-bold">Demandes de rappel</h2>
-            {pendingCallbacks.length > 0 && (
+            {pendingCallbacks.length > 0 ? (
               <Badge className="bg-amber-200 text-amber-900 hover:bg-amber-200">{pendingCallbacks.length} en attente</Badge>
+            ) : (
+              <span className="text-xs text-gray-400">({callbacks.length} traitée(s))</span>
             )}
-          </div>
+          </button>
+          {!callbacksCollapsed && (
+          <>
           <p className="text-xs text-gray-500 mb-4">Formulaire "Être rappelé" de la landing page offre fidélité.</p>
           <div className="space-y-2">
             {callbacks.map((c) => (
@@ -219,16 +282,44 @@ export default function Inscriptions() {
               </div>
             ))}
           </div>
+          </>
+          )}
         </Card>
       )}
 
-      <div className="relative max-w-md">
-        <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />
-        <Input
-          placeholder="Rechercher un étudiant, formation..."
-          value={q} onChange={(e) => setQ(e.target.value)}
-          className="pl-9" data-testid="search-input"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-md flex-1 min-w-[220px]">
+          <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />
+          <Input
+            placeholder="Rechercher un étudiant, formation..."
+            value={q} onChange={(e) => setQ(e.target.value)}
+            className="pl-9" data-testid="search-input"
+          />
+        </div>
+        <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+          <SelectTrigger className="w-40" data-testid="filter-payment"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Paiement : tous</SelectItem>
+            <SelectItem value="paid">Payées</SelectItem>
+            <SelectItem value="unpaid">Non payées</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={traitementFilter} onValueChange={setTraitementFilter}>
+          <SelectTrigger className="w-44" data-testid="filter-traitement"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Traitement : tous</SelectItem>
+            <SelectItem value="traite">Traitées</SelectItem>
+            <SelectItem value="non_traite">Non traitées</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-40" data-testid="filter-status"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Statut : tous</SelectItem>
+            <SelectItem value="active">Actives</SelectItem>
+            <SelectItem value="cloturee">Clôturées</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
@@ -242,12 +333,13 @@ export default function Inscriptions() {
                 <th className="py-3 px-4 overline">Catégorie</th>
                 <th className="py-3 px-4 overline">Paiement</th>
                 <th className="py-3 px-4 overline">Statut</th>
+                <th className="py-3 px-4 overline">Traitement</th>
                 <th className="py-3 px-4 overline text-right">Prix</th>
                 <th className="py-3 px-4 overline text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((i) => {
+              {paged.map((i) => {
                 const cancelled = i.status === "annulee";
                 return (
                   <tr key={i.id} className={`border-b border-gray-100 hover:bg-gray-50 ${cancelled ? "opacity-50" : ""}`} data-testid={`inscription-row-${i.id}`}>
@@ -279,6 +371,23 @@ export default function Inscriptions() {
                       <Badge className={cancelled ? "bg-red-100 text-red-700 hover:bg-red-100" : "bg-green-100 text-green-700 hover:bg-green-100"}>
                         {cancelled ? "Annulée" : "Active"}
                       </Badge>
+                    </td>
+                    <td className="py-3 px-4">
+                      {i.dossier_status === "nouveau" ? (
+                        <Button
+                          size="sm" variant="outline"
+                          onClick={() => startProcessing(i.dossier_id)}
+                          className="h-7 text-xs border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37]/10 hover:text-[#d4af37]"
+                          title="Marque le dossier en cours de traitement — il ne sera plus inclus dans le récap matinal envoyé par email"
+                          data-testid={`start-processing-${i.id}`}
+                        >
+                          <Hourglass size={12} className="mr-1" /> Traiter
+                        </Button>
+                      ) : i.dossier_status ? (
+                        <Badge variant="outline" className="text-xs">{DOSSIER_STATUS_LABEL[i.dossier_status] || i.dossier_status}</Badge>
+                      ) : (
+                        <span className="text-xs text-gray-300">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right font-mono">{fmtMoney(i.price)}</td>
                     <td className="py-3 px-4 text-right">
@@ -340,13 +449,38 @@ export default function Inscriptions() {
                   </tr>
                 );
               })}
-              {!filtered.length && (
-                <tr><td colSpan="8" className="py-12 text-center text-gray-400">Aucune inscription.</td></tr>
+              {!paged.length && (
+                <tr><td colSpan="9" className="py-12 text-center text-gray-400">Aucune inscription.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </Card>
+
+      {filtered.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-gray-500">
+          <p>
+            {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} sur {filtered.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline" size="sm" disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              data-testid="inscriptions-prev-page"
+            >
+              Précédent
+            </Button>
+            <span className="text-xs">Page {page} / {totalPages}</span>
+            <Button
+              variant="outline" size="sm" disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              data-testid="inscriptions-next-page"
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>

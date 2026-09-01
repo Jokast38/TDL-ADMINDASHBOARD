@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -9,7 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Kanban, FolderOpen, ArrowSquareOut, FileArrowUp, CheckCircle, XCircle, PaperPlaneTilt, Warning, Trash } from "@phosphor-icons/react";
+import { Kanban, FolderOpen, ArrowSquareOut, FileArrowUp, CheckCircle, XCircle, PaperPlaneTilt, Warning, Trash, MagnifyingGlass } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const COLUMNS = [
@@ -21,15 +22,29 @@ const COLUMNS = [
   { key: "rejete", label: "Rejeté", color: "#D0021B" },
 ];
 
+const PAGE_SIZE = 5;
+
 export default function Dossiers() {
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
   const [docs, setDocs] = useState([]);
   const [notes, setNotes] = useState("");
   const [dragging, setDragging] = useState(null);
+  const [q, setQ] = useState("");
+  const [visibleCounts, setVisibleCounts] = useState({});
 
   const load = () => api.get("/dossiers").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
+
+  const filteredItems = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return items;
+    return items.filter((d) => (d.student_name || "").toLowerCase().includes(query));
+  }, [items, q]);
+
+  const showMore = (colKey) => {
+    setVisibleCounts((prev) => ({ ...prev, [colKey]: (prev[colKey] || PAGE_SIZE) + PAGE_SIZE }));
+  };
 
   const openDossier = async (d) => {
     const fresh = await api.get(`/dossiers/${d.id}`);
@@ -108,9 +123,22 @@ export default function Dossiers() {
         <p className="text-gray-500 mt-2">Glissez-déposez pour faire avancer chaque dossier dans le pipeline ANTS. Les changements de statut notifient l'étudiant par email.</p>
       </div>
 
+      <div className="relative max-w-md">
+        <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />
+        <Input
+          placeholder="Rechercher un apprenant..."
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="pl-9"
+          data-testid="dossiers-search"
+        />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4" data-testid="kanban-board">
         {COLUMNS.map((col) => {
-          const colItems = items.filter((d) => d.status === col.key);
+          const colAllItems = filteredItems.filter((d) => d.status === col.key);
+          const visible = visibleCounts[col.key] || PAGE_SIZE;
+          const colItems = colAllItems.slice(0, visible);
           return (
             <div
               key={col.key}
@@ -124,7 +152,7 @@ export default function Dossiers() {
                   <span className="w-2 h-2 rounded-full" style={{ background: col.color }} />
                   <h3 className="font-semibold text-sm">{col.label}</h3>
                 </div>
-                <Badge variant="outline" className="font-mono text-xs">{colItems.length}</Badge>
+                <Badge variant="outline" className="font-mono text-xs">{colAllItems.length}</Badge>
               </div>
               <div className="flex flex-col gap-3">
                 {colItems.map((d) => (
@@ -194,6 +222,15 @@ export default function Dossiers() {
                   </div>
                 ))}
               </div>
+              {colAllItems.length > visible && (
+                <button
+                  onClick={() => showMore(col.key)}
+                  className="text-xs text-center text-gray-500 hover:text-[#d4af37] py-1"
+                  data-testid={`show-more-${col.key}`}
+                >
+                  Afficher plus ({colAllItems.length - visible})
+                </button>
+              )}
             </div>
           );
         })}

@@ -103,7 +103,17 @@ async def create_inscription(payload: InscriptionIn):
 
 @router.get("/inscriptions")
 async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
-    return await db.inscriptions.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    items = await db.inscriptions.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    dossiers = await db.dossiers.find(
+        {"inscription_id": {"$in": [i["id"] for i in items]}},
+        {"_id": 0, "id": 1, "inscription_id": 1, "status": 1},
+    ).to_list(1000)
+    by_inscription = {d["inscription_id"]: d for d in dossiers}
+    for i in items:
+        d = by_inscription.get(i["id"])
+        i["dossier_id"] = d["id"] if d else None
+        i["dossier_status"] = d["status"] if d else None
+    return items
 
 
 @router.put("/inscriptions/{iid}")
