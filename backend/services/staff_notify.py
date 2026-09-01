@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 
+from core.config import ROLES_DOSSIERS_MGMT
 from core.database import db
+from core.utils import now_iso
 from services.email import send_email
 from services.push import send_push_to_users
 
@@ -136,4 +138,106 @@ async def send_pending_callback_reminders() -> int:
             f"{len(mine)} demande(s) non traitée(s)", "/admin/inscriptions",
         )
         notified += 1
+    return notified
+
+
+async def send_daily_pending_dossiers_digest() -> int:
+    """Envoie chaque matin (10h — voir _daily_dossiers_digest_loop dans
+    server.py) à chaque employé assigné un récapitulatif des dossiers
+    d'inscription pas encore terminés ("nouveau", "en_verification",
+    "complet", "soumis_ants", "rejete"), avec les dossiers arrivés depuis le
+    dernier envoi mis en avant séparément. Appelée aussi une fois
+    immédiatement au démarrage du serveur (premier mail dès l'ouverture) et
+    via POST /reminders/dossiers-digest/run pour un test/cron externe."""
+    settings = await db.settings.find_one({"id": "global"}, {"_id": 0, "dossiers_digest_last_sent_at": 1}) or {}
+    last_sent = _parse_iso(settings.get("dossiers_digest_last_sent_at"))
+
+    pending = await db.dossiers.find({"status": {"$ne": "termine"}}, {"_id": 0}).to_list(2000)
+    if not pending:
+        await db.settings.update_one({"id": "global"}, {"$set": {"dossiers_digest_last_sent_at": now_iso()}}, upsert=True)
+        return 0
+
+    staff = await db.users.find(
+        {"active": True, "role": {"$in": list(ROLES_DOSSIERS_MGMT)}},
+        {"_id": 0, "id": 1, "email": 1, "name": 1, "assigned_categories": 1, "assigned_training_assignments": 1},
+    ).to_list(200)
+
+    notified = 0
+    for member in staff:
+        assignments = member.get("assigned_training_assignments") or []
+        categories = member.get("assigned_categories") or []
+
+        mine = []
+        for d in pending:
+            if d.get("assigned_to") and d.get("assigned_to") != member["id"]:
+                # Déjà pris en charge par quelqu'un d'autre : ne pas polluer
+                # la boîte mail du reste de l'équipe avec ce dossier.
+                continue
+            if d.get("assigned_to") == member["id"]:
+                mine.append(d)
+                continue
+            if assignments:
+                matches = any(a.get("category") == d.get("category") for a in assignments)
+            else:
+                matches = not categories or d.get("category") in categories
+            if matches:
+                mine.append(d)
+
+        if not mine or not member.get("email"):
+            continue
+
+        new_ids = {
+            d["id"] for d in mine
+            if last_sent is None or ((ref := _parse_iso(d.get("created_at"))) and ref > last_sent)
+        }
+        new_ones = [d for d in mine if d["id"] in new_ids]
+        older_ones = [d for d in mine if d["id"] not in new_ids]
+
+        def _rows(items, highlight=False):
+            style = "background:#fff8e1;" if highlight else ""
+            return "".join(
+                f"<tr style='{style}'>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{d.get('student_name','')}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{d.get('formation_title','')}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{CATEGORY_LABELS.get(d.get('category'), d.get('category') or '')}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{d.get('status','')}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{(d.get('created_at') or '')[:10]}</td></tr>"
+                for d in items
+            )
+
+        header = (
+            "<tr><th style='text-align:left;padding:6px 10px;'>Étudiant</th>"
+            "<th style='text-align:left;padding:6px 10px;'>Formation</th>"
+            "<th style='text-align:left;padding:6px 10px;'>Catégorie</th>"
+            "<th style='text-align:left;padding:6px 10px;'>Statut</th>"
+            "<th style='text-align:left;padding:6px 10px;'>Reçu le</th></tr>"
+        )
+        sections = ""
+        if new_ones:
+            sections += (
+                f"<p style='margin:16px 0 6px;'><b>🆕 {len(new_ones)} nouvelle(s) inscription(s) depuis le dernier récap :</b></p>"
+                f"<table style='border-collapse:collapse;width:100%;'>{header}{_rows(new_ones, highlight=True)}</table>"
+            )
+        if older_ones:
+            sections += (
+                f"<p style='margin:16px 0 6px;'><b>{len(older_ones)} dossier(s) toujours en attente :</b></p>"
+                f"<table style='border-collapse:collapse;width:100%;'>{header}{_rows(older_ones)}</table>"
+            )
+
+        subject = f"📋 {len(mine)} dossier(s) en attente de traitement" + (f" — {len(new_ones)} nouveau(x)" if new_ones else "")
+        body = (
+            f"<p>Bonjour {member.get('name','')},</p>"
+            f"<p>Voici le récapitulatif du matin des dossiers d'inscription qui ne sont pas encore finalisés.</p>"
+            f"{sections}"
+            f"<p style='margin-top:16px;'>Rendez-vous sur la page Inscriptions du dashboard pour les traiter.</p>"
+        )
+        await send_email(member["email"], subject, body)
+        await send_push_to_users(
+            [member["id"]], "Dossiers en attente",
+            f"{len(mine)} dossier(s) non traité(s)" + (f", {len(new_ones)} nouveau(x)" if new_ones else ""),
+            "/admin/inscriptions",
+        )
+        notified += 1
+
+    await db.settings.update_one({"id": "global"}, {"$set": {"dossiers_digest_last_sent_at": now_iso()}}, upsert=True)
     return notified

@@ -2,6 +2,7 @@ import asyncio
 import os
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -22,7 +23,7 @@ from routers import (
     company_documents, positioning_tests, backlinks, docs,
 )
 from routers.lead_automations import run_due_automations
-from services.staff_notify import send_pending_callback_reminders
+from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -230,12 +231,50 @@ async def _callback_reminders_loop():
         await asyncio.sleep(4 * 3600)
 
 
+_DOSSIERS_DIGEST_HOUR_UTC = 10  # 10h chaque matin (heure du serveur, UTC sur Render)
+
+
+def _seconds_until_next_digest() -> float:
+    now = datetime.now(timezone.utc)
+    target = now.replace(hour=_DOSSIERS_DIGEST_HOUR_UTC, minute=0, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return (target - now).total_seconds()
+
+
+async def _daily_dossiers_digest_loop():
+    """Envoie chaque matin à 10h (heure serveur) à chaque employé assigné un
+    récapitulatif des dossiers d'inscription pas encore traités, avec les
+    nouveaux mis en avant depuis le dernier envoi (voir
+    send_daily_pending_dossiers_digest dans services/staff_notify.py). Un
+    premier envoi a lieu immédiatement au démarrage du serveur, puis la
+    boucle se cale sur 10h tous les jours suivants. Même limite que les
+    autres boucles sur le plan gratuit Render (le service peut dormir) —
+    POST /reminders/dossiers-digest/run permet un déclenchement manuel/cron."""
+    log = logging.getLogger(__name__)
+    try:
+        notified = await send_daily_pending_dossiers_digest()
+        if notified:
+            log.info(f"Récap dossiers en attente (démarrage) : {notified} employé(s) notifié(s)")
+    except Exception as e:
+        log.warning(f"Récap dossiers en attente (démarrage) : erreur — {e}")
+    while True:
+        await asyncio.sleep(_seconds_until_next_digest())
+        try:
+            notified = await send_daily_pending_dossiers_digest()
+            if notified:
+                log.info(f"Récap dossiers en attente : {notified} employé(s) notifié(s)")
+        except Exception as e:
+            log.warning(f"Récap dossiers en attente : erreur — {e}")
+
+
 @app.on_event("startup")
 async def startup():
     asyncio.create_task(_background_init())
     asyncio.create_task(asyncio.to_thread(init_storage))
     asyncio.create_task(_automations_loop())
     asyncio.create_task(_callback_reminders_loop())
+    asyncio.create_task(_daily_dossiers_digest_loop())
 
 
 @app.on_event("shutdown")

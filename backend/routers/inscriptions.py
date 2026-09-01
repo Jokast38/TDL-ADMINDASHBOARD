@@ -10,6 +10,7 @@ from models.inscription import InscriptionIn, InscriptionUpdate, DossierUpdate
 from services.trello import TrelloService
 from services.n8n import trigger_n8n
 from services.email import send_email
+from services.staff_notify import notify_new_contact, CATEGORY_LABELS
 
 router = APIRouter(tags=["inscriptions"])
 
@@ -78,6 +79,22 @@ async def create_inscription(payload: InscriptionIn):
         payload.student_email,
         f"Confirmation d'inscription - {formation['title']}",
         f"<p>Bonjour {payload.student_name},</p><p>Votre inscription à <b>{formation['title']}</b> a bien été enregistrée. Nous vous contactons sous 24h pour la suite.</p><p>TDL Formation</p>"
+    )
+    await notify_new_contact(
+        category=formation["category"],
+        roles=ROLES_DOSSIERS_MGMT,
+        email_subject=f"📝 Nouvelle inscription — {formation['title']}",
+        email_body_html=(
+            f"<p>Nouvelle inscription reçue :</p>"
+            f"<p><b>{payload.student_name}</b> ({payload.student_email}"
+            f"{', ' + payload.student_phone if payload.student_phone else ''})</p>"
+            f"<p>Formation : <b>{formation['title']}</b> ({CATEGORY_LABELS.get(formation['category'], formation['category'])})</p>"
+            f"<p style='margin-top:16px;'>Rendez-vous sur la page Inscriptions du dashboard pour traiter ce dossier.</p>"
+        ),
+        push_title="Nouvelle inscription",
+        push_body=f"{payload.student_name} — {formation['title']}",
+        push_url="/admin/inscriptions",
+        center=payload.center or None,
     )
     inscription.pop("_id", None)
     dossier.pop("_id", None)
