@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from core.security import require_role
-from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest
+from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
 
@@ -22,4 +22,12 @@ async def run_dossiers_digest(user: dict = Depends(require_role("admin"))):
     l'envoie automatiquement tous les jours à 10h, plus une fois immédiatement
     au démarrage du serveur."""
     notified = await send_daily_pending_dossiers_digest()
+    return {"notified": notified}
+
+
+@router.post("/documents/run")
+async def run_document_reminders(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel des relances documents manquants (test, ou cron
+    externe) — la boucle de fond (voir server.py) les envoie toutes les 24h."""
+    notified = await send_document_reminders()
     return {"notified": notified}

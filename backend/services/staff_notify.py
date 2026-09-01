@@ -252,3 +252,108 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
 
     await db.settings.update_one({"id": "global"}, {"$set": {"dossiers_digest_last_sent_at": now_iso()}}, upsert=True)
     return notified
+
+
+async def notify_staff_exam_theorique_result(dossier: dict, result: str) -> None:
+    """Notifie le personnel assigné qu'un apprenant a déclaré son résultat à
+    l'examen théorique (section 1.2 du cahier des charges — bouton "Réussi /
+    Échoué" côté apprenant). Priorité au responsable du dossier
+    (`assigned_to`) s'il y en a un, sinon routage par catégorie comme pour
+    les autres notifications staff."""
+    decision_label = "réussi ✅" if result == "reussi" else "échoué ❌"
+    subject = f"📝 Résultat examen théorique — {dossier.get('student_name', '')} : {decision_label}"
+    body = (
+        f"<p><b>{dossier.get('student_name', '')}</b> a déclaré avoir <b>{decision_label}</b> son examen théorique.</p>"
+        f"<p>Formation : <b>{dossier.get('formation_title', '')}</b></p>"
+        f"<p style='margin-top:16px;'>Le dossier a été mis à jour automatiquement. "
+        f"Rendez-vous sur la page Dossiers du dashboard pour la suite.</p>"
+    )
+    recipients = []
+    if dossier.get("assigned_to"):
+        assignee = await db.users.find_one({"id": dossier["assigned_to"], "active": True}, {"_id": 0, "id": 1, "email": 1})
+        if assignee:
+            recipients.append(assignee)
+    if not recipients:
+        recipients = await _assigned_staff(dossier.get("category"), None, ROLES_DOSSIERS_MGMT)
+    if not recipients:
+        await send_email(CONTACT_EMAIL, subject, body)
+        return
+    for member in recipients:
+        if member.get("email"):
+            await send_email(member["email"], subject, body)
+    await send_push_to_users(
+        [m["id"] for m in recipients], "Résultat examen théorique",
+        f"{dossier.get('student_name', '')} — {decision_label}", "/admin/dossiers",
+    )
+
+
+async def send_document_reminders(min_gap_hours: int = 72) -> int:
+    """Relance les apprenants dont le dossier a des documents manquants, au
+    plus une fois tous les `min_gap_hours` par dossier (72h par défaut) —
+    invite explicitement à venir en agence avec les documents manquants pour
+    compléter le dossier sur place (section 1.3). Le personnel assigné à la
+    catégorie du dossier reçoit la même relance en copie, pour pouvoir
+    lui-même recontacter l'apprenant si besoin. Appelée par la boucle de fond
+    (voir server.py) et via POST /reminders/documents/run pour un test/cron
+    externe."""
+    now = datetime.now(timezone.utc)
+    dossiers = await db.dossiers.find({"status": {"$ne": "termine"}}, {"_id": 0}).to_list(5000)
+    notified = 0
+    staff_cache: dict = {}
+
+    for d in dossiers:
+        requis = d.get("documents_requis") or []
+        if not requis or not d.get("student_email"):
+            continue
+        docs = await db.documents.find(
+            {"id": {"$in": d.get("documents", [])}, "is_deleted": False}, {"_id": 0}
+        ).to_list(200)
+        fournis = {doc["doc_type"] for doc in docs if doc.get("verification_status") != "rejected"}
+        manquants = [r for r in requis if r not in fournis]
+        if not manquants:
+            continue
+
+        last_reminded = _parse_iso(d.get("doc_reminder_last_sent_at"))
+        if last_reminded and (now - last_reminded) < timedelta(hours=min_gap_hours):
+            continue
+
+        manquants_label = ", ".join(manquants)
+        await send_email(
+            d["student_email"],
+            f"Documents manquants — {d.get('formation_title', '')}",
+            (
+                f"<p>Bonjour {d.get('student_name', '')},</p>"
+                f"<p>Il manque encore les documents suivants pour compléter votre dossier "
+                f"<b>{d.get('formation_title', '')}</b> :</p>"
+                f"<p><b>{manquants_label}</b></p>"
+                f"<p>Vous pouvez les téléverser depuis votre espace apprenant, ou venir "
+                f"directement en agence avec ces documents pour compléter votre dossier sur place.</p>"
+                f"<p>TDL Formation</p>"
+            ),
+        )
+        await db.dossiers.update_one({"id": d["id"]}, {"$set": {"doc_reminder_last_sent_at": now_iso()}})
+        notified += 1
+
+        category = d.get("category")
+        if category not in staff_cache:
+            staff_cache[category] = await _assigned_staff(category, None, ROLES_DOSSIERS_MGMT)
+        staff = staff_cache[category]
+        for member in staff:
+            if member.get("email"):
+                await send_email(
+                    member["email"],
+                    f"📎 Relance documents envoyée — {d.get('student_name', '')}",
+                    (
+                        f"<p>Une relance automatique a été envoyée à <b>{d.get('student_name', '')}</b> "
+                        f"pour les documents manquants (<b>{manquants_label}</b>) — formation "
+                        f"<b>{d.get('formation_title', '')}</b>.</p>"
+                        f"<p>Vous pouvez aussi le recontacter vous-même si besoin.</p>"
+                    ),
+                )
+        if staff:
+            await send_push_to_users(
+                [m["id"] for m in staff], "Relance documents envoyée",
+                f"{d.get('student_name', '')} ({manquants_label})", "/admin/dossiers",
+            )
+
+    return notified

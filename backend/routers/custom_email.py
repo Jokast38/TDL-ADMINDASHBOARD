@@ -11,6 +11,12 @@ router = APIRouter(prefix="/email", tags=["custom-email"])
 
 MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024  # 10MB
 
+# Boîte de suivi de l'agence : toujours en copie des emails composés depuis
+# le dashboard, en plus de l'expéditeur — pour que les réponses de
+# l'apprenant restent tracées même si l'employé n'a pas sa messagerie sous
+# la main, et que l'équipe garde une trace commune de l'échange.
+TRACKING_CC_EMAIL = "tdlparisformation@gmail.com"
+
 
 @router.post("/send-custom")
 async def send_custom_email(
@@ -41,11 +47,13 @@ async def send_custom_email(
             "content_b64": base64.b64encode(data).decode("ascii"),
         }
 
+    cc = [e for e in {user.get("email"), TRACKING_CC_EMAIL} if e]
     html_body = render_branded_email(message, button_text, button_url)
     log = await send_email(
         to.strip(), subject.strip(), html_body,
         extra={"sent_by": user["id"], "custom_compose": True},
         attachment=attachment,
+        cc=cc,
     )
     if log["status"] not in ("sent", "mocked"):
         raise HTTPException(status_code=502, detail=f"Échec de l'envoi : {log['status']}")

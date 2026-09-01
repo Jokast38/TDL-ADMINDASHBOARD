@@ -32,6 +32,9 @@ import Layout from "@/components/Layout";
 import Dashboard from "@/pages/Dashboard";
 import Formations from "@/pages/Formations";
 import Inscriptions from "@/pages/Inscriptions";
+import Students from "@/pages/Students";
+import Exams from "@/pages/Exams";
+import Appointments from "@/pages/Appointments";
 import Dossiers from "@/pages/Dossiers";
 import KamiStreet from "@/pages/KamiStreet";
 import Orders from "@/pages/Orders";
@@ -140,8 +143,17 @@ function App() {
             <Route path="/admin/inscriptions" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Inscriptions /></AdminLayout></ProtectedRoute>
             } />
+            <Route path="/admin/apprenants" element={
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Students /></AdminLayout></ProtectedRoute>
+            } />
             <Route path="/admin/dossiers" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Dossiers /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/examens" element={
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Exams /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/rdv" element={
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Appointments /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/leads" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Leads /></AdminLayout></ProtectedRoute>

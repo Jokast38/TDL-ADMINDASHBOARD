@@ -5,7 +5,8 @@ import NotificationBell from "@/components/NotificationBell";
 import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
-  CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive, Question
+  CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive, Question, Student,
+  ClipboardText, CalendarPlus
 } from "@phosphor-icons/react";
 
 const navAll = [
@@ -13,7 +14,10 @@ const navAll = [
   { to: "/admin/formations", label: "Formations", icon: GraduationCap, roles: ["admin", "employe", "responsable_admission"] },
   { to: "/admin/stages", label: "Sessions de stage", icon: CalendarCheck, roles: ["admin", "responsable_admission"] },
   { to: "/admin/inscriptions", label: "Inscriptions", icon: IdentificationCard, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
+  { to: "/admin/apprenants", label: "Apprenants", icon: Student, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/dossiers", label: "Dossiers (Kanban)", icon: Folders, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
+  { to: "/admin/examens", label: "Examens", icon: ClipboardText, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
+  { to: "/admin/rdv", label: "Rendez-vous", icon: CalendarPlus, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/leads", label: "Leads", icon: UsersThree, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
   { to: "/admin/documents-library", label: "Bibliothèque PDF", icon: FilePdf, roles: ["admin", "responsable_admission", "agent_admin"] },
   { to: "/admin/doc-templates", label: "Modèles PDF", icon: FileText, roles: ["admin"] },

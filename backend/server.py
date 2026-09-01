@@ -21,9 +21,10 @@ from routers import (
     generated_docs, health, callback, tracking, reviews, chatbot, notifications,
     custom_email, lead_automations, limova, payments, push, reminders,
     company_documents, positioning_tests, backlinks, docs, places,
+    exams, appointments,
 )
 from routers.lead_automations import run_due_automations
-from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest
+from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -87,6 +88,8 @@ app.include_router(positioning_tests.router, prefix=_PREFIX)
 app.include_router(backlinks.router,      prefix=_PREFIX)
 app.include_router(docs.router,           prefix=_PREFIX)
 app.include_router(places.router,         prefix=_PREFIX)
+app.include_router(exams.router,          prefix=_PREFIX)
+app.include_router(appointments.router,   prefix=_PREFIX)
 
 # Fichiers uploadés depuis l'admin (ex: images de couverture d'articles de blog),
 # servis en statique — indépendant du service de stockage objet externe Emergent.
@@ -232,6 +235,23 @@ async def _callback_reminders_loop():
         await asyncio.sleep(4 * 3600)
 
 
+async def _document_reminders_loop():
+    """Toutes les 24h, relance par email les apprenants dont le dossier a des
+    documents manquants (au plus 1 relance/72h par dossier, voir
+    services/staff_notify.py) — section 1.3 du cahier des charges. Le
+    personnel assigné à la catégorie reçoit la même relance en copie.
+    POST /api/reminders/documents/run permet un déclenchement manuel/cron."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_document_reminders()
+            if notified:
+                log.info(f"Relances documents : {notified} apprenant(s) relancé(s)")
+        except Exception as e:
+            log.warning(f"Relances documents : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
+
+
 _DOSSIERS_DIGEST_HOUR_UTC = 10  # 10h chaque matin (heure du serveur, UTC sur Render)
 
 
@@ -279,6 +299,7 @@ async def startup():
     asyncio.create_task(_automations_loop())
     asyncio.create_task(_callback_reminders_loop())
     asyncio.create_task(_daily_dossiers_digest_loop())
+    asyncio.create_task(_document_reminders_loop())
 
 
 @app.on_event("shutdown")

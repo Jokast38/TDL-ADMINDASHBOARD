@@ -42,10 +42,12 @@ def _http_post(url: str, headers: dict, json_data: dict):
     return requests.post(url, headers=headers, json=json_data, timeout=15)
 
 
-async def _send_via_resend(api_key: str, from_addr: str, to: str, subject: str, body: str, attachment: dict = None) -> str:
+async def _send_via_resend(api_key: str, from_addr: str, to: str, subject: str, body: str, attachment: dict = None, cc: list = None) -> str:
     """Envoie via l'API HTTP Resend et renvoie le statut ('sent' ou 'failed: ...')."""
     try:
         payload = {"from": from_addr, "to": [to], "subject": subject, "html": body}
+        if cc:
+            payload["cc"] = cc
         if attachment:
             payload["attachments"] = [{"filename": attachment["filename"], "content": attachment["content_b64"]}]
         r = await asyncio.to_thread(
@@ -60,7 +62,7 @@ async def _send_via_resend(api_key: str, from_addr: str, to: str, subject: str, 
 
 
 def _smtp_send(host: str, port: int, use_tls: bool, user: str, password: str,
-               from_addr: str, to: str, subject: str, body: str, attachment: dict = None):
+               from_addr: str, to: str, subject: str, body: str, attachment: dict = None, cc: list = None):
     import base64
     import socket
     import smtplib
@@ -71,6 +73,8 @@ def _smtp_send(host: str, port: int, use_tls: bool, user: str, password: str,
     msg["Subject"] = subject
     msg["From"] = from_addr
     msg["To"] = to
+    if cc:
+        msg["Cc"] = ", ".join(cc)
     alt = MIMEMultipart("alternative")
     alt.attach(MIMEText(body, "html"))
     msg.attach(alt)
@@ -100,14 +104,17 @@ def _smtp_send(host: str, port: int, use_tls: bool, user: str, password: str,
         socket.getaddrinfo = original_getaddrinfo
 
     server.login(user, password)
-    server.sendmail(from_addr, [to], msg.as_string())
+    server.sendmail(from_addr, [to, *(cc or [])], msg.as_string())
     server.quit()
 
 
-async def _send_via_sendgrid(api_key: str, from_addr: str, to: str, subject: str, body: str, attachment: dict = None) -> str:
+async def _send_via_sendgrid(api_key: str, from_addr: str, to: str, subject: str, body: str, attachment: dict = None, cc: list = None) -> str:
     try:
+        personalization = {"to": [{"email": to}]}
+        if cc:
+            personalization["cc"] = [{"email": c} for c in cc]
         payload = {
-            "personalizations": [{"to": [{"email": to}]}],
+            "personalizations": [personalization],
             "from": {"email": from_addr},
             "subject": subject,
             "content": [{"type": "text/html", "value": body}]
@@ -125,7 +132,7 @@ async def _send_via_sendgrid(api_key: str, from_addr: str, to: str, subject: str
         return f"error: {e}"
 
 
-async def _send_via_brevo(api_key: str, from_addr: str, to: str, subject: str, body: str, attachment: dict = None) -> str:
+async def _send_via_brevo(api_key: str, from_addr: str, to: str, subject: str, body: str, attachment: dict = None, cc: list = None) -> str:
     """Envoie via l'API HTTP Brevo (ex-Sendinblue) — comme Resend/SendGrid,
     en HTTPS, donc non bloqué par les hébergeurs qui coupent le SMTP sortant."""
     try:
@@ -135,6 +142,8 @@ async def _send_via_brevo(api_key: str, from_addr: str, to: str, subject: str, b
             "subject": subject,
             "htmlContent": body,
         }
+        if cc:
+            payload["cc"] = [{"email": c} for c in cc]
         if attachment:
             payload["attachment"] = [{"content": attachment["content_b64"], "name": attachment["filename"]}]
         r = await asyncio.to_thread(
@@ -148,7 +157,7 @@ async def _send_via_brevo(api_key: str, from_addr: str, to: str, subject: str, b
         return f"error: {e}"
 
 
-async def _send_via_smtp(s: dict, to: str, subject: str, body: str, attachment: dict = None) -> str:
+async def _send_via_smtp(s: dict, to: str, subject: str, body: str, attachment: dict = None, cc: list = None) -> str:
     """Envoie en SMTP avec retry (Gmail depuis un hébergeur cloud échoue parfois
     de façon aléatoire — IP partagée méfiante — sans être bloqué à 100%)."""
     max_attempts = 3
@@ -163,7 +172,7 @@ async def _send_via_smtp(s: dict, to: str, subject: str, body: str, attachment: 
                 s["smtp_user"],
                 s["smtp_password"],
                 s.get("email_from") or s.get("smtp_user"),
-                to, subject, body, attachment
+                to, subject, body, attachment, cc
             )
             return "sent"
         except Exception as e:
@@ -178,9 +187,12 @@ def _smtp_configured(s: dict) -> bool:
     return bool(s.get("smtp_host") and s.get("smtp_user") and s.get("smtp_password"))
 
 
-async def send_email(to: str, subject: str, body: str, extra: dict = None, attachment: dict = None) -> dict:
+async def send_email(to: str, subject: str, body: str, extra: dict = None, attachment: dict = None, cc: list = None) -> dict:
     """attachment (optionnel) : {"filename": str, "content_b64": str} — utilisé
-    par le composeur d'email personnalisé pour joindre un fichier."""
+    par le composeur d'email personnalisé pour joindre un fichier.
+    cc (optionnel) : liste d'adresses en copie — utilisé par le composeur
+    personnalisé pour mettre l'expéditeur et une adresse de suivi en copie,
+    afin que les réponses de l'apprenant restent tracées."""
     s = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
     provider = s.get("email_provider", "mock")
     from_addr = s.get("email_from", "noreply@tdlformation.fr")
@@ -189,7 +201,7 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
     resend_key = s.get("email_api_key") if provider == "resend" else s.get("resend_fallback_api_key")
     log_id = str(uuid.uuid4())
     log = {
-        "id": log_id, "to": to, "subject": subject, "body": body,
+        "id": log_id, "to": to, "cc": cc or [], "subject": subject, "body": body,
         "provider": provider, "status": "queued", "created_at": now_iso(),
         "opened": False, "opened_at": None, "open_count": 0,
         "clicked": False, "clicked_at": None, "click_count": 0,
@@ -213,35 +225,35 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
         tracked_body = body
 
     if provider == "resend" and resend_key:
-        log["status"] = await _send_via_resend(resend_key, from_addr, to, subject, tracked_body, attachment)
+        log["status"] = await _send_via_resend(resend_key, from_addr, to, subject, tracked_body, attachment, cc)
         if log["status"] != "sent" and _smtp_configured(s):
             logger.warning(f"Resend en échec pour {to} ({log['status']}), tentative SMTP en secours...")
             log["resend_error"] = log["status"]
-            log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment)
+            log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment, cc)
             log["fallback_provider"] = "smtp"
 
     elif provider == "sendgrid" and s.get("email_api_key"):
-        log["status"] = await _send_via_sendgrid(s["email_api_key"], from_addr, to, subject, tracked_body, attachment)
+        log["status"] = await _send_via_sendgrid(s["email_api_key"], from_addr, to, subject, tracked_body, attachment, cc)
 
     elif provider == "brevo" and s.get("email_api_key"):
-        log["status"] = await _send_via_brevo(s["email_api_key"], from_addr, to, subject, tracked_body, attachment)
+        log["status"] = await _send_via_brevo(s["email_api_key"], from_addr, to, subject, tracked_body, attachment, cc)
         if log["status"] != "sent" and _smtp_configured(s):
             logger.warning(f"Brevo en échec pour {to} ({log['status']}), tentative SMTP en secours...")
             log["brevo_error"] = log["status"]
-            log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment)
+            log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment, cc)
             log["fallback_provider"] = "smtp"
 
     elif provider == "smtp" and _smtp_configured(s):
-        log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment)
+        log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment, cc)
         if log["status"] != "sent" and s.get("brevo_fallback_api_key"):
             logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Brevo en secours...")
             log["smtp_error"] = log["status"]
-            log["status"] = await _send_via_brevo(s["brevo_fallback_api_key"], from_addr, to, subject, tracked_body, attachment)
+            log["status"] = await _send_via_brevo(s["brevo_fallback_api_key"], from_addr, to, subject, tracked_body, attachment, cc)
             log["fallback_provider"] = "brevo"
         elif log["status"] != "sent" and s.get("resend_fallback_api_key"):
             logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Resend en secours...")
             log["smtp_error"] = log["status"]
-            log["status"] = await _send_via_resend(s["resend_fallback_api_key"], from_addr, to, subject, tracked_body, attachment)
+            log["status"] = await _send_via_resend(s["resend_fallback_api_key"], from_addr, to, subject, tracked_body, attachment, cc)
             log["fallback_provider"] = "resend"
 
     else:

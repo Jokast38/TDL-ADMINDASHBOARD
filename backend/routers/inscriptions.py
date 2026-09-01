@@ -101,6 +101,48 @@ async def create_inscription(payload: InscriptionIn):
     return {"inscription": inscription, "dossier": dossier}
 
 
+@router.get("/students")
+async def list_students(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Vue d'ensemble des apprenants (users role=etudiant) pour la page
+    Apprenants du dashboard — chaque étudiant enrichi de ses inscriptions et
+    du statut de son dossier le plus récent, pour éviter d'avoir à croiser
+    manuellement /inscriptions et /dossiers."""
+    students = await db.users.find({"role": "etudiant"}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(5000)
+    student_ids = [s["id"] for s in students]
+
+    inscriptions = await db.inscriptions.find(
+        {"student_id": {"$in": student_ids}}, {"_id": 0}
+    ).sort("created_at", -1).to_list(10000)
+    dossiers = await db.dossiers.find(
+        {"student_id": {"$in": student_ids}}, {"_id": 0}
+    ).sort("created_at", -1).to_list(10000)
+
+    inscriptions_by_student = {}
+    for i in inscriptions:
+        inscriptions_by_student.setdefault(i["student_id"], []).append(i)
+    dossiers_by_student = {}
+    for d in dossiers:
+        dossiers_by_student.setdefault(d["student_id"], []).append(d)
+
+    result = []
+    for s in students:
+        my_inscriptions = inscriptions_by_student.get(s["id"], [])
+        my_dossiers = dossiers_by_student.get(s["id"], [])
+        latest_dossier = my_dossiers[0] if my_dossiers else None
+        result.append({
+            **s,
+            "inscriptions_count": len(my_inscriptions),
+            "formations": [i["formation_title"] for i in my_inscriptions],
+            "categories": sorted({i["category"] for i in my_inscriptions if i.get("category")}),
+            "payment_status": my_inscriptions[0]["payment_status"] if my_inscriptions else None,
+            "inscription_status": my_inscriptions[0]["status"] if my_inscriptions else None,
+            "dossier_id": latest_dossier["id"] if latest_dossier else None,
+            "dossier_status": latest_dossier["status"] if latest_dossier else None,
+            "last_inscription_at": my_inscriptions[0]["created_at"] if my_inscriptions else None,
+        })
+    return result
+
+
 @router.get("/inscriptions")
 async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
     items = await db.inscriptions.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
