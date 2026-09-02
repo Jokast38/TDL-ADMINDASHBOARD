@@ -18,6 +18,21 @@ const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", curr
 
 const PAYMENT_LABEL = { pending: "En attente", paid: "Payé", refunded: "Remboursé" };
 
+// Tag de suivi commercial manuel — distinct du statut du dossier (traitement
+// administratif) et du statut de l'inscription (active/annulée) : c'est le
+// suivi "où en est le contact avec cette personne" (voir backend/models/
+// inscription.py:InscriptionUpdate.contact_status).
+const CONTACT_STATUS_LABEL = {
+  en_cours: "En cours d'inscription", a_contacter: "À contacter",
+  sans_reponse: "Sans réponse", finalisee: "Inscription finalisée",
+};
+const CONTACT_STATUS_COLOR = {
+  en_cours: "bg-blue-100 text-blue-700 hover:bg-blue-100",
+  a_contacter: "bg-[#F5A623]/10 text-[#F5A623] hover:bg-[#F5A623]/10",
+  sans_reponse: "bg-red-100 text-red-700 hover:bg-red-100",
+  finalisee: "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10",
+};
+
 // Statut du dossier de traitement (voir backend/routers/inscriptions.py — collection
 // dossiers). "nouveau" est le seul statut qui déclenche le récap matinal envoyé aux
 // employés (voir services/staff_notify.py) : dès qu'on le fait passer à un statut
@@ -55,6 +70,7 @@ export default function Inscriptions() {
   const [paymentFilter, setPaymentFilter] = useState("all"); // all | paid | unpaid
   const [traitementFilter, setTraitementFilter] = useState("all"); // all | traite | non_traite
   const [statusFilter, setStatusFilter] = useState("all"); // all | active | cloturee
+  const [contactFilter, setContactFilter] = useState("all"); // all | en_cours | a_contacter | sans_reponse | finalisee
   const [page, setPage] = useState(1);
 
   // Section "Demandes de rappel" : repliée par défaut pour laisser la place à
@@ -148,13 +164,19 @@ export default function Inscriptions() {
       statusFilter === "all" ? true :
       statusFilter === "cloturee" ? i.status === "annulee" :
       i.status !== "annulee";
-    return matchesQuery && matchesPayment && matchesTraitement && matchesStatus;
-  }), [items, q, paymentFilter, traitementFilter, statusFilter]);
+    const matchesContact = contactFilter === "all" ? true : (i.contact_status || "en_cours") === contactFilter;
+    return matchesQuery && matchesPayment && matchesTraitement && matchesStatus && matchesContact;
+  }), [items, q, paymentFilter, traitementFilter, statusFilter, contactFilter]);
 
-  useEffect(() => { setPage(1); }, [q, paymentFilter, traitementFilter, statusFilter]);
+  useEffect(() => { setPage(1); }, [q, paymentFilter, traitementFilter, statusFilter, contactFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const updateContactStatus = async (id, contact_status) => {
+    try { await api.put(`/inscriptions/${id}`, { contact_status }); toast.success("Tag mis à jour"); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+  };
 
   const updatePaymentStatus = async (id, payment_status) => {
     try { await api.put(`/inscriptions/${id}`, { payment_status }); toast.success("Statut de paiement mis à jour"); load(); }
@@ -320,6 +342,13 @@ export default function Inscriptions() {
             <SelectItem value="cloturee">Clôturées</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={contactFilter} onValueChange={setContactFilter}>
+          <SelectTrigger className="w-48" data-testid="filter-contact"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tag : tous</SelectItem>
+            {Object.entries(CONTACT_STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
@@ -334,6 +363,7 @@ export default function Inscriptions() {
                 <th className="py-3 px-4 overline">Paiement</th>
                 <th className="py-3 px-4 overline">Statut</th>
                 <th className="py-3 px-4 overline">Traitement</th>
+                <th className="py-3 px-4 overline">Tag</th>
                 <th className="py-3 px-4 overline text-right">Prix</th>
                 <th className="py-3 px-4 overline text-right">Actions</th>
               </tr>
@@ -388,6 +418,16 @@ export default function Inscriptions() {
                       ) : (
                         <span className="text-xs text-gray-300">—</span>
                       )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <Select value={i.contact_status || "en_cours"} onValueChange={(v) => updateContactStatus(i.id, v)} disabled={cancelled}>
+                        <SelectTrigger className={`h-7 text-xs w-44 border-0 ${CONTACT_STATUS_COLOR[i.contact_status || "en_cours"]}`} data-testid={`contact-status-${i.id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(CONTACT_STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </td>
                     <td className="py-3 px-4 text-right font-mono">{fmtMoney(i.price)}</td>
                     <td className="py-3 px-4 text-right">
@@ -450,7 +490,7 @@ export default function Inscriptions() {
                 );
               })}
               {!paged.length && (
-                <tr><td colSpan="9" className="py-12 text-center text-gray-400">Aucune inscription.</td></tr>
+                <tr><td colSpan="10" className="py-12 text-center text-gray-400">Aucune inscription.</td></tr>
               )}
             </tbody>
           </table>

@@ -23,6 +23,10 @@ class InscriptionUpdate(BaseModel):
     student_phone: Optional[str] = None
     payment_status: Optional[str] = None
     notes: Optional[str] = None
+    # Tag de suivi commercial manuel (voir CONTACT_STATUS_LABEL côté
+    # frontend) : "en_cours", "a_contacter", "sans_reponse", "finalisee".
+    # Distinct de `status` (active/annulee) et du statut du dossier.
+    contact_status: Optional[str] = None
 
 
 class DossierUpdate(BaseModel):
