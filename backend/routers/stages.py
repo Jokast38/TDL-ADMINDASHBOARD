@@ -12,6 +12,16 @@ from models.stage import StageIn, StageUpdate
 router = APIRouter(prefix="/stages", tags=["stages"])
 
 
+def _stage_animateur_ids(stage: dict) -> list:
+    """Un stage peut avoir plusieurs formateurs (animateur_ids) ; l'ancien
+    champ animateur_id (1 seul) reste lu pour compatibilité avec les stages
+    créés avant ce changement."""
+    ids = list(stage.get("animateur_ids") or [])
+    if stage.get("animateur_id") and stage["animateur_id"] not in ids:
+        ids.append(stage["animateur_id"])
+    return ids
+
+
 def _stage_days(stage: dict) -> list:
     try:
         from datetime import date as _date
@@ -37,9 +47,9 @@ async def list_stages(
     if formation_id: q["formation_id"] = formation_id
     if statut: q["statut"] = statut
     if user["role"] == "animateur":
-        q["animateur_id"] = user["id"]
+        q["$or"] = [{"animateur_ids": user["id"]}, {"animateur_id": user["id"]}]
     elif animateur_id:
-        q["animateur_id"] = animateur_id
+        q["$or"] = [{"animateur_ids": animateur_id}, {"animateur_id": animateur_id}]
     return await db.stages.find(q, {"_id": 0}).sort("date_debut", -1).to_list(500)
 
 
@@ -49,6 +59,11 @@ async def create_stage(payload: StageIn, user: dict = Depends(require_role("admi
     if not formation:
         raise HTTPException(status_code=404, detail="Formation introuvable")
     doc = payload.model_dump()
+    ids = list(doc.get("animateur_ids") or [])
+    if doc.get("animateur_id") and doc["animateur_id"] not in ids:
+        ids.append(doc["animateur_id"])
+    doc["animateur_ids"] = ids
+    doc["animateur_id"] = ids[0] if ids else None
     doc["id"] = str(uuid.uuid4())
     doc["formation_titre"] = formation.get("title")
     doc["statut"] = "planifie"
@@ -65,11 +80,18 @@ async def update_stage(sid: str, payload: StageUpdate, user: dict = Depends(requ
     if not existing:
         raise HTTPException(status_code=404, detail="Stage introuvable")
     if user["role"] == "animateur":
-        if existing.get("animateur_id") != user["id"]:
+        if user["id"] not in _stage_animateur_ids(existing):
             raise HTTPException(status_code=403, detail="Accès refusé")
         update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if k in ("statut", "notes")}
     else:
         update = payload.model_dump(exclude_unset=True)
+        if "animateur_ids" in update or "animateur_id" in update:
+            ids = list(update.get("animateur_ids") if update.get("animateur_ids") is not None else existing.get("animateur_ids") or [])
+            single = update.get("animateur_id", existing.get("animateur_id"))
+            if single and single not in ids:
+                ids.append(single)
+            update["animateur_ids"] = ids
+            update["animateur_id"] = ids[0] if ids else None
     update["updated_at"] = now_iso()
     await db.stages.update_one({"id": sid}, {"$set": update})
     return await db.stages.find_one({"id": sid}, {"_id": 0})
@@ -98,7 +120,7 @@ async def stage_inscrits(sid: str, session_date: Optional[str] = None, user: dic
     stage = await db.stages.find_one({"id": sid}, {"_id": 0})
     if not stage:
         raise HTTPException(status_code=404, detail="Stage introuvable")
-    if user["role"] == "animateur" and stage.get("animateur_id") != user["id"]:
+    if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
         raise HTTPException(status_code=403, detail="Accès refusé")
     session_date = session_date or _stage_days(stage)[0]
     inscrits = await db.inscriptions.find({"formation_id": stage["formation_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)

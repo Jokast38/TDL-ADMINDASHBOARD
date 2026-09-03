@@ -76,7 +76,19 @@ export default function DocumentsLibrary() {
   const [tplId, setTplId] = useState("");
   const [ctx, setCtx] = useState({});
   const [previewing, setPreviewing] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+
+  // Source des infos (base de données vs saisie manuelle) et destinataire
+  // (téléchargement uniquement vs envoi par email) — s'appliquent à tous les
+  // modèles du formulaire de génération.
+  const [dossiers, setDossiers] = useState([]);
+  const [sourceMode, setSourceMode] = useState("manual"); // "manual" | "db"
+  const [dossierQuery, setDossierQuery] = useState("");
+  const [selectedDossierId, setSelectedDossierId] = useState("");
+  const [sendMode, setSendMode] = useState("download"); // "download" | "email"
+  const [sendEmail, setSendEmail] = useState("");
+  const [sendMessage, setSendMessage] = useState("");
 
   const [tests, setTests] = useState([]);
   const [testOpen, setTestOpen] = useState(false);
@@ -111,6 +123,7 @@ export default function DocumentsLibrary() {
   useEffect(() => { checkSignature(); }, []);
   useEffect(() => { loadTests(); }, []);
   useEffect(() => { api.get("/employees").then((r) => setStaff(r.data)).catch(() => {}); }, []);
+  useEffect(() => { api.get("/dossiers").then((r) => setDossiers(r.data)).catch(() => {}); }, []);
 
   const filtered = items.filter((d) => (d.nom_fichier + (d.template_nom || "") + (d.type_doc || "")).toLowerCase().includes(q.toLowerCase()));
 
@@ -130,26 +143,75 @@ export default function DocumentsLibrary() {
       .then((r) => r.blob()).then((blob) => window.open(URL.createObjectURL(blob), "_blank"));
   };
 
+  const selectedTemplate = templates.find((t) => t.id === tplId);
+  const isStructuredTemplate = selectedTemplate?.generator === "stage_recup";
+
+  const resetGenForm = () => {
+    setTplId(""); setCtx({});
+    setSourceMode("manual"); setDossierQuery(""); setSelectedDossierId("");
+    setSendMode("download"); setSendEmail(""); setSendMessage("");
+  };
+
   const selectTemplate = (id) => {
     setTplId(id);
     const tpl = templates.find((t) => t.id === id);
-    if (tpl) setCtx(buildDefaultContext(tpl));
+    if (tpl && tpl.generator !== "stage_recup") setCtx(buildDefaultContext(tpl));
+    else setCtx({});
+    setSelectedDossierId(""); setDossierQuery("");
+    setSourceMode(tpl?.generator === "stage_recup" ? "db" : "manual");
   };
+
+  // Pré-remplit les champs du formulaire à partir d'un dossier choisi dans la
+  // base — ne couvre que les correspondances évidentes (nom/email/formation),
+  // le reste des champs (spécifiques au modèle) reste à compléter à la main.
+  const applyDossierToContext = (dossier) => {
+    setSelectedDossierId(dossier.id);
+    setSendEmail(dossier.student_email || "");
+    setCtx((c) => {
+      const next = { ...c };
+      Object.keys(next).forEach((k) => {
+        const key = k.toLowerCase();
+        if (key.includes("email")) next[k] = dossier.student_email || next[k];
+        else if (key.includes("formation")) next[k] = dossier.formation_title || next[k];
+        else if (key.includes("nom") && !key.includes("organisme") && !key.includes("representant") && !key.includes("signataire") && !key.includes("formateur") && !key.includes("service")) {
+          next[k] = dossier.student_name || next[k];
+        }
+      });
+      return next;
+    });
+  };
+
+  const filteredDossiers = dossiers.filter((d) =>
+    !dossierQuery || (d.student_name || "").toLowerCase().includes(dossierQuery.toLowerCase())
+  ).slice(0, 30);
 
   const generate = async () => {
     if (!tplId) return toast.error("Choisissez un modèle");
+    if (isStructuredTemplate && !selectedDossierId) return toast.error("Choisissez un dossier (récupération de points)");
+    if (sendMode === "email" && !sendEmail.trim()) return toast.error("Indiquez l'email du destinataire");
+    setGenerating(true);
     try {
-      await api.post("/documents-generated", { template_id: tplId, context: ctx });
-      toast.success("Document PDF généré");
+      const { data } = await api.post("/documents-generated", {
+        template_id: tplId, context: ctx,
+        dossier_id: selectedDossierId || null,
+        send_to_email: sendMode === "email" ? sendEmail : null,
+        send_message: sendMode === "email" ? sendMessage : null,
+      });
+      toast.success(sendMode === "email" && data.sent_to_email ? `Document généré et envoyé à ${data.sent_to_email}` : "Document PDF généré");
+      if (data.send_error) toast.error(`Généré, mais l'envoi par email a échoué : ${data.send_error}`);
       setGenOpen(false);
+      resetGenForm();
       load();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur génération");
+    } finally {
+      setGenerating(false);
     }
   };
 
   const previewTemplate = async () => {
     if (!tplId) return toast.error("Choisissez un modèle");
+    if (isStructuredTemplate) return toast.error("Aperçu non disponible pour ce modèle — utilisez directement « Générer »");
     setPreviewing(true);
     try {
       const res = await api.post("/documents-generated/preview", { template_id: tplId, context: ctx }, { responseType: "blob" });
@@ -384,15 +446,15 @@ export default function DocumentsLibrary() {
             </div>
           </DialogContent>
         </Dialog>
-        <Dialog open={genOpen} onOpenChange={setGenOpen}>
+        <Dialog open={genOpen} onOpenChange={(v) => { setGenOpen(v); if (!v) resetGenForm(); }}>
           <DialogTrigger asChild>
             <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="gen-doc-btn">
               <Plus size={16} className="mr-1" /> Générer un document
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl" data-testid="gen-dialog">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" data-testid="gen-dialog">
             <DialogHeader><DialogTitle>Générer un PDF depuis un modèle</DialogTitle></DialogHeader>
-            <div className="space-y-3 mt-2">
+            <div className="space-y-4 mt-2">
               <div>
                 <label className="text-sm font-medium">Modèle</label>
                 <Select value={tplId} onValueChange={selectTemplate}>
@@ -402,7 +464,51 @@ export default function DocumentsLibrary() {
                   </SelectContent>
                 </Select>
               </div>
-              {tplId && (
+
+              {tplId && !isStructuredTemplate && (
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Source des informations</label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setSourceMode("manual")} className={`flex-1 text-sm px-3 py-2 rounded-md border ${sourceMode === "manual" ? "border-[#d4af37] bg-[#d4af37]/10" : "border-gray-200"}`}>
+                      Saisie manuelle
+                    </button>
+                    <button type="button" onClick={() => setSourceMode("db")} className={`flex-1 text-sm px-3 py-2 rounded-md border ${sourceMode === "db" ? "border-[#d4af37] bg-[#d4af37]/10" : "border-gray-200"}`}>
+                      Depuis un dossier (base de données)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {tplId && (sourceMode === "db" || isStructuredTemplate) && (
+                <div>
+                  <label className="text-sm font-medium">Dossier {isStructuredTemplate && "(récupération de points)"}</label>
+                  <Input
+                    placeholder="Rechercher un apprenant par nom..."
+                    value={dossierQuery}
+                    onChange={(e) => setDossierQuery(e.target.value)}
+                    className="mb-2"
+                    data-testid="gen-dossier-search"
+                  />
+                  <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-md divide-y">
+                    {filteredDossiers
+                      .filter((d) => !isStructuredTemplate || d.category === "PERMIS")
+                      .map((d) => (
+                        <button
+                          type="button"
+                          key={d.id}
+                          onClick={() => applyDossierToContext(d)}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${selectedDossierId === d.id ? "bg-[#d4af37]/10" : ""}`}
+                        >
+                          <span className="font-medium">{d.student_name}</span>
+                          <span className="text-xs text-gray-400 ml-2">{d.formation_title}</span>
+                        </button>
+                      ))}
+                    {!filteredDossiers.length && <p className="px-3 py-2 text-xs text-gray-400">Aucun dossier trouvé.</p>}
+                  </div>
+                </div>
+              )}
+
+              {tplId && !isStructuredTemplate && (
                 <div>
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium">Champs du modèle</label>
@@ -427,17 +533,48 @@ export default function DocumentsLibrary() {
                     ))}
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Les infos entreprise et les dates sont pré-remplies automatiquement. Complétez les champs propres à l'élève / la formation.
+                    Les infos entreprise et les dates sont pré-remplies automatiquement.
+                    {sourceMode === "db" ? " Les champs correspondants ont été pré-remplis depuis le dossier sélectionné." : " Complétez les champs propres à l'élève / la formation."}
                   </p>
+                </div>
+              )}
+
+              {tplId && (
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Destinataire</label>
+                  <div className="flex gap-2 mb-2">
+                    <button type="button" onClick={() => setSendMode("download")} className={`flex-1 text-sm px-3 py-2 rounded-md border ${sendMode === "download" ? "border-[#d4af37] bg-[#d4af37]/10" : "border-gray-200"}`}>
+                      Générer et télécharger depuis la bibliothèque
+                    </button>
+                    <button type="button" onClick={() => setSendMode("email")} className={`flex-1 text-sm px-3 py-2 rounded-md border ${sendMode === "email" ? "border-[#d4af37] bg-[#d4af37]/10" : "border-gray-200"}`}>
+                      Envoyer par email
+                    </button>
+                  </div>
+                  {sendMode === "email" && (
+                    <div className="space-y-2">
+                      <Input
+                        type="email" placeholder="destinataire@email.com"
+                        value={sendEmail} onChange={(e) => setSendEmail(e.target.value)}
+                        data-testid="gen-send-email"
+                      />
+                      <Input
+                        placeholder="Message (optionnel)"
+                        value={sendMessage} onChange={(e) => setSendMessage(e.target.value)}
+                      />
+                      <p className="text-xs text-gray-400">Le document reste aussi enregistré dans la bibliothèque comme d'habitude.</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setGenOpen(false)}>Annuler</Button>
-              <Button variant="outline" onClick={previewTemplate} disabled={!tplId || previewing} data-testid="gen-preview">
+              <Button variant="outline" onClick={previewTemplate} disabled={!tplId || previewing || isStructuredTemplate} data-testid="gen-preview">
                 <Eye size={16} className="mr-1" /> {previewing ? "Aperçu..." : "Aperçu"}
               </Button>
-              <Button onClick={generate} className="bg-[#d4af37] text-black hover:bg-[#b8941f]" data-testid="gen-submit">Générer</Button>
+              <Button onClick={generate} disabled={generating} className="bg-[#d4af37] text-black hover:bg-[#b8941f]" data-testid="gen-submit">
+                {generating ? "Génération..." : "Générer"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

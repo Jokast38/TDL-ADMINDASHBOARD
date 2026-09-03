@@ -1,13 +1,14 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from core.database import db
 from core.security import require_role
 from core.utils import now_iso
-from core.config import PUBLIC_FRONTEND_URL
+from core.config import PUBLIC_FRONTEND_URL, ROLES_DOSSIERS_MGMT
 from models.payment import PaymentToggleIn, CheckoutIn
 from services import stripe_service
 from services.meta_capi import send_capi_event
+from services.pdf import generate_payment_receipt_pdf
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 log = logging.getLogger(__name__)
@@ -18,8 +19,15 @@ log = logging.getLogger(__name__)
 # tunnel d'origine, et aucun événement Purchase (pixel/CAPI) ne peut s'y
 # rattacher correctement. Étendre ce dict pour toute nouvelle landing page
 # vendant en direct (voir StripeCheckout.jsx / StageLandingPage.jsx).
+# "admin_walkin" : inscription sur place saisie par un agent depuis
+# /admin/inscriptions (voir Inscriptions.jsx), avec retour sur une page de
+# confirmation dédiée côté dashboard plutôt que le tunnel public.
 _LANDING_THANK_YOU_PATHS = {
     "stage_recuperation_points": "/stage-recuperation-points/merci",
+    "admin_walkin": "/admin/paiement-confirmation",
+}
+_LANDING_CANCEL_PATHS = {
+    "admin_walkin": "/admin/inscriptions",
 }
 
 
@@ -71,8 +79,9 @@ async def create_checkout(payload: CheckoutIn, request: Request):
     if thank_you_path:
         import urllib.parse
         session_q = urllib.parse.quote(inscription.get("session") or "")
+        cancel_path = _LANDING_CANCEL_PATHS.get(inscription.get("source"), thank_you_path.rsplit("/", 1)[0])
         success_url = f"{PUBLIC_FRONTEND_URL}{thank_you_path}?inscription={inscription['id']}&value={inscription.get('price', 0)}&session={session_q}"
-        cancel_url = f"{PUBLIC_FRONTEND_URL}{thank_you_path.rsplit('/', 1)[0]}?paiement=annule&inscription={inscription['id']}"
+        cancel_url = f"{PUBLIC_FRONTEND_URL}{cancel_path}?paiement=annule&inscription={inscription['id']}"
     else:
         success_url = f"{PUBLIC_FRONTEND_URL}/inscription?paiement=succes&inscription={inscription['id']}"
         cancel_url = f"{PUBLIC_FRONTEND_URL}/inscription?paiement=annule&inscription={inscription['id']}"
@@ -161,3 +170,21 @@ async def stripe_webhook(request: Request):
             )
 
     return {"received": True}
+
+
+@router.get("/{iid}/receipt")
+async def download_receipt(iid: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Reçu PDF téléchargeable une fois l'inscription payée — utilisé depuis
+    la page de confirmation de paiement (inscription sur place, voir
+    PaiementConfirmation.jsx)."""
+    inscription = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    if not inscription:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    if inscription.get("payment_status") != "paid":
+        raise HTTPException(status_code=400, detail="Cette inscription n'est pas encore marquée comme payée")
+    formation = await db.formations.find_one({"id": inscription.get("formation_id")}, {"_id": 0})
+    settings_doc = await _settings()
+    pdf_bytes = generate_payment_receipt_pdf(inscription, formation, settings_doc)
+    return Response(content=pdf_bytes, media_type="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="recu-{iid[:8]}.pdf"'
+    })

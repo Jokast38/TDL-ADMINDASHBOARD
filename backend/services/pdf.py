@@ -142,7 +142,11 @@ def generate_stage_recup_points_attestation(
     agrement_numero.
     `animateurs` : dict avec bafm_nom, bafm_numero, psychologue_nom,
     psychologue_numero — les deux profils requis par la réglementation pour
-    ce type de stage (un animateur BAFM + un psychologue).
+    ce type de stage (un animateur BAFM + un psychologue). Si plusieurs
+    formateurs sont assignés à la session, passer `animateurs["formateurs_list"]`
+    = liste de {nom, titre, numero, signature_data_url} : chacun est alors
+    dessiné avec son propre intitulé et sa signature (bafm_nom/bafm_numero/
+    formateur_signature_data_url sont ignorés dans ce cas).
     `stagiaire` : dict avec nom, prenom, adresse, ville, date_naissance,
     lieu_naissance, numero_permis, date_delivrance_permis,
     prefecture_delivrance.
@@ -255,18 +259,35 @@ def generate_stage_recup_points_attestation(
     c.setFont("Helvetica", 9.5)
     c.drawString(col1, y, centre.get("directeur_nom", ""))
 
-    c.setFont("Helvetica-Bold", 9)
-    c.drawCentredString(col2 + 2.3 * cm, y, "BAFM")
-    c.setFont("Helvetica", 9)
-    c.drawCentredString(col2 + 2.3 * cm, y - 0.45 * cm, animateurs.get("bafm_nom", ""))
-    c.drawCentredString(col2 + 2.3 * cm, y - 0.9 * cm, animateurs.get("bafm_numero", ""))
+    formateurs_list = animateurs.get("formateurs_list")  # liste multi-formateur, voir docstring
+    if formateurs_list:
+        # Plusieurs formateurs assignés à la session (voir Stages.jsx multi-
+        # sélection) : chacun est dessiné avec son intitulé (BAFM, moniteur...)
+        # et sa propre signature, empilés — taille réduite si plus de 2 pour
+        # rester dans le même espace vertical que le cas mono-formateur.
+        n = len(formateurs_list)
+        sig_h = 1.5 * cm if n <= 2 else (0.95 * cm if n == 3 else 0.7 * cm)
+        row_h = sig_h + 0.75 * cm
+        cy = y
+        for f in formateurs_list:
+            c.setFont("Helvetica-Bold", 8.5)
+            c.drawCentredString(col2 + 2.3 * cm, cy, (f.get("titre") or "Formateur")[:30])
+            c.setFont("Helvetica", 8)
+            c.drawCentredString(col2 + 2.3 * cm, cy - 0.35 * cm, f"{f.get('nom', '')} {f.get('numero') or ''}".strip())
+            _draw_data_url_image(c, f.get("signature_data_url"), col2 + 0.9 * cm, cy - 0.5 * cm - sig_h, 2.8 * cm, sig_h)
+            cy -= row_h
+    else:
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(col2 + 2.3 * cm, y, "BAFM")
+        c.setFont("Helvetica", 9)
+        c.drawCentredString(col2 + 2.3 * cm, y - 0.45 * cm, animateurs.get("bafm_nom", ""))
+        c.drawCentredString(col2 + 2.3 * cm, y - 0.9 * cm, animateurs.get("bafm_numero", ""))
+        # Signature de l'animateur BAFM (réutilise la signature staff
+        # existante, voir POST /me/signature côté employees.py).
+        _draw_data_url_image(c, formateur_signature_data_url, col2 + 0.6 * cm, y - 2.3 * cm, 3.4 * cm, 1.6 * cm)
 
     # Cachet du centre (case "directeur") — image par défaut du centre.
     _draw_data_url_image(c, cachet_data_url, col1, y - 3.3 * cm, 4.5 * cm, 2.6 * cm)
-
-    # Signature de l'animateur BAFM (réutilise la signature staff existante,
-    # voir POST /me/signature côté employees.py).
-    _draw_data_url_image(c, formateur_signature_data_url, col2 + 0.6 * cm, y - 2.3 * cm, 3.4 * cm, 1.6 * cm)
 
     # Psychologue — deuxième profil requis par la réglementation.
     y2 = y - 2.7 * cm
@@ -284,6 +305,92 @@ def generate_stage_recup_points_attestation(
     c.setFont("Helvetica", 7.5)
     c.drawCentredString(w / 2, 1.2 * cm, f"{centre.get('nom', 'TDL Formation')} · Agrément préfectoral {centre.get('agrement_numero', '')} · SIRET {centre.get('siret', '')}")
 
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def generate_payment_receipt_pdf(inscription: dict, formation: dict, settings_doc: Optional[dict] = None) -> bytes:
+    """Reçu de paiement remis après un règlement Stripe déclenché par un agent
+    depuis le dashboard (inscription sur place, voir POST /payments/checkout
+    avec source="admin_walkin" et GET /payments/{id}/receipt)."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    import io as _io
+
+    settings_doc = settings_doc or {}
+    centre_nom = settings_doc.get("attestation_centre_nom") or "TDL Formation"
+    centre_adresse = settings_doc.get("attestation_centre_adresse") or ""
+    centre_ville = settings_doc.get("attestation_centre_ville") or ""
+    centre_siret = settings_doc.get("attestation_centre_siret") or ""
+
+    buf = _io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    gold = colors.HexColor("#d4af37")
+    black = colors.HexColor("#0a0a0a")
+
+    c.setFillColor(black)
+    c.rect(0, h - 3 * cm, w, 3 * cm, fill=1, stroke=0)
+    c.setFillColor(gold)
+    c.setFont("Helvetica-Bold", 22)
+    c.drawString(2 * cm, h - 1.8 * cm, centre_nom.upper())
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica", 10)
+    c.drawString(2 * cm, h - 2.5 * cm, f"{centre_adresse}, {centre_ville}".strip(", "))
+
+    c.setFillColor(black)
+    c.setFont("Helvetica-Bold", 18)
+    c.drawCentredString(w / 2, h - 5 * cm, "REÇU DE PAIEMENT")
+    c.setFont("Helvetica", 10)
+    c.setFillColor(colors.HexColor("#666666"))
+    paid_at = (inscription.get("paid_at") or "")[:10] or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    c.drawCentredString(w / 2, h - 5.6 * cm, f"N° {inscription.get('id', '')[:8].upper()} — délivré le {paid_at}")
+
+    y = h - 7.5 * cm
+    c.setFillColor(black)
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(2 * cm, y, "Client")
+    y -= 0.6 * cm
+    c.setFont("Helvetica", 11)
+    for line in [
+        inscription.get("student_name", "—"),
+        inscription.get("student_email", "—"),
+        inscription.get("student_phone") or "",
+    ]:
+        if line:
+            c.drawString(2 * cm, y, line)
+            y -= 0.55 * cm
+
+    y -= 0.7 * cm
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(2 * cm, y, "Formation")
+    y -= 0.6 * cm
+    c.setFont("Helvetica", 11)
+    c.drawString(2 * cm, y, formation.get("title", inscription.get("formation_title", "—")) if formation else inscription.get("formation_title", "—"))
+    y -= 1.2 * cm
+
+    c.setStrokeColor(colors.HexColor("#e0e0e0"))
+    c.setLineWidth(1)
+    c.line(2 * cm, y, w - 2 * cm, y)
+    y -= 1 * cm
+
+    amount = inscription.get("amount_paid") if inscription.get("amount_paid") is not None else inscription.get("price", 0)
+    c.setFont("Helvetica-Bold", 13)
+    c.drawString(2 * cm, y, "Montant réglé")
+    c.setFillColor(gold)
+    c.drawRightString(w - 2 * cm, y, f"{amount:.2f} €")
+    c.setFillColor(black)
+    y -= 0.6 * cm
+    c.setFont("Helvetica", 9)
+    c.setFillColor(colors.HexColor("#666"))
+    c.drawString(2 * cm, y, "Mode de paiement : carte bancaire (Stripe)")
+
+    c.setFillColor(colors.HexColor("#666"))
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(w / 2, 1.5 * cm, f"SIRET : {centre_siret}   ·   {centre_nom}   ·   contact@tdlformation.fr")
     c.showPage()
     c.save()
     return buf.getvalue()

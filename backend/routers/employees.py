@@ -7,7 +7,7 @@ from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
-from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn
+from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 
 router = APIRouter(tags=["employees"])
@@ -32,14 +32,23 @@ async def list_users(user: dict = Depends(require_role("admin"))):
     return await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(1000)
 
 
-# Le responsable commercial gère uniquement l'équipe commerciale, pas tout le
-# staff (admins, animateurs...) : on restreint son périmètre à ce rôle.
+# Le responsable commercial gère uniquement l'équipe commerciale et l'agent
+# administratif uniquement les formateurs (page Formateurs) — pas tout le
+# staff (admins, autres commerciaux...) : on restreint leur périmètre.
 MANAGEABLE_ROLES_BY_MANAGER = ("commercial",)
+MANAGEABLE_ROLES_BY_ROLE = {
+    "responsable_commercial": ("commercial",),
+    "agent_admin": ("animateur",),
+}
+
+
+def _manageable_roles(role: str) -> tuple:
+    return MANAGEABLE_ROLES_BY_ROLE.get(role, ())
 
 
 @router.get("/employees")
-async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
-    roles = list(VALID_STAFF_ROLES) if user["role"] == "admin" else list(MANAGEABLE_ROLES_BY_MANAGER)
+async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin"))):
+    roles = list(VALID_STAFF_ROLES) if user["role"] == "admin" else list(_manageable_roles(user["role"]))
     return await db.users.find(
         {"role": {"$in": roles}},
         {"_id": 0, "password_hash": 0}
@@ -47,12 +56,12 @@ async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
 
 
 @router.post("/employees")
-async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
+async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin"))):
     existing = await db.users.find_one({"email": payload.email.lower()})
     if existing:
         raise HTTPException(status_code=400, detail="Email déjà utilisé")
-    if user["role"] != "admin" and payload.role not in MANAGEABLE_ROLES_BY_MANAGER:
-        raise HTTPException(status_code=403, detail="Vous ne pouvez créer que des comptes commerciaux")
+    if user["role"] != "admin" and payload.role not in _manageable_roles(user["role"]):
+        raise HTTPException(status_code=403, detail="Vous ne pouvez créer que des comptes de votre périmètre")
     role = payload.role if payload.role in VALID_STAFF_ROLES else "employe"
     doc = {
         "id": str(uuid.uuid4()), "email": payload.email.lower(), "name": payload.name,
@@ -60,6 +69,7 @@ async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role
         "assigned_categories": payload.assigned_categories,
         "assigned_centers": payload.assigned_centers,
         "assigned_training_assignments": payload.assigned_training_assignments,
+        "titre": payload.titre,
         "password_hash": hash_password(payload.password),
         "created_at": now_iso(), "active": True, "account_status": "actif",
         "must_change_password": True,
@@ -141,10 +151,27 @@ async def update_employee_assignments(uid: str, payload: AssignedTrainingAssignm
     return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
 
 
+@router.put("/employees/{uid}/titre")
+async def update_employee_titre(uid: str, payload: EmployeeTitreIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin"))):
+    """Intitulé affiché sur les documents générés (attestations...) pour ce
+    formateur — ex: "Formateur BAFM", "Moniteur auto-école"."""
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user["role"] != "admin" and target.get("role") not in _manageable_roles(user["role"]):
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes de votre périmètre")
+    await db.users.update_one({"id": uid}, {"$set": {"titre": payload.titre, "updated_at": now_iso()}})
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+
+
 @router.delete("/employees/{uid}")
-async def delete_employee(uid: str, user: dict = Depends(require_role("admin"))):
+async def delete_employee(uid: str, user: dict = Depends(require_role("admin", "agent_admin"))):
     if uid == user["id"]:
         raise HTTPException(status_code=400, detail="Impossible de supprimer son propre compte")
+    if user["role"] != "admin":
+        target = await db.users.find_one({"id": uid}, {"_id": 0, "role": 1})
+        if not target or target.get("role") not in _manageable_roles(user["role"]):
+            raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que des comptes de votre périmètre")
     await db.users.delete_one({"id": uid})
     return {"ok": True}
 
@@ -267,9 +294,48 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
 
 
 @router.get("/staff/{uid}/profile")
-async def get_staff_profile(uid: str, user: dict = Depends(require_role("admin", "responsable_admission"))):
+async def get_staff_profile(uid: str, user: dict = Depends(require_role("admin", "responsable_admission", "agent_admin"))):
     profile = await _get_or_create_staff_profile(uid)
     docs = await db.documents.find({"id": {"$in": profile.get("documents", [])}, "is_deleted": False}, {"_id": 0}).to_list(200)
     profile["documents_details"] = docs
     profile["user"] = await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
     return profile
+
+
+@router.post("/staff/{uid}/documents")
+async def upload_staff_document(
+    uid: str, file: UploadFile = File(...), doc_type: str = Form("autre"),
+    user: dict = Depends(require_role("admin", "responsable_admission", "agent_admin")),
+):
+    """Équivalent admin de POST /me/profile/documents — permet de répertorier
+    les habilitations/diplômes d'un formateur directement depuis la page
+    Formateurs du dashboard, sans que l'intéressé n'ait à s'en charger."""
+    target = await db.users.find_one({"id": uid}, {"_id": 0, "id": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    profile = await _get_or_create_staff_profile(uid)
+    data = await file.read()
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 15MB)")
+    ext = (file.filename or "bin").rsplit(".", 1)[-1].lower()
+    path = f"{APP_NAME}/staff_profiles/{uid}/{uuid.uuid4()}.{ext}"
+    result = await put_object(path, data, file.content_type or "application/octet-stream")
+    doc = {
+        "id": str(uuid.uuid4()), "storage_path": result["path"], "original_filename": file.filename,
+        "content_type": file.content_type, "size": result["size"], "doc_type": doc_type,
+        "verification_status": "pending", "uploaded_by": user["id"], "created_at": now_iso(), "is_deleted": False
+    }
+    await db.documents.insert_one(doc)
+    await db.staff_profiles.update_one(
+        {"user_id": uid},
+        {"$push": {"documents": doc["id"]}, "$set": {"updated_at": now_iso()}}
+    )
+    doc.pop("_id", None)
+    return doc
+
+
+@router.delete("/staff/{uid}/documents/{doc_id}")
+async def delete_staff_document(uid: str, doc_id: str, user: dict = Depends(require_role("admin", "responsable_admission", "agent_admin"))):
+    await db.documents.update_one({"id": doc_id}, {"$set": {"is_deleted": True, "deleted_at": now_iso()}})
+    await db.staff_profiles.update_one({"user_id": uid}, {"$pull": {"documents": doc_id}, "$set": {"updated_at": now_iso()}})
+    return {"ok": True}

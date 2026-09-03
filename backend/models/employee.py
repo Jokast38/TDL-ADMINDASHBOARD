@@ -12,6 +12,14 @@ class EmployeeIn(BaseModel):
     assigned_categories: List[str] = []
     assigned_centers: List[str] = []
     assigned_training_assignments: List[dict] = []
+    # Intitulé affiché sur les documents générés (attestations...) pour les
+    # formateurs, ex: "Formateur BAFM", "Moniteur auto-école" — distinct du
+    # `role` (enum technique) qui reste "animateur".
+    titre: Optional[str] = None
+
+
+class EmployeeTitreIn(BaseModel):
+    titre: Optional[str] = None
 
 
 class AccountStatusIn(BaseModel):

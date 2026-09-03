@@ -16,6 +16,12 @@ class InscriptionIn(BaseModel):
     landing_url: Optional[str] = None
     session: Optional[str] = None
     center: Optional[str] = None
+    # Session de stage (backend/models/stage.py) déjà connue à l'inscription
+    # — ex: agent affectant directement un candidat à une session lors d'une
+    # inscription sur place. Optionnel : la plupart des inscriptions sont
+    # créées sans session assignée, puis affectées plus tard (voir
+    # PUT /inscriptions/{iid}/stage).
+    stage_id: Optional[str] = None
 
 
 class InscriptionUpdate(BaseModel):
@@ -27,6 +33,12 @@ class InscriptionUpdate(BaseModel):
     # frontend) : "en_cours", "a_contacter", "sans_reponse", "finalisee".
     # Distinct de `status` (active/annulee) et du statut du dossier.
     contact_status: Optional[str] = None
+
+
+class StageAssignIn(BaseModel):
+    # None = retire l'affectation (inscription pas encore rattachée à une
+    # session, ou à réaffecter plus tard).
+    stage_id: Optional[str] = None
 
 
 class DossierUpdate(BaseModel):

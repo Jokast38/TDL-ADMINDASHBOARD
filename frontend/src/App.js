@@ -32,6 +32,7 @@ import Layout from "@/components/Layout";
 import Dashboard from "@/pages/Dashboard";
 import Formations from "@/pages/Formations";
 import Inscriptions from "@/pages/Inscriptions";
+import PaiementConfirmation from "@/pages/PaiementConfirmation";
 import Students from "@/pages/Students";
 import Exams from "@/pages/Exams";
 import Appointments from "@/pages/Appointments";
@@ -40,6 +41,7 @@ import KamiStreet from "@/pages/KamiStreet";
 import Orders from "@/pages/Orders";
 import AIAssistant from "@/pages/AIAssistant";
 import Employees from "@/pages/Employees";
+import Formateurs from "@/pages/Formateurs";
 import Activity from "@/pages/Activity";
 import Settings from "@/pages/Settings";
 import Marketing from "@/pages/Marketing";
@@ -143,6 +145,9 @@ function App() {
             <Route path="/admin/inscriptions" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Inscriptions /></AdminLayout></ProtectedRoute>
             } />
+            <Route path="/admin/paiement-confirmation" element={
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><PaiementConfirmation /></AdminLayout></ProtectedRoute>
+            } />
             <Route path="/admin/apprenants" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Students /></AdminLayout></ProtectedRoute>
             } />
@@ -181,6 +186,9 @@ function App() {
             } />
             <Route path="/admin/employees" element={
               <ProtectedRoute roles={["admin", "responsable_commercial"]}><AdminLayout><Employees /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/formateurs" element={
+              <ProtectedRoute roles={["admin", "responsable_admission", "agent_admin"]}><AdminLayout><Formateurs /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/activite" element={
               <ProtectedRoute roles={["admin"]}><AdminLayout><Activity /></AdminLayout></ProtectedRoute>

@@ -11,7 +11,7 @@ from models.attestation import AttestationIdentityIn, AttestationSignIn
 from services.email import send_email
 from services.push import send_push_to_user
 from services.pdf import generate_stage_recup_points_attestation
-from routers.stages import _stage_days
+from routers.stages import _stage_days, _stage_animateur_ids
 
 router = APIRouter(prefix="/dossiers", tags=["attestations"])
 
@@ -176,7 +176,9 @@ async def sign_attestation(dossier_id: str, payload: AttestationSignIn, user: di
         "directeur_nom": settings_doc.get("attestation_directeur_nom") or "",
         "agrement_numero": settings_doc.get("attestation_agrement_numero") or "",
     }
-    animateur = await db.users.find_one({"id": stage.get("animateur_id")}, {"_id": 0}) if stage.get("animateur_id") else None
+    animateur_ids = _stage_animateur_ids(stage)
+    animateur_docs = await db.users.find({"id": {"$in": animateur_ids}}, {"_id": 0}).to_list(20) if animateur_ids else []
+    animateur = animateur_docs[0] if animateur_docs else None
     animateurs = {
         "bafm_nom": (animateur or {}).get("name", ""), "bafm_numero": (animateur or {}).get("agrement_bafm_numero", ""),
         "psychologue_nom": settings_doc.get("attestation_psychologue_nom") or "",
@@ -195,6 +197,25 @@ async def sign_attestation(dossier_id: str, payload: AttestationSignIn, user: di
             formateur_signature_data_url = await _path_to_data_url(animateur["signature_path"])
         except Exception:
             formateur_signature_data_url = None
+
+    # Plusieurs formateurs assignés à cette session (voir Stages.jsx) : chacun
+    # est dessiné avec son propre intitulé + signature sur le PDF (voir
+    # generate_stage_recup_points_attestation) plutôt que le seul BAFM.
+    if len(animateur_docs) > 1:
+        formateurs_list = []
+        for a in animateur_docs:
+            sig_url = None
+            if a.get("signature_path"):
+                try:
+                    sig_url = await _path_to_data_url(a["signature_path"])
+                except Exception:
+                    sig_url = None
+            formateurs_list.append({
+                "nom": a.get("name", ""), "titre": a.get("titre") or "Formateur",
+                "numero": a.get("agrement_bafm_numero") or "", "signature_data_url": sig_url,
+            })
+        animateurs["formateurs_list"] = formateurs_list
+
     psychologue_signature_data_url = None
     if settings_doc.get("attestation_psychologue_signature_path"):
         try:

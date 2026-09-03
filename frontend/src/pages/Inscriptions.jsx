@@ -11,7 +11,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise, PhoneCall, Check, Trash, GraduationCap, Hourglass, CaretRight, CaretDown } from "@phosphor-icons/react";
+import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise, PhoneCall, Check, Trash, GraduationCap, Hourglass, CaretRight, CaretDown, Plus, CreditCard, CalendarCheck } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n || 0);
@@ -88,10 +88,61 @@ export default function Inscriptions() {
   const [callbacks, setCallbacks] = useState([]);
 
   const [formations, setFormations] = useState([]);
+  const [stages, setStages] = useState([]);
+  const [assignTarget, setAssignTarget] = useState(null); // inscription en cours de (ré)affectation
+  const [assignStageId, setAssignStageId] = useState("");
+  const [assigning, setAssigning] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [enrollCallback, setEnrollCallback] = useState(null);
   const [enrollForm, setEnrollForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "" });
   const [enrolling, setEnrolling] = useState(false);
+
+  // Inscription sur place par un agent (walk-in), avec paiement carte
+  // (Stripe) immédiat — distinct du flux "Inscrire" ci-dessus qui part d'une
+  // demande de rappel existante et ne déclenche pas de paiement.
+  const [walkinOpen, setWalkinOpen] = useState(false);
+  const [walkinForm, setWalkinForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "", pay_now: true });
+  const [walkinSubmitting, setWalkinSubmitting] = useState(false);
+
+  const openWalkin = () => {
+    setWalkinForm({ formation_id: formations[0]?.id || "", name: "", email: "", phone: "", notes: "", pay_now: true });
+    setWalkinOpen(true);
+  };
+
+  const submitWalkin = async () => {
+    if (!walkinForm.formation_id) return toast.error("Choisissez une formation");
+    if (!walkinForm.name.trim()) return toast.error("Le nom est requis");
+    if (!walkinForm.email.trim()) return toast.error("Un email est requis pour créer l'inscription");
+    setWalkinSubmitting(true);
+    try {
+      const { data } = await api.post("/inscriptions", {
+        formation_id: walkinForm.formation_id,
+        student_name: walkinForm.name,
+        student_email: walkinForm.email,
+        student_phone: walkinForm.phone || null,
+        notes: walkinForm.notes,
+        source: "admin_walkin",
+      });
+      const formation = formations.find((f) => f.id === walkinForm.formation_id);
+      if (walkinForm.pay_now && !formation?.cpf_eligible) {
+        try {
+          const { data: checkout } = await api.post("/payments/checkout", {
+            inscription_id: data.inscription.id, allow_klarna: false,
+          });
+          if (checkout.url) {
+            window.location.href = checkout.url;
+            return;
+          }
+        } catch (e) {
+          toast.error(e.response?.data?.detail || "Inscription créée, mais le paiement n'a pas pu être lancé — encaissez manuellement");
+        }
+      }
+      toast.success("Inscription créée");
+      setWalkinOpen(false);
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Erreur lors de l'inscription"); }
+    finally { setWalkinSubmitting(false); }
+  };
 
   const load = () => api.get("/inscriptions").then((r) => setItems(r.data)).catch(() => toast.error("Erreur de chargement"));
   const loadCallbacks = () => api.get("/callback-requests").then((r) => setCallbacks(r.data)).catch(() => {});
@@ -100,7 +151,28 @@ export default function Inscriptions() {
     load();
     loadCallbacks();
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data)).catch(() => {});
+    api.get("/stages").then((r) => setStages(r.data)).catch(() => {});
   }, []);
+
+  const openAssignStage = (i) => {
+    setAssignTarget(i);
+    setAssignStageId(i.stage_id || "");
+  };
+
+  const submitAssignStage = async () => {
+    if (!assignTarget) return;
+    setAssigning(true);
+    try {
+      await api.put(`/inscriptions/${assignTarget.id}/stage`, { stage_id: assignStageId || null });
+      toast.success(assignStageId ? "Session affectée" : "Session retirée");
+      setAssignTarget(null);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   useEffect(() => {
     if (callbacksToggled) return;
@@ -228,10 +300,15 @@ export default function Inscriptions() {
 
   return (
     <div className="space-y-6" data-testid="inscriptions-page">
-      <div>
-        <p className="overline">Liste complète</p>
-        <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Inscriptions</h1>
-        <p className="text-gray-500 mt-2">{items.length} inscription(s) au total.</p>
+      <div className="flex items-end justify-between flex-wrap gap-4">
+        <div>
+          <p className="overline">Liste complète</p>
+          <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Inscriptions</h1>
+          <p className="text-gray-500 mt-2">{items.length} inscription(s) au total.</p>
+        </div>
+        <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" onClick={openWalkin} data-testid="walkin-btn">
+          <Plus size={16} className="mr-1" /> Inscrire sur place
+        </Button>
       </div>
 
       {callbacks.length > 0 && (
@@ -364,6 +441,8 @@ export default function Inscriptions() {
                 <th className="py-3 px-4 overline">Statut</th>
                 <th className="py-3 px-4 overline">Traitement</th>
                 <th className="py-3 px-4 overline">Tag</th>
+                <th className="py-3 px-4 overline">Session</th>
+                <th className="py-3 px-4 overline">Notes</th>
                 <th className="py-3 px-4 overline text-right">Prix</th>
                 <th className="py-3 px-4 overline text-right">Actions</th>
               </tr>
@@ -429,6 +508,27 @@ export default function Inscriptions() {
                         </SelectContent>
                       </Select>
                     </td>
+                    <td className="py-3 px-4">
+                      <button
+                        onClick={() => openAssignStage(i)}
+                        className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border ${i.stage_id ? "border-[#0B7238] text-[#0B7238] bg-[#0B7238]/5" : "border-gray-200 text-gray-500 hover:border-[#d4af37] hover:text-[#d4af37]"}`}
+                        title={i.stage_id ? "Réaffecter à une autre session" : "Affecter à une session"}
+                        data-testid={`assign-stage-${i.id}`}
+                      >
+                        <CalendarCheck size={12} />
+                        {(() => {
+                          const st = stages.find((s) => s.id === i.stage_id);
+                          return st ? `${st.date_debut} → ${st.date_fin}` : "Non affecté";
+                        })()}
+                      </button>
+                    </td>
+                    <td className="py-3 px-4 max-w-[180px]">
+                      {i.notes ? (
+                        <p className="text-xs text-gray-500 truncate" title={i.notes}>{i.notes}</p>
+                      ) : (
+                        <span className="text-xs text-gray-300">—</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 text-right font-mono">{fmtMoney(i.price)}</td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex justify-end items-center gap-1">
@@ -490,7 +590,7 @@ export default function Inscriptions() {
                 );
               })}
               {!paged.length && (
-                <tr><td colSpan="10" className="py-12 text-center text-gray-400">Aucune inscription.</td></tr>
+                <tr><td colSpan="12" className="py-12 text-center text-gray-400">Aucune inscription.</td></tr>
               )}
             </tbody>
           </table>
@@ -587,6 +687,94 @@ export default function Inscriptions() {
             <Button variant="outline" onClick={() => setEnrollOpen(false)} disabled={enrolling}>Annuler</Button>
             <Button onClick={submitEnroll} disabled={enrolling} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
               {enrolling ? "Inscription..." : "Inscrire"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!assignTarget} onOpenChange={(v) => !v && setAssignTarget(null)}>
+        <DialogContent data-testid="assign-stage-dialog">
+          <DialogHeader><DialogTitle>Affecter une session — {assignTarget?.student_name}</DialogTitle></DialogHeader>
+          <div className="space-y-3 mt-2">
+            <p className="text-xs text-gray-500">
+              Choisissez la session de stage correspondant à <b>{assignTarget?.formation_title}</b>. Pour un repassage
+              (ex: nouvel examen VTC), réaffectez simplement cette inscription à une nouvelle session — inutile de recréer une inscription.
+            </p>
+            <Select value={assignStageId || "none"} onValueChange={(v) => setAssignStageId(v === "none" ? "" : v)}>
+              <SelectTrigger data-testid="assign-stage-select"><SelectValue placeholder="Choisir une session" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Aucune (retirer l'affectation)</SelectItem>
+                {stages.filter((s) => s.formation_id === assignTarget?.formation_id).map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.date_debut} → {s.date_fin} — {s.lieu_ville}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {assignTarget && !stages.some((s) => s.formation_id === assignTarget.formation_id) && (
+              <p className="text-xs text-amber-600">Aucune session planifiée pour cette formation — créez-en une depuis la page Sessions de stage.</p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setAssignTarget(null)} disabled={assigning}>Annuler</Button>
+            <Button onClick={submitAssignStage} disabled={assigning} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="assign-stage-submit">
+              {assigning ? "..." : "Enregistrer"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={walkinOpen} onOpenChange={setWalkinOpen}>
+        <DialogContent data-testid="walkin-dialog">
+          <DialogHeader><DialogTitle>Inscrire une personne sur place</DialogTitle></DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-sm font-medium">Formation</label>
+              <Select value={walkinForm.formation_id} onValueChange={(v) => setWalkinForm({ ...walkinForm, formation_id: v })}>
+                <SelectTrigger data-testid="walkin-formation"><SelectValue placeholder="Choisir une formation" /></SelectTrigger>
+                <SelectContent>
+                  {formations.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>{f.title}{f.cpf_eligible ? " (CPF)" : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Nom</label>
+              <Input value={walkinForm.name} onChange={(e) => setWalkinForm({ ...walkinForm, name: e.target.value })} data-testid="walkin-name" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
+                <Input value={walkinForm.email} onChange={(e) => setWalkinForm({ ...walkinForm, email: e.target.value })} data-testid="walkin-email" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Téléphone</label>
+                <Input value={walkinForm.phone} onChange={(e) => setWalkinForm({ ...walkinForm, phone: e.target.value })} data-testid="walkin-phone" />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Notes</label>
+              <Textarea rows={2} value={walkinForm.notes} onChange={(e) => setWalkinForm({ ...walkinForm, notes: e.target.value })} data-testid="walkin-notes" />
+            </div>
+            <label className="flex items-center gap-2 text-sm bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+              <input
+                type="checkbox" checked={walkinForm.pay_now}
+                onChange={(e) => setWalkinForm({ ...walkinForm, pay_now: e.target.checked })}
+                data-testid="walkin-paynow"
+              />
+              Encaisser le paiement maintenant (carte bancaire, via Stripe)
+            </label>
+            <p className="text-xs text-gray-400">
+              {formations.find((f) => f.id === walkinForm.formation_id)?.cpf_eligible
+                ? "Cette formation est éligible CPF — le paiement en ligne n'est pas proposé, l'inscription sera créée en attente."
+                : "Vous serez redirigé(e) vers la page de paiement Stripe, puis ramené(e) ici avec un reçu à télécharger."}
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setWalkinOpen(false)} disabled={walkinSubmitting}>Annuler</Button>
+            <Button onClick={submitWalkin} disabled={walkinSubmitting} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="walkin-submit">
+              {walkinSubmitting ? "..." : walkinForm.pay_now ? (
+                <><CreditCard size={16} className="mr-1" /> Inscrire et encaisser</>
+              ) : "Inscrire"}
             </Button>
           </div>
         </DialogContent>

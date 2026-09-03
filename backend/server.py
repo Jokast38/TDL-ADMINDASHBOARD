@@ -17,14 +17,14 @@ from core.utils import now_iso
 from routers import (
     auth, formations, inscriptions, documents, products,
     leads, employees, settings, dashboard, ai, blog,
-    wordpress, stages, emargements, doc_templates,
+    wordpress, stages, emargements, doc_templates, vtc_import,
     generated_docs, health, callback, tracking, reviews, chatbot, notifications,
     custom_email, lead_automations, limova, payments, push, reminders,
     company_documents, positioning_tests, backlinks, docs, places,
     exams, appointments, stage_attestations,
 )
 from routers.lead_automations import run_due_automations
-from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders
+from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders, send_weekly_admin_report
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -68,6 +68,7 @@ app.include_router(ai.router,             prefix=_PREFIX)
 app.include_router(blog.router,           prefix=_PREFIX)
 app.include_router(wordpress.router,      prefix=_PREFIX)
 app.include_router(stages.router,         prefix=_PREFIX)
+app.include_router(vtc_import.router,     prefix=_PREFIX)
 app.include_router(emargements.router,    prefix=_PREFIX)
 app.include_router(doc_templates.router,  prefix=_PREFIX)
 app.include_router(generated_docs.router, prefix=_PREFIX)
@@ -293,6 +294,36 @@ async def _daily_dossiers_digest_loop():
             log.warning(f"Récap dossiers en attente : erreur — {e}")
 
 
+_WEEKLY_REPORT_SLOTS = [(5, 18), (0, 8)]  # (weekday, heure UTC) — samedi 18h, lundi 8h ; Python: lundi=0 ... dimanche=6
+
+
+def _seconds_until_next_weekly_report() -> float:
+    now = datetime.now(timezone.utc)
+    candidates = []
+    for weekday, hour in _WEEKLY_REPORT_SLOTS:
+        days_ahead = (weekday - now.weekday()) % 7
+        target = (now + timedelta(days=days_ahead)).replace(hour=hour, minute=0, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=7)
+        candidates.append(target)
+    return (min(candidates) - now).total_seconds()
+
+
+async def _weekly_admin_report_loop():
+    """Envoie aux comptes admin un compte-rendu de la semaine (fait / reste à
+    faire) les samedis 18h et lundis 8h (heure serveur, UTC sur Render) — voir
+    send_weekly_admin_report dans services/staff_notify.py."""
+    log = logging.getLogger(__name__)
+    while True:
+        await asyncio.sleep(_seconds_until_next_weekly_report())
+        try:
+            notified = await send_weekly_admin_report()
+            if notified:
+                log.info(f"Compte-rendu hebdomadaire : {notified} admin(s) notifié(s)")
+        except Exception as e:
+            log.warning(f"Compte-rendu hebdomadaire : erreur — {e}")
+
+
 async def _wordpress_auto_sync_loop():
     """Toutes les 15 min, si la synchro auto du blog est activée (bouton
     on/off dans AdminBlog.jsx, réglage wp_blog_auto_sync_enabled), importe en
@@ -320,6 +351,7 @@ async def startup():
     asyncio.create_task(_daily_dossiers_digest_loop())
     asyncio.create_task(_document_reminders_loop())
     asyncio.create_task(_wordpress_auto_sync_loop())
+    asyncio.create_task(_weekly_admin_report_loop())
 
 
 @app.on_event("shutdown")

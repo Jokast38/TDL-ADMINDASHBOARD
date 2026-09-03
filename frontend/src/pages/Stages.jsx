@@ -8,14 +8,42 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight } from "@phosphor-icons/react";
+import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight, UploadSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
+
+const MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+
+function monthLabel(dateStr) {
+  if (!dateStr) return "Sans date";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "Sans date";
+  return `${MOIS_FR[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function monthKey(dateStr) {
+  if (!dateStr) return "0000-00";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "0000-00";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Sous-groupe une liste de sessions (déjà triées) par mois calendaire de
+// date_debut, en conservant l'ordre chronologique passé en entrée.
+function groupByMonth(sessions) {
+  const groups = new Map();
+  for (const s of sessions) {
+    const key = monthKey(s.date_debut);
+    if (!groups.has(key)) groups.set(key, { key, label: monthLabel(s.date_debut), sessions: [] });
+    groups.get(key).sessions.push(s);
+  }
+  return Array.from(groups.values());
+}
 
 const empty = {
   formation_id: "", date_debut: "", date_fin: "",
   lieu_adresse: "", lieu_ville: "", capacite_max: 20,
-  animateur_id: "", statut: "planifie", notes: ""
+  animateur_ids: [], statut: "planifie", notes: ""
 };
 
 const STATUTS = ["planifie", "en_cours", "termine", "annule"];
@@ -29,6 +57,7 @@ export default function Stages() {
   const [editingId, setEditingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [collapsed, setCollapsed] = useState(() => new Set());
+  const [importing, setImporting] = useState(false);
 
   const toggleCollapsed = (formationId) => {
     setCollapsed((prev) => {
@@ -48,18 +77,25 @@ export default function Stages() {
   const openCreate = () => { setEditingId(null); setForm(empty); setOpen(true); };
   const openEdit = (s) => {
     setEditingId(s.id);
+    const ids = s.animateur_ids?.length ? s.animateur_ids : (s.animateur_id ? [s.animateur_id] : []);
     setForm({
       formation_id: s.formation_id || "", date_debut: s.date_debut || "", date_fin: s.date_fin || "",
       lieu_adresse: s.lieu_adresse || "", lieu_ville: s.lieu_ville || "", capacite_max: s.capacite_max ?? 20,
-      animateur_id: s.animateur_id || "", statut: s.statut || "planifie", notes: s.notes || "",
+      animateur_ids: ids, statut: s.statut || "planifie", notes: s.notes || "",
     });
     setOpen(true);
+  };
+
+  const toggleAnimateur = (id) => {
+    setForm((f) => ({
+      ...f,
+      animateur_ids: f.animateur_ids.includes(id) ? f.animateur_ids.filter((a) => a !== id) : [...f.animateur_ids, id],
+    }));
   };
 
   const save = async () => {
     try {
       const payload = { ...form, capacite_max: +form.capacite_max };
-      if (!payload.animateur_id) delete payload.animateur_id;
       if (editingId) {
         await api.put(`/stages/${editingId}`, payload);
         toast.success("Session mise à jour");
@@ -107,6 +143,32 @@ export default function Stages() {
     return result;
   }, [items]);
 
+  const importExcel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    setImporting(true);
+    try {
+      const { data } = await api.post("/vtc-import/vtc-taxi-sessions", fd, {
+        headers: { "Content-Type": "multipart/form-data" }, timeout: 120000,
+      });
+      const warn = Object.keys(data.unmatched_metiers || {}).length
+        ? ` · ${Object.keys(data.unmatched_metiers).length} métier(s) non reconnu(s), voir console`
+        : "";
+      if (warn) console.warn("Métiers non reconnus lors de l'import :", data.unmatched_metiers);
+      toast.success(
+        `${data.sessions_created} session(s) créée(s), ${data.inscriptions_created} inscription(s) importée(s)${warn}`
+      );
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur lors de l'import du fichier Excel");
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  };
+
   const remove = async (id) => {
     try {
       await api.delete(`/stages/${id}`);
@@ -126,6 +188,13 @@ export default function Stages() {
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Sessions de stage</h1>
           <p className="text-gray-500 mt-2">{items.length} session(s) planifiée(s).</p>
         </div>
+        <div className="flex gap-2">
+          <label className="inline-block">
+            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} data-testid="stages-import-excel" />
+            <Button variant="outline" disabled={importing} className="cursor-pointer" title="Importe les sessions VTC/Taxi/Passerelle depuis un fichier Excel (1 onglet par mois)">
+              <UploadSimple size={16} className="mr-1" /> {importing ? "Import..." : "Importer Excel VTC/Taxi"}
+            </Button>
+          </label>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditingId(null); setForm(empty); } }}>
           <DialogTrigger asChild>
             <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="new-stage-btn" onClick={openCreate}>
@@ -137,7 +206,17 @@ export default function Stages() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
               <div className="sm:col-span-2">
                 <label className="text-sm font-medium">Formation</label>
-                <Select value={form.formation_id} onValueChange={(v) => setForm({ ...form, formation_id: v })}>
+                <Select
+                  value={form.formation_id}
+                  onValueChange={(v) => {
+                    // Capacité par défaut à 25 pour les formations VTC/Taxi —
+                    // seulement à la création, et seulement si l'utilisateur
+                    // n'a pas déjà modifié la capacité par défaut (20).
+                    const formation = formations.find((f) => f.id === v);
+                    const bump = !editingId && form.capacite_max === 20 && formation?.category === "VTC_TAXI";
+                    setForm({ ...form, formation_id: v, ...(bump ? { capacite_max: 25 } : {}) });
+                  }}
+                >
                   <SelectTrigger data-testid="stage-formation"><SelectValue placeholder="Choisir une formation" /></SelectTrigger>
                   <SelectContent>{formations.map((f) => <SelectItem key={f.id} value={f.id}>{f.title}</SelectItem>)}</SelectContent>
                 </Select>
@@ -177,12 +256,24 @@ export default function Stages() {
                   </Select>
                 </div>
               )}
-              <div>
-                <label className="text-sm font-medium">Animateur</label>
-                <Select value={form.animateur_id} onValueChange={(v) => setForm({ ...form, animateur_id: v })}>
-                  <SelectTrigger data-testid="stage-animateur"><SelectValue placeholder="Aucun" /></SelectTrigger>
-                  <SelectContent>{animateurs.map((a) => <SelectItem key={a.id} value={a.id}>{a.name} ({a.role})</SelectItem>)}</SelectContent>
-                </Select>
+              <div className="sm:col-span-2">
+                <label className="text-sm font-medium">Formateurs / animateurs assignés</label>
+                <p className="text-xs text-gray-400 mb-1">Plusieurs formateurs peuvent être assignés à la même session — chacun apparaîtra avec sa propre signature sur l'attestation générée.</p>
+                <div className="flex flex-wrap gap-2 border border-gray-200 rounded-md p-2" data-testid="stage-animateurs">
+                  {animateurs.map((a) => {
+                    const checked = form.animateur_ids.includes(a.id);
+                    return (
+                      <label
+                        key={a.id}
+                        className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border cursor-pointer ${checked ? "border-[#d4af37] bg-[#d4af37]/10" : "border-gray-200"}`}
+                      >
+                        <input type="checkbox" checked={checked} onChange={() => toggleAnimateur(a.id)} className="hidden" />
+                        {a.name} ({a.role})
+                      </label>
+                    );
+                  })}
+                  {!animateurs.length && <span className="text-xs text-gray-400">Aucun formateur — créez-en un depuis la page Formateurs.</span>}
+                </div>
               </div>
               <div className="sm:col-span-2">
                 <label className="text-sm font-medium">Notes</label>
@@ -197,6 +288,7 @@ export default function Stages() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {!items.length && <Card className="p-12 text-center border-dashed"><p className="text-gray-500">Aucune session.</p></Card>}
@@ -231,24 +323,34 @@ export default function Stages() {
             {!isCollapsed && (
             <>
             {g.upcoming.length > 0 && (
-              <div className="mb-6">
-                <p className="overline text-[#0B7238] mb-2">À venir</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {g.upcoming.map((s) => (
-                    <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} />
-                  ))}
-                </div>
+              <div className="mb-6 space-y-4">
+                <p className="overline text-[#0B7238]">À venir</p>
+                {groupByMonth(g.upcoming).map((mg) => (
+                  <div key={mg.key}>
+                    <p className="text-xs font-semibold text-gray-500 capitalize mb-2">{mg.label}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {mg.sessions.map((s) => (
+                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
             {g.past.length > 0 && (
-              <div>
-                <p className="overline text-gray-400 mb-2">Sessions passées</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {g.past.map((s) => (
-                    <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} muted />
-                  ))}
-                </div>
+              <div className="space-y-4">
+                <p className="overline text-gray-400">Sessions passées</p>
+                {groupByMonth(g.past).map((mg) => (
+                  <div key={mg.key}>
+                    <p className="text-xs font-semibold text-gray-400 capitalize mb-2">{mg.label}</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {mg.sessions.map((s) => (
+                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} muted />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
             </>
@@ -302,7 +404,11 @@ function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete,
       <div className="text-xs text-gray-500 mt-3 space-y-1">
         <p className="flex items-center gap-1"><Calendar size={12} /> {s.date_debut} → {s.date_fin}</p>
         <p className="flex items-center gap-1"><MapPin size={12} /> {s.lieu_ville}</p>
-        {s.animateur_id && <p className="text-[10px]">Animateur : {animateurs.find((a) => a.id === s.animateur_id)?.name || "—"}</p>}
+        {(() => {
+          const ids = s.animateur_ids?.length ? s.animateur_ids : (s.animateur_id ? [s.animateur_id] : []);
+          const names = ids.map((id) => animateurs.find((a) => a.id === id)?.name).filter(Boolean);
+          return names.length ? <p className="text-[10px]">Formateur(s) : {names.join(", ")}</p> : null;
+        })()}
       </div>
     </Card>
   );

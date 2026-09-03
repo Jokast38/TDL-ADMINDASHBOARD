@@ -12,7 +12,7 @@ from core.config import APP_NAME, ROLES_ALL_STAFF
 from models.stage import EmargementIn
 from services.email import send_email
 from services.pdf import generate_attestation_pdf, render_html_pdf
-from routers.stages import _stage_days
+from routers.stages import _stage_days, _stage_animateur_ids
 
 router = APIRouter(tags=["emargements"])
 
@@ -22,7 +22,7 @@ async def create_emargement(payload: EmargementIn, user: dict = Depends(require_
     stage = await db.stages.find_one({"id": payload.stage_id}, {"_id": 0})
     if not stage:
         raise HTTPException(status_code=404, detail="Stage introuvable")
-    if user["role"] == "animateur" and stage.get("animateur_id") != user["id"]:
+    if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
         raise HTTPException(status_code=403, detail="Accès refusé")
     if payload.present and not (payload.signature_data_url or "").startswith("data:image"):
         raise HTTPException(status_code=400, detail="Une signature est requise lorsque le stagiaire est marqué présent")
@@ -80,7 +80,9 @@ async def list_emargements(stage_id: Optional[str] = None, session_date: Optiona
     if stage_id: q["stage_id"] = stage_id
     if session_date: q["session_date"] = session_date
     if user["role"] == "animateur":
-        own = await db.stages.find({"animateur_id": user["id"]}, {"_id": 0, "id": 1}).to_list(500)
+        own = await db.stages.find(
+            {"$or": [{"animateur_ids": user["id"]}, {"animateur_id": user["id"]}]}, {"_id": 0, "id": 1}
+        ).to_list(500)
         q["stage_id"] = {"$in": [s["id"] for s in own]}
     return await db.emargements.find(q, {"_id": 0}).sort("signed_at", -1).to_list(2000)
 
@@ -90,7 +92,7 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
     stage = await db.stages.find_one({"id": sid}, {"_id": 0})
     if not stage:
         raise HTTPException(status_code=404, detail="Stage introuvable")
-    if user["role"] == "animateur" and stage.get("animateur_id") != user["id"]:
+    if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
         raise HTTPException(status_code=403, detail="Accès refusé")
     valid_days = _stage_days(stage)
     session_date = session_date or valid_days[0]
@@ -99,7 +101,9 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
 
     formation = await db.formations.find_one({"id": stage["formation_id"]}, {"_id": 0}) or {}
     inscrits = await db.inscriptions.find({"formation_id": stage["formation_id"]}, {"_id": 0}).to_list(500)
-    animateur = await db.users.find_one({"id": stage.get("animateur_id")}, {"_id": 0, "password_hash": 0}) if stage.get("animateur_id") else None
+    animateur_ids = _stage_animateur_ids(stage)
+    animateurs_docs = await db.users.find({"id": {"$in": animateur_ids}}, {"_id": 0, "password_hash": 0}).to_list(20) if animateur_ids else []
+    animateur = animateurs_docs[0] if animateurs_docs else None
 
     rows = ""
     for ins in inscrits:
@@ -109,7 +113,13 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
     if not rows:
         rows = '<tr><td colspan="2" style="padding:6px;text-align:center;color:#999;">Aucun inscrit</td></tr>'
 
-    intervenant_row = f'<tr><td style="padding:6px;">{animateur.get("name", "")}</td><td style="padding:6px;text-align:right;">_____________</td></tr>' if animateur else '<tr><td colspan="2" style="padding:6px;text-align:center;color:#999;">Aucun formateur assigné</td></tr>'
+    if animateurs_docs:
+        intervenant_row = "".join(
+            f'<tr><td style="padding:6px;">{a.get("name", "")}</td><td style="padding:6px;text-align:right;">_____________</td></tr>'
+            for a in animateurs_docs
+        )
+    else:
+        intervenant_row = '<tr><td colspan="2" style="padding:6px;text-align:center;color:#999;">Aucun formateur assigné</td></tr>'
 
     tpl = await db.doc_templates.find_one({"nom": "Feuille d'émargement - Présence stagiaires", "actif": True}, {"_id": 0})
     context = {
@@ -121,7 +131,7 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
         "date_debut": session_date, "date_fin": session_date,
         "lieu_formation": f"{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}",
         "duree_totale": str(formation.get("duration_hours", "")),
-        "formateurs_list": animateur.get("name", "") if animateur else "",
+        "formateurs_list": ", ".join(a.get("name", "") for a in animateurs_docs) if animateurs_docs else "",
         "apprenants_list": rows, "intervenants_list": intervenant_row,
         "lieu_signature": stage.get("lieu_ville", "EPINAY SUR SEINE"), "date_signature": session_date,
     }

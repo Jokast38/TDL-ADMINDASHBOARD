@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class DocTemplateIn(BaseModel):
@@ -23,8 +23,15 @@ class DocTemplateUpdate(BaseModel):
 class GeneratedDocIn(BaseModel):
     template_id: str
     context: Dict[str, Any] = {}
+    # Rattache le document généré à un dossier existant (récupéré depuis la
+    # base plutôt que saisi à la main) — sert aussi à nommer le fichier avec
+    # le nom de l'apprenant concerné.
     dossier_id: Optional[str] = None
     nom_fichier: Optional[str] = None
+    # Si renseigné, le PDF généré est aussi envoyé par email en pièce jointe
+    # (en plus d'être enregistré dans la bibliothèque comme d'habitude).
+    send_to_email: Optional[EmailStr] = None
+    send_message: Optional[str] = None
 
 
 class WooProductUpdate(BaseModel):

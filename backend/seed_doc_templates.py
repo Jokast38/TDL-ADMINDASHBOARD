@@ -994,6 +994,24 @@ GRILLE_EVAL_FORMATEUR = {
     "actif": True
 }
 
+# Modèle structuré : pas de contenu HTML/variables génériques — la Bibliothèque
+# PDF (DocumentsLibrary.jsx) détecte `generator: "stage_recup"` et route la
+# génération vers generate_stage_recup_points_attestation (services/pdf.py) à
+# partir du dossier choisi, au lieu de la substitution {{ variable }} classique.
+ATTESTATION_STAGE_RECUP = {
+    "nom": "Attestation de stage de récupération de points",
+    "type_doc": "attestation",
+    "description": (
+        "Attestation officielle de suivi de stage de sensibilisation à la sécurité "
+        "routière (récupération de points) — générée depuis les données du dossier "
+        "choisi (identité, stage, signatures déjà enregistrées)."
+    ),
+    "contenu_html": "",
+    "variables": [],
+    "generator": "stage_recup",
+    "actif": True,
+}
+
 MODELS = [
     ATTESTATION_ASSIDUITE,
     ATTESTATION_INDIVIDUELLE,
@@ -1005,7 +1023,8 @@ MODELS = [
     TEST_POSITIONNEMENT_VTC,
     FICHE_ENTRETIEN_BESOIN,
     GRILLE_EVAL_FORMATEUR,
-    FORMULAIRE_RENSEIGNEMENTS
+    FORMULAIRE_RENSEIGNEMENTS,
+    ATTESTATION_STAGE_RECUP,
 ]
 
 # --- Correctif: les f-strings Python utilisées ci-dessus pour insérer le logo

@@ -144,11 +144,14 @@ async def send_pending_callback_reminders() -> int:
 async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None) -> int:
     """Envoie chaque matin (10h — voir _daily_dossiers_digest_loop dans
     server.py) à chaque employé assigné un récapitulatif des dossiers
-    d'inscription encore au statut "nouveau" (= pas encore pris en charge),
-    avec ceux arrivés depuis le dernier envoi mis en avant séparément. Dès
-    qu'un employé fait avancer un dossier (bouton "Traitement en cours" dans
-    Inscriptions.jsx, qui passe le statut à "en_verification", ou tout autre
-    statut suivant), il sort automatiquement de ce récap — pas besoin d'un
+    d'inscription encore au statut "nouveau" (= pas encore pris en charge)
+    ET des demandes de rappel non traitées (`handled != True`) — uniquement
+    ce qui reste à faire, jamais ce qui est déjà en cours de traitement.
+    Les nouveaux dossiers arrivés depuis le dernier envoi sont mis en avant
+    séparément. Dès qu'un employé fait avancer un dossier (bouton
+    "Traitement en cours" dans Inscriptions.jsx, qui passe le statut à
+    "en_verification", ou tout autre statut suivant) ou marque une demande
+    de rappel traitée, il sort automatiquement de ce récap — pas besoin d'un
     champ dédié pour le "mute".
 
     `min_gap` évite les envois en rafale si le process redémarre plusieurs
@@ -164,19 +167,24 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
         return 0
 
     pending = await db.dossiers.find({"status": "nouveau"}, {"_id": 0}).to_list(2000)
-    if not pending:
+    # Le récap doit aussi couvrir les demandes de rappel encore non traitées
+    # (`handled != True`) — auparavant ce mail ne parlait que des dossiers,
+    # laissant les demandes de rappel hors du récap matinal.
+    pending_callbacks = await db.callback_requests.find({"handled": {"$ne": True}}, {"_id": 0}).to_list(2000)
+    if not pending and not pending_callbacks:
         await db.settings.update_one({"id": "global"}, {"$set": {"dossiers_digest_last_sent_at": now_iso()}}, upsert=True)
         return 0
 
     staff = await db.users.find(
         {"active": True, "role": {"$in": list(ROLES_DOSSIERS_MGMT)}},
-        {"_id": 0, "id": 1, "email": 1, "name": 1, "assigned_categories": 1, "assigned_training_assignments": 1},
+        {"_id": 0, "id": 1, "email": 1, "name": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1},
     ).to_list(200)
 
     notified = 0
     for member in staff:
         assignments = member.get("assigned_training_assignments") or []
         categories = member.get("assigned_categories") or []
+        centers = member.get("assigned_centers") or []
 
         mine = []
         for d in pending:
@@ -194,7 +202,22 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
             if matches:
                 mine.append(d)
 
-        if not mine or not member.get("email"):
+        mine_callbacks = []
+        for p in pending_callbacks:
+            if assignments:
+                matches = (
+                    not p.get("interest") or not p.get("center")
+                    or any(a.get("category") == p.get("interest") and a.get("center") == p.get("center") for a in assignments)
+                )
+            else:
+                matches = (
+                    (not categories or not p.get("interest") or p["interest"] in categories)
+                    and (not centers or not p.get("center") or p["center"] in centers)
+                )
+            if matches:
+                mine_callbacks.append(p)
+
+        if (not mine and not mine_callbacks) or not member.get("email"):
             continue
 
         new_ids = {
@@ -234,18 +257,32 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
                 f"<p style='margin:16px 0 6px;'><b>{len(older_ones)} dossier(s) toujours en attente :</b></p>"
                 f"<table style='border-collapse:collapse;width:100%;'>{header}{_rows(older_ones)}</table>"
             )
+        if mine_callbacks:
+            cb_rows = "".join(
+                f"<tr><td style='padding:6px 10px;border-bottom:1px solid #eee;'>{p['prenom']} {p['nom']}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{p.get('telephone','')}</td>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{CATEGORY_LABELS.get(p.get('interest'), 'Non précisé')}</td></tr>"
+                for p in mine_callbacks
+            )
+            sections += (
+                f"<p style='margin:16px 0 6px;'><b>📞 {len(mine_callbacks)} demande(s) de rappel non traitée(s) :</b></p>"
+                f"<table style='border-collapse:collapse;width:100%;'>"
+                f"<tr><th style='text-align:left;padding:6px 10px;'>Nom</th><th style='text-align:left;padding:6px 10px;'>Téléphone</th><th style='text-align:left;padding:6px 10px;'>Intérêt</th></tr>"
+                f"{cb_rows}</table>"
+            )
 
-        subject = f"📋 {len(mine)} dossier(s) en attente de traitement" + (f" — {len(new_ones)} nouveau(x)" if new_ones else "")
+        total = len(mine) + len(mine_callbacks)
+        subject = f"📋 {total} élément(s) en attente de traitement" + (f" — {len(new_ones)} nouveau(x)" if new_ones else "")
         body = (
             f"<p>Bonjour {member.get('name','')},</p>"
-            f"<p>Voici le récapitulatif du matin des dossiers d'inscription qui ne sont pas encore finalisés.</p>"
+            f"<p>Voici le récapitulatif du matin des dossiers et demandes de rappel pas encore traités.</p>"
             f"{sections}"
             f"<p style='margin-top:16px;'>Rendez-vous sur la page Inscriptions du dashboard pour les traiter.</p>"
         )
         await send_email(member["email"], subject, body)
         await send_push_to_users(
-            [member["id"]], "Dossiers en attente",
-            f"{len(mine)} dossier(s) non traité(s)" + (f", {len(new_ones)} nouveau(x)" if new_ones else ""),
+            [member["id"]], "Éléments en attente",
+            f"{total} élément(s) non traité(s)" + (f", {len(new_ones)} nouveau(x)" if new_ones else ""),
             "/admin/inscriptions",
         )
         notified += 1
@@ -356,4 +393,66 @@ async def send_document_reminders(min_gap_hours: int = 72) -> int:
                 f"{d.get('student_name', '')} ({manquants_label})", "/admin/dossiers",
             )
 
+    return notified
+
+
+async def send_weekly_admin_report() -> int:
+    """Compte-rendu hebdomadaire envoyé uniquement aux comptes admin, les
+    samedis (fin de semaine) et lundis (début de semaine) — voir
+    _weekly_admin_report_loop dans server.py. Résume ce qui a été fait la
+    semaine écoulée (dossiers traités, inscriptions reçues, demandes de
+    rappel traitées) et ce qu'il reste à faire (dossiers "nouveau" et
+    demandes de rappel non traitées, tous âges confondus — pas seulement
+    ceux de la semaine)."""
+    now = datetime.now(timezone.utc)
+    week_ago = now - timedelta(days=7)
+    week_ago_iso = week_ago.isoformat()
+
+    dossiers_traites = await db.dossiers.count_documents({
+        "status": {"$ne": "nouveau"}, "updated_at": {"$gte": week_ago_iso},
+    })
+    inscriptions_recues = await db.inscriptions.count_documents({"created_at": {"$gte": week_ago_iso}})
+    callbacks_traites = await db.callback_requests.count_documents({
+        "handled": True, "updated_at": {"$gte": week_ago_iso},
+    })
+
+    dossiers_restants = await db.dossiers.count_documents({"status": "nouveau"})
+    callbacks_restants = await db.callback_requests.count_documents({"handled": {"$ne": True}})
+
+    admins = await db.users.find(
+        {"active": True, "role": "admin"}, {"_id": 0, "id": 1, "email": 1, "name": 1}
+    ).to_list(50)
+    if not admins:
+        return 0
+
+    period_label = f"{week_ago.strftime('%d/%m')} — {now.strftime('%d/%m/%Y')}"
+    subject = f"📊 Compte-rendu hebdomadaire ({period_label})"
+    body = (
+        f"<p>Bonjour,</p>"
+        f"<p>Voici le compte-rendu de la semaine écoulée ({period_label}).</p>"
+        f"<p style='margin:16px 0 6px;'><b>✅ Fait cette semaine :</b></p>"
+        f"<ul>"
+        f"<li>{dossiers_traites} dossier(s) fait(s) avancer (sorti(s) du statut « nouveau »)</li>"
+        f"<li>{inscriptions_recues} nouvelle(s) inscription(s) reçue(s)</li>"
+        f"<li>{callbacks_traites} demande(s) de rappel traitée(s)</li>"
+        f"</ul>"
+        f"<p style='margin:16px 0 6px;'><b>⏳ Reste à faire :</b></p>"
+        f"<ul>"
+        f"<li>{dossiers_restants} dossier(s) pas encore pris en charge</li>"
+        f"<li>{callbacks_restants} demande(s) de rappel en attente</li>"
+        f"</ul>"
+        f"<p style='margin-top:16px;'>Rendez-vous sur le dashboard pour le détail.</p>"
+    )
+    notified = 0
+    for admin in admins:
+        if not admin.get("email"):
+            continue
+        await send_email(admin["email"], subject, body)
+        notified += 1
+    if admins:
+        await send_push_to_users(
+            [a["id"] for a in admins], "Compte-rendu hebdomadaire",
+            f"{dossiers_restants} dossier(s) et {callbacks_restants} demande(s) restant à traiter",
+            "/admin",
+        )
     return notified

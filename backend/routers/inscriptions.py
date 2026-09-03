@@ -6,7 +6,7 @@ from core.database import db
 from core.security import hash_password, get_current_user, require_role
 from core.utils import now_iso
 from core.config import ROLES_DOSSIERS_MGMT
-from models.inscription import InscriptionIn, InscriptionUpdate, DossierUpdate
+from models.inscription import InscriptionIn, InscriptionUpdate, DossierUpdate, StageAssignIn
 from services.trello import TrelloService
 from services.n8n import trigger_n8n
 from services.email import send_email
@@ -26,6 +26,26 @@ async def create_inscription(payload: InscriptionIn):
     formation = await db.formations.find_one({"id": payload.formation_id}, {"_id": 0})
     if not formation:
         raise HTTPException(status_code=404, detail="Formation introuvable")
+
+    # Doublon = même personne, même formation ET même session — un
+    # réinscription sur une AUTRE session (ex: repassage d'examen VTC sur un
+    # nouveau créneau) n'est jamais bloquée, seule l'inscription à une
+    # session déjà rejointe l'est (voir aussi PUT /inscriptions/{iid}/stage).
+    stage_titre = None
+    if payload.stage_id:
+        stage = await db.stages.find_one({"id": payload.stage_id}, {"_id": 0})
+        if not stage:
+            raise HTTPException(status_code=404, detail="Session introuvable")
+        if stage["formation_id"] != payload.formation_id:
+            raise HTTPException(status_code=400, detail="Cette session ne correspond pas à la formation choisie")
+        stage_titre = stage.get("formation_titre")
+        duplicate = await db.inscriptions.find_one({
+            "student_email": payload.student_email.lower(), "formation_id": payload.formation_id,
+            "stage_id": payload.stage_id, "status": "active",
+        })
+        if duplicate:
+            raise HTTPException(status_code=409, detail="Cette personne est déjà inscrite à cette même session — pour une nouvelle tentative (ex: repassage d'examen), assignez-la plutôt à une autre session.")
+
     user = await db.users.find_one({"email": payload.student_email.lower()})
     if not user:
         user_id = str(uuid.uuid4())
@@ -49,6 +69,7 @@ async def create_inscription(payload: InscriptionIn):
         "status": "active", "contact_status": "en_cours", "notes": payload.notes or "", "created_at": now_iso(),
         "source": payload.source or "", "landing_url": payload.landing_url or "",
         "session": payload.session or "", "center": payload.center or "",
+        "stage_id": payload.stage_id, "stage_titre": stage_titre,
     }
     await db.inscriptions.insert_one(inscription)
 
@@ -158,6 +179,17 @@ async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MG
     return items
 
 
+@router.get("/inscriptions/{iid}")
+async def get_inscription(iid: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Utilisé par la page de confirmation de paiement (inscription sur place
+    par un agent, voir POST /payments/checkout + PaiementConfirmation.jsx)
+    pour vérifier l'état du paiement après le retour de Stripe."""
+    inscription = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    if not inscription:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    return inscription
+
+
 @router.put("/inscriptions/{iid}")
 async def update_inscription(iid: str, payload: InscriptionUpdate, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
     existing = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
@@ -168,6 +200,38 @@ async def update_inscription(iid: str, payload: InscriptionUpdate, user: dict = 
         raise HTTPException(status_code=400, detail="Aucune modification fournie")
     update["updated_at"] = now_iso()
     await db.inscriptions.update_one({"id": iid}, {"$set": update})
+    return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+
+
+@router.put("/inscriptions/{iid}/stage")
+async def assign_inscription_stage(iid: str, payload: StageAssignIn, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Affecte (ou réaffecte, ou retire) la session de stage d'une
+    inscription — couvre à la fois « pas encore affecté à une session » et
+    « reprogrammer sur une autre session » (ex: repassage d'examen VTC sur un
+    nouveau créneau : on ne recrée pas d'inscription, on réaffecte
+    celle-ci)."""
+    inscription = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    if not inscription:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+
+    stage_titre = None
+    if payload.stage_id:
+        stage = await db.stages.find_one({"id": payload.stage_id}, {"_id": 0})
+        if not stage:
+            raise HTTPException(status_code=404, detail="Session introuvable")
+        if stage["formation_id"] != inscription["formation_id"]:
+            raise HTTPException(status_code=400, detail="Cette session ne correspond pas à la formation de cette inscription")
+        stage_titre = stage.get("formation_titre")
+        duplicate = await db.inscriptions.find_one({
+            "id": {"$ne": iid}, "student_email": inscription["student_email"], "formation_id": inscription["formation_id"],
+            "stage_id": payload.stage_id, "status": "active",
+        })
+        if duplicate:
+            raise HTTPException(status_code=409, detail="Cette personne est déjà inscrite à cette session")
+
+    await db.inscriptions.update_one(
+        {"id": iid}, {"$set": {"stage_id": payload.stage_id, "stage_titre": stage_titre, "updated_at": now_iso()}}
+    )
     return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
 
 
