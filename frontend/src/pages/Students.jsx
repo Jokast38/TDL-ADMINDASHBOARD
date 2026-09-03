@@ -47,6 +47,25 @@ const DOSSIER_STATUS_COLOR = {
 
 const PAYMENT_LABEL = { pending: "En attente", paid: "Payé", refunded: "Remboursé" };
 
+const CENTER_OPTIONS = ["Épinay-sur-Seine (93)", "Creil (60)"];
+
+// Modèle "Convocation à un examen" : génère l'objet + le message à partir de
+// l'intitulé de l'examen, la date de convocation et le centre — l'agent peut
+// ensuite modifier le texte généré avant l'envoi (voir insertConvocationTemplate).
+function convocationText({ studentName, intitule, date, centre }) {
+  const dateLabel = date ? new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "[date à préciser]";
+  return {
+    subject: `Convocation à l'examen — ${intitule || "[intitulé de l'examen]"}`,
+    message:
+      `Bonjour ${studentName},\n\n` +
+      `Vous êtes convoqué(e) à l'examen "${intitule || "[intitulé de l'examen]"}", qui se déroulera :\n\n` +
+      `Date : ${dateLabel}\n` +
+      `Centre : ${centre || "[centre à préciser]"}\n\n` +
+      `Merci de vous présenter 15 minutes avant l'heure de convocation, muni(e) d'une pièce d'identité valide.\n\n` +
+      `Cordialement,\nTDL Formation`,
+  };
+}
+
 export default function Students() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +80,10 @@ export default function Students() {
   const [composeSubject, setComposeSubject] = useState("");
   const [composeMessage, setComposeMessage] = useState("");
   const [composing, setComposing] = useState(false);
+  const [mailTemplate, setMailTemplate] = useState("libre"); // "libre" | "convocation"
+  const [convocIntitule, setConvocIntitule] = useState("");
+  const [convocDate, setConvocDate] = useState("");
+  const [convocCentre, setConvocCentre] = useState(CENTER_OPTIONS[0]);
 
   const load = () => {
     setLoading(true);
@@ -108,6 +131,16 @@ export default function Students() {
     setComposeTarget(s);
     setComposeSubject("");
     setComposeMessage("");
+    setMailTemplate("libre");
+    setConvocIntitule(""); setConvocDate(""); setConvocCentre(CENTER_OPTIONS[0]);
+  };
+
+  const insertConvocationTemplate = () => {
+    const { subject, message } = convocationText({
+      studentName: composeTarget?.name || "", intitule: convocIntitule, date: convocDate, centre: convocCentre,
+    });
+    setComposeSubject(subject);
+    setComposeMessage(message);
   };
 
   const sendCompose = async () => {
@@ -377,6 +410,44 @@ export default function Students() {
                 À : {composeTarget.email} — mis en forme automatiquement avec le design TDL Formation (logo, couleurs, pied de page), comme pour les campagnes.
               </p>
               <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Modèle</label>
+                  <Select value={mailTemplate} onValueChange={setMailTemplate}>
+                    <SelectTrigger data-testid="compose-email-template"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="libre">Message libre</SelectItem>
+                      <SelectItem value="convocation">Convocation à un examen</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {mailTemplate === "convocation" && (
+                  <div className="border border-gray-200 rounded-md p-3 space-y-3 bg-gray-50">
+                    <div>
+                      <label className="text-sm font-medium">Intitulé de l'examen</label>
+                      <Input value={convocIntitule} onChange={(e) => setConvocIntitule(e.target.value)} placeholder="Ex: Examen pratique VTC" data-testid="convoc-intitule" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-sm font-medium">Date de convocation</label>
+                        <Input type="date" value={convocDate} onChange={(e) => setConvocDate(e.target.value)} data-testid="convoc-date" />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Centre</label>
+                        <Select value={convocCentre} onValueChange={setConvocCentre}>
+                          <SelectTrigger data-testid="convoc-centre"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {CENTER_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={insertConvocationTemplate} data-testid="convoc-insert">
+                      Insérer le modèle dans l'objet / message
+                    </Button>
+                  </div>
+                )}
+
                 <div>
                   <label className="text-sm font-medium">Objet</label>
                   <Input value={composeSubject} onChange={(e) => setComposeSubject(e.target.value)} placeholder="Objet de votre email" data-testid="compose-email-subject" />

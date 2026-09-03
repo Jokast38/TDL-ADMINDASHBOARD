@@ -166,7 +166,13 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
     if min_gap and last_sent and (datetime.now(timezone.utc) - last_sent) < min_gap:
         return 0
 
-    pending = await db.dossiers.find({"status": "nouveau"}, {"_id": 0}).to_list(2000)
+    # Les dossiers issus d'un import en masse (Excel VTC/Taxi...) sont déjà
+    # connus de l'équipe au moment de l'import — pas une nouvelle demande à
+    # traiter — donc exclus du récap pour ne pas noyer les vraies nouvelles
+    # inscriptions (voir routers/vtc_import.py).
+    pending = await db.dossiers.find(
+        {"status": "nouveau", "source": {"$not": {"$regex": "^excel_import"}}}, {"_id": 0}
+    ).to_list(2000)
     # Le récap doit aussi couvrir les demandes de rappel encore non traitées
     # (`handled != True`) — auparavant ce mail ne parlait que des dossiers,
     # laissant les demandes de rappel hors du récap matinal.

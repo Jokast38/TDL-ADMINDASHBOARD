@@ -247,6 +247,10 @@ async def import_vtc_taxi_excel(file: UploadFile = File(...), user: dict = Depen
                 "documents_requis": formation.get("documents_requis", []),
                 "trello_card_id": None, "trello_card_url": None,
                 "documents": [], "created_at": now_iso(), "updated_at": now_iso(),
+                # Marque le dossier comme déjà connu de l'équipe (import en
+                # masse, pas une nouvelle demande) — exclu du récap matinal
+                # des dossiers non traités, voir services/staff_notify.py.
+                "source": "excel_import_vtc_taxi_2026",
             })
             inscriptions_created += 1
 
