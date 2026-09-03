@@ -71,6 +71,29 @@ const callbackInterest = (c) => {
   return "Non précisé";
 };
 
+// Origine de l'inscription — le champ `source` est en texte libre (attribution
+// marketing), on le regroupe ici en 3 catégories utiles pour l'équipe : le
+// site public (formulaire d'inscription ou landing page), une inscription
+// saisie sur place par un agent, et un import en masse (Excel) qui suit un
+// traitement différent (financement CPF à instruire, pas de contact initial
+// à passer) — d'où l'intérêt de pouvoir l'isoler.
+const ORIGIN_IMPORTED = "imported";
+const ORIGIN_WALKIN = "walkin";
+const ORIGIN_WEBSITE = "website";
+const ORIGIN_LABEL = {
+  [ORIGIN_WEBSITE]: "Site internet", [ORIGIN_WALKIN]: "Sur place (agent)", [ORIGIN_IMPORTED]: "Import Excel",
+};
+const ORIGIN_COLOR = {
+  [ORIGIN_WEBSITE]: "bg-blue-50 text-blue-700 border-blue-200",
+  [ORIGIN_WALKIN]: "bg-purple-50 text-purple-700 border-purple-200",
+  [ORIGIN_IMPORTED]: "bg-teal-50 text-teal-700 border-teal-200",
+};
+const getOrigin = (i) => {
+  if ((i.source || "").startsWith("excel_import")) return ORIGIN_IMPORTED;
+  if (i.source === "admin_walkin") return ORIGIN_WALKIN;
+  return ORIGIN_WEBSITE;
+};
+
 const PAGE_SIZE = 25;
 
 export default function Inscriptions() {
@@ -80,6 +103,8 @@ export default function Inscriptions() {
   const [traitementFilter, setTraitementFilter] = useState("all"); // all | traite | non_traite
   const [statusFilter, setStatusFilter] = useState("all"); // all | active | cloturee
   const [contactFilter, setContactFilter] = useState("all"); // all | en_cours | a_contacter | sans_reponse | finalisee
+  const [formationFilter, setFormationFilter] = useState("all");
+  const [originFilter, setOriginFilter] = useState("all"); // all | website | walkin | imported
   const [page, setPage] = useState(1);
 
   // Section "Demandes de rappel" : repliée par défaut pour laisser la place à
@@ -231,6 +256,12 @@ export default function Inscriptions() {
     finally { setEnrolling(false); }
   };
 
+  const formationOptions = useMemo(() => {
+    const map = new Map();
+    items.forEach((i) => { if (i.formation_id && !map.has(i.formation_id)) map.set(i.formation_id, i.formation_title); });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [items]);
+
   const filtered = useMemo(() => items.filter((i) => {
     const matchesQuery = (i.student_name + i.student_email + i.formation_title).toLowerCase().includes(q.toLowerCase());
     const matchesPayment =
@@ -246,10 +277,12 @@ export default function Inscriptions() {
       statusFilter === "cloturee" ? i.status === "annulee" :
       i.status !== "annulee";
     const matchesContact = contactFilter === "all" ? true : (i.contact_status || "en_cours") === contactFilter;
-    return matchesQuery && matchesPayment && matchesTraitement && matchesStatus && matchesContact;
-  }), [items, q, paymentFilter, traitementFilter, statusFilter, contactFilter]);
+    const matchesFormation = formationFilter === "all" ? true : i.formation_id === formationFilter;
+    const matchesOrigin = originFilter === "all" ? true : getOrigin(i) === originFilter;
+    return matchesQuery && matchesPayment && matchesTraitement && matchesStatus && matchesContact && matchesFormation && matchesOrigin;
+  }), [items, q, paymentFilter, traitementFilter, statusFilter, contactFilter, formationFilter, originFilter]);
 
-  useEffect(() => { setPage(1); }, [q, paymentFilter, traitementFilter, statusFilter, contactFilter]);
+  useEffect(() => { setPage(1); }, [q, paymentFilter, traitementFilter, statusFilter, contactFilter, formationFilter, originFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -450,6 +483,20 @@ export default function Inscriptions() {
             {Object.entries(CONTACT_STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={formationFilter} onValueChange={setFormationFilter}>
+          <SelectTrigger className="w-56" data-testid="filter-formation"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Formation : toutes</SelectItem>
+            {formationOptions.map(([id, title]) => <SelectItem key={id} value={id}>{title}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={originFilter} onValueChange={setOriginFilter}>
+          <SelectTrigger className="w-52" data-testid="filter-origin"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Origine : toutes</SelectItem>
+            {Object.entries(ORIGIN_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
@@ -461,6 +508,7 @@ export default function Inscriptions() {
                 <th className="py-3 px-4 overline">Étudiant</th>
                 <th className="py-3 px-4 overline">Formation</th>
                 <th className="py-3 px-4 overline">Catégorie</th>
+                <th className="py-3 px-4 overline">Origine</th>
                 <th className="py-3 px-4 overline">Paiement</th>
                 <th className="py-3 px-4 overline">Statut</th>
                 <th className="py-3 px-4 overline">Traitement</th>
@@ -486,6 +534,9 @@ export default function Inscriptions() {
                     </td>
                     <td className="py-3 px-4">{i.formation_title}</td>
                     <td className="py-3 px-4"><Badge variant="outline">{i.category}</Badge></td>
+                    <td className="py-3 px-4">
+                      <Badge variant="outline" className={`text-[10px] ${ORIGIN_COLOR[getOrigin(i)]}`}>{ORIGIN_LABEL[getOrigin(i)]}</Badge>
+                    </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1">
                         <Select value={i.payment_status} onValueChange={(v) => updatePaymentStatus(i.id, v)} disabled={cancelled}>
@@ -627,7 +678,7 @@ export default function Inscriptions() {
                 );
               })}
               {!paged.length && (
-                <tr><td colSpan="12" className="py-12 text-center text-gray-400">Aucune inscription.</td></tr>
+                <tr><td colSpan="13" className="py-12 text-center text-gray-400">Aucune inscription.</td></tr>
               )}
             </tbody>
           </table>
