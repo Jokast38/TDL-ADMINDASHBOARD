@@ -4,10 +4,11 @@ import { api, API } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Users, PenNib, CheckCircle, XCircle, Eraser, FilePdf, UserCircle, FileArrowUp } from "@phosphor-icons/react";
+import { Calendar, MapPin, Users, PenNib, CheckCircle, XCircle, Eraser, FilePdf, UserCircle, FileArrowUp, Signature } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const STAFF_DOC_TYPE_LABELS = {
@@ -20,6 +21,99 @@ const STAFF_DOC_TYPE_LABELS = {
   contrat: "Contrat",
   autre: "Autre document",
 };
+
+function SignatureTab({ user }) {
+  const padRef = useRef(null);
+  const [saving, setSaving] = useState(false);
+  const [hasSignature, setHasSignature] = useState(!!user?.signature_path);
+  const [bafmNumero, setBafmNumero] = useState(user?.agrement_bafm_numero || "");
+  const [savingBafm, setSavingBafm] = useState(false);
+
+  const clear = () => padRef.current?.clear();
+
+  const saveSignature = async () => {
+    if (padRef.current?.isEmpty()) return toast.error("Signez d'abord dans la zone");
+    setSaving(true);
+    try {
+      const dataUrl = padRef.current.getCanvas().toDataURL("image/png");
+      const blob = await (await fetch(dataUrl)).blob();
+      const fd = new FormData();
+      fd.append("file", blob, "signature.png");
+      await api.post("/me/signature", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success("Signature enregistrée");
+      setHasSignature(true);
+      clear();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeSignature = async () => {
+    try {
+      await api.delete("/me/signature");
+      toast.success("Signature supprimée");
+      setHasSignature(false);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
+  const saveBafm = async () => {
+    setSavingBafm(true);
+    try {
+      await api.put("/me/agrement-bafm", { agrement_bafm_numero: bafmNumero });
+      toast.success("Numéro d'agrément enregistré");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSavingBafm(false);
+    }
+  };
+
+  return (
+    <Card className="p-6 border border-gray-200 rounded-md shadow-none max-w-2xl">
+      <p className="overline mb-1">Ma signature</p>
+      <h2 className="font-display text-xl font-bold mb-1">Signature & agrément</h2>
+      <p className="text-sm text-gray-500 mb-4">
+        Utilisée pour signer automatiquement les attestations de stage de récupération de points (section "Signature des Animateurs").
+      </p>
+
+      {hasSignature && (
+        <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-md p-3 mb-4 text-sm text-green-700">
+          <CheckCircle size={16} weight="fill" /> Une signature est déjà enregistrée.
+          <button onClick={removeSignature} className="ml-auto text-red-600 hover:underline text-xs" data-testid="remove-signature-btn">Supprimer</button>
+        </div>
+      )}
+
+      <div>
+        <p className="text-sm font-medium mb-1">{hasSignature ? "Mettre à jour ma signature" : "Ma signature manuscrite"}</p>
+        <div className="border-2 border-dashed border-gray-300 rounded-md bg-white">
+          <SignatureCanvas
+            ref={padRef}
+            canvasProps={{ width: 460, height: 180, className: "w-full rounded-md", "data-testid": "animateur-signature-pad" }}
+            penColor="#0a0a0a"
+          />
+        </div>
+        <div className="flex items-center gap-2 mt-2">
+          <Button variant="ghost" size="sm" onClick={clear}><Eraser size={12} className="mr-1" /> Effacer</Button>
+          <Button size="sm" onClick={saveSignature} disabled={saving} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="save-signature-btn">
+            {saving ? "Enregistrement..." : "Enregistrer ma signature"}
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-6 pt-4 border-t border-gray-200">
+        <p className="text-sm font-medium mb-1">Numéro d'agrément BAFM</p>
+        <div className="flex items-center gap-2">
+          <Input value={bafmNumero} onChange={(e) => setBafmNumero(e.target.value)} placeholder="B 2409100030" className="max-w-xs" />
+          <Button size="sm" variant="outline" onClick={saveBafm} disabled={savingBafm}>Enregistrer</Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 function ProfileTab() {
   const [profile, setProfile] = useState(null);
@@ -83,7 +177,7 @@ function ProfileTab() {
 
 export default function AnimateurSpace() {
   const { user } = useAuth();
-  const [tab, setTab] = useState("sessions"); // sessions | profile
+  const [tab, setTab] = useState("sessions"); // sessions | profile | signature
   const [stages, setStages] = useState([]);
   const [selected, setSelected] = useState(null);
   const [jours, setJours] = useState([]);
@@ -185,7 +279,7 @@ export default function AnimateurSpace() {
         <div>
           <p className="overline">Espace animateur</p>
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">
-            {tab === "sessions" ? "Mes sessions" : "Mon profil"}
+            {tab === "sessions" ? "Mes sessions" : tab === "profile" ? "Mon profil" : "Ma signature"}
           </h1>
           <p className="text-gray-500 mt-2">Bienvenue {user?.name}. {stages.length} session(s) attribuée(s).</p>
         </div>
@@ -196,10 +290,14 @@ export default function AnimateurSpace() {
           <Button variant={tab === "profile" ? "default" : "outline"} size="sm" onClick={() => setTab("profile")} className={tab === "profile" ? "bg-[#0a0a0a] text-white" : ""}>
             <UserCircle size={14} className="mr-1" /> Mon profil
           </Button>
+          <Button variant={tab === "signature" ? "default" : "outline"} size="sm" onClick={() => setTab("signature")} className={tab === "signature" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-signature">
+            <Signature size={14} className="mr-1" /> Ma signature
+          </Button>
         </div>
       </div>
 
       {tab === "profile" && <ProfileTab />}
+      {tab === "signature" && <SignatureTab user={user} />}
 
       {tab === "sessions" && (!selected ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

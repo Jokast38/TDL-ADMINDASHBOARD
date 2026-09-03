@@ -156,27 +156,16 @@ async def wordpress_blog_import_preview(user: dict = Depends(require_role("admin
     return {"posts": posts, "rank_math_available": any(p.get("rank_math_title") for p in posts)}
 
 
-@router.post("/blog/import")
-async def wordpress_blog_import(
-    payload: WordPressBlogImportIn = WordPressBlogImportIn(),
-    user: dict = Depends(require_role("admin", "employe")),
-):
-    wp_ids = payload.wp_ids
-    status = payload.status
-    """Importe les articles WordPress sélectionnés (ou tous les nouveaux si
-    wp_ids est vide) dans le blog interne, en conservant le SEO Rank Math
-    quand il est exposé par l'API REST. Idempotent : un article déjà importé
-    (même wp_source_id) est ignoré, pas dupliqué."""
+async def _import_wp_posts(wp_ids: Optional[list], status: str, author_id: str, author_name: str) -> list:
+    """Logique d'import partagée entre l'import manuel (POST /blog/import) et
+    la synchro automatique en tâche de fond (voir _wordpress_auto_sync_loop
+    dans server.py). Idempotent : un article déjà importé (même wp_source_id)
+    est ignoré, pas dupliqué."""
     if not WORDPRESS_SITE or not WORDPRESS_USER or not WORDPRESS_APP_PASSWORD:
         raise HTTPException(status_code=500, detail="Variables WORDPRESS_SITE / WORDPRESS_USER / WORDPRESS_APP_PASSWORD manquantes")
     site_url = wp_site_url(WORDPRESS_SITE)
     headers = wp_basic_auth_headers(WORDPRESS_USER, WORDPRESS_APP_PASSWORD)
-    try:
-        posts = await asyncio.to_thread(fetch_wp_posts_for_import, site_url, headers)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur WordPress: {e}")
+    posts = await asyncio.to_thread(fetch_wp_posts_for_import, site_url, headers)
 
     if wp_ids:
         posts = [p for p in posts if p["wp_id"] in wp_ids]
@@ -214,8 +203,8 @@ async def wordpress_blog_import(
             "seo_title": (p.get("rank_math_title") or p["title"])[:60],
             "seo_description": (p.get("rank_math_description") or excerpt_md)[:160],
             "status": status,
-            "author_id": user["id"],
-            "author_name": user.get("name", "TDL"),
+            "author_id": author_id,
+            "author_name": author_name,
             "views": 0,
             "wp_source_id": p["wp_id"],
             "wp_source_link": p.get("wp_link"),
@@ -226,7 +215,64 @@ async def wordpress_blog_import(
         await db.blog_posts.insert_one(doc)
         results.append({"wp_id": p["wp_id"], "title": p["title"], "status": "imported", "slug": slug})
 
+    return results
+
+
+@router.post("/blog/import")
+async def wordpress_blog_import(
+    payload: WordPressBlogImportIn = WordPressBlogImportIn(),
+    user: dict = Depends(require_role("admin", "employe")),
+):
+    """Importe les articles WordPress sélectionnés (ou tous les nouveaux si
+    wp_ids est vide) dans le blog interne, en conservant le SEO Rank Math
+    quand il est exposé par l'API REST."""
+    try:
+        results = await _import_wp_posts(payload.wp_ids, payload.status, user["id"], user.get("name", "TDL"))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur WordPress: {e}")
     return {"results": results}
+
+
+async def auto_sync_wordpress_posts() -> int:
+    """Appelée périodiquement par _wordpress_auto_sync_loop (server.py) quand
+    la synchro auto est activée (réglage wp_blog_auto_sync_enabled, voir
+    GET/PUT /wordpress/blog/auto-sync) : importe en brouillon tout nouvel
+    article publié sur WordPress et absent du blog interne. Retourne le
+    nombre d'articles importés."""
+    results = await _import_wp_posts(None, "draft", "auto-sync", "Synchro WordPress")
+    imported = [r for r in results if r["status"] == "imported"]
+    if imported:
+        await db.settings.update_one(
+            {"id": "global"},
+            {"$set": {"wp_blog_auto_sync_last_run_at": now_iso(), "wp_blog_auto_sync_last_count": len(imported)}},
+            upsert=True,
+        )
+    else:
+        await db.settings.update_one(
+            {"id": "global"}, {"$set": {"wp_blog_auto_sync_last_run_at": now_iso()}}, upsert=True
+        )
+    return len(imported)
+
+
+@router.get("/blog/auto-sync")
+async def get_wordpress_auto_sync(user: dict = Depends(require_role("admin", "employe"))):
+    settings = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
+    return {
+        "enabled": bool(settings.get("wp_blog_auto_sync_enabled", False)),
+        "last_run_at": settings.get("wp_blog_auto_sync_last_run_at"),
+        "last_count": settings.get("wp_blog_auto_sync_last_count", 0),
+    }
+
+
+@router.put("/blog/auto-sync")
+async def set_wordpress_auto_sync(payload: dict, user: dict = Depends(require_role("admin", "employe"))):
+    enabled = bool(payload.get("enabled"))
+    await db.settings.update_one(
+        {"id": "global"}, {"$set": {"wp_blog_auto_sync_enabled": enabled, "updated_at": now_iso()}}, upsert=True
+    )
+    return {"enabled": enabled}
 
 
 _ANY_UPLOADS_URL_RE = re.compile(r'https?://[^\s")\]]+/wp-content/uploads/[^\s")\]]*', re.IGNORECASE)

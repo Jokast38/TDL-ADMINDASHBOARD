@@ -7,7 +7,7 @@ from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
-from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn
+from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 
 router = APIRouter(tags=["employees"])
@@ -182,6 +182,14 @@ async def upload_my_profile_document(
     )
     doc.pop("_id", None)
     return doc
+
+
+@router.put("/me/agrement-bafm")
+async def update_my_agrement_bafm(payload: AgrementBafmIn, user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+    """Numéro d'agrément BAFM de l'animateur — affiché sur l'attestation de
+    stage de récupération de points (section "Signature des Animateurs")."""
+    await db.users.update_one({"id": user["id"]}, {"$set": {"agrement_bafm_numero": payload.agrement_bafm_numero}})
+    return {"ok": True}
 
 
 @router.post("/me/signature")

@@ -102,6 +102,193 @@ def generate_attestation_pdf(
     return buf.getvalue()
 
 
+def _draw_data_url_image(c, data_url: Optional[str], x, y, width, height):
+    """Dessine une image data:image/... (signature manuscrite capturée en
+    base64 côté frontend) à la position donnée. Ne fait rien si absente ou
+    invalide (case laissée vide sur le PDF plutôt que de faire échouer toute
+    la génération)."""
+    if not data_url or not data_url.startswith("data:image"):
+        return
+    import io as _io
+    import base64 as _b64
+    from reportlab.lib.utils import ImageReader
+    try:
+        b64part = data_url.split(",", 1)[1]
+        img = ImageReader(_io.BytesIO(_b64.b64decode(b64part)))
+        c.drawImage(img, x, y, width=width, height=height, mask='auto', preserveAspectRatio=True, anchor='sw')
+    except Exception:
+        pass
+
+
+def generate_stage_recup_points_attestation(
+    stagiaire: dict, stage_dates: list, lieu: str,
+    centre: dict, animateurs: dict,
+    student_signature_data_url: Optional[str] = None,
+    formateur_signature_data_url: Optional[str] = None,
+    psychologue_signature_data_url: Optional[str] = None,
+    cachet_data_url: Optional[str] = None,
+    cas_stage_label: str = "Cas 1 : Stage volontaire (art. L.223-6 alinéa 4 et R.223-8 du code de la route).",
+    lieu_signature: Optional[str] = None,
+    date_signature: Optional[str] = None,
+) -> bytes:
+    """Reproduit la mise en page exacte de l'attestation officielle de suivi
+    de stage de sensibilisation à la sécurité routière (récupération de
+    points) — voir frontend/public/doc/model-attestation-stage-recup.pdf,
+    le modèle réel fourni par l'agence, préfecture par préfecture identique
+    dans sa forme (texte réglementaire fixe : cas de stage, articles du code
+    de la route...), seules les données de chaque partie changent.
+
+    `centre` : dict avec nom, adresse, ville, siret, directeur_nom,
+    agrement_numero.
+    `animateurs` : dict avec bafm_nom, bafm_numero, psychologue_nom,
+    psychologue_numero — les deux profils requis par la réglementation pour
+    ce type de stage (un animateur BAFM + un psychologue).
+    `stagiaire` : dict avec nom, prenom, adresse, ville, date_naissance,
+    lieu_naissance, numero_permis, date_delivrance_permis,
+    prefecture_delivrance.
+    Les signatures (`*_signature_data_url`, `cachet_data_url`) sont des
+    data:image/png;base64 optionnelles — une case reste vide si absente,
+    la génération n'échoue jamais pour cette raison."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+
+    def _wrap(text, font, size, max_width):
+        words = text.split(" ")
+        lines, cur = [], ""
+        for w in words:
+            trial = f"{cur} {w}".strip()
+            if c.stringWidth(trial, font, size) <= max_width:
+                cur = trial
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+        return lines
+
+    buf = __import__("io").BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    black = colors.HexColor("#0a0a0a")
+    gray = colors.HexColor("#444444")
+    margin = 2 * cm
+
+    # En-tête : identité du centre
+    c.setFillColor(black)
+    c.setFont("Helvetica", 10)
+    y = h - 2 * cm
+    for line in [centre.get("nom", "Top Drive Learning (TDL)"), centre.get("adresse", ""), centre.get("ville", ""), f"SIRET : {centre.get('siret', '')}"]:
+        c.drawString(margin, y, line)
+        y -= 0.5 * cm
+
+    # Titre
+    c.setFont("Helvetica-Bold", 13)
+    c.drawCentredString(w / 2, h - 5.2 * cm, "ATTESTATION DE SUIVI DE STAGE")
+    c.drawCentredString(w / 2, h - 5.8 * cm, "DE SENSIBILISATION À LA SÉCURITÉ ROUTIÈRE")
+
+    # Paragraphe d'introduction
+    y = h - 7.3 * cm
+    c.setFont("Helvetica", 10.5)
+    intro = (
+        f"Je soussigné(e) {centre.get('directeur_nom', '')}, Responsable de la formation spécifique, "
+        f"titulaire de l'Agrément Préfectoral n° {centre.get('agrement_numero', '')} atteste que:"
+    )
+    for line in _wrap(intro, "Helvetica", 10.5, w - 2 * margin):
+        c.drawString(margin, y, line)
+        y -= 0.5 * cm
+
+    # Identité du stagiaire (deux colonnes)
+    y -= 0.6 * cm
+    left_x, right_x = margin, 11 * cm
+    left_lines = [
+        f"Nom : {stagiaire.get('nom', '—')}",
+        f"Prénom : {stagiaire.get('prenom', '—')}",
+        f"Adresse : {stagiaire.get('adresse', '—')}",
+        f"Ville : {stagiaire.get('ville', '—')}",
+        f"Date de naissance : {stagiaire.get('date_naissance', '—')}",
+        f"Lieu de naissance : {stagiaire.get('lieu_naissance', '—')}",
+    ]
+    right_lines = [
+        f"Numéro de permis : {stagiaire.get('numero_permis', '—')}",
+        f"Date délivrance permis : {stagiaire.get('date_delivrance_permis', '—')}",
+        f"Préfecture de délivrance : {stagiaire.get('prefecture_delivrance', '—')}",
+    ]
+    identity_top = y
+    for i, line in enumerate(left_lines):
+        c.drawString(left_x, identity_top - i * 0.5 * cm, line)
+    for i, line in enumerate(right_lines):
+        c.drawString(right_x, identity_top - i * 0.5 * cm, line)
+    y = identity_top - max(len(left_lines), len(right_lines)) * 0.5 * cm - 0.7 * cm
+
+    # Paragraphe dates + lieu du stage
+    dates_str = " et ".join(stage_dates) if stage_dates else "—"
+    stage_para = f"a suivi le stage de formation spécifique correspondant au cas visé ci-dessous, qui s'est déroulé les {dates_str} à l'adresse suivante : {lieu}"
+    for line in _wrap(stage_para, "Helvetica", 10.5, w - 2 * margin):
+        c.drawString(margin, y, line)
+        y -= 0.5 * cm
+
+    # Cas de stage
+    y -= 0.5 * cm
+    c.setFont("Helvetica-Bold", 10.5)
+    c.drawString(margin, y, "Cas de stage :")
+    y -= 0.65 * cm
+    c.setFont("Helvetica", 10.5)
+    c.drawString(margin + 0.4 * cm, y, f"•  {cas_stage_label}")
+
+    # Lieu et date de signature
+    y -= 1.6 * cm
+    c.setFont("Helvetica", 10.5)
+    c.drawString(margin, y, f"À {lieu_signature or centre.get('ville', '')}, le {date_signature or ''}")
+
+    # Bloc signatures (3 colonnes)
+    y -= 1.6 * cm
+    col1, col2, col3 = margin, 8.7 * cm, 15.3 * cm
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(col1, y, "Signature du directeur")
+    c.drawCentredString(col2 + 2.3 * cm, y, "Signature des Animateurs")
+    c.drawString(col3, y, "Signature du stagiaire")
+
+    y -= 0.6 * cm
+    c.setFont("Helvetica", 9.5)
+    c.drawString(col1, y, centre.get("directeur_nom", ""))
+
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(col2 + 2.3 * cm, y, "BAFM")
+    c.setFont("Helvetica", 9)
+    c.drawCentredString(col2 + 2.3 * cm, y - 0.45 * cm, animateurs.get("bafm_nom", ""))
+    c.drawCentredString(col2 + 2.3 * cm, y - 0.9 * cm, animateurs.get("bafm_numero", ""))
+
+    # Cachet du centre (case "directeur") — image par défaut du centre.
+    _draw_data_url_image(c, cachet_data_url, col1, y - 3.3 * cm, 4.5 * cm, 2.6 * cm)
+
+    # Signature de l'animateur BAFM (réutilise la signature staff existante,
+    # voir POST /me/signature côté employees.py).
+    _draw_data_url_image(c, formateur_signature_data_url, col2 + 0.6 * cm, y - 2.3 * cm, 3.4 * cm, 1.6 * cm)
+
+    # Psychologue — deuxième profil requis par la réglementation.
+    y2 = y - 2.7 * cm
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(col2 + 2.3 * cm, y2, "Psychologue")
+    c.setFont("Helvetica", 9)
+    c.drawCentredString(col2 + 2.3 * cm, y2 - 0.45 * cm, animateurs.get("psychologue_nom", ""))
+    c.drawCentredString(col2 + 2.3 * cm, y2 - 0.9 * cm, animateurs.get("psychologue_numero", ""))
+    _draw_data_url_image(c, psychologue_signature_data_url, col2 + 0.6 * cm, y2 - 2.4 * cm, 3.4 * cm, 1.6 * cm)
+
+    # Signature manuscrite du stagiaire, capturée depuis son espace apprenant.
+    _draw_data_url_image(c, student_signature_data_url, col3, y - 2.4 * cm, 4.5 * cm, 2.2 * cm)
+
+    c.setFillColor(gray)
+    c.setFont("Helvetica", 7.5)
+    c.drawCentredString(w / 2, 1.2 * cm, f"{centre.get('nom', 'TDL Formation')} · Agrément préfectoral {centre.get('agrement_numero', '')} · SIRET {centre.get('siret', '')}")
+
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
 def overlay_signature_on_pdf(pdf_bytes: bytes, signature_png: bytes, signer_name: str, signed_at_label: str) -> bytes:
     """Appose l'image de signature de l'utilisateur (+ une mention) en bas à
     droite de la DERNIÈRE page d'un PDF déjà généré. Le cachet et la signature
@@ -123,13 +310,13 @@ def overlay_signature_on_pdf(pdf_bytes: bytes, signature_png: bytes, signer_name
     try:
         img = ImageReader(_io.BytesIO(signature_png))
         c.drawImage(
-            img, page_w - 7 * cm, 2.6 * cm, width=5 * cm, height=2.3 * cm,
+            img, page_w - 12 * cm, 3.8 * cm, width=10 * cm, height=5 * cm,
             mask='auto', preserveAspectRatio=True, anchor='sw'
         )
     except Exception:
         pass
     c.setFont("Helvetica-Oblique", 8)
-    c.drawRightString(page_w - 2 * cm, 2.3 * cm, f"Signé électroniquement par {signer_name} le {signed_at_label}")
+    c.drawRightString(page_w - 2 * cm, 3.5 * cm, f"Signé électroniquement par {signer_name} le {signed_at_label}")
     c.save()
     overlay_buf.seek(0)
     overlay_page = PdfReader(overlay_buf).pages[0]

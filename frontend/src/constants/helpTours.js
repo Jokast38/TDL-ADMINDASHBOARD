@@ -1,7 +1,7 @@
 import {
   House, GraduationCap, Folders, IdentificationCard, UsersThree, FilePdf, FileText,
   Archive, ShoppingCart, Storefront, Robot, Article, Users, Gear, ChartBar,
-  CalendarCheck, PenNib, TrendUp, LinkSimple,
+  CalendarCheck, PenNib, TrendUp, LinkSimple, Student, Signature, ArrowsClockwise,
 } from "@phosphor-icons/react";
 
 // Contenu du Centre d'aide (visites guidées) — une catégorie par profil
@@ -23,7 +23,15 @@ export const HELP_CATEGORIES = [
         route: "/admin/inscriptions",
         targetSelector: '[data-testid="callback-requests-card"]',
         description:
-          "Liste de toutes les inscriptions (en ligne ou saisies par vous) et, encadré ici, les demandes de rappel non traitées — pensez à les marquer « traité » une fois le candidat rappelé.",
+          "Liste de toutes les inscriptions (en ligne ou saisies par vous) et, encadré ici, les demandes de rappel non traitées — pensez à les marquer « traité » une fois le candidat rappelé. La section se replie automatiquement dès qu'il n'y a plus de nouvelle demande.",
+      },
+      {
+        title: "Filtres et statut de contact",
+        icon: IdentificationCard,
+        route: "/admin/inscriptions",
+        targetSelector: '[data-testid="filter-contact"]',
+        description:
+          "Filtrez les inscriptions par payé/non payé, traité/non traité, clôturée/active, et par statut de contact (à contacter, en cours, sans réponse) — pratique pour relancer les inscriptions bloquées. Pagination automatique par 25.",
       },
       {
         title: "Dossiers (Kanban)",
@@ -31,7 +39,15 @@ export const HELP_CATEGORIES = [
         route: "/admin/dossiers",
         targetSelector: '[data-testid="kanban-board"]',
         description:
-          "Chaque inscription génère automatiquement un dossier avec sa liste de documents requis et une carte Trello. Faites glisser les dossiers d'une colonne à l'autre selon l'avancement (nouveau → en cours → validé...) ; vérifiez et validez/rejetez les documents déposés par l'élève.",
+          "Chaque inscription génère automatiquement un dossier avec sa liste de documents requis et une carte Trello. Faites glisser les dossiers d'une colonne à l'autre selon l'avancement (nouveau → en cours → validé...) ; vérifiez et validez/rejetez les documents déposés par l'élève. Une barre de recherche par nom d'apprenant est disponible en haut, et chaque colonne se charge par 5 avec « Afficher plus ».",
+      },
+      {
+        title: "Apprenants",
+        icon: Student,
+        route: "/admin/apprenants",
+        targetSelector: '[data-testid="students-page"]',
+        description:
+          "Vue unifiée de chaque apprenant : résultats d'examen CMA (VTC/Taxi, permis B), rendez-vous, documents manquants. Depuis cette page vous pouvez ouvrir le dossier, envoyer un email avec le template de la marque, et — pour les stages de récupération de points terminés — déclencher la notification de disponibilité de l'attestation de stage à signer.",
       },
       {
         title: "Sessions de stage",
@@ -145,6 +161,14 @@ export const HELP_CATEGORIES = [
         description:
           "Rédigez un article vous-même ou laissez l'IA en générer un brouillon à partir d'un sujet et de mots-clés avec ce bouton (relisez toujours avant de publier).",
       },
+      {
+        title: "Synchro auto WordPress",
+        icon: ArrowsClockwise,
+        route: "/admin/blog",
+        targetSelector: '[data-testid="wp-autosync-toggle"]',
+        description:
+          "Activez ce bouton pour importer automatiquement, toutes les 15 min, les nouveaux articles publiés sur WordPress (en brouillon, à relire avant publication). Désactivez-le si vous préférez importer manuellement via « Importer depuis WordPress ».",
+      },
     ],
   },
   {
@@ -169,6 +193,14 @@ export const HELP_CATEGORIES = [
         targetSelector: '[data-testid="generate-emargement-pdf"]',
         description:
           "Pour chaque session, ouvrez la liste des stagiaires : marquez chacun présent/absent et faites-le signer directement à l'écran (signature tactile). Une fois tous les stagiaires traités, ce bouton génère la feuille d'émargement PDF officielle.",
+      },
+      {
+        title: "Ma signature",
+        icon: Signature,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="tab-signature"]',
+        description:
+          "Déposez votre signature manuscrite et votre numéro d'agrément BAFM une seule fois : ils sont ensuite utilisés automatiquement pour signer les attestations de stage de récupération de points de vos stagiaires.",
       },
     ],
   },

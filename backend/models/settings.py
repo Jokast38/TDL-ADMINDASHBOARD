@@ -33,6 +33,20 @@ class SettingsIn(BaseModel):
     limova_phone_agent_id: Optional[str] = None
     limova_marketing_agent_id: Optional[str] = None
 
+    # Attestation de suivi de stage de récupération de points (voir
+    # services/pdf.py:generate_stage_recup_points_attestation) — identité du
+    # centre + signataires par défaut (directeur, psychologue). La signature
+    # de l'animateur BAFM n'est pas ici : elle vient de son propre compte
+    # (voir POST /me/signature), assignée dynamiquement via le stage.
+    attestation_centre_nom: Optional[str] = None
+    attestation_centre_adresse: Optional[str] = None
+    attestation_centre_ville: Optional[str] = None
+    attestation_centre_siret: Optional[str] = None
+    attestation_directeur_nom: Optional[str] = None
+    attestation_agrement_numero: Optional[str] = None
+    attestation_psychologue_nom: Optional[str] = None
+    attestation_psychologue_numero: Optional[str] = None
+
 
 class ChatIn(BaseModel):
     message: str

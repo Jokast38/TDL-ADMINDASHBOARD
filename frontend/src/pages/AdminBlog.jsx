@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, PencilSimple, Trash, Sparkle, Eye, ArrowSquareOut, MagicWand, UploadSimple, Image as ImageIcon, CloudArrowDown, CheckCircle, CloudArrowUp, ArrowCounterClockwise, X, ArrowLineDown } from "@phosphor-icons/react";
+import { Plus, PencilSimple, Trash, Sparkle, Eye, ArrowSquareOut, MagicWand, UploadSimple, Image as ImageIcon, CloudArrowDown, CheckCircle, CloudArrowUp, ArrowCounterClockwise, X, ArrowLineDown, ArrowsClockwise } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const CATEGORIES = ["actualites", "conseils", "formations", "kami", "seo"];
@@ -49,9 +49,25 @@ export default function AdminBlog() {
   const [wpPosts, setWpPosts] = useState([]);
   const [wpRankMathAvailable, setWpRankMathAvailable] = useState(false);
   const [wpSelected, setWpSelected] = useState([]);
+  const [autoSync, setAutoSync] = useState(null);
+  const [autoSyncToggling, setAutoSyncToggling] = useState(false);
 
   const load = () => api.get("/blog/admin/posts").then((r) => setItems(r.data));
-  useEffect(() => { load(); }, []);
+  const loadAutoSync = () => api.get("/wordpress/blog/auto-sync").then((r) => setAutoSync(r.data)).catch(() => {});
+  useEffect(() => { load(); loadAutoSync(); }, []);
+
+  const toggleAutoSync = async () => {
+    setAutoSyncToggling(true);
+    try {
+      const { data } = await api.put("/wordpress/blog/auto-sync", { enabled: !autoSync?.enabled });
+      setAutoSync((a) => ({ ...a, enabled: data.enabled }));
+      toast.success(data.enabled ? "Synchro automatique WordPress activée" : "Synchro automatique WordPress désactivée");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setAutoSyncToggling(false);
+    }
+  };
 
   const openEdit = async (id) => {
     const { data } = await api.get(`/blog/admin/posts/${id}`);
@@ -253,6 +269,17 @@ export default function AdminBlog() {
           </Button>
           <Button variant="outline" onClick={fixImageHosts} disabled={fixingImages} title="Corrige les images d'articles importés dont l'URL pointe vers un domaine cassé/parqué" data-testid="fix-images-btn">
             <ImageIcon size={16} className="mr-1" /> {fixingImages ? "Correction..." : "Réparer les images"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={toggleAutoSync}
+            disabled={autoSyncToggling || autoSync === null}
+            title={autoSync?.last_run_at ? `Dernière synchro : ${new Date(autoSync.last_run_at).toLocaleString("fr-FR")}` : "Importe automatiquement en brouillon les nouveaux articles WordPress toutes les 15 min"}
+            className={autoSync?.enabled ? "border-[#0B7238] text-[#0B7238] hover:bg-[#0B7238]/10 hover:text-[#0B7238]" : ""}
+            data-testid="wp-autosync-toggle"
+          >
+            <ArrowsClockwise size={16} className="mr-1" weight={autoSync?.enabled ? "fill" : "regular"} />
+            Synchro auto WordPress : {autoSync?.enabled ? "ON" : "OFF"}
           </Button>
           <Dialog open={wpOpen} onOpenChange={setWpOpen}>
             <DialogTrigger asChild>

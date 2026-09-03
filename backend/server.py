@@ -21,7 +21,7 @@ from routers import (
     generated_docs, health, callback, tracking, reviews, chatbot, notifications,
     custom_email, lead_automations, limova, payments, push, reminders,
     company_documents, positioning_tests, backlinks, docs, places,
-    exams, appointments,
+    exams, appointments, stage_attestations,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders
@@ -90,6 +90,7 @@ app.include_router(docs.router,           prefix=_PREFIX)
 app.include_router(places.router,         prefix=_PREFIX)
 app.include_router(exams.router,          prefix=_PREFIX)
 app.include_router(appointments.router,   prefix=_PREFIX)
+app.include_router(stage_attestations.router, prefix=_PREFIX)
 
 # Fichiers uploadés depuis l'admin (ex: images de couverture d'articles de blog),
 # servis en statique — indépendant du service de stockage objet externe Emergent.
@@ -292,6 +293,24 @@ async def _daily_dossiers_digest_loop():
             log.warning(f"Récap dossiers en attente : erreur — {e}")
 
 
+async def _wordpress_auto_sync_loop():
+    """Toutes les 15 min, si la synchro auto du blog est activée (bouton
+    on/off dans AdminBlog.jsx, réglage wp_blog_auto_sync_enabled), importe en
+    brouillon les nouveaux articles publiés sur WordPress. Le réglage est lu
+    à chaque itération pour réagir sans redémarrage au toggle admin."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            settings = await db.settings.find_one({"id": "global"}, {"wp_blog_auto_sync_enabled": 1}) or {}
+            if settings.get("wp_blog_auto_sync_enabled"):
+                imported = await wordpress.auto_sync_wordpress_posts()
+                if imported:
+                    log.info(f"Synchro WordPress auto : {imported} article(s) importé(s)")
+        except Exception as e:
+            log.warning(f"Synchro WordPress auto : erreur — {e}")
+        await asyncio.sleep(15 * 60)
+
+
 @app.on_event("startup")
 async def startup():
     asyncio.create_task(_background_init())
@@ -300,6 +319,7 @@ async def startup():
     asyncio.create_task(_callback_reminders_loop())
     asyncio.create_task(_daily_dossiers_digest_loop())
     asyncio.create_task(_document_reminders_loop())
+    asyncio.create_task(_wordpress_auto_sync_loop())
 
 
 @app.on_event("shutdown")

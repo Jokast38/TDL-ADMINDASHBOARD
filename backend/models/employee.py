@@ -28,3 +28,10 @@ class AssignedCentersIn(BaseModel):
 
 class AssignedTrainingAssignmentsIn(BaseModel):
     assigned_training_assignments: List[dict] = []
+
+
+class AgrementBafmIn(BaseModel):
+    # Numéro d'agrément BAFM de l'animateur, affiché sur l'attestation de
+    # stage de récupération de points (voir services/pdf.py) — géré par
+    # l'animateur lui-même depuis son espace, comme sa signature.
+    agrement_bafm_numero: Optional[str] = None

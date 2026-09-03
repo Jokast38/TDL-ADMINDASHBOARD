@@ -1,19 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api } from "@/lib/api";
+import SignatureCanvas from "react-signature-canvas";
+import { api, API } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   SignOut, FileArrowUp, FolderOpen, Warning, CheckCircle, ThumbsUp, ThumbsDown,
-  CalendarCheck, ArrowSquareOut, CreditCard, Clock, Sparkle, MapPin,
+  CalendarCheck, ArrowSquareOut, CreditCard, Clock, Sparkle, MapPin, Eraser, FilePdf, Signature,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
+
+// Seule cette catégorie de formation ("Récupération de points") donne lieu
+// à l'attestation officielle de stage — doit rester synchronisé avec
+// ATTESTATION_CATEGORY côté backend (routers/stage_attestations.py).
+const ATTESTATION_CATEGORY = "PERMIS";
 
 const STATUS_LABEL = {
   nouveau: "Nouveau", en_verification: "En vérification", complet: "Complet",
@@ -299,6 +306,124 @@ function ExamPratiqueSection({ dossier, refresh }) {
   );
 }
 
+const EMPTY_IDENTITY = {
+  adresse: "", ville: "", date_naissance: "", lieu_naissance: "",
+  numero_permis: "", date_delivrance_permis: "", prefecture_delivrance: "",
+};
+
+function AttestationSection({ dossierId }) {
+  const [info, setInfo] = useState(null);
+  const [identity, setIdentity] = useState(EMPTY_IDENTITY);
+  const [savingIdentity, setSavingIdentity] = useState(false);
+  const [signing, setSigning] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const padRef = useRef(null);
+
+  const load = () => {
+    api.get(`/dossiers/${dossierId}/attestation`).then((r) => {
+      setInfo(r.data);
+      setIdentity({ ...EMPTY_IDENTITY, ...r.data.identity });
+    }).catch(() => setInfo(null));
+  };
+  useEffect(() => { load(); }, [dossierId]);
+
+  if (!info || !info.disponible) return null;
+
+  const identityComplete = Object.values(identity).every((v) => (v || "").trim());
+
+  const saveIdentity = async () => {
+    if (!identityComplete) return toast.error("Merci de compléter tous les champs");
+    setSavingIdentity(true);
+    try {
+      await api.put(`/dossiers/${dossierId}/attestation/identity`, identity);
+      toast.success("Fiche identité enregistrée");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSavingIdentity(false);
+    }
+  };
+
+  const sign = async () => {
+    if (padRef.current?.isEmpty()) return toast.error("Signez d'abord dans la zone");
+    setSigning(true);
+    try {
+      const dataUrl = padRef.current.getCanvas().toDataURL("image/png");
+      await api.post(`/dossiers/${dossierId}/attestation/sign`, { signature_data_url: dataUrl });
+      toast.success("Attestation signée !");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  const download = async () => {
+    setDownloading(true);
+    try {
+      const token = localStorage.getItem("tdl_token");
+      const res = await fetch(`${API}/dossiers/${dossierId}/attestation/download`, { headers: { Authorization: `Bearer ${token}` } });
+      const blob = await res.blob();
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch {
+      toast.error("Erreur de téléchargement");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  if (info.signed) {
+    return (
+      <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-4 flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm text-green-800 flex items-center gap-2"><CheckCircle size={16} weight="fill" /> Votre attestation de stage est signée.</p>
+        <Button size="sm" variant="outline" onClick={download} disabled={downloading} data-testid={`download-attestation-${dossierId}`}>
+          <FilePdf size={14} className="mr-1" /> {downloading ? "..." : "Télécharger"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-50 border border-gray-200 rounded-md p-4 mb-4">
+      <p className="text-sm font-medium mb-3 flex items-center gap-2"><Signature size={16} className="text-[#d4af37]" /> Votre attestation de stage est disponible — complétez et signez-la</p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+        <Input placeholder="Adresse" value={identity.adresse} onChange={(e) => setIdentity((i) => ({ ...i, adresse: e.target.value }))} />
+        <Input placeholder="Ville" value={identity.ville} onChange={(e) => setIdentity((i) => ({ ...i, ville: e.target.value }))} />
+        <Input type="date" placeholder="Date de naissance" value={identity.date_naissance} onChange={(e) => setIdentity((i) => ({ ...i, date_naissance: e.target.value }))} />
+        <Input placeholder="Lieu de naissance" value={identity.lieu_naissance} onChange={(e) => setIdentity((i) => ({ ...i, lieu_naissance: e.target.value }))} />
+        <Input placeholder="Numéro de permis" value={identity.numero_permis} onChange={(e) => setIdentity((i) => ({ ...i, numero_permis: e.target.value }))} />
+        <Input type="date" placeholder="Date de délivrance du permis" value={identity.date_delivrance_permis} onChange={(e) => setIdentity((i) => ({ ...i, date_delivrance_permis: e.target.value }))} />
+        <Input placeholder="Préfecture de délivrance" value={identity.prefecture_delivrance} onChange={(e) => setIdentity((i) => ({ ...i, prefecture_delivrance: e.target.value }))} />
+      </div>
+      <Button size="sm" variant="outline" onClick={saveIdentity} disabled={savingIdentity} className="mb-4" data-testid={`save-identity-${dossierId}`}>
+        {savingIdentity ? "..." : "Enregistrer ma fiche identité"}
+      </Button>
+
+      {identityComplete && (
+        <div className="border-t border-gray-200 pt-3">
+          <p className="text-sm font-medium mb-1">Ma signature</p>
+          <div className="border-2 border-dashed border-gray-300 rounded-md bg-white">
+            <SignatureCanvas
+              ref={padRef}
+              canvasProps={{ width: 460, height: 160, className: "w-full rounded-md", "data-testid": `attestation-signature-pad-${dossierId}` }}
+              penColor="#0a0a0a"
+            />
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <Button variant="ghost" size="sm" onClick={() => padRef.current?.clear()}><Eraser size={12} className="mr-1" /> Effacer</Button>
+            <Button size="sm" onClick={sign} disabled={signing} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid={`sign-attestation-${dossierId}`}>
+              {signing ? "Signature..." : "Signer mon attestation"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function StudentSpace() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -407,6 +532,7 @@ export default function StudentSpace() {
                     <ExamPratiqueSection dossier={d} refresh={fetchDossiers} />
                   </>
                 )}
+                {d.category === ATTESTATION_CATEGORY && <AttestationSection dossierId={d.id} />}
 
                 {docs.length > 0 && (
                   <div className="space-y-1 mb-4">

@@ -7,10 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { MagnifyingGlass, EnvelopeSimple, Phone, GraduationCap, FolderOpen, Sparkle, PaperPlaneTilt } from "@phosphor-icons/react";
+import { MagnifyingGlass, EnvelopeSimple, Phone, GraduationCap, FolderOpen, Sparkle, PaperPlaneTilt, Signature } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 25;
+
+// Seule cette catégorie ("Récupération de points") donne lieu à
+// l'attestation officielle de stage — doit rester synchronisé avec
+// ATTESTATION_CATEGORY côté backend (routers/stage_attestations.py).
+const ATTESTATION_CATEGORY = "PERMIS";
 
 // Les formations VTC/Taxi et permis B (AUTO_ECOLE) passent par le workflow
 // examen CMA (voir StudentSpace.jsx) — pas l'ECSR, le TP Vente (VENTE), ni
@@ -140,6 +145,17 @@ export default function Students() {
     }
   };
 
+  const notifyAttestation = async (s) => {
+    if (!s.dossier_id) return toast.error("Aucun dossier pour cet apprenant");
+    try {
+      await api.post(`/dossiers/${s.dossier_id}/attestation/notify`);
+      toast.success("Apprenant notifié — attestation disponible sur son espace");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -234,6 +250,16 @@ export default function Students() {
                       {s.dossier_id && (
                         <button onClick={() => openDossier(s)} className="p-1.5 text-gray-600 hover:bg-gray-100 rounded" title="Voir le dossier" data-testid={`view-dossier-${s.id}`}>
                           <FolderOpen size={14} />
+                        </button>
+                      )}
+                      {s.dossier_id && (s.categories || []).includes(ATTESTATION_CATEGORY) && (
+                        <button
+                          onClick={() => notifyAttestation(s)}
+                          className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
+                          title="Notifier la disponibilité de l'attestation de stage (uniquement si le stage est terminé)"
+                          data-testid={`notify-attestation-${s.id}`}
+                        >
+                          <Signature size={14} />
                         </button>
                       )}
                       {s.email && (

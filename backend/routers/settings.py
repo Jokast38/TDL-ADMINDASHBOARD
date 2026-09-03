@@ -1,10 +1,11 @@
 import os
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File
 
 from core.database import db
 from core.security import require_role
+from core.storage import put_object
 from core.utils import now_iso
-from core.config import EMERGENT_LLM_KEY, OLLAMA_API_KEY
+from core.config import EMERGENT_LLM_KEY, OLLAMA_API_KEY, APP_NAME
 from models.settings import SettingsIn
 from services.trello import TrelloService
 
@@ -24,6 +25,33 @@ async def update_settings(payload: SettingsIn, user: dict = Depends(require_role
     update["updated_at"] = now_iso()
     await db.settings.update_one({"id": "global"}, {"$set": update}, upsert=True)
     return await db.settings.find_one({"id": "global"}, {"_id": 0})
+
+
+@router.post("/settings/attestation-cachet")
+async def upload_attestation_cachet(file: UploadFile = File(...), user: dict = Depends(require_role("admin"))):
+    """Cachet/tampon du centre, apposé par défaut sur les attestations de
+    stage de récupération de points (case "Signature du directeur") — voir
+    services/pdf.py:generate_stage_recup_points_attestation."""
+    data = await file.read()
+    result = await put_object(f"{APP_NAME}/settings/attestation_cachet.png", data, file.content_type or "image/png")
+    await db.settings.update_one(
+        {"id": "global"}, {"$set": {"attestation_cachet_path": result["path"], "updated_at": now_iso()}}, upsert=True
+    )
+    return {"ok": True}
+
+
+@router.post("/settings/attestation-psychologue-signature")
+async def upload_attestation_psychologue_signature(file: UploadFile = File(...), user: dict = Depends(require_role("admin"))):
+    """Signature par défaut du psychologue (deuxième profil requis par la
+    réglementation pour ce type de stage) — cette personne n'a pas
+    forcément de compte sur le dashboard, donc pas de mécanisme
+    d'auto-upload équivalent à /me/signature pour les animateurs."""
+    data = await file.read()
+    result = await put_object(f"{APP_NAME}/settings/attestation_psychologue_signature.png", data, file.content_type or "image/png")
+    await db.settings.update_one(
+        {"id": "global"}, {"$set": {"attestation_psychologue_signature_path": result["path"], "updated_at": now_iso()}}, upsert=True
+    )
+    return {"ok": True}
 
 
 @router.get("/integrations/status")

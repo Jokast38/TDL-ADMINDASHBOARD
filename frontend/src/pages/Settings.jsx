@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { CreditCard, EnvelopeSimple, Kanban, Plugs, ChartBar, MagnifyingGlass, Robot } from "@phosphor-icons/react";
+import { CreditCard, EnvelopeSimple, Kanban, Plugs, ChartBar, MagnifyingGlass, Robot, Signature, UploadSimple, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 export default function Settings() {
@@ -44,6 +44,7 @@ export default function Settings() {
           <TabsTrigger value="seo" data-testid="tab-seo"><MagnifyingGlass size={14} className="mr-1" /> SEO</TabsTrigger>
           <TabsTrigger value="analytics" data-testid="tab-analytics"><ChartBar size={14} className="mr-1" /> Analytics</TabsTrigger>
           <TabsTrigger value="limova" data-testid="tab-limova"><Robot size={14} className="mr-1" /> Limova</TabsTrigger>
+          <TabsTrigger value="attestations" data-testid="tab-attestations"><Signature size={14} className="mr-1" /> Attestations</TabsTrigger>
         </TabsList>
 
         <TabsContent value="email">
@@ -273,6 +274,40 @@ export default function Settings() {
             </div>
           </Card>
         </TabsContent>
+
+        <TabsContent value="attestations">
+          <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+            <h3 className="font-display text-xl font-bold mb-1">Attestation de stage — récupération de points</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Identité du centre et signataires par défaut apposés sur l'attestation officielle de suivi de stage de
+              sensibilisation à la sécurité routière. La signature de l'animateur BAFM vient de son propre espace
+              (Espace animateur → Ma signature) — pas d'ici.
+            </p>
+            <div className="space-y-4 max-w-xl">
+              <Field label="Nom du centre" value={s.attestation_centre_nom} onChange={(v) => update("attestation_centre_nom", v)} testid="attestation-centre-nom" placeholder="Top Drive Learning (TDL)" />
+              <Field label="Adresse du centre" value={s.attestation_centre_adresse} onChange={(v) => update("attestation_centre_adresse", v)} testid="attestation-centre-adresse" placeholder="59 avenue Joffre" />
+              <Field label="Ville du centre" value={s.attestation_centre_ville} onChange={(v) => update("attestation_centre_ville", v)} testid="attestation-centre-ville" placeholder="93800 Epinay-sur-seine" />
+              <Field label="SIRET" value={s.attestation_centre_siret} onChange={(v) => update("attestation_centre_siret", v)} testid="attestation-centre-siret" />
+              <Field label="Nom du directeur / responsable de formation" value={s.attestation_directeur_nom} onChange={(v) => update("attestation_directeur_nom", v)} testid="attestation-directeur-nom" />
+              <Field label="Numéro d'agrément préfectoral" value={s.attestation_agrement_numero} onChange={(v) => update("attestation_agrement_numero", v)} testid="attestation-agrement" />
+              <Field label="Nom du psychologue" value={s.attestation_psychologue_nom} onChange={(v) => update("attestation_psychologue_nom", v)} testid="attestation-psy-nom" />
+              <Field label="Numéro d'agrément du psychologue" value={s.attestation_psychologue_numero} onChange={(v) => update("attestation_psychologue_numero", v)} testid="attestation-psy-numero" />
+            </div>
+
+            <div className="mt-6 pt-6 border-t border-gray-200 space-y-4 max-w-xl">
+              <AttestationImageUpload
+                label="Cachet du centre (case « Signature du directeur »)"
+                endpoint="/settings/attestation-cachet"
+                testid="attestation-cachet"
+              />
+              <AttestationImageUpload
+                label="Signature du psychologue"
+                endpoint="/settings/attestation-psychologue-signature"
+                testid="attestation-psy-signature"
+              />
+            </div>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <div className="flex justify-end">
@@ -313,6 +348,42 @@ function PaymentsToggle() {
           Renseignez la clé secrète Stripe ci-dessus (ou STRIPE_SECRET_KEY sur le serveur) pour pouvoir activer.
         </p>
       )}
+    </div>
+  );
+}
+
+function AttestationImageUpload({ label, endpoint, testid }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploaded, setUploaded] = useState(false);
+
+  const upload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      await api.post(endpoint, fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success("Image enregistrée");
+      setUploaded(true);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <div>
+      <label className="text-sm font-medium block mb-1">{label}</label>
+      <div className="flex items-center gap-2">
+        <label className="inline-flex items-center gap-2 text-sm cursor-pointer px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
+          <UploadSimple size={14} /> {uploading ? "Envoi..." : "Choisir une image"}
+          <input type="file" accept="image/*" className="hidden" onChange={upload} data-testid={testid} />
+        </label>
+        {uploaded && <span className="text-xs text-[#0B7238] flex items-center gap-1"><CheckCircle size={14} weight="fill" /> Enregistrée</span>}
+      </div>
     </div>
   );
 }
