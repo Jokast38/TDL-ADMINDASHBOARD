@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, ArrowRight, ArrowLeft, CreditCard, XCircle } from "@phosphor-icons/react";
+import { CheckCircle, ArrowRight, ArrowLeft, CreditCard, XCircle, CalendarCheck, MapPin, Users } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { trackCompleteRegistration, trackInitiateCheckout, trackPurchase } from "@/lib/metaPixel";
 import { setPageMeta } from "@/lib/seo";
@@ -21,6 +21,11 @@ const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 
+// Catégorie(s) de formation pour lesquelles on demande de choisir une session
+// (date + centre) disponible avant les infos personnelles — pour l'instant
+// uniquement la récupération de points, sur demande explicite.
+const SESSION_STEP_CATEGORIES = ["PERMIS"];
+
 export default function PublicInscription() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -33,6 +38,9 @@ export default function PublicInscription() {
   const [allowKlarna, setAllowKlarna] = useState(false);
   const [privacyConsent, setPrivacyConsent] = useState(false);
   const [payLoading, setPayLoading] = useState(false);
+  const [sessions, setSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [selectedStageId, setSelectedStageId] = useState("");
 
   // Retour depuis Stripe Checkout : le navigateur recharge la page, l'état React
   // (étapes 1-3) est donc perdu — on affiche un écran dédié basé sur les paramètres
@@ -78,7 +86,10 @@ export default function PublicInscription() {
       return toast.error("Merci de vérifier votre numéro de téléphone (10 chiffres, ex : 06 12 34 56 78)");
     }
     try {
-      const { data } = await api.post("/inscriptions", { formation_id: formationId, ...form });
+      const { data } = await api.post("/inscriptions", {
+        formation_id: formationId, ...form,
+        stage_id: selectedStageId || undefined,
+      });
       setSuccess(data);
       setStep(3);
       toast.success("Inscription enregistrée");
@@ -89,6 +100,26 @@ export default function PublicInscription() {
   };
 
   const selected = formations.find((f) => f.id === formationId);
+  const needsSessionStep = selected && SESSION_STEP_CATEGORIES.includes(selected.category);
+
+  const pickFormation = async (f) => {
+    setFormationId(f.id);
+    setSelectedStageId("");
+    if (SESSION_STEP_CATEGORIES.includes(f.category)) {
+      setLoadingSessions(true);
+      setStep(1.5);
+      try {
+        const { data } = await api.get("/stages/public/available", { params: { formation_id: f.id } });
+        setSessions(data);
+      } catch {
+        setSessions([]);
+      } finally {
+        setLoadingSessions(false);
+      }
+    } else {
+      setStep(2);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50" data-testid="public-inscription">
@@ -143,12 +174,12 @@ export default function PublicInscription() {
         <>
         {/* Steps */}
         <div className="flex items-center gap-2 mb-8">
-          {[1, 2, 3].map((s) => (
+          {(needsSessionStep ? [1, 1.5, 2, 3] : [1, 2, 3]).map((s, idx, arr) => (
             <div key={s} className="flex items-center gap-2 flex-1">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
                 s <= step ? "bg-[#0a0a0a] text-white" : "bg-gray-200 text-gray-500"
-              }`}>{s}</div>
-              {s < 3 && <div className={`flex-1 h-0.5 ${s < step ? "bg-[#0a0a0a]" : "bg-gray-200"}`} />}
+              }`}>{idx + 1}</div>
+              {idx < arr.length - 1 && <div className={`flex-1 h-0.5 ${s < step ? "bg-[#0a0a0a]" : "bg-gray-200"}`} />}
             </div>
           ))}
         </div>
@@ -161,7 +192,7 @@ export default function PublicInscription() {
               {formations.map((f) => (
                 <Card
                   key={f.id}
-                  onClick={() => { setFormationId(f.id); setStep(2); }}
+                  onClick={() => pickFormation(f)}
                   className={`p-5 border rounded-md cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg ${
                     formationId === f.id ? "border-[#0a0a0a] ring-2 ring-[#0a0a0a]/20" : "border-gray-200"
                   }`}
@@ -177,9 +208,52 @@ export default function PublicInscription() {
           </div>
         )}
 
+        {step === 1.5 && selected && (
+          <div data-testid="step-1-5">
+            <p className="overline">Étape 2 / 4</p>
+            <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-1 mb-2">Choisir une session</h1>
+            <p className="text-gray-500 mb-6">Formation choisie : <strong>{selected.title}</strong> — places restantes en temps réel.</p>
+            {loadingSessions ? (
+              <p className="text-gray-400 text-center py-12">Chargement des sessions disponibles...</p>
+            ) : sessions.length ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {sessions.map((s) => (
+                  <Card
+                    key={s.id}
+                    onClick={() => { setSelectedStageId(s.id); setStep(2); }}
+                    className={`p-5 border rounded-md cursor-pointer transition-all hover:-translate-y-1 hover:shadow-lg ${
+                      selectedStageId === s.id ? "border-[#0a0a0a] ring-2 ring-[#0a0a0a]/20" : "border-gray-200"
+                    }`}
+                    data-testid={`pick-session-${s.id}`}
+                  >
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <CalendarCheck size={16} className="text-[#d4af37]" />
+                      {new Date(s.date_debut).toLocaleDateString("fr-FR")} → {new Date(s.date_fin).toLocaleDateString("fr-FR")}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-gray-500 mt-2">
+                      <MapPin size={12} /> {s.lieu_ville}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                      <Users size={12} /> {s.places_restantes} place{s.places_restantes > 1 ? "s" : ""} restante{s.places_restantes > 1 ? "s" : ""}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card className="p-8 text-center border-dashed border-gray-200">
+                <p className="text-gray-500">Aucune session disponible pour le moment — vous pourrez continuer votre inscription et une session vous sera proposée par notre équipe.</p>
+                <Button className="mt-4 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" onClick={() => setStep(2)}>Continuer sans choisir de session</Button>
+              </Card>
+            )}
+            <div className="flex justify-start mt-6">
+              <Button variant="outline" onClick={() => setStep(1)}><ArrowLeft size={14} className="mr-2" /> Modifier la formation</Button>
+            </div>
+          </div>
+        )}
+
         {step === 2 && selected && (
           <div data-testid="step-2">
-            <p className="overline">Étape 2 / 3</p>
+            <p className="overline">Étape {needsSessionStep ? "3 / 4" : "2 / 3"}</p>
             <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-1 mb-2">Vos informations</h1>
             <p className="text-gray-500 mb-6">Formation choisie : <strong>{selected.title}</strong> — {selected.price}€</p>
             <Card className="p-6 border border-gray-200 rounded-md shadow-none">
@@ -205,7 +279,7 @@ export default function PublicInscription() {
                 <PrivacyConsentCheckbox checked={privacyConsent} onChange={setPrivacyConsent} testId="inscr-privacy-consent" />
               </div>
               <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-4">
-                <Button variant="outline" onClick={() => setStep(1)} className="w-full sm:w-auto">← Modifier la formation</Button>
+                <Button variant="outline" onClick={() => setStep(needsSessionStep ? 1.5 : 1)} className="w-full sm:w-auto">← {needsSessionStep ? "Modifier la session" : "Modifier la formation"}</Button>
                 <Button
                   onClick={submit}
                   disabled={!form.student_name || !form.student_email || !privacyConsent}

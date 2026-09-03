@@ -84,6 +84,19 @@ async def create_checkout_session(
     return await asyncio.to_thread(_create)
 
 
+async def retrieve_checkout_session(session_id: str) -> "stripe.checkout.Session":
+    """Relit l'état réel d'une session Stripe Checkout — filet de sécurité si
+    le webhook n'a pas (encore, ou jamais) mis à jour l'inscription (ex:
+    secret de webhook mal configuré, retry épuisé) : voir POST
+    /payments/{iid}/sync côté routers/payments.py."""
+    key = await secret_key()
+
+    def _retrieve():
+        return stripe.checkout.Session.retrieve(session_id, api_key=key)
+
+    return await asyncio.to_thread(_retrieve)
+
+
 async def construct_webhook_event(payload: bytes, sig_header: str):
     key = await secret_key()
     secret = await webhook_secret()

@@ -36,6 +36,31 @@ def _stage_days(stage: dict) -> list:
         return [stage.get("date_debut", "")]
 
 
+@router.get("/public/available")
+async def list_public_available_stages(formation_id: str):
+    """Sessions à venir avec places restantes, pour l'étape « choisir une
+    session » de l'inscription publique (voir PublicInscription.jsx) —
+    endpoint public (page d'inscription non authentifiée), ne renvoie que le
+    strict nécessaire (pas d'infos internes comme les notes ou l'animateur)."""
+    today = datetime.now().date().isoformat()
+    stages = await db.stages.find(
+        {"formation_id": formation_id, "date_fin": {"$gte": today}, "statut": {"$ne": "annule"}},
+        {"_id": 0},
+    ).sort("date_debut", 1).to_list(100)
+    result = []
+    for s in stages:
+        nb_inscrits = await db.inscriptions.count_documents({"stage_id": s["id"], "status": "active"})
+        remaining = max(0, (s.get("capacite_max") or 0) - nb_inscrits)
+        if remaining <= 0:
+            continue
+        result.append({
+            "id": s["id"], "date_debut": s["date_debut"], "date_fin": s["date_fin"],
+            "lieu_ville": s.get("lieu_ville", ""), "lieu_adresse": s.get("lieu_adresse", ""),
+            "places_restantes": remaining,
+        })
+    return result
+
+
 @router.get("")
 async def list_stages(
     formation_id: Optional[str] = None,

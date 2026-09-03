@@ -117,6 +117,41 @@ async def create_checkout(payload: CheckoutIn, request: Request):
     return {"url": session.url}
 
 
+@router.post("/{iid}/sync")
+async def sync_payment_from_stripe(iid: str, user: dict = Depends(require_role("admin", "employe"))):
+    """Filet de sécurité : relit l'état réel du paiement directement sur
+    Stripe et met à jour l'inscription en conséquence — utile si le webhook
+    n'a pas mis à jour le dashboard (secret de webhook mal configuré,
+    paiement différé type Klarna, retry Stripe épuisé...). Évite d'avoir à
+    corriger manuellement le statut."""
+    inscription = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    if not inscription:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    if not inscription.get("stripe_session_id"):
+        raise HTTPException(status_code=400, detail="Aucune session de paiement Stripe associée à cette inscription")
+    try:
+        session = await stripe_service.retrieve_checkout_session(inscription["stripe_session_id"])
+    except stripe_service.StripeNotConfigured as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erreur Stripe : {e}")
+
+    stripe_status = session.get("payment_status") if isinstance(session, dict) else session.payment_status
+    if stripe_status == "paid" and inscription.get("payment_status") != "paid":
+        amount_total = session.get("amount_total") if isinstance(session, dict) else session.amount_total
+        payment_intent = session.get("payment_intent") if isinstance(session, dict) else session.payment_intent
+        amount_paid = (amount_total or 0) / 100
+        await db.inscriptions.update_one(
+            {"id": iid},
+            {"$set": {
+                "payment_status": "paid", "amount_paid": amount_paid,
+                "stripe_payment_intent": payment_intent, "paid_at": now_iso(), "updated_at": now_iso(),
+            }},
+        )
+        return {"updated": True, "payment_status": "paid", "stripe_payment_status": stripe_status}
+    return {"updated": False, "payment_status": inscription.get("payment_status"), "stripe_payment_status": stripe_status}
+
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
@@ -129,38 +164,73 @@ async def stripe_webhook(request: Request):
         log.warning(f"Stripe webhook signature invalide: {e}")
         raise HTTPException(status_code=400, detail="Signature invalide")
 
-    if event["type"] == "checkout.session.completed":
+    event_type = event["type"]
+    log.info(f"Stripe webhook reçu : {event_type}")
+
+    # Klarna (et les autres moyens de paiement différés) : checkout.session.completed
+    # se déclenche immédiatement mais avec payment_status="unpaid" — le paiement
+    # réel n'est confirmé que plus tard par un évènement async_payment_succeeded/
+    # failed séparé. Ne traiter "completed" comme payé que si Stripe le confirme
+    # déjà à ce stade (cas normal carte bancaire) ; sinon attendre l'évènement
+    # async correspondant. Ignorer cette distinction est la cause la plus probable
+    # d'un paiement confirmé côté Stripe mais resté "en attente" côté dashboard.
+    if event_type in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
+        session = event["data"]["object"]
+        inscription_id = (session.get("metadata") or {}).get("inscription_id")
+        if not inscription_id:
+            log.warning(f"Stripe webhook {event_type} : metadata.inscription_id absent (session {session.get('id')}) — aucune mise à jour possible")
+        elif event_type == "checkout.session.completed" and session.get("payment_status") != "paid":
+            log.info(f"Stripe webhook completed : paiement différé (payment_status={session.get('payment_status')}) pour {inscription_id}, en attente de la confirmation async")
+        else:
+            try:
+                amount_paid = (session.get("amount_total") or 0) / 100
+                result = await db.inscriptions.update_one(
+                    {"id": inscription_id},
+                    {"$set": {
+                        "payment_status": "paid", "amount_paid": amount_paid,
+                        "stripe_payment_intent": session.get("payment_intent"), "paid_at": now_iso(),
+                        "updated_at": now_iso(),
+                    }},
+                )
+                if result.matched_count == 0:
+                    log.warning(f"Stripe webhook {event_type} : inscription {inscription_id} introuvable en base")
+                inscription = await db.inscriptions.find_one({"id": inscription_id}, {"_id": 0})
+            except Exception as e:
+                log.error(f"Stripe webhook {event_type} : échec mise à jour inscription {inscription_id} — {e}")
+                raise
+            if inscription:
+                try:
+                    await send_capi_event(
+                        "Purchase",
+                        # ID déterministe à partir de l'inscription — le pixel navigateur
+                        # (StageRecuperationMerci.jsx) calcule le même `purchase_{id}`
+                        # indépendamment, ce qui suffit à Meta pour dédupliquer les deux
+                        # évènements sans aucune coordination réseau entre les deux.
+                        event_id=f"purchase_{inscription_id}",
+                        email=inscription.get("student_email"),
+                        phone=inscription.get("student_phone"),
+                        custom_data={"value": amount_paid, "currency": "EUR", "content_name": inscription.get("source") or "inscription_formation"},
+                        event_source_url=inscription.get("landing_url") or f"{PUBLIC_FRONTEND_URL}/inscription",
+                        client_ip_address=inscription.get("checkout_client_ip"),
+                        client_user_agent=inscription.get("checkout_user_agent"),
+                        fbc=inscription.get("checkout_fbc"), fbp=inscription.get("checkout_fbp"),
+                        external_id=inscription_id,
+                    )
+                except Exception as e:
+                    # Ne jamais faire échouer le webhook (et donc déclencher un
+                    # retry Stripe inutile) pour un évènement de tracking marketing
+                    # — l'inscription est déjà marquée payée à ce stade.
+                    log.warning(f"Stripe webhook {event_type} : événement CAPI non envoyé — {e}")
+    elif event_type == "checkout.session.async_payment_failed":
         session = event["data"]["object"]
         inscription_id = (session.get("metadata") or {}).get("inscription_id")
         if inscription_id:
-            amount_paid = (session.get("amount_total") or 0) / 100
             await db.inscriptions.update_one(
-                {"id": inscription_id},
-                {"$set": {
-                    "payment_status": "paid", "amount_paid": amount_paid,
-                    "stripe_payment_intent": session.get("payment_intent"), "paid_at": now_iso(),
-                    "updated_at": now_iso(),
-                }},
+                {"id": inscription_id, "payment_status": "processing"},
+                {"$set": {"payment_status": "pending", "updated_at": now_iso()}},
             )
-            inscription = await db.inscriptions.find_one({"id": inscription_id}, {"_id": 0})
-            if inscription:
-                await send_capi_event(
-                    "Purchase",
-                    # ID déterministe à partir de l'inscription — le pixel navigateur
-                    # (StageRecuperationMerci.jsx) calcule le même `purchase_{id}`
-                    # indépendamment, ce qui suffit à Meta pour dédupliquer les deux
-                    # évènements sans aucune coordination réseau entre les deux.
-                    event_id=f"purchase_{inscription_id}",
-                    email=inscription.get("student_email"),
-                    phone=inscription.get("student_phone"),
-                    custom_data={"value": amount_paid, "currency": "EUR", "content_name": inscription.get("source") or "inscription_formation"},
-                    event_source_url=inscription.get("landing_url") or f"{PUBLIC_FRONTEND_URL}/inscription",
-                    client_ip_address=inscription.get("checkout_client_ip"),
-                    client_user_agent=inscription.get("checkout_user_agent"),
-                    fbc=inscription.get("checkout_fbc"), fbp=inscription.get("checkout_fbp"),
-                    external_id=inscription_id,
-                )
-    elif event["type"] in ("checkout.session.expired",):
+            log.info(f"Stripe webhook async_payment_failed : inscription {inscription_id} repassée en attente")
+    elif event_type == "checkout.session.expired":
         session = event["data"]["object"]
         inscription_id = (session.get("metadata") or {}).get("inscription_id")
         if inscription_id:

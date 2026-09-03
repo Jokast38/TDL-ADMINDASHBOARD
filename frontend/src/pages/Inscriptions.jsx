@@ -11,7 +11,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise, PhoneCall, Check, Trash, GraduationCap, Hourglass, CaretRight, CaretDown, Plus, CreditCard, CalendarCheck } from "@phosphor-icons/react";
+import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise, PhoneCall, Check, Trash, GraduationCap, Hourglass, CaretRight, CaretDown, Plus, CreditCard, CalendarCheck, ArrowsClockwise } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n || 0);
@@ -250,6 +250,21 @@ export default function Inscriptions() {
     catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
   };
 
+  const [syncingId, setSyncingId] = useState(null);
+  const syncPaymentFromStripe = async (id) => {
+    setSyncingId(id);
+    try {
+      const { data } = await api.post(`/payments/${id}/sync`);
+      if (data.updated) toast.success("Paiement confirmé sur Stripe — statut mis à jour");
+      else toast.info(`Stripe indique : ${data.stripe_payment_status || "aucun paiement confirmé"}`);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur de vérification Stripe");
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
   const updatePaymentStatus = async (id, payment_status) => {
     try { await api.put(`/inscriptions/${id}`, { payment_status }); toast.success("Statut de paiement mis à jour"); load(); }
     catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
@@ -463,18 +478,31 @@ export default function Inscriptions() {
                     <td className="py-3 px-4">{i.formation_title}</td>
                     <td className="py-3 px-4"><Badge variant="outline">{i.category}</Badge></td>
                     <td className="py-3 px-4">
-                      <Select value={i.payment_status} onValueChange={(v) => updatePaymentStatus(i.id, v)} disabled={cancelled}>
-                        <SelectTrigger className={`h-7 text-xs w-28 border-0 ${
-                          i.payment_status === "paid" ? "bg-[#0B7238]/10 text-[#0B7238]"
-                          : i.payment_status === "refunded" ? "bg-gray-200 text-gray-600"
-                          : "bg-[#F5A623]/10 text-[#F5A623]"
-                        }`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(PAYMENT_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex items-center gap-1">
+                        <Select value={i.payment_status} onValueChange={(v) => updatePaymentStatus(i.id, v)} disabled={cancelled}>
+                          <SelectTrigger className={`h-7 text-xs w-28 border-0 ${
+                            i.payment_status === "paid" ? "bg-[#0B7238]/10 text-[#0B7238]"
+                            : i.payment_status === "refunded" ? "bg-gray-200 text-gray-600"
+                            : "bg-[#F5A623]/10 text-[#F5A623]"
+                          }`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(PAYMENT_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        {i.payment_status !== "paid" && i.stripe_session_id && (
+                          <button
+                            onClick={() => syncPaymentFromStripe(i.id)}
+                            disabled={syncingId === i.id}
+                            className="p-1 text-gray-400 hover:text-[#d4af37] hover:bg-gray-100 rounded shrink-0"
+                            title="Vérifier auprès de Stripe (si le paiement a réussi mais n'apparaît pas ici)"
+                            data-testid={`sync-stripe-${i.id}`}
+                          >
+                            <ArrowsClockwise size={13} className={syncingId === i.id ? "animate-spin" : ""} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-4">
                       <Badge className={cancelled ? "bg-red-100 text-red-700 hover:bg-red-100" : "bg-green-100 text-green-700 hover:bg-green-100"}>
