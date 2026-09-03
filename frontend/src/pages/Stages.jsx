@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight, UploadSimple } from "@phosphor-icons/react";
+import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight, UploadSimple, Sun, Moon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 
@@ -19,6 +19,14 @@ function monthLabel(dateStr) {
   const d = new Date(dateStr);
   if (Number.isNaN(d.getTime())) return "Sans date";
   return `${MOIS_FR[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// Le créneau JOUR/SOIR n'a pas son propre champ sur le stage — il est
+// encodé dans les notes à la création (voir vtc_import.py et Stages.jsx
+// "Créneau : JOUR"/"Créneau : SOIR"). Extrait ici pour l'affichage.
+function extractCreneau(notes) {
+  const m = /Créneau\s*:\s*(JOUR|SOIR)/i.exec(notes || "");
+  return m ? m[1].toUpperCase() : null;
 }
 
 function monthKey(dateStr) {
@@ -58,6 +66,23 @@ export default function Stages() {
   const [deletingId, setDeletingId] = useState(null);
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [importing, setImporting] = useState(false);
+  const [rosterTarget, setRosterTarget] = useState(null);
+  const [roster, setRoster] = useState([]);
+  const [loadingRoster, setLoadingRoster] = useState(false);
+
+  const openRoster = async (s) => {
+    setRosterTarget(s);
+    setLoadingRoster(true);
+    try {
+      const { data } = await api.get(`/stages/${s.id}/roster`);
+      setRoster(data);
+    } catch {
+      toast.error("Erreur de chargement des inscrits");
+      setRoster([]);
+    } finally {
+      setLoadingRoster(false);
+    }
+  };
 
   const toggleCollapsed = (formationId) => {
     setCollapsed((prev) => {
@@ -330,7 +355,7 @@ export default function Stages() {
                     <p className="text-xs font-semibold text-gray-500 capitalize mb-2">{mg.label}</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {mg.sessions.map((s) => (
-                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} />
+                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} onViewRoster={openRoster} />
                       ))}
                     </div>
                   </div>
@@ -346,7 +371,7 @@ export default function Stages() {
                     <p className="text-xs font-semibold text-gray-400 capitalize mb-2">{mg.label}</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {mg.sessions.map((s) => (
-                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} muted />
+                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} onViewRoster={openRoster} muted />
                       ))}
                     </div>
                   </div>
@@ -359,11 +384,47 @@ export default function Stages() {
           );
         })}
       </div>
+
+      <Dialog open={!!rosterTarget} onOpenChange={(v) => !v && setRosterTarget(null)}>
+        <DialogContent data-testid="stage-roster-dialog">
+          <DialogHeader>
+            <DialogTitle>
+              Inscrits — {rosterTarget?.formation_titre}
+              {rosterTarget && (
+                <span className="block text-xs font-normal text-gray-400 mt-1">
+                  {rosterTarget.date_debut} → {rosterTarget.date_fin}
+                  {extractCreneau(rosterTarget.notes) ? ` · ${extractCreneau(rosterTarget.notes)}` : ""}
+                  {" · "}{rosterTarget.nb_inscrits || 0}/{rosterTarget.capacite_max} places
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-96 overflow-y-auto space-y-1 mt-2">
+            {loadingRoster ? (
+              <p className="text-sm text-gray-400 text-center py-8">Chargement...</p>
+            ) : roster.length ? (
+              roster.map((r) => (
+                <div key={r.id} className="flex items-center justify-between text-sm bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{r.student_name}</p>
+                    <p className="text-xs text-gray-500 truncate">{r.student_email}</p>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] shrink-0 ml-2">{r.payment_status}</Badge>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-8">Aucun candidat affecté à cette session pour l'instant.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete, muted }) {
+function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete, onViewRoster, muted }) {
+  const creneau = extractCreneau(s.notes);
+  const full = (s.nb_inscrits || 0) >= s.capacite_max;
   return (
     <Card
       className={`p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all cursor-pointer relative group ${muted ? "opacity-70" : ""}`}
@@ -371,9 +432,23 @@ function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete,
       onClick={() => onEdit(s)}
     >
       <div className="flex items-start justify-between mb-2">
-        <Badge variant="outline">{s.statut}</Badge>
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline">{s.statut}</Badge>
+          {creneau && (
+            <Badge variant="outline" className="text-[10px] gap-1">
+              {creneau === "JOUR" ? <Sun size={10} /> : <Moon size={10} />} {creneau}
+            </Badge>
+          )}
+        </div>
         <div className="flex items-center gap-2">
-          <p className="text-xs text-gray-500"><Users size={12} className="inline mr-1" />{s.nb_inscrits || 0}/{s.capacite_max}</p>
+          <button
+            onClick={(e) => { e.stopPropagation(); onViewRoster(s); }}
+            className={`text-xs flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-gray-100 ${full ? "text-red-600 font-semibold" : "text-gray-500"}`}
+            title="Voir les inscrits de cette session"
+            data-testid={`stage-roster-${s.id}`}
+          >
+            <Users size={12} />{s.nb_inscrits || 0}/{s.capacite_max}
+          </button>
           <PencilSimple size={14} className="text-gray-300 group-hover:text-[#d4af37] transition-colors" />
           <AlertDialog open={deletingId === s.id} onOpenChange={(v) => !v && setDeletingId(null)}>
             <AlertDialogTrigger asChild>

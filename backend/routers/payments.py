@@ -72,7 +72,7 @@ async def create_checkout(payload: CheckoutIn, request: Request):
     if formation and formation.get("cpf_eligible"):
         raise HTTPException(status_code=400, detail="Cette formation est éligible CPF — le paiement en ligne n'est pas proposé")
 
-    if inscription.get("payment_status") == "paid":
+    if inscription.get("payment_status") in ("paid", "cpf_valide"):
         raise HTTPException(status_code=400, detail="Cette inscription est déjà payée")
 
     thank_you_path = _LANDING_THANK_YOU_PATHS.get(inscription.get("source"))

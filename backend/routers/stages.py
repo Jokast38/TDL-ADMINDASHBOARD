@@ -75,7 +75,37 @@ async def list_stages(
         q["$or"] = [{"animateur_ids": user["id"]}, {"animateur_id": user["id"]}]
     elif animateur_id:
         q["$or"] = [{"animateur_ids": animateur_id}, {"animateur_id": animateur_id}]
-    return await db.stages.find(q, {"_id": 0}).sort("date_debut", -1).to_list(500)
+    stages = await db.stages.find(q, {"_id": 0}).sort("date_debut", -1).to_list(500)
+    # `nb_inscrits` stocké sur le stage n'est jamais mis à jour (aucune écriture
+    # ne l'incrémente) — on le recalcule ici à partir des inscriptions
+    # réellement affectées (voir PUT /inscriptions/{iid}/stage), seule source
+    # de vérité, pour ne jamais afficher un compteur figé à 0.
+    if stages:
+        counts = await db.inscriptions.aggregate([
+            {"$match": {"stage_id": {"$in": [s["id"] for s in stages]}, "status": "active"}},
+            {"$group": {"_id": "$stage_id", "n": {"$sum": 1}}},
+        ]).to_list(500)
+        counts_by_stage = {c["_id"]: c["n"] for c in counts}
+        for s in stages:
+            s["nb_inscrits"] = counts_by_stage.get(s["id"], 0)
+    return stages
+
+
+@router.get("/{sid}/roster")
+async def stage_roster(sid: str, user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+    """Liste des candidats affectés à cette session précise (via
+    inscription.stage_id) — distinct de GET /stages/{sid}/inscrits qui liste
+    tous les inscrits de la formation (toutes sessions confondues, pour
+    l'émargement)."""
+    stage = await db.stages.find_one({"id": sid}, {"_id": 0})
+    if not stage:
+        raise HTTPException(status_code=404, detail="Stage introuvable")
+    if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+    return await db.inscriptions.find(
+        {"stage_id": sid, "status": "active"},
+        {"_id": 0, "id": 1, "student_name": 1, "student_email": 1, "student_phone": 1, "payment_status": 1, "contact_status": 1},
+    ).sort("student_name", 1).to_list(200)
 
 
 @router.post("")

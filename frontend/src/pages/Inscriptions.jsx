@@ -16,7 +16,16 @@ import { toast } from "sonner";
 
 const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" }).format(n || 0);
 
-const PAYMENT_LABEL = { pending: "En attente", paid: "Payé", refunded: "Remboursé" };
+// "cpf_valide"/"cpf_attente" couvrent le financement CPF (dossier de
+// financement validé ou pas encore) — distinct de "paid"/"pending" qui
+// concernent un règlement direct (carte, espèces...). CPF validé est traité
+// visuellement comme un paiement acquis (vert), comme "Payé".
+const PAYMENT_LABEL = {
+  pending: "En attente", paid: "Payé",
+  cpf_valide: "CPF Validé", cpf_attente: "CPF en attente",
+  refunded: "Remboursé",
+};
+const PAYMENT_PAID_LIKE = ["paid", "cpf_valide"];
 
 // Tag de suivi commercial manuel — distinct du statut du dossier (traitement
 // administratif) et du statut de l'inscription (active/annulée) : c'est le
@@ -226,8 +235,8 @@ export default function Inscriptions() {
     const matchesQuery = (i.student_name + i.student_email + i.formation_title).toLowerCase().includes(q.toLowerCase());
     const matchesPayment =
       paymentFilter === "all" ? true :
-      paymentFilter === "paid" ? i.payment_status === "paid" :
-      i.payment_status !== "paid";
+      paymentFilter === "paid" ? PAYMENT_PAID_LIKE.includes(i.payment_status) :
+      !PAYMENT_PAID_LIKE.includes(i.payment_status);
     const matchesTraitement =
       traitementFilter === "all" ? true :
       traitementFilter === "traite" ? !!i.dossier_status && i.dossier_status !== "nouveau" :
@@ -480,8 +489,8 @@ export default function Inscriptions() {
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1">
                         <Select value={i.payment_status} onValueChange={(v) => updatePaymentStatus(i.id, v)} disabled={cancelled}>
-                          <SelectTrigger className={`h-7 text-xs w-28 border-0 ${
-                            i.payment_status === "paid" ? "bg-[#0B7238]/10 text-[#0B7238]"
+                          <SelectTrigger className={`h-7 text-xs w-32 border-0 ${
+                            PAYMENT_PAID_LIKE.includes(i.payment_status) ? "bg-[#0B7238]/10 text-[#0B7238]"
                             : i.payment_status === "refunded" ? "bg-gray-200 text-gray-600"
                             : "bg-[#F5A623]/10 text-[#F5A623]"
                           }`}>
@@ -491,7 +500,7 @@ export default function Inscriptions() {
                             {Object.entries(PAYMENT_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                           </SelectContent>
                         </Select>
-                        {i.payment_status !== "paid" && i.stripe_session_id && (
+                        {!PAYMENT_PAID_LIKE.includes(i.payment_status) && i.stripe_session_id && (
                           <button
                             onClick={() => syncPaymentFromStripe(i.id)}
                             disabled={syncingId === i.id}

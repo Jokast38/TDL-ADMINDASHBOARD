@@ -224,10 +224,14 @@ async def import_vtc_taxi_excel(file: UploadFile = File(...), user: dict = Depen
                 "category": formation["category"], "student_id": user_id, "student_name": name,
                 "student_email": email.lower(), "student_phone": get(idx_tel),
                 "price": formation.get("price", 0),
-                "payment_status": "paid" if cpf_ok else "pending",
+                # CPF = "OUI" dans le fichier -> dossier de financement CPF déjà
+                # validé (statut dédié "cpf_valide", distinct d'un règlement
+                # direct "paid") ; sinon en attente de validation CPF.
+                "payment_status": "cpf_valide" if cpf_ok else "cpf_attente",
                 "status": "active", "contact_status": "finalisee" if cpf_ok else "a_contacter",
                 "notes": " · ".join(note_parts), "created_at": now_iso(),
-                "source": "excel_import_vtc_taxi_2026", "session": stage_id, "center": _CENTRE_VILLE[centre_key],
+                "source": "excel_import_vtc_taxi_2026", "session": stage_id, "stage_id": stage_id,
+                "center": _CENTRE_VILLE[centre_key],
             }
             if cpf_ok:
                 inscription["paid_at"] = now_iso()
