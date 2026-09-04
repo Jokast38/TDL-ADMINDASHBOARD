@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends
 
 from core.security import require_role
-from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders, send_weekly_admin_report, send_session_reminders
+from services.staff_notify import (
+    send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
+    send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
+)
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
 
@@ -48,4 +51,22 @@ async def run_session_reminders(user: dict = Depends(require_role("admin"))):
     la boucle de fond (voir server.py) les envoie automatiquement chaque
     jour, pour les sessions démarrant dans 3 jours."""
     notified = await send_session_reminders()
+    return {"notified": notified}
+
+
+@router.post("/appointments/run")
+async def run_appointment_reminders(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel des rappels de rendez-vous (test, ou cron
+    externe) — la boucle de fond (voir server.py) les envoie automatiquement
+    chaque jour, pour les rendez-vous du lendemain."""
+    notified = await send_appointment_reminders()
+    return {"notified": notified}
+
+
+@router.post("/formateur-dossiers/run")
+async def run_formateur_dossier_reminders(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel des rappels dossier formateur (test, ou cron
+    externe) — la boucle de fond (voir server.py) les envoie automatiquement
+    toutes les 6h."""
+    notified = await send_formateur_dossier_reminders()
     return {"notified": notified}

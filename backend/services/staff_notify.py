@@ -530,3 +530,95 @@ async def send_session_reminders() -> int:
             notified += 1
         await db.stages.update_one({"id": stage["id"]}, {"$set": {"reminder_sent_at": now_iso()}})
     return notified
+
+
+async def send_formateur_dossier_reminders() -> int:
+    """Suivi du délai de 24h pour compléter le dossier formateur (documents +
+    convention, voir routers/employees.py) — un rappel au formateur lui-même
+    entre 6h et 24h après la création de son compte, puis une alerte aux
+    agents si toujours incomplet passé les 24h. Chaque email n'est envoyé
+    qu'une fois (`dossier_reminder_sent_at` / `dossier_overdue_alert_sent_at`
+    sur le compte)."""
+    from routers.employees import _formateur_dossier_status, FORMATEUR_DOC_TYPES
+
+    now = datetime.now(timezone.utc)
+    animateurs = await db.users.find({"role": "animateur", "active": True}, {"_id": 0}).to_list(500)
+    notified = 0
+    for a in animateurs:
+        status = await _formateur_dossier_status(a["id"], a.get("created_at") or now_iso(), a.get("convention_signed_at"))
+        if status["dossier_complete"]:
+            continue
+        try:
+            created = datetime.fromisoformat((a.get("created_at") or now_iso()).replace("Z", "+00:00"))
+        except Exception:
+            continue
+        age = now - created
+
+        if age >= timedelta(hours=6) and not status["dossier_overdue"] and not a.get("dossier_reminder_sent_at") and a.get("email"):
+            missing_label = ", ".join(FORMATEUR_DOC_TYPES[k] for k in status["missing_documents"]) or "convention à signer"
+            await send_email(
+                a["email"], "⏰ Votre dossier formateur est à compléter",
+                (
+                    f"<p>Bonjour {a.get('name', '')},</p>"
+                    f"<p>Il vous reste peu de temps pour compléter votre dossier (délai de 24h après la création "
+                    f"de votre compte) : {missing_label}.</p>"
+                    f"<p>Rendez-vous dans votre espace, onglet « Mon dossier ».</p><p>TDL Formation</p>"
+                ),
+            )
+            await send_push_to_users([a["id"]], "Dossier à compléter", missing_label, "/espace-animateur")
+            await db.users.update_one({"id": a["id"]}, {"$set": {"dossier_reminder_sent_at": now_iso()}})
+            notified += 1
+
+        elif status["dossier_overdue"] and not a.get("dossier_overdue_alert_sent_at"):
+            agents = await db.users.find(
+                {"active": True, "role": {"$in": ["admin", "responsable_admission", "agent_admin"]}}, {"_id": 0, "id": 1, "email": 1}
+            ).to_list(100)
+            for agent in agents:
+                if agent.get("email"):
+                    await send_email(
+                        agent["email"], f"🔴 Dossier formateur en retard — {a.get('name', '')}",
+                        f"<p>Le dossier de <b>{a.get('name', '')}</b> (créé le {a.get('created_at', '')[:10]}) "
+                        f"dépasse le délai de 24h et reste incomplet.</p>"
+                        f"<p style='margin-top:16px;'>Rendez-vous sur la page Formateurs du dashboard.</p>",
+                    )
+            if agents:
+                await send_push_to_users([ag["id"] for ag in agents], "Dossier formateur en retard", a.get("name", ""), "/admin/formateurs")
+            await db.users.update_one({"id": a["id"]}, {"$set": {"dossier_overdue_alert_sent_at": now_iso()}})
+            notified += 1
+    return notified
+
+
+async def send_appointment_reminders() -> int:
+    """Rappel automatique la veille d'un rendez-vous réservé (examen,
+    entretien...) — voir _appointment_reminders_loop dans server.py. Chaque
+    réservation n'est rappelée qu'une fois (`reminder_sent` sur la
+    réservation elle-même, plusieurs réservations pouvant partager un même
+    créneau)."""
+    target_date = (datetime.now(timezone.utc) + timedelta(days=1)).date().isoformat()
+    slots = await db.appointment_slots.find({"date": target_date}, {"_id": 0}).to_list(500)
+    notified = 0
+    for slot in slots:
+        bookings = slot.get("bookings") or []
+        pending = [b for b in bookings if not b.get("reminder_sent")]
+        if not pending:
+            continue
+        for booking in pending:
+            student = await db.users.find_one({"id": booking.get("student_id")}, {"_id": 0, "id": 1, "email": 1, "name": 1})
+            if student and student.get("email"):
+                await send_email(
+                    student["email"],
+                    f"📅 Rappel — rendez-vous demain à {slot['heure_debut']}",
+                    (
+                        f"<p>Bonjour {student.get('name', '')},</p>"
+                        f"<p>Rappel : vous avez rendez-vous demain, <b>{slot['date']}</b> à "
+                        f"<b>{slot['heure_debut']}</b> ({slot.get('department', '')}).</p>"
+                        f"<p>TDL Formation</p>"
+                    ),
+                )
+                await send_push_to_users([student["id"]], "Rappel rendez-vous", f"Demain à {slot['heure_debut']}", "/espace-etudiant")
+                notified += 1
+        await db.appointment_slots.update_one(
+            {"id": slot["id"]},
+            {"$set": {f"bookings.{i}.reminder_sent": True for i, b in enumerate(bookings) if not b.get("reminder_sent")}},
+        )
+    return notified

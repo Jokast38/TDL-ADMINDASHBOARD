@@ -14,6 +14,7 @@ from models.attestation import AttestationIdentityIn, AttestationSignIn
 from services.email import send_email
 from services.push import send_push_to_user
 from services.pdf import generate_stage_recup_points_attestation
+from services.staff_notify import notify_new_contact
 from routers.stages import _stage_days, _stage_animateur_ids
 
 router = APIRouter(prefix="/dossiers", tags=["attestations"])
@@ -265,6 +266,20 @@ async def sign_attestation(dossier_id: str, payload: AttestationSignIn, user: di
             "attestation_pdf_path": result["path"], "attestation_signed_at": now_iso(),
             "updated_at": now_iso(),
         }},
+    )
+    await notify_new_contact(
+        category=dossier.get("category"),
+        roles=ROLES_DOSSIERS_MGMT,
+        email_subject=f"✍️ Attestation de stage signée — {dossier.get('student_name', '')}",
+        email_body_html=(
+            f"<p><b>{dossier.get('student_name', '')}</b> vient de signer son attestation de stage de "
+            f"récupération de points.</p>"
+            f"<p style='margin-top:16px;'>Le dossier ANTS (attestation + pièces) est téléchargeable en un "
+            f"clic depuis la page Apprenants une fois le dossier validé.</p>"
+        ),
+        push_title="Attestation signée",
+        push_body=dossier.get("student_name", ""),
+        push_url="/admin/apprenants",
     )
     return {"ok": True}
 

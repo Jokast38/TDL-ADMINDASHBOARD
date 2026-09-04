@@ -8,7 +8,8 @@ from core.utils import now_iso
 from core.config import ROLES_DOSSIERS_MGMT
 from models.appointment import SlotGenerateIn, SlotUnlock4thIn, SlotBookIn
 from services.email import send_email
-from services.push import send_push_to_user
+from services.push import send_push_to_user, send_push_to_users
+from services.staff_notify import notify_new_contact
 
 router = APIRouter(prefix="/slots", tags=["appointments"])
 
@@ -124,6 +125,30 @@ async def book_slot(slot_id: str, payload: SlotBookIn, user: dict = Depends(get_
     )
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Ce créneau est complet")
+
+    if user.get("email"):
+        await send_email(
+            user["email"],
+            f"Rendez-vous confirmé — {slot['date']} à {slot['heure_debut']}",
+            (
+                f"<p>Bonjour {dossier.get('student_name', '')},</p>"
+                f"<p>Votre rendez-vous est confirmé pour le <b>{slot['date']}</b> à <b>{slot['heure_debut']}</b> "
+                f"({slot.get('department', '')}).</p><p>TDL Formation</p>"
+            ),
+        )
+    await send_push_to_user(user["id"], "Rendez-vous confirmé", f"{slot['date']} à {slot['heure_debut']}", "/espace-etudiant")
+    await notify_new_contact(
+        category=dossier.get("category"),
+        roles=ROLES_DOSSIERS_MGMT,
+        email_subject=f"📅 Nouveau rendez-vous réservé — {dossier.get('student_name', '')}",
+        email_body_html=(
+            f"<p><b>{dossier.get('student_name', '')}</b> a réservé le créneau du "
+            f"<b>{slot['date']}</b> à <b>{slot['heure_debut']}</b> ({slot.get('department', '')}).</p>"
+        ),
+        push_title="Nouveau rendez-vous",
+        push_body=f"{dossier.get('student_name', '')} — {slot['date']} {slot['heure_debut']}",
+        push_url="/admin/rdv",
+    )
 
     updated = await db.appointment_slots.find_one({"id": slot_id}, {"_id": 0})
     return _serialize(updated)

@@ -13,6 +13,8 @@ from core.storage import get_object
 from core.utils import now_iso
 from core.config import ROLES_ALL_STAFF
 from models.stage import StageIn, StageUpdate
+from services.email import send_email
+from services.push import send_push_to_user, send_push_to_users
 
 router = APIRouter(prefix="/stages", tags=["stages"])
 
@@ -132,6 +134,23 @@ async def create_stage(payload: StageIn, user: dict = Depends(require_role("admi
     doc["nb_inscrits"] = 0
     doc["created_at"] = now_iso()
     await db.stages.insert_one(doc)
+
+    if ids:
+        formateurs = await db.users.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "email": 1, "name": 1}).to_list(20)
+        for f in formateurs:
+            if f.get("email"):
+                await send_email(
+                    f["email"], f"📅 Nouvelle session qui vous est assignée — {formation.get('title', '')}",
+                    (
+                        f"<p>Bonjour {f.get('name', '')},</p>"
+                        f"<p>Une nouvelle session vous a été assignée : <b>{formation.get('title', '')}</b>, "
+                        f"du <b>{doc['date_debut']}</b> au <b>{doc['date_fin']}</b>, à {doc.get('lieu_ville', '')}.</p>"
+                        f"<p>TDL Formation</p>"
+                    ),
+                )
+        if formateurs:
+            await send_push_to_users([f["id"] for f in formateurs], "Nouvelle session assignée", formation.get("title", ""), "/espace-animateur")
+
     doc.pop("_id", None)
     return doc
 
@@ -156,7 +175,39 @@ async def update_stage(sid: str, payload: StageUpdate, user: dict = Depends(requ
             update["animateur_id"] = ids[0] if ids else None
     update["updated_at"] = now_iso()
     await db.stages.update_one({"id": sid}, {"$set": update})
-    return await db.stages.find_one({"id": sid}, {"_id": 0})
+    updated = await db.stages.find_one({"id": sid}, {"_id": 0})
+
+    if update.get("statut") == "annule" and existing.get("statut") != "annule":
+        inscriptions = await db.inscriptions.find(
+            {"stage_id": sid, "status": "active"}, {"_id": 0, "student_email": 1, "student_name": 1, "student_id": 1}
+        ).to_list(200)
+        for insc in inscriptions:
+            if insc.get("student_email"):
+                await send_email(
+                    insc["student_email"], f"❌ Session annulée — {existing.get('formation_titre', '')}",
+                    (
+                        f"<p>Bonjour {insc.get('student_name', '')},</p>"
+                        f"<p>La session <b>{existing.get('formation_titre', '')}</b> du "
+                        f"<b>{existing.get('date_debut', '')}</b> a été annulée. Un membre de notre équipe va "
+                        f"revenir vers vous pour vous proposer une nouvelle date.</p><p>TDL Formation</p>"
+                    ),
+                )
+            if insc.get("student_id"):
+                await send_push_to_user(insc["student_id"], "Session annulée", existing.get("formation_titre", ""), "/espace-etudiant")
+        animateur_ids = _stage_animateur_ids(existing)
+        if animateur_ids:
+            formateurs = await db.users.find({"id": {"$in": animateur_ids}}, {"_id": 0, "id": 1, "email": 1, "name": 1}).to_list(20)
+            for f in formateurs:
+                if f.get("email"):
+                    await send_email(
+                        f["email"], f"❌ Session annulée — {existing.get('formation_titre', '')}",
+                        f"<p>Bonjour {f.get('name', '')},</p><p>La session <b>{existing.get('formation_titre', '')}</b> "
+                        f"du <b>{existing.get('date_debut', '')}</b> que vous deviez animer a été annulée.</p><p>TDL Formation</p>",
+                    )
+            if formateurs:
+                await send_push_to_users([f["id"] for f in formateurs], "Session annulée", existing.get("formation_titre", ""), "/espace-animateur")
+
+    return updated
 
 
 @router.delete("/{sid}")

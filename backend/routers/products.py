@@ -9,6 +9,7 @@ from core.config import ROLES_KAMI_STREET
 from models.product import ProductIn, OrderIn
 from services.n8n import trigger_n8n
 from services.email import send_email
+from services.push import send_push_to_users
 
 router = APIRouter(tags=["products"])
 
@@ -65,6 +66,18 @@ async def create_order(payload: OrderIn):
         f"Commande KAMI STREET - {product['name']}",
         f"<p>Bonjour {payload.customer_name},</p><p>Votre commande de <b>{product['name']}</b> (x{payload.quantity}) pour {order['total']}€ a bien été reçue.</p>"
     )
+    staff = await db.users.find(
+        {"active": True, "role": {"$in": list(ROLES_KAMI_STREET)}}, {"_id": 0, "id": 1, "email": 1}
+    ).to_list(50)
+    for s in staff:
+        if s.get("email"):
+            await send_email(
+                s["email"], f"🛒 Nouvelle commande KAMI STREET — {product['name']}",
+                f"<p><b>{payload.customer_name}</b> ({payload.customer_email}) a commandé "
+                f"<b>{product['name']}</b> (x{payload.quantity}) pour {order['total']}€.</p>",
+            )
+    if staff:
+        await send_push_to_users([s["id"] for s in staff], "Nouvelle commande", f"{product['name']} — {order['total']}€", "/admin/orders")
     order.pop("_id", None)
     return order
 
@@ -74,7 +87,23 @@ async def list_orders(user: dict = Depends(require_role(*ROLES_KAMI_STREET))):
     return await db.orders.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
 
+ORDER_STATUS_LABEL = {
+    "nouveau": "Nouvelle", "en_preparation": "En préparation", "expediee": "Expédiée",
+    "livree": "Livrée", "annulee": "Annulée",
+}
+
+
 @router.put("/orders/{oid}")
 async def update_order(oid: str, status: str, user: dict = Depends(require_role(*ROLES_KAMI_STREET))):
+    existing = await db.orders.find_one({"id": oid}, {"_id": 0})
     await db.orders.update_one({"id": oid}, {"$set": {"status": status, "updated_at": now_iso()}})
-    return await db.orders.find_one({"id": oid}, {"_id": 0})
+    updated = await db.orders.find_one({"id": oid}, {"_id": 0})
+    if existing and existing.get("status") != status and updated.get("customer_email"):
+        label = ORDER_STATUS_LABEL.get(status, status)
+        await send_email(
+            updated["customer_email"], f"Votre commande KAMI STREET — {label}",
+            f"<p>Bonjour {updated.get('customer_name', '')},</p>"
+            f"<p>Votre commande de <b>{updated.get('product_name', '')}</b> est maintenant : <b>{label}</b>.</p>"
+            f"<p>KAMI STREET</p>",
+        )
+    return updated

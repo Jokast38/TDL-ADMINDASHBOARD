@@ -261,6 +261,24 @@ async def upload_my_profile_document(
         {"user_id": user["id"]},
         {"$push": {"documents": doc["id"]}, "$set": {"updated_at": now_iso()}}
     )
+
+    if user["role"] == "animateur":
+        # Fait avancer le dossier formateur à valider en 24h — les agents
+        # doivent le savoir sans avoir à revérifier la page Formateurs.
+        label = FORMATEUR_DOC_TYPES.get(doc_type, doc_type)
+        agents = await db.users.find(
+            {"active": True, "role": {"$in": ["admin", "responsable_admission", "agent_admin"]}}, {"_id": 0, "id": 1, "email": 1}
+        ).to_list(100)
+        for a in agents:
+            if a.get("email"):
+                await send_email(
+                    a["email"], f"📎 Document formateur déposé — {user.get('name', '')}",
+                    f"<p><b>{user.get('name', '')}</b> a déposé le document « {label} » pour son dossier formateur.</p>"
+                    f"<p style='margin-top:16px;'>Rendez-vous sur la page Formateurs du dashboard.</p>",
+                )
+        if agents:
+            await send_push_to_users([a["id"] for a in agents], "Document formateur déposé", f"{user.get('name', '')} — {label}", "/admin/formateurs")
+
     doc.pop("_id", None)
     return doc
 

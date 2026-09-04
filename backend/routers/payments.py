@@ -9,6 +9,7 @@ from models.payment import PaymentToggleIn, CheckoutIn
 from services import stripe_service
 from services.meta_capi import send_capi_event
 from services.pdf import generate_payment_receipt_pdf
+from services.email import send_email
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 log = logging.getLogger(__name__)
@@ -221,6 +222,28 @@ async def stripe_webhook(request: Request):
                     # retry Stripe inutile) pour un évènement de tracking marketing
                     # — l'inscription est déjà marquée payée à ce stade.
                     log.warning(f"Stripe webhook {event_type} : événement CAPI non envoyé — {e}")
+                if inscription.get("student_email"):
+                    try:
+                        import base64 as _b64
+                        formation = await db.formations.find_one({"id": inscription.get("formation_id")}, {"_id": 0})
+                        settings_doc = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
+                        pdf_bytes = generate_payment_receipt_pdf(inscription, formation, settings_doc)
+                        await send_email(
+                            inscription["student_email"],
+                            f"Reçu de paiement — {inscription.get('formation_title', '')}",
+                            (
+                                f"<p>Bonjour {inscription.get('student_name', '')},</p>"
+                                f"<p>Nous confirmons la bonne réception de votre paiement de "
+                                f"<b>{amount_paid:.2f} €</b> pour <b>{inscription.get('formation_title', '')}</b>.</p>"
+                                f"<p>Vous trouverez votre reçu en pièce jointe.</p><p>TDL Formation</p>"
+                            ),
+                            attachment={"filename": "recu-paiement.pdf", "content_b64": _b64.b64encode(pdf_bytes).decode("ascii")},
+                        )
+                    except Exception as e:
+                        # Le paiement reste marqué "paid" même si le reçu échoue à
+                        # partir — l'agent peut toujours le régénérer manuellement
+                        # depuis la Bibliothèque PDF / page Inscriptions.
+                        log.warning(f"Stripe webhook {event_type} : reçu de paiement non envoyé — {e}")
     elif event_type == "checkout.session.async_payment_failed":
         session = event["data"]["object"]
         inscription_id = (session.get("metadata") or {}).get("inscription_id")
@@ -230,6 +253,18 @@ async def stripe_webhook(request: Request):
                 {"$set": {"payment_status": "pending", "updated_at": now_iso()}},
             )
             log.info(f"Stripe webhook async_payment_failed : inscription {inscription_id} repassée en attente")
+            insc = await db.inscriptions.find_one({"id": inscription_id}, {"_id": 0})
+            if insc and insc.get("student_email"):
+                await send_email(
+                    insc["student_email"],
+                    "Votre paiement n'a pas abouti",
+                    (
+                        f"<p>Bonjour {insc.get('student_name', '')},</p>"
+                        f"<p>Votre paiement pour <b>{insc.get('formation_title', '')}</b> n'a pas pu être finalisé. "
+                        f"Vous pouvez réessayer depuis votre espace ou nous contacter directement.</p>"
+                        f"<p>TDL Formation</p>"
+                    ),
+                )
     elif event_type == "checkout.session.expired":
         session = event["data"]["object"]
         inscription_id = (session.get("metadata") or {}).get("inscription_id")
