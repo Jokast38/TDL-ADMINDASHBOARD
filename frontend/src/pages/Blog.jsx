@@ -11,6 +11,7 @@ import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
 import { setPageMeta } from "@/lib/seo";
+import CoverImage from "@/components/CoverImage";
 
 const CATEGORIES = [
   { key: "all", label: "Tous" },
@@ -102,12 +103,12 @@ export default function Blog() {
           {featured && (
             <Link to={`/blog/${featured.slug}`} className="block mb-12" data-testid={`featured-${featured.slug}`}>
               <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all grid md:grid-cols-2 gap-0">
-                <div className="aspect-video md:aspect-auto bg-gray-100 overflow-hidden">
+                <div className="aspect-video md:aspect-auto bg-gray-100">
                   {featured.cover_image && !brokenCovers[featured.id] ? (
-                    <img
+                    <CoverImage
                       src={featured.cover_image}
                       alt={featured.title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full"
                       onError={() => setBrokenCovers((b) => ({ ...b, [featured.id]: true }))}
                     />
                   ) : (
@@ -134,12 +135,12 @@ export default function Blog() {
             {rest.map((p, idx) => (
               <Link key={p.id} to={`/blog/${p.slug}`} data-testid={`post-${p.slug}`} data-reveal className={`reveal reveal-delay-${(idx % 4) + 1}`}>
                 <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all h-full">
-                  <div className="aspect-video bg-gray-100 overflow-hidden">
+                  <div className="aspect-video bg-gray-100">
                     {p.cover_image && !brokenCovers[p.id] ? (
-                      <img
+                      <CoverImage
                         src={p.cover_image}
                         alt={p.title}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full"
                         onError={() => setBrokenCovers((b) => ({ ...b, [p.id]: true }))}
                       />
                     ) : (

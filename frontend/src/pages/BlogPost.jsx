@@ -15,6 +15,7 @@ import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
+import CoverImage from "@/components/CoverImage";
 
 const CATEGORY_TO_FORMATION = {
   actualites: "VTC_TAXI",
@@ -98,10 +99,10 @@ export default function BlogPost() {
         </div>
 
         <div className="aspect-video bg-gray-100 rounded-md overflow-hidden mb-10">
-          <img
+          <CoverImage
             src={post.cover_image || heroForCategory(faqCategory || "VTC_TAXI")}
             alt={post.title}
-            className="w-full h-full object-cover"
+            className="w-full h-full"
             onError={(e) => {
               const fallback = heroForCategory(faqCategory || "VTC_TAXI");
               if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;

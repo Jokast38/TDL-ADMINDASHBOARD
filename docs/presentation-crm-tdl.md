@@ -98,25 +98,25 @@ Points clés à faire passer dès le départ :
 | Gestion des formateurs (dossier, convention) | Variable selon l'outil | Dédiée, avec délai de 24h suivi automatiquement |
 | Suivi CRM (leads, relances, marketing) | Non ou très limité | Complet (leads, blog, campagnes email) |
 | Personnalisation | Limitée au paramétrage proposé | Illimitée — c'est notre code, on ajoute ce qu'on veut |
-| Coût | Abonnement(s) mensuel/annuel [à compléter] | Coût de développement + hébergement, pas d'abonnement récurrent par apprenant/session |
+| Coût | Digiforma : 500 €/mois à lui seul (+ ProStage + Formaest à ajouter) | Coût de développement + hébergement, pas d'abonnement récurrent par apprenant/session |
 | Dépendance | Si la plateforme ferme ou change ses tarifs, on subit | On maîtrise l'outil et les données de bout en bout |
 
 **Argument central** : ces plateformes ont été pensées pour être génériques et servir un grand nombre d'organismes différents. Notre outil, lui, colle exactement à notre façon de travailler — pas de fonctionnalité qu'on paie sans s'en servir, pas de fonctionnalité qui nous manque et qu'on doit contourner avec un tableur à côté.
 
 ---
 
-## 5. Rentabilité — à compléter avec les chiffres réels
+## 5. Rentabilité
 
-> ⚠️ Les montants ci-dessous sont des exemples à remplacer par nos vrais abonnements avant la présentation — je n'ai pas de données fiables sur les tarifs actuels de ProStage/Digiforma/Formaest pour les avancer moi-même.
+> ⚠️ Le montant Digiforma (500 €/mois) est celui que tu m'as confirmé — c'est notre abonnement réel, à utiliser tel quel. Pour ProStage et Formaest, voir le détail ci-dessous : je n'ai pas pu trouver de tarif fiable et directement comparable, il faudra le confirmer avec nos propres factures avant la présentation.
 
 ### 5.1 Coûts évités (abonnements actuels)
 
-| Plateforme | Coût mensuel actuel | Coût annuel actuel |
-|---|---|---|
-| ProStage | [à compléter] € | [à compléter] € |
-| Digiforma | [à compléter] € | [à compléter] € |
-| Formaest | [à compléter] € | [à compléter] € |
-| **Total** | **[à compléter] €** | **[à compléter] €** |
+| Plateforme | Coût mensuel | Coût annuel | Source / fiabilité |
+|---|---|---|---|
+| Digiforma | **500 € HT/mois** (confirmé) | 6 000 € HT/an | Notre abonnement réel. À titre de repère public, la grille tarifaire officielle 2026 va de 49 €/mois (Indépendant) à 699 €/mois (Leader) — 500 € correspond à peu près au palier "Orga+" (≈499 €/mois) ([digiforma.com/prix](https://www.digiforma.com/prix/)) |
+| ProStagesPermis | [à confirmer avec notre facture] € | [à confirmer] € | ⚠️ Attention : ProStagesPermis n'est pas un logiciel de gestion comme Digiforma — c'est une **plateforme de mise en relation** (marketplace) entre candidats et centres agréés pour les stages de récupération de points, avec un modèle probable de commission/frais de mise en visibilité par stage plutôt qu'un abonnement mensuel fixe. Le prix affiché aux candidats est de 130 à 230 € par stage ([prostagespermis.fr](https://www.prostagespermis.fr/)) — ça ne se compare pas directement à notre dashboard interne, il faut regarder notre contrat/facture réel avec eux pour savoir ce qu'on leur paie concrètement (commission par inscription ? frais fixe mensuel ?) |
+| Formaest | [à confirmer] € | [à confirmer] € | Aucune information tarifaire publique trouvée en ligne pour ce nom précis — à vérifier directement sur notre facture ou avec leur commercial |
+| **Total (partiel, Digiforma seul confirmé)** | **500 € / mois** | **6 000 € / an** | + ProStage + Formaest à ajouter une fois confirmés |
 
 ### 5.2 Coût du dashboard interne
 
@@ -133,6 +133,10 @@ Points clés à faire passer dès le départ :
 Économie annuelle = (Total abonnements évités par an) − (Coût annuel du dashboard interne)
 Délai de rentabilisation = Coût de développement initial ÷ Économie mensuelle nette
 ```
+
+**Exemple chiffré avec ce qu'on sait déjà (Digiforma seul, 500 €/mois confirmé)** :
+- Coût évité rien que sur Digiforma : 500 € × 12 = **6 000 €/an**.
+- Dès que le coût d'hébergement + maintenance du dashboard interne est complété (section 5.2), le calcul ci-dessus donne directement l'économie nette — à refaire une fois ProStage et Formaest confirmés pour le chiffre complet.
 
 En complément des coûts directs, valoriser aussi :
 - **Temps gagné par dossier** (ex: X minutes économisées par dossier ANTS grâce au zip prêt-à-envoyer × nombre de dossiers/mois).

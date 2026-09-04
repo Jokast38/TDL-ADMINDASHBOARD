@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, PencilSimple, Trash, Sparkle, Eye, ArrowSquareOut, MagicWand, UploadSimple, Image as ImageIcon, CloudArrowDown, CheckCircle, CloudArrowUp, ArrowCounterClockwise, X, ArrowLineDown, ArrowsClockwise } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import CoverImage from "@/components/CoverImage";
 
 const CATEGORIES = ["actualites", "conseils", "formations", "kami", "seo"];
 const CONTENT_IMAGE_RE = /!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/g;
@@ -431,10 +432,10 @@ export default function AdminBlog() {
                   </div>
                   {form.cover_image ? (
                     <div className="mt-3 aspect-video w-full max-w-xs bg-gray-100 rounded-md overflow-hidden border border-gray-200">
-                      <img
+                      <CoverImage
                         src={form.cover_image}
                         alt="Aperçu couverture"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full"
                         onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = ""; e.currentTarget.classList.add("opacity-0"); }}
                       />
                     </div>
