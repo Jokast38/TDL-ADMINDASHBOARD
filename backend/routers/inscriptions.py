@@ -1,6 +1,12 @@
+import io
+import re
 import uuid
 import secrets
+import zipfile
+from typing import List, Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 
 from core.database import db
 from core.security import hash_password, get_current_user, require_role
@@ -10,9 +16,26 @@ from models.inscription import InscriptionIn, InscriptionUpdate, DossierUpdate, 
 from services.trello import TrelloService
 from services.n8n import trigger_n8n
 from services.email import send_email
+from services.email_template import render_branded_email
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS
 
 router = APIRouter(tags=["inscriptions"])
+
+_SAFE_NAME_RE = re.compile(r'[\\/:*?"<>|]')
+
+
+class BulkIdsIn(BaseModel):
+    ids: List[str]
+
+
+class BulkEmailIn(BaseModel):
+    ids: List[str]
+    subject: str
+    message: str
+
+
+class BulkAttestationIn(BaseModel):
+    dossier_ids: List[str]
 
 
 def _missing_docs(dossier: dict, docs: list) -> list:
@@ -162,6 +185,113 @@ async def list_students(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))
             "last_inscription_at": my_inscriptions[0]["created_at"] if my_inscriptions else None,
         })
     return result
+
+
+async def _delete_student_cascade(uid: str) -> None:
+    """Supprime le compte apprenant et tout ce qui lui est directement
+    rattaché (inscriptions, dossiers) — les documents/générés déposés en
+    stockage ne sont pas purgés (peu de volume, coût de suppression
+    disproportionné face au risque de perte accidentelle)."""
+    await db.inscriptions.delete_many({"student_id": uid})
+    await db.dossiers.delete_many({"student_id": uid})
+    await db.users.delete_one({"id": uid, "role": "etudiant"})
+
+
+@router.delete("/students/{uid}")
+async def delete_student(uid: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    existing = await db.users.find_one({"id": uid, "role": "etudiant"}, {"_id": 0, "id": 1})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Apprenant introuvable")
+    await _delete_student_cascade(uid)
+    return {"ok": True}
+
+
+@router.post("/students/bulk-delete")
+async def bulk_delete_students(payload: BulkIdsIn, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    deleted = 0
+    for uid in payload.ids:
+        existing = await db.users.find_one({"id": uid, "role": "etudiant"}, {"_id": 0, "id": 1})
+        if existing:
+            await _delete_student_cascade(uid)
+            deleted += 1
+    return {"deleted": deleted}
+
+
+@router.post("/students/bulk-email")
+async def bulk_email_students(payload: BulkEmailIn, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    if not payload.subject.strip() or not payload.message.strip():
+        raise HTTPException(status_code=400, detail="Objet et message sont requis")
+    students = await db.users.find(
+        {"id": {"$in": payload.ids}, "role": "etudiant"}, {"_id": 0, "id": 1, "email": 1, "name": 1}
+    ).to_list(500)
+    html_body = render_branded_email(payload.message, None, None)
+    cc = [e for e in {user.get("email"), "tdlparisformation@gmail.com"} if e]
+    sent = 0
+    for s in students:
+        if not s.get("email"):
+            continue
+        log = await send_email(s["email"], payload.subject.strip(), html_body, extra={"sent_by": user["id"], "bulk_compose": True}, cc=cc)
+        if log["status"] in ("sent", "mocked"):
+            sent += 1
+    return {"sent": sent, "total": len(students)}
+
+
+@router.post("/students/bulk-notify-attestation")
+async def bulk_notify_attestation(payload: BulkAttestationIn, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Déclenche la notification « attestation disponible » (voir
+    routers/stage_attestations.py) pour chaque dossier sélectionné, en
+    ignorant silencieusement ceux qui ne sont pas éligibles (autre catégorie,
+    stage pas encore terminé...) plutôt que de faire échouer tout le lot."""
+    from routers.stage_attestations import notify_attestation_available
+
+    notified, skipped = 0, []
+    for dossier_id in payload.dossier_ids:
+        try:
+            await notify_attestation_available(dossier_id, user)
+            notified += 1
+        except HTTPException as e:
+            skipped.append({"dossier_id": dossier_id, "reason": e.detail})
+    return {"notified": notified, "skipped": skipped}
+
+
+@router.get("/students/bulk-attestations-zip")
+async def bulk_download_attestations(dossier_ids: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Zip des attestations de stage (signée si déjà signée par l'apprenant,
+    sinon générée à blanc pour impression papier ou signature sur place sur
+    la plateforme) pour chaque dossier sélectionné — dossier_ids = ids
+    séparés par des virgules."""
+    from routers.generated_docs import _generate_stage_recup_copy
+
+    ids = [d.strip() for d in dossier_ids.split(",") if d.strip()]
+    if not ids:
+        raise HTTPException(status_code=400, detail="Aucun dossier sélectionné")
+
+    buf = io.BytesIO()
+    included = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for dossier_id in ids:
+            dossier = await db.dossiers.find_one({"id": dossier_id}, {"_id": 0})
+            if not dossier or dossier.get("category") != "PERMIS":
+                continue
+            try:
+                if dossier.get("attestation_pdf_path"):
+                    from core.storage import get_object
+                    pdf_bytes, _ = await get_object(dossier["attestation_pdf_path"])
+                else:
+                    pdf_bytes = await _generate_stage_recup_copy(dossier)
+            except Exception:
+                continue
+            name = _SAFE_NAME_RE.sub("", dossier.get("student_name") or dossier_id)
+            zf.writestr(f"Attestation_{name}.pdf", pdf_bytes)
+            included += 1
+
+    if included == 0:
+        raise HTTPException(status_code=404, detail="Aucune attestation disponible pour ces dossiers")
+
+    return Response(
+        content=buf.getvalue(), media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="Attestations.zip"'},
+    )
 
 
 @router.get("/inscriptions")

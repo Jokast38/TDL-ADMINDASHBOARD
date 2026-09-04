@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { MagnifyingGlass, EnvelopeSimple, Phone, GraduationCap, FolderOpen, Sparkle, PaperPlaneTilt, Signature } from "@phosphor-icons/react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
+} from "@/components/ui/alert-dialog";
+import { MagnifyingGlass, EnvelopeSimple, Phone, GraduationCap, FolderOpen, Sparkle, PaperPlaneTilt, Signature, Trash, DownloadSimple, UsersThree } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 25;
@@ -82,6 +86,18 @@ export default function Students() {
   const [composing, setComposing] = useState(false);
   const [antsStatus, setAntsStatus] = useState(null);
   const [downloadingAnts, setDownloadingAnts] = useState(false);
+
+  // Sélection multiple (cases à cocher) pour les actions groupées : suppression,
+  // email groupé, notification d'attestation, téléchargement des attestations.
+  const [checkedIds, setCheckedIds] = useState(() => new Set());
+  const [deleteTarget, setDeleteTarget] = useState(null); // { ids: [...] } — un seul id ou plusieurs
+  const [deleting, setDeleting] = useState(false);
+  const [bulkEmailOpen, setBulkEmailOpen] = useState(false);
+  const [bulkSubject, setBulkSubject] = useState("");
+  const [bulkMessage, setBulkMessage] = useState("");
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkNotifying, setBulkNotifying] = useState(false);
+  const [bulkDownloading, setBulkDownloading] = useState(false);
   const [mailTemplate, setMailTemplate] = useState("libre"); // "libre" | "convocation"
   const [convocIntitule, setConvocIntitule] = useState("");
   const [convocDate, setConvocDate] = useState("");
@@ -211,6 +227,93 @@ export default function Students() {
     }
   };
 
+  const toggleChecked = (id) => setCheckedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const toggleCheckAllOnPage = (pagedItems) => setCheckedIds((prev) => {
+    const allChecked = pagedItems.every((s) => prev.has(s.id));
+    const next = new Set(prev);
+    pagedItems.forEach((s) => { if (allChecked) next.delete(s.id); else next.add(s.id); });
+    return next;
+  });
+
+  const runDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      if (deleteTarget.ids.length === 1) {
+        await api.delete(`/students/${deleteTarget.ids[0]}`);
+      } else {
+        await api.post("/students/bulk-delete", { ids: deleteTarget.ids });
+      }
+      toast.success(deleteTarget.ids.length > 1 ? `${deleteTarget.ids.length} apprenant(s) supprimé(s)` : "Apprenant supprimé");
+      setCheckedIds((prev) => { const next = new Set(prev); deleteTarget.ids.forEach((id) => next.delete(id)); return next; });
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la suppression");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const openBulkEmail = () => {
+    setBulkSubject(""); setBulkMessage("");
+    setBulkEmailOpen(true);
+  };
+
+  const sendBulkEmail = async () => {
+    if (!bulkSubject.trim() || !bulkMessage.trim()) return toast.error("Objet et message sont requis");
+    setBulkSending(true);
+    try {
+      const { data } = await api.post("/students/bulk-email", {
+        ids: Array.from(checkedIds), subject: bulkSubject.trim(), message: bulkMessage,
+      });
+      toast.success(`Email envoyé à ${data.sent}/${data.total} apprenant(s)`);
+      setBulkEmailOpen(false);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de l'envoi");
+    } finally {
+      setBulkSending(false);
+    }
+  };
+
+  const bulkNotifyAttestation = async () => {
+    const dossierIds = items.filter((s) => checkedIds.has(s.id) && s.dossier_id).map((s) => s.dossier_id);
+    if (!dossierIds.length) return toast.error("Aucun apprenant sélectionné n'a de dossier");
+    setBulkNotifying(true);
+    try {
+      const { data } = await api.post("/students/bulk-notify-attestation", { dossier_ids: dossierIds });
+      toast.success(`${data.notified} attestation(s) notifiée(s)${data.skipped?.length ? ` · ${data.skipped.length} ignorée(s) (pas éligible)` : ""}`);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setBulkNotifying(false);
+    }
+  };
+
+  const bulkDownloadAttestations = async () => {
+    const dossierIds = items.filter((s) => checkedIds.has(s.id) && s.dossier_id).map((s) => s.dossier_id);
+    if (!dossierIds.length) return toast.error("Aucun apprenant sélectionné n'a de dossier");
+    setBulkDownloading(true);
+    try {
+      const res = await api.get("/students/bulk-attestations-zip", {
+        params: { dossier_ids: dossierIds.join(",") }, responseType: "blob",
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = "Attestations.zip"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Aucune attestation disponible pour cette sélection");
+    } finally {
+      setBulkDownloading(false);
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
@@ -248,11 +351,58 @@ export default function Students() {
         </Select>
       </div>
 
+      {checkedIds.size > 0 && (
+        <Card className="p-3 border border-[#d4af37]/40 bg-[#fff8e1]/40 rounded-md shadow-none flex flex-wrap items-center gap-2" data-testid="bulk-actions-bar">
+          <span className="text-sm font-medium flex items-center gap-1.5 mr-2">
+            <UsersThree size={16} /> {checkedIds.size} sélectionné(s)
+          </span>
+          <Button size="sm" variant="outline" onClick={openBulkEmail} data-testid="bulk-email-btn">
+            <EnvelopeSimple size={14} className="mr-1" /> Email groupé
+          </Button>
+          <Button size="sm" variant="outline" onClick={bulkNotifyAttestation} disabled={bulkNotifying} data-testid="bulk-notify-attestation-btn">
+            <Signature size={14} className="mr-1" /> {bulkNotifying ? "..." : "Notifier attestations"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={bulkDownloadAttestations} disabled={bulkDownloading} data-testid="bulk-download-attestations-btn">
+            <DownloadSimple size={14} className="mr-1" /> {bulkDownloading ? "..." : "Télécharger attestations"}
+          </Button>
+          <AlertDialog open={deleteTarget?.bulk === true} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="outline" className="border-red-300 text-red-600 hover:bg-red-50 ml-auto" onClick={() => setDeleteTarget({ ids: Array.from(checkedIds), bulk: true })} data-testid="bulk-delete-btn">
+                <Trash size={14} className="mr-1" /> Supprimer la sélection
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Supprimer {deleteTarget?.ids.length} apprenant(s) ?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Cette action est irréversible : les comptes, leurs inscriptions et leurs dossiers seront supprimés définitivement.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuler</AlertDialogCancel>
+                <AlertDialogAction onClick={runDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700 text-white">
+                  {deleting ? "Suppression..." : "Supprimer définitivement"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </Card>
+      )}
+
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-left border-b border-gray-200">
               <tr>
+                <th className="py-3 px-4 w-8">
+                  <input
+                    type="checkbox"
+                    checked={paged.length > 0 && paged.every((s) => checkedIds.has(s.id))}
+                    onChange={() => toggleCheckAllOnPage(paged)}
+                    aria-label="Tout sélectionner"
+                    data-testid="students-check-all"
+                  />
+                </th>
                 <th className="py-3 px-4 overline">Apprenant</th>
                 <th className="py-3 px-4 overline">Formation(s)</th>
                 <th className="py-3 px-4 overline">Paiement</th>
@@ -264,6 +414,12 @@ export default function Students() {
             <tbody>
               {paged.map((s) => (
                 <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50" data-testid={`student-row-${s.id}`}>
+                  <td className="py-3 px-4">
+                    <input
+                      type="checkbox" checked={checkedIds.has(s.id)} onChange={() => toggleChecked(s.id)}
+                      aria-label={`Sélectionner ${s.name}`} data-testid={`student-check-${s.id}`}
+                    />
+                  </td>
                   <td className="py-3 px-4">
                     <p className="font-medium">{s.name}</p>
                     <p className="text-xs text-gray-500">{s.email}</p>
@@ -327,13 +483,38 @@ export default function Students() {
                           <Phone size={14} />
                         </a>
                       )}
+                      <AlertDialog open={deleteTarget?.ids?.[0] === s.id && !deleteTarget?.bulk} onOpenChange={(v) => !v && setDeleteTarget(null)}>
+                        <AlertDialogTrigger asChild>
+                          <button
+                            onClick={() => setDeleteTarget({ ids: [s.id] })}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Supprimer cet apprenant"
+                            data-testid={`delete-student-${s.id}`}
+                          >
+                            <Trash size={14} />
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Supprimer {s.name} ?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Cette action est irréversible : le compte, ses inscriptions et ses dossiers seront supprimés définitivement.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Annuler</AlertDialogCancel>
+                            <AlertDialogAction onClick={runDelete} disabled={deleting} className="bg-red-600 hover:bg-red-700 text-white">
+                              {deleting ? "Suppression..." : "Supprimer définitivement"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </td>
                 </tr>
               ))}
               {!paged.length && (
                 <tr>
-                  <td colSpan="6" className="py-12 text-center text-gray-400">
+                  <td colSpan="7" className="py-12 text-center text-gray-400">
                     {loading ? "Chargement..." : "Aucun apprenant."}
                   </td>
                 </tr>
@@ -504,6 +685,33 @@ export default function Students() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkEmailOpen} onOpenChange={setBulkEmailOpen}>
+        <DialogContent className="max-w-lg" data-testid="bulk-email-dialog">
+          <DialogHeader>
+            <DialogTitle className="font-display">Email groupé — {checkedIds.size} apprenant(s)</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-500 -mt-2 mb-2">
+            Mis en forme automatiquement avec le design TDL Formation, comme pour un email individuel.
+          </p>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Objet</label>
+              <Input value={bulkSubject} onChange={(e) => setBulkSubject(e.target.value)} placeholder="Objet de votre email" data-testid="bulk-email-subject" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Message</label>
+              <Textarea rows={8} value={bulkMessage} onChange={(e) => setBulkMessage(e.target.value)} placeholder="Écrivez votre message ici..." data-testid="bulk-email-message" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setBulkEmailOpen(false)} disabled={bulkSending}>Annuler</Button>
+            <Button onClick={sendBulkEmail} disabled={bulkSending} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="bulk-email-send">
+              <PaperPlaneTilt size={14} className="mr-1" /> {bulkSending ? "Envoi..." : `Envoyer à ${checkedIds.size}`}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
