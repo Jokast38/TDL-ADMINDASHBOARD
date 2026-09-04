@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, CheckCircle, X } from "@phosphor-icons/react";
@@ -22,6 +22,8 @@ export default function TourOverlay() {
   const [searching, setSearching] = useState(false);
   const timeoutRef = useRef(null);
   const pollRef = useRef(null);
+  const tooltipRef = useRef(null);
+  const [tooltipHeight, setTooltipHeight] = useState(260); // estimation avant mesure réelle
 
   const step = tour?.category?.steps?.[tour.stepIndex];
   const stepCount = tour?.category?.steps?.length || 0;
@@ -89,6 +91,17 @@ export default function TourOverlay() {
 
   useEffect(() => () => clearTimeout(timeoutRef.current), []);
 
+  // Mesure la hauteur réelle du tooltip une fois rendu (le texte de chaque
+  // étape a une longueur différente) pour pouvoir le clamper précisément
+  // dans l'écran — sans ça, un tooltip placé "au-dessus" d'un élément proche
+  // du haut de l'écran pouvait dépasser par le haut et devenir invisible.
+  useLayoutEffect(() => {
+    if (tooltipRef.current) {
+      const h = tooltipRef.current.getBoundingClientRect().height;
+      if (h && Math.abs(h - tooltipHeight) > 2) setTooltipHeight(h);
+    }
+  });
+
   if (!tour || !step) return null;
 
   const vw = window.innerWidth;
@@ -102,18 +115,21 @@ export default function TourOverlay() {
       }
     : null;
 
-  // Position du tooltip : sous l'élément si la place le permet, sinon au-dessus ;
-  // recentré horizontalement et clampé pour ne jamais sortir de l'écran.
+  // Position du tooltip : sous l'élément si la place le permet, sinon
+  // au-dessus — dans tous les cas, le résultat est ensuite clampé pour
+  // rester entièrement dans l'écran (jamais coupé en haut ni en bas), quelle
+  // que soit la position de l'élément entouré ou la longueur du texte.
+  const MARGIN = 16;
   let tooltipStyle = { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
   if (box) {
     const tooltipWidth = 360;
     const spaceBelow = vh - (box.top + box.height);
-    const placeBelow = spaceBelow > 220 || spaceBelow > box.top;
-    const top = placeBelow ? box.top + box.height + 14 : Math.max(box.top - 14, 14);
-    const left = Math.min(Math.max(box.left, 16), vw - tooltipWidth - 16);
-    tooltipStyle = placeBelow
-      ? { top, left }
-      : { top, left, transform: "translateY(-100%)" };
+    const spaceAbove = box.top;
+    const placeBelow = spaceBelow >= tooltipHeight + MARGIN || spaceBelow >= spaceAbove;
+    let top = placeBelow ? box.top + box.height + 14 : box.top - 14 - tooltipHeight;
+    top = Math.min(Math.max(top, MARGIN), Math.max(vh - tooltipHeight - MARGIN, MARGIN));
+    const left = Math.min(Math.max(box.left, MARGIN), Math.max(vw - tooltipWidth - MARGIN, MARGIN));
+    tooltipStyle = { top, left };
   }
 
   return (
@@ -139,7 +155,8 @@ export default function TourOverlay() {
       )}
 
       <div
-        className="fixed z-[10000] w-[360px] max-w-[calc(100vw-32px)] bg-white rounded-lg shadow-2xl p-5 pointer-events-auto"
+        ref={tooltipRef}
+        className="fixed z-[10000] w-[360px] max-w-[calc(100vw-32px)] max-h-[calc(100vh-32px)] overflow-y-auto bg-white rounded-lg shadow-2xl p-5 pointer-events-auto"
         style={tooltipStyle}
         data-testid="tour-tooltip"
       >

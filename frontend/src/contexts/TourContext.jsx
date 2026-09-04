@@ -9,8 +9,8 @@ const TourContext = createContext(null);
 export function TourProvider({ children }) {
   const [tour, setTour] = useState(null); // { category, stepIndex }
 
-  const startTour = useCallback((category) => {
-    setTour({ category, stepIndex: 0 });
+  const startTour = useCallback((category, stepIndex = 0) => {
+    setTour({ category, stepIndex });
   }, []);
 
   const stopTour = useCallback(() => setTour(null), []);

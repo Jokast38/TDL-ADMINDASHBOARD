@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight, UploadSimple, Sun, Moon } from "@phosphor-icons/react";
+import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight, UploadSimple, Sun, Moon, FolderOpen } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 
@@ -24,6 +24,18 @@ function monthLabel(dateStr) {
 // Le créneau JOUR/SOIR n'a pas son propre champ sur le stage — il est
 // encodé dans les notes à la création (voir vtc_import.py et Stages.jsx
 // "Créneau : JOUR"/"Créneau : SOIR"). Extrait ici pour l'affichage.
+async function downloadStageAntsBundle(s) {
+  try {
+    const res = await api.get(`/stages/${s.id}/ants-bundle`, { responseType: "blob" });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Dossier_ANTS_session_${s.formation_titre}_${s.date_debut}.zip`; a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    toast.error(e.response?.data?.detail || "Aucune feuille d'émargement disponible pour cette session");
+  }
+}
+
 function extractCreneau(notes) {
   const m = /Créneau\s*:\s*(JOUR|SOIR)/i.exec(notes || "");
   return m ? m[1].toUpperCase() : null;
@@ -485,6 +497,16 @@ function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete,
           return names.length ? <p className="text-[10px]">Formateur(s) : {names.join(", ")}</p> : null;
         })()}
       </div>
+      {muted && (
+        <button
+          onClick={(e) => { e.stopPropagation(); downloadStageAntsBundle(s); }}
+          className="mt-3 text-xs flex items-center gap-1 text-gray-500 hover:text-[#d4af37]"
+          title="Feuilles d'émargement signées de cette session, prêtes pour l'ANTS"
+          data-testid={`stage-ants-bundle-${s.id}`}
+        >
+          <FolderOpen size={12} /> Télécharger le dossier ANTS
+        </button>
+      )}
     </Card>
   );
 }

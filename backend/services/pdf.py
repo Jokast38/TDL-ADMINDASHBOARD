@@ -120,6 +120,32 @@ def _draw_data_url_image(c, data_url: Optional[str], x, y, width, height):
         pass
 
 
+def _draw_data_url_image_top(c, data_url: Optional[str], x, top_y, max_width, max_height):
+    """Comme _draw_data_url_image, mais ancre le HAUT réel de l'image (pas le
+    haut de sa boîte englobante) à `top_y`. Nécessaire car une signature/un
+    cachet scanné a souvent un ratio très large (peu haut) — avec un simple
+    anchor='sw' + preserveAspectRatio, l'image se retrouve alors calée tout en
+    bas d'une boîte haute, avec un grand vide au-dessus qui la fait paraître
+    « décollée » du texte au lieu d'être juste dessous. Règle générale à
+    suivre pour toute future signature apposée sur un document : toujours
+    positionner par rapport au HAUT réel de l'image, jamais par un décalage
+    fixe depuis le bas."""
+    if not data_url or not data_url.startswith("data:image"):
+        return
+    import io as _io
+    import base64 as _b64
+    from reportlab.lib.utils import ImageReader
+    try:
+        b64part = data_url.split(",", 1)[1]
+        img = ImageReader(_io.BytesIO(_b64.b64decode(b64part)))
+        iw, ih = img.getSize()
+        ratio = min(max_width / iw, max_height / ih)
+        draw_w, draw_h = iw * ratio, ih * ratio
+        c.drawImage(img, x, top_y - draw_h, width=draw_w, height=draw_h, mask='auto')
+    except Exception:
+        pass
+
+
 def generate_stage_recup_points_attestation(
     stagiaire: dict, stage_dates: list, lieu: str,
     centre: dict, animateurs: dict,
@@ -247,64 +273,199 @@ def generate_stage_recup_points_attestation(
     c.setFont("Helvetica", 10.5)
     c.drawString(margin, y, f"À {lieu_signature or centre.get('ville', '')}, le {date_signature or ''}")
 
-    # Bloc signatures (3 colonnes)
+    # Bloc signatures (3 colonnes) — layout calculé du HAUT vers le bas pour
+    # chaque colonne (voir _sig_column ci-dessous) : l'image de signature est
+    # toujours positionnée à distance fixe SOUS la dernière ligne de texte,
+    # jamais chevauchée — contrairement à l'ancien calcul par décalages fixes
+    # depuis le bas, qui désynchronisait le cachet et les signatures dès que
+    # le nombre de lignes de texte au-dessus changeait (ex: plusieurs
+    # formateurs empilés faisant remonter/chevaucher le bloc suivant).
+    def _sig_column(x, y_top, lines, image_url, img_w, img_h, center=False, min_gap=0.35 * cm, line_h=0.42 * cm, img_dx=0):
+        cy = y_top
+        for text, font, size in lines:
+            c.setFont(font, size)
+            if center:
+                c.drawCentredString(x, cy, text)
+            else:
+                c.drawString(x, cy, text)
+            cy -= line_h
+        img_top = cy - min_gap
+        if image_url:
+            anchor_x = ((x - img_w / 2) if center else x) + img_dx
+            _draw_data_url_image_top(c, image_url, anchor_x, img_top, img_w, img_h)
+        return img_top - img_h
+
     y -= 1.6 * cm
     col1, col2, col3 = margin, 8.7 * cm, 15.3 * cm
+    col2_center = col2 + 2.3 * cm
     c.setFont("Helvetica-Bold", 10)
     c.drawString(col1, y, "Signature du directeur")
-    c.drawCentredString(col2 + 2.3 * cm, y, "Signature des Animateurs")
+    c.drawCentredString(col2_center, y, "Signature des Animateurs")
     c.drawString(col3, y, "Signature du stagiaire")
 
-    y -= 0.6 * cm
-    c.setFont("Helvetica", 9.5)
-    c.drawString(col1, y, centre.get("directeur_nom", ""))
+    text_top = y - 0.6 * cm
 
-    formateurs_list = animateurs.get("formateurs_list")  # liste multi-formateur, voir docstring
+    # Colonne directeur : nom + cachet du centre.
+    # Cachet du centre agrandi (demande explicite) et décalé vers la marge de
+    # gauche (img_dx négatif) — largeur plafonnée pour rester sous la colonne
+    # Animateurs (qui démarre à col2_center - 1.6cm, soit environ 9.4cm).
+    _sig_column(
+        col1, text_top, [(centre.get("directeur_nom", ""), "Helvetica", 9.5)],
+        cachet_data_url, 7.5 * cm, 5.8 * cm, img_dx=-1 * cm,
+    )
+
+    # Colonne animateurs — un ou plusieurs formateurs (dont, le cas échéant,
+    # un psychologue identifié par son intitulé) empilés sans chevauchement ;
+    # sinon l'ancien flux mono-BAFM + psychologue par défaut (réglages).
+    formateurs_list = animateurs.get("formateurs_list")
     if formateurs_list:
-        # Plusieurs formateurs assignés à la session (voir Stages.jsx multi-
-        # sélection) : chacun est dessiné avec son intitulé (BAFM, moniteur...)
-        # et sa propre signature, empilés — taille réduite si plus de 2 pour
-        # rester dans le même espace vertical que le cas mono-formateur.
         n = len(formateurs_list)
-        sig_h = 1.5 * cm if n <= 2 else (0.95 * cm if n == 3 else 0.7 * cm)
-        row_h = sig_h + 0.75 * cm
-        cy = y
+        sig_h = 1.3 * cm if n <= 2 else (0.9 * cm if n == 3 else 0.65 * cm)
+        cy = text_top
         for f in formateurs_list:
-            c.setFont("Helvetica-Bold", 8.5)
-            c.drawCentredString(col2 + 2.3 * cm, cy, (f.get("titre") or "Formateur")[:30])
-            c.setFont("Helvetica", 8)
-            c.drawCentredString(col2 + 2.3 * cm, cy - 0.35 * cm, f"{f.get('nom', '')} {f.get('numero') or ''}".strip())
-            _draw_data_url_image(c, f.get("signature_data_url"), col2 + 0.9 * cm, cy - 0.5 * cm - sig_h, 2.8 * cm, sig_h)
-            cy -= row_h
+            cy = _sig_column(
+                col2_center, cy,
+                [((f.get("titre") or "Formateur")[:30], "Helvetica-Bold", 8.5),
+                 (f"{f.get('nom', '')} {f.get('numero') or ''}".strip(), "Helvetica", 8)],
+                f.get("signature_data_url"), 2.8 * cm, sig_h, center=True,
+            ) - 0.3 * cm
     else:
-        c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(col2 + 2.3 * cm, y, "BAFM")
-        c.setFont("Helvetica", 9)
-        c.drawCentredString(col2 + 2.3 * cm, y - 0.45 * cm, animateurs.get("bafm_nom", ""))
-        c.drawCentredString(col2 + 2.3 * cm, y - 0.9 * cm, animateurs.get("bafm_numero", ""))
-        # Signature de l'animateur BAFM (réutilise la signature staff
-        # existante, voir POST /me/signature côté employees.py).
-        _draw_data_url_image(c, formateur_signature_data_url, col2 + 0.6 * cm, y - 2.3 * cm, 3.4 * cm, 1.6 * cm)
+        cy = _sig_column(
+            col2_center, text_top,
+            [("BAFM", "Helvetica-Bold", 9), (animateurs.get("bafm_nom", ""), "Helvetica", 9), (animateurs.get("bafm_numero", ""), "Helvetica", 9)],
+            formateur_signature_data_url, 3.2 * cm, 1.4 * cm, center=True,
+        ) - 0.4 * cm
+        _sig_column(
+            col2_center, cy,
+            [("Psychologue", "Helvetica-Bold", 9), (animateurs.get("psychologue_nom", ""), "Helvetica", 9), (animateurs.get("psychologue_numero", ""), "Helvetica", 9)],
+            psychologue_signature_data_url, 3.2 * cm, 1.4 * cm, center=True,
+        )
 
-    # Cachet du centre (case "directeur") — image par défaut du centre.
-    _draw_data_url_image(c, cachet_data_url, col1, y - 3.3 * cm, 4.5 * cm, 2.6 * cm)
-
-    # Psychologue — deuxième profil requis par la réglementation.
-    y2 = y - 2.7 * cm
-    c.setFont("Helvetica-Bold", 9)
-    c.drawCentredString(col2 + 2.3 * cm, y2, "Psychologue")
-    c.setFont("Helvetica", 9)
-    c.drawCentredString(col2 + 2.3 * cm, y2 - 0.45 * cm, animateurs.get("psychologue_nom", ""))
-    c.drawCentredString(col2 + 2.3 * cm, y2 - 0.9 * cm, animateurs.get("psychologue_numero", ""))
-    _draw_data_url_image(c, psychologue_signature_data_url, col2 + 0.6 * cm, y2 - 2.4 * cm, 3.4 * cm, 1.6 * cm)
-
-    # Signature manuscrite du stagiaire, capturée depuis son espace apprenant.
-    _draw_data_url_image(c, student_signature_data_url, col3, y - 2.4 * cm, 4.5 * cm, 2.2 * cm)
+    # Colonne stagiaire : signature manuscrite capturée depuis son espace.
+    _sig_column(col3, text_top, [], student_signature_data_url, 4.0 * cm, 2.2 * cm)
 
     c.setFillColor(gray)
     c.setFont("Helvetica", 7.5)
     c.drawCentredString(w / 2, 1.2 * cm, f"{centre.get('nom', 'TDL Formation')} · Agrément préfectoral {centre.get('agrement_numero', '')} · SIRET {centre.get('siret', '')}")
 
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def generate_formateur_convention_pdf(
+    formateur: dict, signature_data_url: str, centre: Optional[dict] = None,
+    cachet_data_url: Optional[str] = None,
+) -> bytes:
+    """Convention de collaboration signée par un formateur/animateur/
+    psychologue nouvellement créé (voir POST /me/convention/sign côté
+    routers/employees.py) — engagement à être présent pour assurer les
+    sessions qui lui sont assignées. Remplace le passage par une plateforme
+    tierce (Digiforma...) pour ce document."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    import io as _io
+
+    centre = centre or {}
+    buf = _io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    w, h = A4
+    black = colors.HexColor("#0a0a0a")
+    gold = colors.HexColor("#d4af37")
+    margin = 2 * cm
+
+    c.setFillColor(black)
+    c.rect(0, h - 3 * cm, w, 3 * cm, fill=1, stroke=0)
+    c.setFillColor(gold)
+    c.setFont("Helvetica-Bold", 20)
+    c.drawString(margin, h - 1.8 * cm, centre.get("nom", "TDL Formation").upper())
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica", 10)
+    c.drawString(margin, h - 2.5 * cm, "Convention de collaboration — Formateur / Animateur / Psychologue")
+
+    y = h - 5 * cm
+    c.setFillColor(black)
+    c.setFont("Helvetica", 10.5)
+
+    def _wrap(text, size=10.5, max_width=w - 2 * margin):
+        words = text.split(" ")
+        lines, cur = [], ""
+        for word in words:
+            trial = f"{cur} {word}".strip()
+            if c.stringWidth(trial, "Helvetica", size) <= max_width:
+                cur = trial
+            else:
+                lines.append(cur)
+                cur = word
+        if cur:
+            lines.append(cur)
+        return lines
+
+    intro = (
+        f"Entre {centre.get('nom', 'TDL Formation')}, {centre.get('adresse', '')} {centre.get('ville', '')}, "
+        f"représenté par {centre.get('directeur_nom', '')}, ci-après « le Centre »,"
+    )
+    for line in _wrap(intro):
+        c.drawString(margin, y, line)
+        y -= 0.5 * cm
+    y -= 0.3 * cm
+    person = (
+        f"Et {formateur.get('name', '')} ({formateur.get('titre') or 'Formateur'}), "
+        f"{formateur.get('email', '')}, ci-après « l'Intervenant »,"
+    )
+    for line in _wrap(person):
+        c.drawString(margin, y, line)
+        y -= 0.5 * cm
+
+    y -= 0.8 * cm
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margin, y, "Article 1 — Objet")
+    y -= 0.6 * cm
+    c.setFont("Helvetica", 10.5)
+    for line in _wrap(
+        "L'Intervenant s'engage à assurer, avec assiduité et professionnalisme, les sessions de formation, "
+        "d'animation ou d'accompagnement qui lui sont assignées par le Centre via le tableau de bord TDL "
+        "Formation, aux dates et lieux qui y sont indiqués."
+    ):
+        c.drawString(margin, y, line)
+        y -= 0.5 * cm
+
+    y -= 0.6 * cm
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(margin, y, "Article 2 — Documents fournis")
+    y -= 0.6 * cm
+    c.setFont("Helvetica", 10.5)
+    for line in _wrap(
+        "L'Intervenant certifie avoir fourni au Centre l'ensemble des pièces justificatives de son droit "
+        "d'exercer (pièce d'identité, diplômes et attestations d'habilitation, KBIS le cas échéant, "
+        "attestation de vigilance URSSAF, justificatif de domicile) et s'engage à en signaler toute "
+        "évolution ou expiration sans délai."
+    ):
+        c.drawString(margin, y, line)
+        y -= 0.5 * cm
+
+    y -= 1.2 * cm
+    c.setFont("Helvetica", 10.5)
+    today = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+    c.drawString(margin, y, f"Fait à {centre.get('ville', '')}, le {today}")
+
+    y -= 1.8 * cm
+    col1, col2 = margin, 11 * cm
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(col1, y, "Le Centre")
+    c.drawString(col2, y, "L'Intervenant")
+    text_top = y - 0.5 * cm
+    c.setFont("Helvetica", 9.5)
+    c.drawString(col1, text_top, centre.get("directeur_nom", ""))
+    c.drawString(col2, text_top, formateur.get("name", ""))
+    _draw_data_url_image(c, cachet_data_url, col1, text_top - 0.35 * cm - 2.2 * cm, 4 * cm, 2.2 * cm)
+    _draw_data_url_image(c, signature_data_url, col2, text_top - 0.35 * cm - 2.2 * cm, 4 * cm, 2.2 * cm)
+
+    c.setFillColor(colors.HexColor("#666"))
+    c.setFont("Helvetica", 7.5)
+    c.drawCentredString(w / 2, 1.2 * cm, f"{centre.get('nom', 'TDL Formation')} · SIRET {centre.get('siret', '')}")
     c.showPage()
     c.save()
     return buf.getvalue()

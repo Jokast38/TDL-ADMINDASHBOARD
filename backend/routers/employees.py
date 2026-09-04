@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import Response
 
@@ -7,8 +8,11 @@ from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
-from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn
+from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
+from services.pdf import generate_formateur_convention_pdf
+from services.email import send_email
+from services.push import send_push_to_users
 
 router = APIRouter(tags=["employees"])
 
@@ -16,6 +20,51 @@ VALID_STAFF_ROLES = (
     "admin", "employe", "animateur", "responsable_admission", "agent_admin",
     "commercial", "responsable_commercial",
 )
+
+# Pièces justifiant le droit d'exercer d'un formateur/animateur/psychologue —
+# checklist affichée dans son espace ("Mon dossier") et sur la page
+# Formateurs du dashboard (voir Formateurs.jsx). Le dossier doit être
+# complété (documents + convention signée) dans les 24h suivant la création
+# du compte par un agent (voir `dossier_deadline` dans create_employee) —
+# objectif : ne plus dépendre de plateformes tierces (Digiforma...).
+FORMATEUR_DOC_TYPES = {
+    "identite_recto": "Pièce d'identité (recto)",
+    "identite_verso": "Pièce d'identité (verso)",
+    "diplome_bafm_psy": "Diplôme BAFM / PSY",
+    "autorisation_animer_initiale": "Autorisation d'animer initiale",
+    "attestation_formation_continue": "Attestation de formation continue",
+    "attestation_gta_initiale": "Attestation GTA initiale",
+    "attestation_gta_continue": "Attestation GTA continue",
+    "kbis": "KBIS de moins de 3 mois",
+    "attestation_vigilance_urssaf": "Attestation de vigilance URSSAF",
+    "justificatif_domicile": "Justificatif de domicile",
+}
+
+FORMATEUR_DOSSIER_SLA = timedelta(hours=24)
+
+
+async def _formateur_dossier_status(uid: str, created_at: str, convention_signed_at: str = None) -> dict:
+    profile = await db.staff_profiles.find_one({"user_id": uid}, {"_id": 0}) or {}
+    docs = await db.documents.find(
+        {"id": {"$in": profile.get("documents", [])}, "is_deleted": False}, {"_id": 0, "doc_type": 1}
+    ).to_list(200)
+    present_types = {d.get("doc_type") for d in docs}
+    missing = [k for k in FORMATEUR_DOC_TYPES if k not in present_types]
+    deadline = None
+    overdue = False
+    try:
+        deadline = (datetime.fromisoformat(created_at.replace("Z", "+00:00")) + FORMATEUR_DOSSIER_SLA)
+        overdue = datetime.now(timezone.utc) > deadline and (bool(missing) or not convention_signed_at)
+    except Exception:
+        pass
+    return {
+        "missing_documents": missing,
+        "documents_complete": not missing,
+        "convention_signed": bool(convention_signed_at),
+        "dossier_complete": not missing and bool(convention_signed_at),
+        "dossier_deadline": deadline.isoformat() if deadline else None,
+        "dossier_overdue": overdue,
+    }
 
 
 async def _get_or_create_staff_profile(uid: str) -> dict:
@@ -49,10 +98,15 @@ def _manageable_roles(role: str) -> tuple:
 @router.get("/employees")
 async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin"))):
     roles = list(VALID_STAFF_ROLES) if user["role"] == "admin" else list(_manageable_roles(user["role"]))
-    return await db.users.find(
+    staff = await db.users.find(
         {"role": {"$in": roles}},
         {"_id": 0, "password_hash": 0}
     ).to_list(500)
+    for s in staff:
+        if s.get("role") == "animateur":
+            status = await _formateur_dossier_status(s["id"], s.get("created_at") or now_iso(), s.get("convention_signed_at"))
+            s.update(status)
+    return staff
 
 
 @router.post("/employees")
@@ -249,6 +303,91 @@ async def get_my_signature_image(user: dict = Depends(require_role(*ROLES_ALL_ST
         raise HTTPException(status_code=404, detail="Aucune signature enregistrée")
     data, ct = await get_object(u["signature_path"])
     return Response(content=data, media_type=ct or "image/png")
+
+
+@router.get("/me/formateur-dossier")
+async def get_my_formateur_dossier(user: dict = Depends(require_role("animateur"))):
+    """État du dossier d'habilitation du formateur connecté (documents +
+    convention) — affiché dans son espace ("Mon dossier"), à compléter dans
+    les 24h suivant la création du compte."""
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    profile = await _get_or_create_staff_profile(user["id"])
+    docs = await db.documents.find({"id": {"$in": profile.get("documents", [])}, "is_deleted": False}, {"_id": 0}).to_list(200)
+    status = await _formateur_dossier_status(user["id"], u.get("created_at") or now_iso(), u.get("convention_signed_at"))
+    return {**status, "documents_details": docs, "document_types": FORMATEUR_DOC_TYPES, "convention_pdf_available": bool(u.get("convention_pdf_path"))}
+
+
+@router.post("/me/convention/sign")
+async def sign_my_convention(payload: ConventionSignIn, user: dict = Depends(require_role("animateur"))):
+    """Signe la convention de collaboration (engagement de présence) avec sa
+    signature manuscrite — génère le PDF, l'enregistre comme signature par
+    défaut de l'utilisateur si il n'en a pas déjà une, et notifie les agents
+    (admin/responsable_admission/agent_admin) que le dossier a avancé."""
+    if not payload.signature_data_url.startswith("data:image"):
+        raise HTTPException(status_code=400, detail="Signature invalide")
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    if u.get("convention_signed_at"):
+        raise HTTPException(status_code=400, detail="Convention déjà signée")
+
+    import base64 as _b64
+    import io as _io
+    img_bytes = _b64.b64decode(payload.signature_data_url.split(",", 1)[1])
+
+    if not u.get("signature_path"):
+        sig_path = f"{APP_NAME}/signatures/{user['id']}.png"
+        result = await put_object(sig_path, img_bytes, "image/png")
+        await db.users.update_one({"id": user["id"]}, {"$set": {"signature_path": result["path"], "signature_updated_at": now_iso()}})
+
+    settings_doc = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
+    centre = {
+        "nom": settings_doc.get("attestation_centre_nom") or "Top Drive Learning (TDL)",
+        "adresse": settings_doc.get("attestation_centre_adresse") or "59 avenue Joffre",
+        "ville": settings_doc.get("attestation_centre_ville") or "93800 Epinay-sur-seine",
+        "siret": settings_doc.get("attestation_centre_siret") or "90096880100010",
+        "directeur_nom": settings_doc.get("attestation_directeur_nom") or "",
+    }
+    cachet_data_url = None
+    if settings_doc.get("attestation_cachet_path"):
+        try:
+            data, ct = await get_object(settings_doc["attestation_cachet_path"])
+            cachet_data_url = f"data:{ct or 'image/png'};base64,{_b64.b64encode(data).decode('ascii')}"
+        except Exception:
+            cachet_data_url = None
+
+    pdf_bytes = generate_formateur_convention_pdf(u, payload.signature_data_url, centre, cachet_data_url)
+    path = f"{APP_NAME}/conventions/{user['id']}.pdf"
+    result = await put_object(path, pdf_bytes, "application/pdf")
+    signed_at = now_iso()
+    await db.users.update_one(
+        {"id": user["id"]}, {"$set": {"convention_pdf_path": result["path"], "convention_signed_at": signed_at, "updated_at": signed_at}}
+    )
+
+    status = await _formateur_dossier_status(user["id"], u.get("created_at") or now_iso(), signed_at)
+    agents = await db.users.find(
+        {"active": True, "role": {"$in": ["admin", "responsable_admission", "agent_admin"]}}, {"_id": 0, "id": 1, "email": 1, "name": 1}
+    ).to_list(100)
+    subject = f"✅ Convention signée — {u.get('name', '')}" + ("" if status["dossier_complete"] else " (dossier encore incomplet)")
+    body = (
+        f"<p><b>{u.get('name', '')}</b> a signé sa convention de collaboration.</p>"
+        f"<p>Dossier {'complet ✅' if status['dossier_complete'] else 'encore incomplet — documents manquants : ' + ', '.join(FORMATEUR_DOC_TYPES[k] for k in status['missing_documents'])}.</p>"
+        f"<p style='margin-top:16px;'>Rendez-vous sur la page Formateurs du dashboard.</p>"
+    )
+    for a in agents:
+        if a.get("email"):
+            await send_email(a["email"], subject, body)
+    if agents:
+        await send_push_to_users([a["id"] for a in agents], "Convention formateur signée", u.get("name", ""), "/admin/formateurs")
+
+    return {"ok": True, **status}
+
+
+@router.get("/me/convention/download")
+async def download_my_convention(user: dict = Depends(require_role("animateur"))):
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0, "convention_pdf_path": 1})
+    if not u or not u.get("convention_pdf_path"):
+        raise HTTPException(status_code=404, detail="Convention pas encore signée")
+    data, ct = await get_object(u["convention_pdf_path"])
+    return Response(content=data, media_type=ct or "application/pdf")
 
 
 @router.get("/employees/activity")

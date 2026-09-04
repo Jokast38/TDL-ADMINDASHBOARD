@@ -10,10 +10,36 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { Plus, FileText, UploadSimple, Trash, Calendar, PencilSimple, Signature } from "@phosphor-icons/react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, FileText, UploadSimple, Trash, Calendar, PencilSimple, Signature, CheckCircle, Clock, WarningCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const emptyForm = { name: "", email: "", phone: "", password: "", titre: "" };
+
+// Doit rester synchronisé avec FORMATEUR_DOC_TYPES côté backend
+// (routers/employees.py) et STAFF_DOC_TYPE_LABELS dans AnimateurSpace.jsx.
+const DOC_TYPE_LABELS = {
+  identite_recto: "Pièce d'identité (recto)",
+  identite_verso: "Pièce d'identité (verso)",
+  diplome_bafm_psy: "Diplôme BAFM / PSY",
+  autorisation_animer_initiale: "Autorisation d'animer initiale",
+  attestation_formation_continue: "Attestation de formation continue",
+  attestation_gta_initiale: "Attestation GTA initiale",
+  attestation_gta_continue: "Attestation GTA continue",
+  kbis: "KBIS de moins de 3 mois",
+  attestation_vigilance_urssaf: "Attestation de vigilance URSSAF",
+  justificatif_domicile: "Justificatif de domicile",
+};
+
+function DossierBadge({ u }) {
+  if (u.dossier_complete) {
+    return <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10 text-[10px]"><CheckCircle size={10} className="mr-1" weight="fill" />Dossier complet</Badge>;
+  }
+  if (u.dossier_overdue) {
+    return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 text-[10px]"><WarningCircle size={10} className="mr-1" weight="fill" />Dossier en retard</Badge>;
+  }
+  return <Badge className="bg-[#F5A623]/10 text-[#F5A623] hover:bg-[#F5A623]/10 text-[10px]"><Clock size={10} className="mr-1" />Dossier incomplet</Badge>;
+}
 
 // Page dédiée aux formateurs (animateurs) : répertoire, documents
 // (habilitations, diplômes...) et sessions assignées — à ne pas confondre
@@ -32,6 +58,7 @@ export default function Formateurs() {
   const [titreDraft, setTitreDraft] = useState("");
   const [savingTitre, setSavingTitre] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [uploadDocType, setUploadDocType] = useState(Object.keys(DOC_TYPE_LABELS)[0]);
 
   const load = () => api.get("/employees").then((r) => setItems(r.data.filter((u) => u.role === "animateur")));
   useEffect(() => { load(); }, []);
@@ -90,6 +117,7 @@ export default function Formateurs() {
     if (!file || !detail) return;
     const fd = new FormData();
     fd.append("file", file);
+    fd.append("doc_type", uploadDocType);
     setUploading(true);
     try {
       await api.post(`/staff/${detail.id}/documents`, fd, { headers: { "Content-Type": "multipart/form-data" } });
@@ -193,6 +221,7 @@ export default function Formateurs() {
             <p className="text-xs text-gray-500">{u.titre || "Formateur"}</p>
             <p className="text-xs text-gray-400 font-mono mt-1">{u.email}</p>
             {u.agrement_bafm_numero && <p className="text-xs text-gray-400 mt-1">BAFM : {u.agrement_bafm_numero}</p>}
+            <div className="mt-2"><DossierBadge u={u} /></div>
           </Card>
         ))}
         {!items.length && (
@@ -223,26 +252,47 @@ export default function Formateurs() {
                 </div>
 
                 <div>
-                  <p className="text-sm font-medium mb-2 flex items-center gap-1"><FileText size={15} /> Documents / habilitations</p>
-                  <label className="inline-block mb-3">
-                    <input type="file" className="hidden" onChange={uploadDoc} data-testid="formateur-doc-upload" />
-                    <Button type="button" variant="outline" size="sm" disabled={uploading} className="cursor-pointer">
-                      <UploadSimple size={14} className="mr-1" /> {uploading ? "Envoi..." : "Ajouter un document"}
-                    </Button>
-                  </label>
-                  <div className="space-y-1">
-                    {(profile?.documents_details || []).map((d) => (
-                      <div key={d.id} className="flex items-center justify-between text-sm bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
-                        <span className="truncate">{d.original_filename}</span>
-                        <button onClick={() => deleteDoc(d.id)} className="p-1 text-red-600 hover:bg-red-50 rounded shrink-0" title="Supprimer">
-                          <Trash size={14} />
-                        </button>
-                      </div>
-                    ))}
-                    {profile && !(profile.documents_details || []).length && (
-                      <p className="text-xs text-gray-400">Aucun document.</p>
-                    )}
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium flex items-center gap-1"><FileText size={15} /> Documents / habilitations</p>
+                    <DossierBadge u={detail} />
                   </div>
+                  <div className="flex gap-2 mb-3">
+                    <Select value={uploadDocType} onValueChange={setUploadDocType}>
+                      <SelectTrigger className="flex-1" data-testid="formateur-doc-type"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(DOC_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <label className="shrink-0">
+                      <input type="file" className="hidden" onChange={uploadDoc} data-testid="formateur-doc-upload" />
+                      <Button type="button" variant="outline" disabled={uploading} className="cursor-pointer">
+                        <UploadSimple size={14} className="mr-1" /> {uploading ? "Envoi..." : "Charger"}
+                      </Button>
+                    </label>
+                  </div>
+                  <div className="space-y-1">
+                    {Object.entries(DOC_TYPE_LABELS).map(([type, label]) => {
+                      const doc = (profile?.documents_details || []).find((d) => d.doc_type === type);
+                      return (
+                        <div key={type} className="flex items-center justify-between text-sm bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+                          <span className="flex items-center gap-2 truncate">
+                            {doc ? <CheckCircle size={14} className="text-[#0B7238] shrink-0" weight="fill" /> : <Clock size={14} className="text-gray-300 shrink-0" />}
+                            <span className="truncate">{label}{doc ? ` — ${doc.original_filename}` : ""}</span>
+                          </span>
+                          {doc && (
+                            <button onClick={() => deleteDoc(doc.id)} className="p-1 text-red-600 hover:bg-red-50 rounded shrink-0" title="Supprimer">
+                              <Trash size={14} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    {detail.convention_signed
+                      ? "Convention de collaboration signée par le formateur."
+                      : "Convention pas encore signée — le formateur la signe depuis son espace (\"Mon dossier\")."}
+                  </p>
                 </div>
 
                 <div>

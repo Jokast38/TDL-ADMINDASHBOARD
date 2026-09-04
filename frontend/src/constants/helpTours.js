@@ -2,13 +2,17 @@ import {
   House, GraduationCap, Folders, IdentificationCard, UsersThree, FilePdf, FileText,
   Archive, ShoppingCart, Storefront, Robot, Article, Users, Gear, ChartBar,
   CalendarCheck, PenNib, TrendUp, LinkSimple, Student, Signature, ArrowsClockwise,
+  CreditCard,
 } from "@phosphor-icons/react";
 
 // Contenu du Centre d'aide (visites guidées) — une catégorie par profil
 // d'employé, chacune listant les fonctionnalités importantes de ce profil
-// sous forme d'étapes (voir components/GuidedTour.jsx). Pensé pour former
-// rapidement un nouvel employé sans avoir à repasser derrière lui pour
-// chaque fonctionnalité.
+// sous forme d'étapes (voir components/GuidedTour.jsx). Chaque étape porte
+// aussi un `question` formulé comme une question métier ("Comment... ?") —
+// affiché comme bouton dans HelpCenter.jsx pour lancer directement la visite
+// sur cette fonctionnalité précise, sans avoir à parcourir toute la
+// catégorie. Pensé pour former rapidement un nouvel employé sans avoir à
+// repasser derrière lui pour chaque fonctionnalité.
 export const HELP_CATEGORIES = [
   {
     key: "admission",
@@ -19,6 +23,7 @@ export const HELP_CATEGORIES = [
     steps: [
       {
         title: "Demandes de rappel",
+        question: "Comment traiter les demandes de rappel ?",
         icon: IdentificationCard,
         route: "/admin/inscriptions",
         targetSelector: '[data-testid="callback-requests-card"]',
@@ -26,15 +31,26 @@ export const HELP_CATEGORIES = [
           "Liste de toutes les inscriptions (en ligne ou saisies par vous) et, encadré ici, les demandes de rappel non traitées — pensez à les marquer « traité » une fois le candidat rappelé. La section se replie automatiquement dès qu'il n'y a plus de nouvelle demande.",
       },
       {
+        title: "Inscrire un apprenant sur place",
+        question: "Comment inscrire un apprenant qui se présente en agence ?",
+        icon: CreditCard,
+        route: "/admin/inscriptions",
+        targetSelector: '[data-testid="walkin-btn"]',
+        description:
+          "Un candidat se présente en agence ? Ce bouton crée son inscription et peut lancer immédiatement le paiement par carte (Stripe) — vous revenez ensuite automatiquement sur la liste, avec un reçu téléchargeable. Dans la colonne « Session », affectez-le à une session existante (ou changez-en pour un repassage d'examen).",
+      },
+      {
         title: "Filtres et statut de contact",
+        question: "Comment retrouver rapidement une inscription précise ?",
         icon: IdentificationCard,
         route: "/admin/inscriptions",
         targetSelector: '[data-testid="filter-contact"]',
         description:
-          "Filtrez les inscriptions par payé/non payé, traité/non traité, clôturée/active, et par statut de contact (à contacter, en cours, sans réponse) — pratique pour relancer les inscriptions bloquées. Pagination automatique par 25.",
+          "Filtrez les inscriptions par payé/non payé (dont CPF Validé/en attente), traité/non traité, clôturée/active, par formation, par origine (site internet / sur place / import Excel) et par statut de contact — pratique pour retrouver rapidement un profil d'inscription. Pagination automatique par 25.",
       },
       {
         title: "Dossiers (Kanban)",
+        question: "Comment suivre l'avancement d'un dossier candidat ?",
         icon: Folders,
         route: "/admin/dossiers",
         targetSelector: '[data-testid="kanban-board"]',
@@ -43,22 +59,43 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Apprenants",
+        question: "Comment suivre un apprenant et communiquer avec lui ?",
         icon: Student,
         route: "/admin/apprenants",
         targetSelector: '[data-testid="students-page"]',
         description:
-          "Vue unifiée de chaque apprenant : résultats d'examen CMA (VTC/Taxi, permis B), rendez-vous, documents manquants. Depuis cette page vous pouvez ouvrir le dossier, envoyer un email avec le template de la marque, et — pour les stages de récupération de points terminés — déclencher la notification de disponibilité de l'attestation de stage à signer.",
+          "Vue unifiée de chaque apprenant : résultats d'examen CMA (VTC/Taxi, permis B), rendez-vous, documents manquants. Depuis cette page vous pouvez ouvrir le dossier, envoyer un email avec le template de la marque (dont un modèle « Convocation à un examen »), et — pour les stages de récupération de points terminés — déclencher la notification de disponibilité de l'attestation de stage à signer.",
+      },
+      {
+        title: "Dossier ANTS en un clic",
+        question: "Comment préparer l'envoi d'un dossier à l'ANTS ?",
+        icon: FilePdf,
+        route: "/admin/apprenants",
+        targetSelector: '[data-testid="students-page"]',
+        description:
+          "Pour un dossier « Récupération de points » validé, session terminée et attestation signée par toutes les parties : ouvrez le dossier de l'apprenant, un bouton « Télécharger le dossier ANTS » apparaît — un zip nommé à son nom avec l'attestation signée et toutes ses pièces, prêt à envoyer. Idem au niveau d'une session entière depuis la page Sessions de stage (feuilles d'émargement signées de tous les participants).",
       },
       {
         title: "Sessions de stage",
+        question: "Comment planifier une session de stage ?",
         icon: CalendarCheck,
         route: "/admin/stages",
         targetSelector: '[data-testid="new-stage-btn"]',
         description:
-          "Calendrier des sessions (stage récupération de points, formations groupées...). Ce bouton crée une session : fixez ses dates et son centre (Épinay-sur-Seine ou Creil), et suivez les inscrits qui y sont rattachés.",
+          "Calendrier des sessions (stage récupération de points, formations groupées...), sous-groupé par mois avec un badge JOUR/☀️ ou SOIR/🌙. Ce bouton crée une session : fixez ses dates, son centre et un ou plusieurs formateurs. Cliquez sur le compteur « X/25 » d'une session pour voir la liste des candidats inscrits.",
+      },
+      {
+        title: "Formateurs",
+        question: "Comment ajouter et suivre le dossier d'un formateur ?",
+        icon: PenNib,
+        route: "/admin/formateurs",
+        targetSelector: '[data-testid="add-formateur-btn"]',
+        description:
+          "Répertoire des formateurs, animateurs et psychologues (créez un compte psychologue comme un formateur classique, avec l'intitulé « Psychologue »). Pour chacun : intitulé affiché sur les attestations, checklist des 10 pièces justificatives (identité, BAFM/PSY, GTA, KBIS...), et statut de la convention de collaboration. Le formateur a 24h après la création de son compte pour tout compléter depuis son espace (« Mon dossier ») — vous êtes notifié dès qu'il signe.",
       },
       {
         title: "Bibliothèque PDF",
+        question: "Comment générer une attestation, une convention ou une facture ?",
         icon: FilePdf,
         route: "/admin/documents-library",
         targetSelector: '[data-testid="gen-doc-btn"]',
@@ -67,6 +104,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Documents entreprise",
+        question: "Où retrouver les documents internes de l'organisme ?",
         icon: Archive,
         route: "/admin/company-documents",
         targetSelector: '[data-testid="upload-doc-btn"]',
@@ -84,6 +122,7 @@ export const HELP_CATEGORIES = [
     steps: [
       {
         title: "Leads",
+        question: "Comment relancer les leads efficacement ?",
         icon: UsersThree,
         route: "/admin/leads",
         targetSelector: '[data-testid="broadcast-btn"]',
@@ -92,6 +131,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Demandes de rappel",
+        question: "Comment traiter les demandes de rappel qui me sont assignées ?",
         icon: IdentificationCard,
         route: "/admin/inscriptions",
         targetSelector: '[data-testid="callback-requests-card"]',
@@ -100,6 +140,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "KAMI STREET",
+        question: "Comment consulter le catalogue KAMI STREET ?",
         icon: ShoppingCart,
         route: "/admin/kami-street",
         targetSelector: '[data-testid="add-product-btn"]',
@@ -108,6 +149,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Commandes",
+        question: "Comment suivre une commande KAMI STREET ?",
         icon: Storefront,
         route: "/admin/orders",
         targetSelector: '[data-testid="orders-page"]',
@@ -125,6 +167,7 @@ export const HELP_CATEGORIES = [
     steps: [
       {
         title: "Tableau de bord",
+        question: "Par où commencer ma journée sur le dashboard ?",
         icon: House,
         route: "/admin",
         targetSelector: '[data-testid="kpi-grid"]',
@@ -132,6 +175,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Formations",
+        question: "Comment créer ou modifier une formation du catalogue ?",
         icon: GraduationCap,
         route: "/admin/formations",
         targetSelector: '[data-testid="add-formation-btn"]',
@@ -140,6 +184,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Dossiers (Kanban)",
+        question: "Comment suivre un dossier candidat au quotidien ?",
         icon: Folders,
         route: "/admin/dossiers",
         targetSelector: '[data-testid="kanban-board"]',
@@ -148,6 +193,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Leads",
+        question: "Comment recontacter un lead ?",
         icon: UsersThree,
         route: "/admin/leads",
         targetSelector: '[data-testid="broadcast-btn"]',
@@ -155,6 +201,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Blog",
+        question: "Comment publier un article de blog ?",
         icon: Article,
         route: "/admin/blog",
         targetSelector: '[data-testid="ai-generate-btn"]',
@@ -163,6 +210,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Synchro auto WordPress",
+        question: "Comment récupérer automatiquement les articles WordPress ?",
         icon: ArrowsClockwise,
         route: "/admin/blog",
         targetSelector: '[data-testid="wp-autosync-toggle"]',
@@ -180,6 +228,7 @@ export const HELP_CATEGORIES = [
     steps: [
       {
         title: "Espace animateur",
+        question: "Où retrouver mes sessions de formation ?",
         icon: House,
         route: "/espace-animateur",
         targetSelector: '[data-testid="animateur-page"]',
@@ -188,6 +237,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Feuille d'émargement",
+        question: "Comment faire signer la présence de mes stagiaires ?",
         icon: CalendarCheck,
         route: "/espace-animateur",
         targetSelector: '[data-testid="generate-emargement-pdf"]',
@@ -196,11 +246,21 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Ma signature",
+        question: "Comment enregistrer ma signature et mon agrément BAFM ?",
         icon: Signature,
         route: "/espace-animateur",
         targetSelector: '[data-testid="tab-signature"]',
         description:
           "Déposez votre signature manuscrite et votre numéro d'agrément BAFM une seule fois : ils sont ensuite utilisés automatiquement pour signer les attestations de stage de récupération de points de vos stagiaires.",
+      },
+      {
+        title: "Mon dossier",
+        question: "Comment compléter mon dossier formateur et signer ma convention ?",
+        icon: Student,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="tab-dossier"]',
+        description:
+          "À compléter dans les 24h suivant la création de votre compte : chargez vos 10 pièces justificatives (identité, diplôme BAFM/PSY, GTA, KBIS...) puis signez la convention de collaboration directement à l'écran (signature tactile). L'agent qui vous a créé est notifié dès que c'est fait.",
       },
     ],
   },
@@ -213,6 +273,7 @@ export const HELP_CATEGORIES = [
     steps: [
       {
         title: "Tableau de bord",
+        question: "Comment avoir une vue d'ensemble de l'activité ?",
         icon: TrendUp,
         route: "/admin",
         targetSelector: '[data-testid="kpi-grid"]',
@@ -220,6 +281,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Activité de l'équipe",
+        question: "Comment mesurer la productivité de l'équipe ?",
         icon: TrendUp,
         route: "/admin/activite",
         targetSelector: '[data-testid="activity-page"]',
@@ -228,6 +290,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Employés",
+        question: "Comment créer un compte pour un membre de l'équipe ?",
         icon: Users,
         route: "/admin/employees",
         targetSelector: '[data-testid="add-employee-btn"]',
@@ -236,6 +299,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Modèles PDF",
+        question: "Comment créer un nouveau modèle de document ?",
         icon: FileText,
         route: "/admin/doc-templates",
         targetSelector: '[data-testid="new-tpl-btn"]',
@@ -244,6 +308,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Paramètres",
+        question: "Où configurer email, paiement et intégrations techniques ?",
         icon: Gear,
         route: "/admin/settings",
         targetSelector: '[data-testid="email-provider"]',
@@ -252,6 +317,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Marketing",
+        question: "Comment suivre le trafic et les conversions du site ?",
         icon: ChartBar,
         route: "/admin/marketing",
         targetSelector: '[data-testid="marketing-page"]',
@@ -260,6 +326,7 @@ export const HELP_CATEGORIES = [
       },
       {
         title: "Demandes de backlinks",
+        question: "Comment lancer une campagne de demandes de backlinks ?",
         icon: LinkSimple,
         route: "/admin/marketing",
         targetSelector: '[data-testid="tab-backlinks"]',

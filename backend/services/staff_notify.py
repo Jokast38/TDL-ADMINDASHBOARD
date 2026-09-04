@@ -462,3 +462,71 @@ async def send_weekly_admin_report() -> int:
             "/admin",
         )
     return notified
+
+
+SESSION_REMINDER_DAYS_BEFORE = 3
+
+
+async def send_session_reminders() -> int:
+    """Rappel automatique — apprenants inscrits ET formateurs assignés — pour
+    chaque session de stage qui commence dans SESSION_REMINDER_DAYS_BEFORE
+    jours (voir _session_reminders_loop dans server.py). Un seul envoi par
+    session (`reminder_sent_at` posé sur le stage), pas de relance en boucle."""
+    target_date = (datetime.now(timezone.utc) + timedelta(days=SESSION_REMINDER_DAYS_BEFORE)).date().isoformat()
+    stages = await db.stages.find(
+        {"date_debut": target_date, "reminder_sent_at": {"$exists": False}, "statut": {"$ne": "annule"}},
+        {"_id": 0},
+    ).to_list(200)
+    if not stages:
+        return 0
+
+    notified = 0
+    for stage in stages:
+        inscriptions = await db.inscriptions.find(
+            {"stage_id": stage["id"], "status": "active"}, {"_id": 0, "student_email": 1, "student_name": 1, "student_id": 1}
+        ).to_list(200)
+        animateur_ids = list(stage.get("animateur_ids") or [])
+        if stage.get("animateur_id") and stage["animateur_id"] not in animateur_ids:
+            animateur_ids.append(stage["animateur_id"])
+        animateurs = await db.users.find({"id": {"$in": animateur_ids}}, {"_id": 0, "id": 1, "email": 1, "name": 1}).to_list(20)
+
+        lieu = f"{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}".strip(", ")
+        for insc in inscriptions:
+            if not insc.get("student_email"):
+                continue
+            await send_email(
+                insc["student_email"],
+                f"📅 Rappel — votre session commence le {stage['date_debut']}",
+                (
+                    f"<p>Bonjour {insc.get('student_name', '')},</p>"
+                    f"<p>Rappel : votre session <b>{stage.get('formation_titre', '')}</b> débute le "
+                    f"<b>{stage['date_debut']}</b> (fin le {stage.get('date_fin', '')}), à <b>{lieu}</b>.</p>"
+                    f"<p>À bientôt !<br>TDL Formation</p>"
+                ),
+            )
+            if insc.get("student_id"):
+                await send_push_to_users(
+                    [insc["student_id"]], "Rappel de session",
+                    f"{stage.get('formation_titre', '')} débute le {stage['date_debut']}", "/espace-etudiant",
+                )
+            notified += 1
+        for a in animateurs:
+            if not a.get("email"):
+                continue
+            await send_email(
+                a["email"],
+                f"📅 Rappel — session à animer le {stage['date_debut']}",
+                (
+                    f"<p>Bonjour {a.get('name', '')},</p>"
+                    f"<p>Rappel : la session <b>{stage.get('formation_titre', '')}</b> que vous animez débute le "
+                    f"<b>{stage['date_debut']}</b> (fin le {stage.get('date_fin', '')}), à <b>{lieu}</b>, "
+                    f"avec {len(inscriptions)} inscrit(s).</p><p>TDL Formation</p>"
+                ),
+            )
+            await send_push_to_users(
+                [a["id"]], "Rappel de session",
+                f"{stage.get('formation_titre', '')} débute le {stage['date_debut']}", "/espace-animateur",
+            )
+            notified += 1
+        await db.stages.update_one({"id": stage["id"]}, {"$set": {"reminder_sent_at": now_iso()}})
+    return notified

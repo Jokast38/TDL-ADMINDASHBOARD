@@ -43,3 +43,11 @@ class AgrementBafmIn(BaseModel):
     # stage de récupération de points (voir services/pdf.py) — géré par
     # l'animateur lui-même depuis son espace, comme sa signature.
     agrement_bafm_numero: Optional[str] = None
+
+
+class ConventionSignIn(BaseModel):
+    # Signature manuscrite capturée dans l'espace formateur pour signer la
+    # convention de collaboration (voir POST /me/convention/sign) — utilisée
+    # aussi comme signature par défaut de l'utilisateur si il n'en a pas
+    # déjà une (voir POST /me/signature).
+    signature_data_url: str

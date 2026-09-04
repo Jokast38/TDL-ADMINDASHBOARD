@@ -7,19 +7,24 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, MapPin, Users, PenNib, CheckCircle, XCircle, Eraser, FilePdf, UserCircle, FileArrowUp, Signature } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
+// Pièces justifiant le droit d'exercer — doit rester synchronisé avec
+// FORMATEUR_DOC_TYPES côté backend (routers/employees.py). Dossier à
+// compléter (documents + convention signée) dans les 24h suivant la
+// création du compte par un agent.
 const STAFF_DOC_TYPE_LABELS = {
-  identite: "Pièce d'identité",
-  diplome: "Diplôme",
-  cv: "CV",
-  casier_judiciaire: "Casier judiciaire (B3)",
-  assurance: "Attestation d'assurance",
-  permis_conduire: "Permis de conduire",
-  contrat: "Contrat",
-  autre: "Autre document",
+  identite_recto: "Pièce d'identité (recto)",
+  identite_verso: "Pièce d'identité (verso)",
+  diplome_bafm_psy: "Diplôme BAFM / PSY",
+  autorisation_animer_initiale: "Autorisation d'animer initiale",
+  attestation_formation_continue: "Attestation de formation continue",
+  attestation_gta_initiale: "Attestation GTA initiale",
+  attestation_gta_continue: "Attestation GTA continue",
+  kbis: "KBIS de moins de 3 mois",
+  attestation_vigilance_urssaf: "Attestation de vigilance URSSAF",
+  justificatif_domicile: "Justificatif de domicile",
 };
 
 function SignatureTab({ user }) {
@@ -115,16 +120,15 @@ function SignatureTab({ user }) {
   );
 }
 
-function ProfileTab() {
-  const [profile, setProfile] = useState(null);
-  const [docType, setDocType] = useState("cv");
+function DossierTab() {
+  const [dossier, setDossier] = useState(null);
+  const [signing, setSigning] = useState(false);
+  const convPadRef = useRef(null);
 
-  const load = () => api.get("/me/profile").then((r) => setProfile(r.data));
+  const load = () => api.get("/me/formateur-dossier").then((r) => setDossier(r.data));
   useEffect(() => { load(); }, []);
 
-  const upload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadFor = async (docType, file) => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("doc_type", docType);
@@ -134,50 +138,114 @@ function ProfileTab() {
       load();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
-    } finally {
-      e.target.value = "";
     }
   };
 
-  if (!profile) return null;
+  const signConvention = async () => {
+    if (convPadRef.current?.isEmpty()) return toast.error("Signez d'abord dans la zone");
+    setSigning(true);
+    try {
+      const dataUrl = convPadRef.current.getCanvas().toDataURL("image/png");
+      await api.post("/me/convention/sign", { signature_data_url: dataUrl });
+      toast.success("Convention signée");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la signature");
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  const downloadConvention = async () => {
+    const token = localStorage.getItem("tdl_token");
+    const res = await fetch(`${API}/me/convention/download`, { headers: { Authorization: `Bearer ${token}` } });
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), "_blank");
+  };
+
+  if (!dossier) return null;
+  const byType = {};
+  (dossier.documents_details || []).forEach((d) => { byType[d.doc_type] = d; });
 
   return (
-    <Card className="p-6 border border-gray-200 rounded-md shadow-none max-w-2xl">
-      <p className="overline mb-1">Mon profil</p>
-      <h2 className="font-display text-xl font-bold mb-4">Mon dossier formateur</h2>
+    <div className="space-y-6 max-w-2xl">
+      {dossier.dossier_overdue && (
+        <div className="border border-red-300 bg-red-50 text-red-700 rounded-md p-3 text-sm">
+          ⏰ Le délai de 24h pour compléter votre dossier est dépassé — merci de finaliser au plus vite les documents et la convention manquants.
+        </div>
+      )}
+      {!dossier.dossier_complete && !dossier.dossier_overdue && dossier.dossier_deadline && (
+        <div className="border border-amber-300 bg-amber-50 text-amber-800 rounded-md p-3 text-sm">
+          À compléter avant le {new Date(dossier.dossier_deadline).toLocaleString("fr-FR")} (documents + convention).
+        </div>
+      )}
+      {dossier.dossier_complete && (
+        <div className="border border-[#0B7238]/30 bg-[#0B7238]/5 text-[#0B7238] rounded-md p-3 text-sm">
+          ✅ Dossier complet — documents et convention en règle.
+        </div>
+      )}
 
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <Select value={docType} onValueChange={setDocType}>
-          <SelectTrigger className="w-56 h-9 text-sm"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {Object.entries(STAFF_DOC_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <label className="inline-flex items-center gap-2 text-sm cursor-pointer px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
-          <FileArrowUp size={14} /> Ajouter ce document
-          <input type="file" className="hidden" onChange={upload} />
-        </label>
-      </div>
+      <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+        <p className="overline mb-1">Mon dossier</p>
+        <h2 className="font-display text-xl font-bold mb-4">Documents justifiant mon droit d'exercer</h2>
+        <div className="space-y-2">
+          {Object.entries(STAFF_DOC_TYPE_LABELS).map(([type, label]) => {
+            const doc = byType[type];
+            return (
+              <div key={type} className="flex items-center justify-between border border-gray-200 rounded-md p-3 text-sm">
+                <span className="flex items-center gap-2">
+                  {doc ? <CheckCircle size={16} className="text-[#0B7238]" weight="fill" /> : <XCircle size={16} className="text-gray-300" />}
+                  {label}
+                </span>
+                {doc ? (
+                  <Badge variant="outline" className={
+                    doc.verification_status === "approved" ? "border-green-500 text-green-600" :
+                    doc.verification_status === "rejected" ? "border-red-500 text-red-600" : "text-gray-500"
+                  }>{doc.verification_status === "approved" ? "Approuvé" : doc.verification_status === "rejected" ? "Rejeté" : "Envoyé"}</Badge>
+                ) : (
+                  <label className="inline-flex items-center gap-1 text-xs cursor-pointer px-3 py-1.5 border border-gray-300 rounded-md hover:bg-gray-50">
+                    <FileArrowUp size={12} /> Charger
+                    <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && uploadFor(type, e.target.files[0])} />
+                  </label>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Card>
 
-      <div className="space-y-2">
-        {(profile.documents_details || []).map((doc) => (
-          <div key={doc.id} className="flex items-center justify-between border border-gray-200 rounded-md p-3 text-sm">
-            <span className="truncate">{STAFF_DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type} — {doc.original_filename}</span>
-            <Badge variant="outline" className={
-              doc.verification_status === "approved" ? "border-green-500 text-green-600" :
-              doc.verification_status === "rejected" ? "border-red-500 text-red-600" : "text-gray-500"
-            }>{doc.verification_status === "approved" ? "Approuvé" : doc.verification_status === "rejected" ? "Rejeté" : "En attente"}</Badge>
+      <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+        <p className="overline mb-1">Engagement</p>
+        <h2 className="font-display text-xl font-bold mb-4">Convention de collaboration</h2>
+        {dossier.convention_signed ? (
+          <div className="flex items-center justify-between">
+            <p className="text-sm flex items-center gap-2 text-[#0B7238]"><CheckCircle size={16} weight="fill" /> Convention signée</p>
+            <Button variant="outline" size="sm" onClick={downloadConvention}><FilePdf size={14} className="mr-1" /> Télécharger</Button>
           </div>
-        ))}
-        {!(profile.documents_details || []).length && <p className="text-sm text-gray-400 text-center py-6">Aucun document envoyé.</p>}
-      </div>
-    </Card>
+        ) : (
+          <>
+            <p className="text-sm text-gray-500 mb-3">
+              En signant, vous vous engagez à assurer les sessions qui vous seront assignées via le dashboard.
+            </p>
+            <div className="border-2 border-dashed border-gray-300 rounded-md bg-white mb-2">
+              <SignatureCanvas ref={convPadRef} canvasProps={{ width: 460, height: 160, className: "w-full rounded-md" }} penColor="#0a0a0a" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => convPadRef.current?.clear()}><Eraser size={12} className="mr-1" /> Effacer</Button>
+              <Button onClick={signConvention} disabled={signing} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white ml-auto">
+                {signing ? "Signature..." : "Signer la convention"}
+              </Button>
+            </div>
+          </>
+        )}
+      </Card>
+    </div>
   );
 }
 
 export default function AnimateurSpace() {
   const { user } = useAuth();
-  const [tab, setTab] = useState("sessions"); // sessions | profile | signature
+  const [tab, setTab] = useState("sessions"); // sessions | dossier | signature
   const [stages, setStages] = useState([]);
   const [selected, setSelected] = useState(null);
   const [jours, setJours] = useState([]);
@@ -279,7 +347,7 @@ export default function AnimateurSpace() {
         <div>
           <p className="overline">Espace animateur</p>
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">
-            {tab === "sessions" ? "Mes sessions" : tab === "profile" ? "Mon profil" : "Ma signature"}
+            {tab === "sessions" ? "Mes sessions" : tab === "dossier" ? "Mon dossier" : "Ma signature"}
           </h1>
           <p className="text-gray-500 mt-2">Bienvenue {user?.name}. {stages.length} session(s) attribuée(s).</p>
         </div>
@@ -287,8 +355,8 @@ export default function AnimateurSpace() {
           <Button variant={tab === "sessions" ? "default" : "outline"} size="sm" onClick={() => setTab("sessions")} className={tab === "sessions" ? "bg-[#0a0a0a] text-white" : ""}>
             <Calendar size={14} className="mr-1" /> Sessions
           </Button>
-          <Button variant={tab === "profile" ? "default" : "outline"} size="sm" onClick={() => setTab("profile")} className={tab === "profile" ? "bg-[#0a0a0a] text-white" : ""}>
-            <UserCircle size={14} className="mr-1" /> Mon profil
+          <Button variant={tab === "dossier" ? "default" : "outline"} size="sm" onClick={() => setTab("dossier")} className={tab === "dossier" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-dossier">
+            <UserCircle size={14} className="mr-1" /> Mon dossier
           </Button>
           <Button variant={tab === "signature" ? "default" : "outline"} size="sm" onClick={() => setTab("signature")} className={tab === "signature" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-signature">
             <Signature size={14} className="mr-1" /> Ma signature
@@ -296,7 +364,7 @@ export default function AnimateurSpace() {
         </div>
       </div>
 
-      {tab === "profile" && <ProfileTab />}
+      {tab === "dossier" && <DossierTab />}
       {tab === "signature" && <SignatureTab user={user} />}
 
       {tab === "sessions" && (!selected ? (

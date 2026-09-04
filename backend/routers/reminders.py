@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from core.security import require_role
-from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders, send_weekly_admin_report
+from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders, send_weekly_admin_report, send_session_reminders
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
 
@@ -39,4 +39,13 @@ async def run_weekly_admin_report(user: dict = Depends(require_role("admin"))):
     externe) — la boucle de fond (voir server.py) l'envoie automatiquement les
     samedis 18h et lundis 8h."""
     notified = await send_weekly_admin_report()
+    return {"notified": notified}
+
+
+@router.post("/sessions/run")
+async def run_session_reminders(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel des rappels de session (test, ou cron externe) —
+    la boucle de fond (voir server.py) les envoie automatiquement chaque
+    jour, pour les sessions démarrant dans 3 jours."""
+    notified = await send_session_reminders()
     return {"notified": notified}

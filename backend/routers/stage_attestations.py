@@ -1,4 +1,7 @@
 import base64
+import io
+import re
+import zipfile
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
@@ -14,6 +17,16 @@ from services.pdf import generate_stage_recup_points_attestation
 from routers.stages import _stage_days, _stage_animateur_ids
 
 router = APIRouter(prefix="/dossiers", tags=["attestations"])
+
+# Statuts de dossier considérés "validés" par l'équipe (voir DOSSIER_STATUS_LABEL
+# côté frontend) — condition nécessaire, avec l'attestation signée et la
+# session terminée, pour proposer le dossier ANTS téléchargeable en un clic.
+_ANTS_READY_DOSSIER_STATUSES = ("complet", "soumis_ants", "termine")
+_SAFE_FILENAME_RE = re.compile(r'[\\/:*?"<>|]')
+
+
+def _safe_name(name: str) -> str:
+    return _SAFE_FILENAME_RE.sub("", name or "").strip() or "document"
 
 # Seule la catégorie "Récupération de points" (voir CATEGORY_LABELS dans
 # services/staff_notify.py) donne lieu à cette attestation officielle —
@@ -266,3 +279,58 @@ async def download_attestation(dossier_id: str, user: dict = Depends(get_current
         raise HTTPException(status_code=404, detail="Attestation pas encore générée")
     data, content_type = await get_object(dossier["attestation_pdf_path"])
     return Response(content=data, media_type=content_type or "application/pdf")
+
+
+@router.get("/{dossier_id}/ants-bundle/status")
+async def ants_bundle_status(dossier_id: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Indique si le dossier ANTS (attestation signée + pièces du dossier,
+    zippées) peut être téléchargé en un clic — en attendant un accès API ANTS
+    (aucune intégration officielle connue à ce jour : à demander au support
+    technique ANTS/partenaire agréé ; en attendant, le zip prêt-à-envoyer
+    fait gagner le plus de temps)."""
+    dossier = await _get_dossier_for_admin(dossier_id)
+    reasons = []
+    if dossier.get("category") != ATTESTATION_CATEGORY:
+        reasons.append("Cette catégorie de dossier n'a pas d'attestation de stage à joindre")
+    if not dossier.get("attestation_signed_at"):
+        reasons.append("Attestation pas encore signée par l'apprenant")
+    if dossier.get("status") not in _ANTS_READY_DOSSIER_STATUSES:
+        reasons.append("Dossier pas encore validé (statut requis : complet, soumis ANTS ou terminé)")
+    return {"ready": not reasons, "reasons": reasons}
+
+
+@router.get("/{dossier_id}/ants-bundle")
+async def download_ants_bundle(dossier_id: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Zip prêt à envoyer à l'ANTS : attestation de stage signée + toutes les
+    pièces du dossier de l'apprenant — un seul bouton une fois le dossier
+    validé, la session terminée et l'attestation signée par toutes les
+    parties. Objectif : préparer l'envoi sans ressaisie ni recherche
+    éparpillée de documents."""
+    dossier = await _get_dossier_for_admin(dossier_id)
+    status = await ants_bundle_status(dossier_id, user)
+    if not status["ready"]:
+        raise HTTPException(status_code=400, detail="; ".join(status["reasons"]))
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        att_data, _ = await get_object(dossier["attestation_pdf_path"])
+        zf.writestr("00_Attestation_de_stage_signee.pdf", att_data)
+
+        docs = await db.documents.find(
+            {"id": {"$in": dossier.get("documents", [])}, "is_deleted": False}, {"_id": 0}
+        ).to_list(200)
+        for i, doc in enumerate(docs, start=1):
+            try:
+                data, _ = await get_object(doc["storage_path"])
+            except Exception:
+                continue
+            ext = (doc.get("original_filename") or "").rsplit(".", 1)[-1] if "." in (doc.get("original_filename") or "") else "pdf"
+            label = _safe_name(doc.get("doc_type") or "document")
+            zf.writestr(f"{i:02d}_{label}.{ext}", data)
+
+    zip_bytes = buf.getvalue()
+    fname = f"Dossier_ANTS_{_safe_name(dossier.get('student_name', 'apprenant'))}.zip"
+    return Response(
+        content=zip_bytes, media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )

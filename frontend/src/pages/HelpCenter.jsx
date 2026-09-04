@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { PlayCircle, Question, BookOpenText } from "@phosphor-icons/react";
+import { PlayCircle, Question, BookOpenText, CaretDown, CaretRight } from "@phosphor-icons/react";
 import { HELP_CATEGORIES, categoriesForRole } from "@/constants/helpTours";
 import { useTour } from "@/contexts/TourContext";
 
@@ -14,6 +15,12 @@ export default function HelpCenter() {
 
   const ordered = categoriesForRole(user?.role);
   const ownKeys = new Set(HELP_CATEGORIES.filter((c) => c.roles.includes(user?.role)).map((c) => c.key));
+  const [expanded, setExpanded] = useState(() => new Set());
+  const toggleExpanded = (key) => setExpanded((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
 
   return (
     <div className="space-y-6" data-testid="help-center-page">
@@ -77,8 +84,33 @@ export default function HelpCenter() {
                 className="w-full mt-4 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
                 data-testid={`start-tour-${cat.key}`}
               >
-                <PlayCircle size={16} className="mr-2" weight="fill" /> Lancer la visite guidée
+                <PlayCircle size={16} className="mr-2" weight="fill" /> Lancer la visite guidée complète
               </Button>
+
+              <button
+                type="button"
+                onClick={() => toggleExpanded(cat.key)}
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-[#0a0a0a] mt-3 w-full"
+                data-testid={`toggle-questions-${cat.key}`}
+              >
+                {expanded.has(cat.key) ? <CaretDown size={12} /> : <CaretRight size={12} />}
+                Ou choisissez directement une question
+              </button>
+              {expanded.has(cat.key) && (
+                <div className="mt-2 space-y-1.5">
+                  {cat.steps.map((step, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => startTour(cat, i)}
+                      className="w-full text-left text-xs px-3 py-2 rounded-md border border-gray-200 hover:border-[#d4af37] hover:bg-[#fff8e1]/40 transition-colors"
+                      data-testid={`start-tour-${cat.key}-step-${i}`}
+                    >
+                      {step.question || step.title}
+                    </button>
+                  ))}
+                </div>
+              )}
             </Card>
           );
         })}

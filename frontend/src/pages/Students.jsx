@@ -80,6 +80,8 @@ export default function Students() {
   const [composeSubject, setComposeSubject] = useState("");
   const [composeMessage, setComposeMessage] = useState("");
   const [composing, setComposing] = useState(false);
+  const [antsStatus, setAntsStatus] = useState(null);
+  const [downloadingAnts, setDownloadingAnts] = useState(false);
   const [mailTemplate, setMailTemplate] = useState("libre"); // "libre" | "convocation"
   const [convocIntitule, setConvocIntitule] = useState("");
   const [convocDate, setConvocDate] = useState("");
@@ -115,6 +117,7 @@ export default function Students() {
 
   const openDossier = async (s) => {
     if (!s.dossier_id) return toast.error("Aucun dossier pour cet apprenant");
+    setAntsStatus(null);
     try {
       const [dossierRes, docsRes] = await Promise.all([
         api.get(`/dossiers/${s.dossier_id}`),
@@ -122,8 +125,27 @@ export default function Students() {
       ]);
       setSelected(dossierRes.data);
       setSelectedDocs(docsRes.data);
+      if (dossierRes.data.category === ATTESTATION_CATEGORY) {
+        api.get(`/dossiers/${s.dossier_id}/ants-bundle/status`).then((r) => setAntsStatus(r.data)).catch(() => {});
+      }
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur de chargement du dossier");
+    }
+  };
+
+  const downloadAntsBundle = async () => {
+    if (!selected) return;
+    setDownloadingAnts(true);
+    try {
+      const res = await api.get(`/dossiers/${selected.id}/ants-bundle`, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = `Dossier_ANTS_${selected.student_name}.zip`; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error("Erreur lors du téléchargement du dossier ANTS");
+    } finally {
+      setDownloadingAnts(false);
     }
   };
 
@@ -377,6 +399,23 @@ export default function Students() {
                   </div>
                 ) : (
                   <p className="text-sm text-gray-400">Aucun document envoyé.</p>
+                )}
+
+                {selected.category === ATTESTATION_CATEGORY && antsStatus && (
+                  <div className="border-t pt-4">
+                    <Button
+                      size="sm" disabled={!antsStatus.ready || downloadingAnts} onClick={downloadAntsBundle}
+                      className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white disabled:opacity-40"
+                      data-testid="download-ants-bundle-btn"
+                    >
+                      <FolderOpen size={14} className="mr-1" /> {downloadingAnts ? "Préparation..." : "Télécharger le dossier ANTS"}
+                    </Button>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {antsStatus.ready
+                        ? "Zip prêt : attestation signée + toutes les pièces du dossier, nommé au nom de l'apprenant."
+                        : `Pas encore disponible : ${antsStatus.reasons.join(" · ")}.`}
+                    </p>
+                  </div>
                 )}
 
                 {!CMA_CATEGORIES.includes(selected.category) && selected.status !== "termine" && (

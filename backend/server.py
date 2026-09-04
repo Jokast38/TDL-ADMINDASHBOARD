@@ -24,7 +24,7 @@ from routers import (
     exams, appointments, stage_attestations,
 )
 from routers.lead_automations import run_due_automations
-from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders, send_weekly_admin_report
+from services.staff_notify import send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders, send_weekly_admin_report, send_session_reminders
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -324,6 +324,21 @@ async def _weekly_admin_report_loop():
             log.warning(f"Compte-rendu hebdomadaire : erreur — {e}")
 
 
+async def _session_reminders_loop():
+    """Toutes les 24h, envoie un rappel aux apprenants inscrits et aux
+    formateurs assignés pour chaque session commençant dans
+    SESSION_REMINDER_DAYS_BEFORE jours (voir services/staff_notify.py)."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_session_reminders()
+            if notified:
+                log.info(f"Rappels de session : {notified} notification(s) envoyée(s)")
+        except Exception as e:
+            log.warning(f"Rappels de session : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
+
+
 async def _wordpress_auto_sync_loop():
     """Toutes les 15 min, si la synchro auto du blog est activée (bouton
     on/off dans AdminBlog.jsx, réglage wp_blog_auto_sync_enabled), importe en
@@ -352,6 +367,7 @@ async def startup():
     asyncio.create_task(_document_reminders_loop())
     asyncio.create_task(_wordpress_auto_sync_loop())
     asyncio.create_task(_weekly_admin_report_loop())
+    asyncio.create_task(_session_reminders_loop())
 
 
 @app.on_event("shutdown")

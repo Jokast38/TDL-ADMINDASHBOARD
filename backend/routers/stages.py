@@ -1,15 +1,22 @@
+import io
+import re
 import uuid
+import zipfile
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 
 from core.database import db
 from core.security import require_role
+from core.storage import get_object
 from core.utils import now_iso
 from core.config import ROLES_ALL_STAFF
 from models.stage import StageIn, StageUpdate
 
 router = APIRouter(prefix="/stages", tags=["stages"])
+
+_SAFE_NAME_RE = re.compile(r'[\\/:*?"<>|]')
 
 
 def _stage_animateur_ids(stage: dict) -> list:
@@ -184,3 +191,46 @@ async def stage_inscrits(sid: str, session_date: Optional[str] = None, user: dic
         ins["emarge"] = bool(em)
         ins["present"] = em.get("present") if em else None
     return inscrits
+
+
+@router.get("/{sid}/ants-bundle")
+async def download_stage_ants_bundle(sid: str, user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+    """Zip prêt à envoyer à l'ANTS pour toute la session : feuilles
+    d'émargement (collectives + individuelles) déjà signées par toutes les
+    parties, une fois la session terminée — voir aussi
+    /dossiers/{id}/ants-bundle pour le dossier individuel d'un apprenant
+    (attestation + pièces). En attendant un éventuel accès à une API ANTS
+    (aucune intégration publique connue à ce jour — à demander directement
+    au support ANTS), ce zip vise à faire gagner le plus de temps possible à
+    l'envoi manuel."""
+    stage = await db.stages.find_one({"id": sid}, {"_id": 0})
+    if not stage:
+        raise HTTPException(status_code=404, detail="Stage introuvable")
+    if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+    today = datetime.now().date().isoformat()
+    if (stage.get("date_fin") or "") > today:
+        raise HTTPException(status_code=400, detail="La session n'est pas encore terminée")
+
+    docs = await db.generated_docs.find(
+        {"stage_id": sid, "type_doc": {"$in": ["attestation", "attestation_presence"]}}, {"_id": 0}
+    ).to_list(500)
+    if not docs:
+        raise HTTPException(status_code=404, detail="Aucune feuille d'émargement générée pour cette session")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for i, doc in enumerate(docs, start=1):
+            try:
+                data, _ = await get_object(doc["storage_path"])
+            except Exception:
+                continue
+            name = _SAFE_NAME_RE.sub("", doc.get("nom_fichier") or f"document_{i}.pdf")
+            zf.writestr(f"{i:02d}_{name}", data)
+
+    zip_bytes = buf.getvalue()
+    fname = f"Dossier_ANTS_session_{_SAFE_NAME_RE.sub('', stage.get('formation_titre', 'session'))}_{stage.get('date_debut', '')}.zip"
+    return Response(
+        content=zip_bytes, media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
