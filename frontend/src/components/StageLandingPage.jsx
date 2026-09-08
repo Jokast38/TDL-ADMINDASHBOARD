@@ -5,7 +5,7 @@ import {
   Clock, MapPin, CaretDown, CaretRight, ShieldCheck, CalendarBlank, Plus, Certificate,
   Star, Phone, UsersThree, Armchair, PersonSimple, ChatCircleText, X, Check,
 } from "@phosphor-icons/react";
-import { trackSchedule } from "@/lib/metaPixel";
+import { trackSchedule, trackLead, trackInitiateCheckout, newEventId, getFbCookies } from "@/lib/metaPixel";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -720,6 +720,8 @@ function BookingForm({
     setCreatingInscription(true);
     try {
       const formationId = "e22bcca0-6656-4335-b6a6-8a06235a2770";
+      const leadEventId = newEventId();
+      const fbCookies = getFbCookies();
 
       const response = await api.post("/inscriptions", {
         formation_id: formationId,
@@ -734,16 +736,27 @@ function BookingForm({
         landing_url: window.location.href,
         payment_status: "pending",
         status: "active",
-        formation_title: "Stage récupération de points"
+        formation_title: "Stage récupération de points",
+        event_id: leadEventId,
+        ...fbCookies,
       });
 
       const inscription = response.data.inscription;
       setInscriptionId(inscription.id);
-      
+
+      // Prospect confirmé dès la validation du récapitulatif — AVANT le
+      // paiement — c'est le formulaire réellement utilisé par cette page
+      // (voir BookingForm), le seul qui compte pour le ciblage des
+      // campagnes. `InitiateCheckout` juste après, au moment où on
+      // redirige effectivement vers Stripe.
+      trackLead({ content_name: "stage_recuperation_points", value: price, currency: "EUR", session }, leadEventId);
+      trackInitiateCheckout({ content_name: "stage_recuperation_points", value: price, currency: "EUR", session });
+
       try {
         const checkoutResponse = await api.post("/payments/checkout", {
           inscription_id: inscription.id,
-          allow_klarna: true
+          allow_klarna: true,
+          ...fbCookies,
         });
 
         const { url } = checkoutResponse.data;
