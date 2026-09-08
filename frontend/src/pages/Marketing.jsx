@@ -76,6 +76,7 @@ export default function Marketing() {
           <TabsTrigger value="compose" data-testid="tab-compose"><PencilSimple size={14} className="mr-1" /> Email personnalisé</TabsTrigger>
           <TabsTrigger value="landing" data-testid="tab-landing"><Browser size={14} className="mr-1" /> Landing pages</TabsTrigger>
           <TabsTrigger value="backlinks" data-testid="tab-backlinks"><LinkSimple size={14} className="mr-1" /> Backlinks</TabsTrigger>
+          <TabsTrigger value="meta-events" data-testid="tab-meta-events"><Megaphone size={14} className="mr-1" /> Prospects Meta</TabsTrigger>
           {canSeeAgentsTab && (
             <TabsTrigger value="agents" data-testid="tab-agents"><Robot size={14} className="mr-1" /> Agents IA</TabsTrigger>
           )}
@@ -120,6 +121,10 @@ export default function Marketing() {
 
         <TabsContent value="backlinks">
           <BacklinksTab />
+        </TabsContent>
+
+        <TabsContent value="meta-events">
+          <MetaEventsTab />
         </TabsContent>
 
         {canSeeAgentsTab && (
@@ -575,6 +580,116 @@ function suggestFormationKey(backlink) {
 
 function suggestKeywords(backlink) {
   return FORMATION_KEYWORDS[suggestFormationKey(backlink)];
+}
+
+const META_EVENT_STATUS_LABEL = {
+  sent: "Envoyé", failed: "Échec", error: "Erreur", not_configured: "Pixel non configuré",
+};
+const META_EVENT_STATUS_COLOR = {
+  sent: "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10",
+  failed: "bg-red-100 text-red-700 hover:bg-red-100",
+  error: "bg-red-100 text-red-700 hover:bg-red-100",
+  not_configured: "bg-gray-100 text-gray-600 hover:bg-gray-100",
+};
+
+// Journal des événements Meta Pixel/CAPI réellement envoyés côté serveur
+// (voir backend/services/meta_capi.py) — pour vérifier directement ici,
+// sans dépendre du Gestionnaire d'événements Meta (parfois déroutant, ex:
+// des événements "Subscribe" détectés automatiquement par Meta n'ont rien à
+// voir avec nos événements "Lead" explicites), que chaque prospect
+// déclenche bien un envoi.
+function MetaEventsTab() {
+  const [events, setEvents] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("");
+
+  const load = () => {
+    setLoading(true);
+    Promise.all([
+      api.get("/track/meta-events", { params: { status: statusFilter || undefined, limit: 100 } }),
+      api.get("/track/meta-events/summary", { params: { days: 7 } }),
+    ])
+      .then(([evRes, sumRes]) => { setEvents(evRes.data.events); setSummary(sumRes.data.by_event); })
+      .catch(() => toast.error("Erreur de chargement des événements Meta"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [statusFilter]);
+
+  if (loading && !events.length) {
+    return <p className="text-sm text-gray-400 py-8 text-center">Chargement...</p>;
+  }
+
+  return (
+    <div className="space-y-6 mt-2">
+      {summary && Object.keys(summary).length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {Object.entries(summary).map(([name, counts]) => (
+            <Card key={name} className="p-4 border border-gray-200 rounded-md shadow-none">
+              <p className="text-xs text-gray-500">{name} (7j)</p>
+              <p className="font-display text-2xl font-bold mt-1">{counts.sent || 0}</p>
+              <p className="text-xs text-gray-400 mt-1">
+                envoyé(s){counts.failed || counts.error ? ` · ${(counts.failed || 0) + (counts.error || 0)} échec(s)` : ""}
+              </p>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="text-sm border border-gray-300 rounded-md px-3 py-1.5"
+          data-testid="meta-events-status-filter"
+        >
+          <option value="">Statut : tous</option>
+          {Object.entries(META_EVENT_STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </div>
+
+      <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-left border-b border-gray-200">
+              <tr>
+                <th className="py-3 px-4 overline">Événement</th>
+                <th className="py-3 px-4 overline">Prospect</th>
+                <th className="py-3 px-4 overline">Contexte</th>
+                <th className="py-3 px-4 overline">Statut</th>
+                <th className="py-3 px-4 overline">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((ev) => (
+                <tr key={ev.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <td className="py-3 px-4 font-medium">{ev.event_name}</td>
+                  <td className="py-3 px-4">
+                    {ev.email && <p className="text-xs">{ev.email}</p>}
+                    {ev.phone && <p className="text-xs text-gray-400">{ev.phone}</p>}
+                    {!ev.email && !ev.phone && <span className="text-xs text-gray-300">—</span>}
+                  </td>
+                  <td className="py-3 px-4 text-xs text-gray-500">{ev.custom_data?.content_name || "—"}</td>
+                  <td className="py-3 px-4">
+                    <Badge className={META_EVENT_STATUS_COLOR[ev.status] || "bg-gray-100 text-gray-600"}>
+                      {META_EVENT_STATUS_LABEL[ev.status] || ev.status}
+                    </Badge>
+                  </td>
+                  <td className="py-3 px-4 text-xs text-gray-500 font-mono">
+                    {new Date(ev.created_at).toLocaleString("fr-FR")}
+                  </td>
+                </tr>
+              ))}
+              {!events.length && (
+                <tr><td colSpan="5" className="py-12 text-center text-gray-400">Aucun événement pour l'instant.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
 }
 
 function BacklinksTab() {

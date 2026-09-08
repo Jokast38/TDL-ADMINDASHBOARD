@@ -112,3 +112,36 @@ async def email_stats(days: int = 30, user: dict = Depends(require_role(*ROLES_L
         "by_day": [{"day": x["_id"], "sent": x["sent"], "opened": x["opened"], "clicked": x["clicked"]} for x in by_day],
         "recent": recent,
     }
+
+
+@router.get("/meta-events")
+async def list_meta_events(
+    event_name: str = None, status: str = None, limit: int = 100,
+    user: dict = Depends(require_role(*ROLES_LEADS)),
+):
+    """Journal des événements Meta Pixel/CAPI réellement envoyés (voir
+    services/meta_capi.py) — pour vérifier directement depuis le dashboard
+    que chaque prospect (Lead) déclenche bien un envoi, sans dépendre
+    uniquement du Gestionnaire d'événements Meta."""
+    q = {}
+    if event_name: q["event_name"] = event_name
+    if status: q["status"] = status
+    events = await db.meta_events_log.find(q, {"_id": 0}).sort("created_at", -1).to_list(min(limit, 500))
+    return {"events": events, "count": len(events)}
+
+
+@router.get("/meta-events/summary")
+async def meta_events_summary(days: int = 7, user: dict = Depends(require_role(*ROLES_LEADS))):
+    since_iso = datetime.fromtimestamp(
+        datetime.now(timezone.utc).timestamp() - days * 86400, tz=timezone.utc
+    ).isoformat()
+    rows = await db.meta_events_log.aggregate([
+        {"$match": {"created_at": {"$gte": since_iso}}},
+        {"$group": {"_id": {"event_name": "$event_name", "status": "$status"}, "count": {"$sum": 1}}},
+    ]).to_list(200)
+    summary = {}
+    for r in rows:
+        name = r["_id"]["event_name"]
+        summary.setdefault(name, {"sent": 0, "failed": 0, "error": 0, "not_configured": 0})
+        summary[name][r["_id"]["status"]] = summary[name].get(r["_id"]["status"], 0) + r["count"]
+    return {"period_days": days, "by_event": summary}
