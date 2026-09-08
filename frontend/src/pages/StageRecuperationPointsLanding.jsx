@@ -129,6 +129,7 @@ export default function StageRecuperationPointsLanding() {
     setSending(true);
     try {
       const formationId = "e22bcca0-6656-4335-b6a6-8a06235a2770";
+      const leadEventId = newEventId();
 
       const inscriptionResponse = await api.post("/inscriptions", {
         formation_id: formationId,
@@ -143,10 +144,17 @@ export default function StageRecuperationPointsLanding() {
         landing_url: window.location.href,
         payment_status: "pending",
         status: "active",
-        formation_title: "Stage récupération de points"
+        formation_title: "Stage récupération de points",
+        event_id: leadEventId,
+        ...getFbCookies(),
       });
 
       const inscription = inscriptionResponse.data.inscription;
+      // Signal "nouveau prospect" — avant, seul le formulaire secondaire
+      // "être rappelé" envoyait un évènement Lead ; la quasi-totalité des
+      // vraies inscriptions (via ce formulaire principal) n'était jamais
+      // comptée comme prospect par Meta, faussant le ciblage des audiences.
+      trackLead({ content_name: "stage_recuperation_points", value: 179, currency: "EUR", session }, leadEventId);
       trackInitiateCheckout({ content_name: "stage_recuperation_points", value: 179, currency: "EUR", session });
 
       const checkoutResponse = await api.post("/payments/checkout", {

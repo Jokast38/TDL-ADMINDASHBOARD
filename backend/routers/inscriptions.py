@@ -5,7 +5,7 @@ import secrets
 import zipfile
 from typing import List, Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 
 from core.database import db
@@ -18,6 +18,7 @@ from services.n8n import trigger_n8n
 from services.email import send_email
 from services.email_template import render_branded_email
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS
+from services.meta_capi import send_capi_event
 
 router = APIRouter(tags=["inscriptions"])
 
@@ -45,7 +46,7 @@ def _missing_docs(dossier: dict, docs: list) -> list:
 
 
 @router.post("/inscriptions")
-async def create_inscription(payload: InscriptionIn):
+async def create_inscription(payload: InscriptionIn, request: Request):
     formation = await db.formations.find_one({"id": payload.formation_id}, {"_id": 0})
     if not formation:
         raise HTTPException(status_code=404, detail="Formation introuvable")
@@ -140,6 +141,27 @@ async def create_inscription(payload: InscriptionIn):
         push_url="/admin/inscriptions",
         center=payload.center or None,
     )
+
+    # Signal "nouveau prospect" pour Meta (Pixel côté navigateur + CAPI ici,
+    # dédupliqués via le même event_id) — avant cet ajout, seul le formulaire
+    # secondaire "être rappelé" envoyait un évènement Lead : la quasi-totalité
+    # des vraies inscriptions (le signal le plus fort) restait invisible pour
+    # l'algorithme de ciblage Meta, faussant les audiences/optimisations.
+    try:
+        await send_capi_event(
+            "Lead",
+            event_id=payload.event_id,
+            email=payload.student_email, phone=payload.student_phone,
+            custom_data={"content_name": payload.source or "inscription_formation", "value": formation.get("price", 0), "currency": "EUR"},
+            event_source_url=payload.landing_url,
+            client_ip_address=(request.headers.get("x-forwarded-for") or "").split(",")[0].strip() or (request.client.host if request.client else None),
+            client_user_agent=request.headers.get("user-agent"),
+            fbc=payload.fbc, fbp=payload.fbp, external_id=insc_id,
+        )
+    except Exception:
+        # Le tracking marketing ne doit jamais faire échouer une inscription.
+        pass
+
     inscription.pop("_id", None)
     dossier.pop("_id", None)
     return {"inscription": inscription, "dossier": dossier}

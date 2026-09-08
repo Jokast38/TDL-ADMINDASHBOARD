@@ -22,6 +22,13 @@ class InscriptionIn(BaseModel):
     # créées sans session assignée, puis affectées plus tard (voir
     # PUT /inscriptions/{iid}/stage).
     stage_id: Optional[str] = None
+    # Suivi Meta Pixel/CAPI côté serveur (voir callback.py pour le même
+    # pattern) — `event_id` permet la déduplication avec l'événement "Lead"
+    # envoyé côté navigateur (même id des deux côtés), fbc/fbp sont les
+    # cookies Meta du visiteur pour améliorer le score de correspondance.
+    event_id: Optional[str] = None
+    fbc: Optional[str] = None
+    fbp: Optional[str] = None
 
 
 class InscriptionUpdate(BaseModel):
