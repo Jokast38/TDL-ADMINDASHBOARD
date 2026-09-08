@@ -690,6 +690,7 @@ function BookingForm({
   const [showRecap, setShowRecap] = useState(false);
   const [inscriptionId, setInscriptionId] = useState(null);
   const [creatingInscription, setCreatingInscription] = useState(false);
+  const [leadEventId, setLeadEventId] = useState(null);
 
   useEffect(() => {
     if (session && session !== form.session) {
@@ -713,6 +714,15 @@ function BookingForm({
       return;
     }
 
+    // Prospect confirmé dès ce premier formulaire validé — avant le
+    // récapitulatif, avant toute création d'inscription et bien avant le
+    // paiement. L'id généré ici est réutilisé plus bas (création de
+    // l'inscription) pour que Meta déduplique cet évènement navigateur avec
+    // l'évènement CAPI envoyé côté serveur pour la même action.
+    const eventId = newEventId();
+    setLeadEventId(eventId);
+    trackLead({ content_name: "stage_recuperation_points", value: price, currency: "EUR", session }, eventId);
+
     setShowRecap(true);
   };
 
@@ -720,7 +730,6 @@ function BookingForm({
     setCreatingInscription(true);
     try {
       const formationId = "e22bcca0-6656-4335-b6a6-8a06235a2770";
-      const leadEventId = newEventId();
       const fbCookies = getFbCookies();
 
       const response = await api.post("/inscriptions", {
@@ -737,19 +746,17 @@ function BookingForm({
         payment_status: "pending",
         status: "active",
         formation_title: "Stage récupération de points",
-        event_id: leadEventId,
+        event_id: leadEventId || newEventId(),
         ...fbCookies,
       });
 
       const inscription = response.data.inscription;
       setInscriptionId(inscription.id);
 
-      // Prospect confirmé dès la validation du récapitulatif — AVANT le
-      // paiement — c'est le formulaire réellement utilisé par cette page
-      // (voir BookingForm), le seul qui compte pour le ciblage des
-      // campagnes. `InitiateCheckout` juste après, au moment où on
-      // redirige effectivement vers Stripe.
-      trackLead({ content_name: "stage_recuperation_points", value: price, currency: "EUR", session }, leadEventId);
+      // Ce bouton ("Confirmer et payer") est celui qui déclenche réellement
+      // la redirection vers Stripe juste après — c'est le moment du
+      // checkout, donc InitiateCheckout ici (Lead a déjà été envoyé plus
+      // tôt, sur le premier bouton "Vérifier et procéder au paiement").
       trackInitiateCheckout({ content_name: "stage_recuperation_points", value: price, currency: "EUR", session });
 
       try {
