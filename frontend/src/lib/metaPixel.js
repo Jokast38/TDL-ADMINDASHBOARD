@@ -57,6 +57,27 @@ function readCookie(name) {
 // correspondance (fbc: +33%, fbp: +25% d'après le Gestionnaire d'évènements).
 // `_fbc` n'existe que si le visiteur est arrivé via un clic sur une pub Meta
 // (paramètre fbclid dans l'URL) — normal qu'il soit souvent absent hors pub.
+//
+// Sur la toute première page vue après un clic pub, le script du pixel n'a
+// souvent pas encore eu le temps de poser le cookie `_fbc` au moment où un
+// formulaire est soumis (ou, avant l'élargissement du chargement du pixel à
+// tout le site, il pouvait être totalement absent) — sans repli, ce
+// premier évènement partait sans `fbc` et perdait l'attribution du clic pub
+// d'origine. On reconstruit `_fbc` nous-mêmes à partir de `fbclid` dans
+// l'URL selon le format documenté par Meta : `fb.1.<timestamp_ms>.<fbclid>`.
+function synthesizeFbc() {
+  try {
+    const fbclid = new URLSearchParams(window.location.search).get("fbclid");
+    if (!fbclid) return null;
+    return `fb.1.${Date.now()}.${fbclid}`;
+  } catch {
+    return null;
+  }
+}
+
 export function getFbCookies() {
-  return { fbc: readCookie("_fbc"), fbp: readCookie("_fbp") };
+  return {
+    fbc: readCookie("_fbc") || synthesizeFbc(),
+    fbp: readCookie("_fbp"),
+  };
 }

@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, ArrowRight, ArrowLeft, CreditCard, XCircle, CalendarCheck, MapPin, Users } from "@phosphor-icons/react";
 import { toast } from "sonner";
-import { trackCompleteRegistration, trackInitiateCheckout, trackPurchase } from "@/lib/metaPixel";
+import { trackCompleteRegistration, trackInitiateCheckout, trackPurchase, trackLead, newEventId, getFbCookies } from "@/lib/metaPixel";
 import { setPageMeta } from "@/lib/seo";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import ChatWidget from "@/components/ChatWidget";
@@ -67,7 +67,7 @@ export default function PublicInscription() {
     setPayLoading(true);
     trackInitiateCheckout({ content_name: selected?.title, value: priceForTracking, currency: "EUR" });
     try {
-      const { data } = await api.post("/payments/checkout", { inscription_id: inscriptionId, allow_klarna: allowKlarna });
+      const { data } = await api.post("/payments/checkout", { inscription_id: inscriptionId, allow_klarna: allowKlarna, ...getFbCookies() });
       window.location.href = data.url;
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur lors de la création du paiement");
@@ -86,13 +86,20 @@ export default function PublicInscription() {
       return toast.error("Merci de vérifier votre numéro de téléphone (10 chiffres, ex : 06 12 34 56 78)");
     }
     try {
+      const leadEventId = newEventId();
       const { data } = await api.post("/inscriptions", {
         formation_id: formationId, ...form,
         stage_id: selectedStageId || undefined,
+        source: "inscription_publique", landing_url: window.location.href,
+        event_id: leadEventId, ...getFbCookies(),
       });
       setSuccess(data);
       setStep(3);
       toast.success("Inscription enregistrée");
+      // "Lead" = signal de nouveau prospect pour le ciblage des campagnes ;
+      // "CompleteRegistration" reste envoyé en plus, certaines campagnes
+      // pouvant être optimisées sur l'un ou l'autre selon les objectifs.
+      trackLead({ content_name: selected?.title, value: selected?.price, currency: "EUR" }, leadEventId);
       trackCompleteRegistration({ content_name: selected?.title, value: selected?.price, currency: "EUR" });
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");

@@ -2,9 +2,14 @@ import { useEffect } from "react";
 import { api } from "@/lib/api";
 import { hasConsent, CONSENT_CHANGED_EVENT } from "@/lib/consent";
 
-// Pages sur lesquelles le Meta Pixel doit être chargé — pour l'instant
-// uniquement la landing page ciblée par la campagne publicitaire en cours.
-const META_PIXEL_PAGES = ["/stage-recuperation-points", "/stage-recuperation-points/merci"];
+// Le Meta Pixel était auparavant restreint à 2 routes ("landing page ciblée
+// par LA campagne du moment") — mais plusieurs autres landing pages
+// (Caces/Taxi/Vtc/Ssiap/Passerelle/Mobilite/OffreFidelite, la page contact,
+// l'inscription publique...) appellent déjà trackLead/trackViewContent etc.
+// sans jamais avoir le pixel chargé : ces événements ne partaient nulle part,
+// ce qui fausse le ciblage des campagnes sur ces pages. Chargé maintenant
+// partout où GA4/Plausible le sont déjà (tout le site public, hors
+// /admin et /login) pour rester cohérent avec le code de tracking existant.
 
 /**
  * Injects analytics scripts (GA4 and/or Plausible) and the Meta Pixel based on
@@ -49,11 +54,7 @@ export default function AnalyticsLoader() {
       // Meta (Facebook) Pixel — nécessite le consentement "publicité/marketing".
       // Les événements custom (lib/metaPixel.js) vérifient eux aussi le
       // consentement avant d'appeler fbq(), en plus de cette garde ici.
-      // Restreint à la landing page "Stage récupération de points" : c'est la
-      // seule sur laquelle une campagne est menée pour le moment — inutile
-      // (et faux pour les stats) de charger le pixel ailleurs sur le site.
-      // Élargir META_PIXEL_PAGES le jour où d'autres landing pages sont ciblées.
-      if (cfg.meta_pixel_id && hasConsent("marketing") && META_PIXEL_PAGES.includes(path) && !document.getElementById("meta-pixel-tag")) {
+      if (cfg.meta_pixel_id && hasConsent("marketing") && !document.getElementById("meta-pixel-tag")) {
         const s = document.createElement("script");
         s.id = "meta-pixel-tag";
         s.innerHTML = `
