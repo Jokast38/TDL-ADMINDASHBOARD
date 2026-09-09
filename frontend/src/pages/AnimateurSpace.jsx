@@ -250,6 +250,7 @@ export default function AnimateurSpace() {
   const [selected, setSelected] = useState(null);
   const [jours, setJours] = useState([]);
   const [sessionDate, setSessionDate] = useState(null);
+  const [periode, setPeriode] = useState("journee"); // "matin" | "apres_midi" | "journee"
   const [inscrits, setInscrits] = useState([]);
   const [signOpen, setSignOpen] = useState(false);
   const [signTarget, setSignTarget] = useState(null);
@@ -267,14 +268,24 @@ export default function AnimateurSpace() {
     setJours(days);
     const firstDay = days[0];
     setSessionDate(firstDay);
-    const r = await api.get(`/stages/${s.id}/inscrits`, { params: { session_date: firstDay } });
+    setPeriode("journee");
+    const r = await api.get(`/stages/${s.id}/inscrits`, { params: { session_date: firstDay, periode: "journee" } });
+    setInscrits(r.data);
+  };
+
+  const refreshInscrits = async (day, per) => {
+    const r = await api.get(`/stages/${selected.id}/inscrits`, { params: { session_date: day, periode: per } });
     setInscrits(r.data);
   };
 
   const changeDay = async (day) => {
     setSessionDate(day);
-    const r = await api.get(`/stages/${selected.id}/inscrits`, { params: { session_date: day } });
-    setInscrits(r.data);
+    await refreshInscrits(day, periode);
+  };
+
+  const changePeriode = async (per) => {
+    setPeriode(per);
+    await refreshInscrits(sessionDate, per);
   };
 
   const openSign = (ins) => { setSignTarget(ins); setPresence(true); setSignOpen(true); };
@@ -292,10 +303,11 @@ export default function AnimateurSpace() {
           signature_data_url: "",
           present: false,
           session_date: sessionDate,
+          periode,
         });
         toast.success("Absence enregistrée");
         setSignOpen(false);
-        changeDay(sessionDate);
+        refreshInscrits(sessionDate, periode);
       } catch (e) {
         toast.error(e.response?.data?.detail || "Erreur");
       }
@@ -315,10 +327,11 @@ export default function AnimateurSpace() {
         signature_data_url: dataUrl,
         present: true,
         session_date: sessionDate,
+        periode,
       });
       toast.success("Émargement signé · attestation générée");
       setSignOpen(false);
-      changeDay(sessionDate);
+      refreshInscrits(sessionDate, periode);
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
     }
@@ -327,7 +340,7 @@ export default function AnimateurSpace() {
   const generateSheet = async () => {
     setGeneratingPdf(true);
     try {
-      const { data } = await api.get(`/stages/${selected.id}/emargement-pdf`, { params: { session_date: sessionDate } });
+      const { data } = await api.get(`/stages/${selected.id}/emargement-pdf`, { params: { session_date: sessionDate, periode } });
       const token = localStorage.getItem("tdl_token");
       const res = await fetch(`${API}/documents-generated/${data.id}/download`, { headers: { Authorization: `Bearer ${token}` } });
       const blob = await res.blob();
@@ -415,6 +428,22 @@ export default function AnimateurSpace() {
               </div>
             )}
 
+            <div className="mt-4">
+              <p className="overline mb-2">Créneau</p>
+              <div className="flex gap-2">
+                {[["matin", "Matin"], ["apres_midi", "Après-midi"], ["journee", "Journée"]].map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => changePeriode(val)}
+                    className={`px-3 py-1.5 rounded-md text-xs border ${periode === val ? "bg-[#d4af37] text-black border-[#d4af37]" : "border-gray-300 hover:bg-gray-50"}`}
+                    data-testid={`periode-${val}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="mt-6">
               <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
                 <p className="overline flex items-center gap-2"><Users size={12} /> Liste d'émargement {sessionDate ? `— ${new Date(sessionDate).toLocaleDateString("fr-FR")}` : ""}</p>
@@ -456,7 +485,10 @@ export default function AnimateurSpace() {
           {signTarget && (
             <>
               <DialogHeader>
-                <DialogTitle>Émargement — {signTarget.student_name} ({sessionDate ? new Date(sessionDate).toLocaleDateString("fr-FR") : ""})</DialogTitle>
+                <DialogTitle>
+                  Émargement — {signTarget.student_name} ({sessionDate ? new Date(sessionDate).toLocaleDateString("fr-FR") : ""}
+                  {periode !== "journee" ? ` · ${periode === "matin" ? "Matin" : "Après-midi"}` : ""})
+                </DialogTitle>
               </DialogHeader>
               <div className="mt-2 space-y-4">
                 <div className="flex gap-2">

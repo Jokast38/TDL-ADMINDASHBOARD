@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight, UploadSimple, Sun, Moon, FolderOpen } from "@phosphor-icons/react";
+import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight, UploadSimple, Sun, Moon, FolderOpen, Books } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 
@@ -81,6 +81,10 @@ export default function Stages() {
   const [rosterTarget, setRosterTarget] = useState(null);
   const [roster, setRoster] = useState([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
+  const [stageModules, setStageModules] = useState([]);
+  const [sessionTemplates, setSessionTemplates] = useState([]);
+  const [moduleLib, setModuleLib] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
 
   const openRoster = async (s) => {
     setRosterTarget(s);
@@ -111,7 +115,7 @@ export default function Stages() {
     api.get("/employees").then((r) => setAnimateurs(r.data.filter((u) => u.role === "animateur" || u.role === "admin"))).catch(() => {});
   }, []);
 
-  const openCreate = () => { setEditingId(null); setForm(empty); setOpen(true); };
+  const openCreate = () => { setEditingId(null); setForm(empty); setStageModules([]); setSelectedTemplateId(""); setOpen(true); };
   const openEdit = (s) => {
     setEditingId(s.id);
     const ids = s.animateur_ids?.length ? s.animateur_ids : (s.animateur_id ? [s.animateur_id] : []);
@@ -120,7 +124,50 @@ export default function Stages() {
       lieu_adresse: s.lieu_adresse || "", lieu_ville: s.lieu_ville || "", capacite_max: s.capacite_max ?? 20,
       animateur_ids: ids, statut: s.statut || "planifie", notes: s.notes || "",
     });
+    setStageModules(s.modules || []);
+    setSelectedTemplateId("");
+    const category = formations.find((f) => f.id === s.formation_id)?.category;
+    if (category) {
+      api.get("/session-templates", { params: { category } }).then((r) => setSessionTemplates(r.data)).catch(() => setSessionTemplates([]));
+      api.get("/formation-modules", { params: { category } }).then((r) => setModuleLib(r.data)).catch(() => setModuleLib([]));
+    } else {
+      setSessionTemplates([]); setModuleLib([]);
+    }
     setOpen(true);
+  };
+
+  const applyTemplate = async () => {
+    if (!selectedTemplateId || !editingId) return;
+    try {
+      const { data } = await api.post(`/stages/${editingId}/apply-template`, { template_id: selectedTemplateId, replace: true });
+      setStageModules(data.modules || []);
+      toast.success("Modèle appliqué au calendrier de la session");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de l'application du modèle");
+    }
+  };
+
+  const addModuleRow = () => {
+    setStageModules((prev) => [...prev, {
+      module_id: moduleLib[0]?.id || null, module_nom: moduleLib[0]?.nom || "Module",
+      date: form.date_debut || "", heure_debut: "09:00", heure_fin: "17:00", animateur_id: null,
+    }]);
+  };
+
+  const updateModuleRow = (idx, patch) => {
+    setStageModules((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
+  };
+
+  const removeModuleRow = (idx) => setStageModules((prev) => prev.filter((_, i) => i !== idx));
+
+  const saveModules = async () => {
+    try {
+      await api.put(`/stages/${editingId}/modules`, { modules: stageModules });
+      toast.success("Calendrier pédagogique enregistré");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de l'enregistrement du calendrier");
+    }
   };
 
   const toggleAnimateur = (id) => {
@@ -316,6 +363,47 @@ export default function Stages() {
                 <label className="text-sm font-medium">Notes</label>
                 <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </div>
+
+              {editingId && (
+                <div className="sm:col-span-2 border-t border-gray-200 pt-4 mt-1">
+                  <label className="text-sm font-medium flex items-center gap-1.5"><Books size={14} /> Calendrier pédagogique</label>
+                  <p className="text-xs text-gray-400 mb-2">Modules étudiés par jour pour cette session — appliquez un modèle pré-enregistré ou éditez manuellement.</p>
+                  <div className="flex gap-2 mb-3">
+                    <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                      <SelectTrigger className="flex-1"><SelectValue placeholder="Choisir un modèle de session..." /></SelectTrigger>
+                      <SelectContent>{sessionTemplates.map((t) => <SelectItem key={t.id} value={t.id}>{t.nom}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Button type="button" variant="outline" disabled={!selectedTemplateId} onClick={applyTemplate}>Appliquer</Button>
+                  </div>
+                  {!sessionTemplates.length && (
+                    <p className="text-xs text-gray-400 mb-2">Aucun modèle pour cette catégorie de formation — gérez-les depuis la page Modules.</p>
+                  )}
+                  <div className="space-y-2 max-h-56 overflow-y-auto">
+                    {stageModules.map((m, idx) => (
+                      <div key={m.id || idx} className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-md p-2">
+                        <Input type="date" className="w-36" value={m.date || ""} onChange={(e) => updateModuleRow(idx, { date: e.target.value })} />
+                        <Input type="time" className="w-24" value={m.heure_debut || ""} onChange={(e) => updateModuleRow(idx, { heure_debut: e.target.value })} />
+                        <span className="text-xs text-gray-400">-</span>
+                        <Input type="time" className="w-24" value={m.heure_fin || ""} onChange={(e) => updateModuleRow(idx, { heure_fin: e.target.value })} />
+                        <Input className="flex-1 min-w-[140px]" value={m.module_nom || ""} onChange={(e) => updateModuleRow(idx, { module_nom: e.target.value })} placeholder="Nom du module" />
+                        <Select value={m.animateur_id || "none"} onValueChange={(v) => updateModuleRow(idx, { animateur_id: v === "none" ? null : v })}>
+                          <SelectTrigger className="w-40"><SelectValue placeholder="Formateur" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Sans formateur</SelectItem>
+                            {animateurs.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <button type="button" onClick={() => removeModuleRow(idx)} className="text-gray-300 hover:text-red-600"><Trash size={14} /></button>
+                      </div>
+                    ))}
+                    {!stageModules.length && <p className="text-xs text-gray-400 text-center py-3">Aucun module planifié pour cette session.</p>}
+                  </div>
+                  <div className="flex justify-between mt-2">
+                    <Button type="button" variant="outline" size="sm" onClick={addModuleRow}><Plus size={14} className="mr-1" /> Ajouter un module</Button>
+                    <Button type="button" size="sm" onClick={saveModules} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Enregistrer le calendrier</Button>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>

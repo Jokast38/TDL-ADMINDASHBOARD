@@ -6,13 +6,15 @@ import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
   CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive, Question, Student,
-  ClipboardText, CalendarPlus, PenNib
+  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books
 } from "@phosphor-icons/react";
 
 const navAll = [
   { to: "/admin", label: "Dashboard", icon: House, roles: ["admin", "employe", "responsable_admission", "agent_admin", "responsable_commercial"], end: true },
   { to: "/admin/formations", label: "Formations", icon: GraduationCap, roles: ["admin", "employe", "responsable_admission"] },
   { to: "/admin/stages", label: "Sessions de stage", icon: CalendarCheck, roles: ["admin", "responsable_admission"] },
+  { to: "/admin/agenda", label: "Agenda", icon: CalendarBlank, roles: ["admin", "responsable_admission", "animateur"] },
+  { to: "/admin/modules", label: "Modules de formation", icon: Books, roles: ["admin", "responsable_admission"] },
   { to: "/admin/formateurs", label: "Formateurs", icon: PenNib, roles: ["admin", "responsable_admission", "agent_admin"] },
   { to: "/admin/inscriptions", label: "Inscriptions", icon: IdentificationCard, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
   { to: "/admin/apprenants", label: "Apprenants", icon: Student, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },

@@ -6,7 +6,9 @@ from fastapi import HTTPException
 def generate_attestation_pdf(
     stage: dict, formation: dict, student: dict, animateur: dict,
     signature_data_url: Optional[str], present: bool,
-    settings_doc: Optional[dict] = None
+    settings_doc: Optional[dict] = None,
+    animateur_signature_data_url: Optional[str] = None,
+    periode: Optional[str] = None,
 ) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas as rl_canvas
@@ -57,8 +59,11 @@ def generate_attestation_pdf(
         f"Session du {stage.get('date_debut', '—')} au {stage.get('date_fin', '—')}",
         f"Lieu : {stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}",
         "",
-        f"Statut de présence : {'PRÉSENT(E)' if present else 'ABSENT(E)'}",
     ]
+    if periode and periode != "journee":
+        lines.append(f"Créneau : {'Matin' if periode == 'matin' else 'Après-midi'}")
+        lines.append("")
+    lines.append(f"Statut de présence : {'PRÉSENT(E)' if present else 'ABSENT(E)'}")
     for line in lines:
         if line.startswith("Statut"):
             c.setFont("Helvetica-Bold", 12)
@@ -89,6 +94,8 @@ def generate_attestation_pdf(
     c.drawString(11 * cm, y, "Cachet & signature de l'animateur :")
     c.setFont("Helvetica", 10)
     c.drawString(11 * cm, y - 0.7 * cm, animateur.get("name", "—"))
+    if animateur_signature_data_url and animateur_signature_data_url.startswith("data:image"):
+        _draw_data_url_image_top(c, animateur_signature_data_url, 11 * cm, y - 1 * cm, 6 * cm, 1.8 * cm)
     c.setStrokeColor(gold)
     c.setLineWidth(1.5)
     c.line(11 * cm, y - 3 * cm, 18 * cm, y - 3 * cm)

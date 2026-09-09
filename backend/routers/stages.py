@@ -229,16 +229,22 @@ async def stage_days_route(sid: str, user: dict = Depends(require_role(*ROLES_AL
 
 
 @router.get("/{sid}/inscrits")
-async def stage_inscrits(sid: str, session_date: Optional[str] = None, user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+async def stage_inscrits(sid: str, session_date: Optional[str] = None, periode: Optional[str] = None, user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
     stage = await db.stages.find_one({"id": sid}, {"_id": 0})
     if not stage:
         raise HTTPException(status_code=404, detail="Stage introuvable")
     if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
         raise HTTPException(status_code=403, detail="Accès refusé")
     session_date = session_date or _stage_days(stage)[0]
+    periode = periode or "journee"
     inscrits = await db.inscriptions.find({"formation_id": stage["formation_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # Compat : les émargements créés avant l'ajout de la notion de période
+    # n'ont pas de champ "periode" — on les considère comme "journee".
+    periode_filter = {"$in": [periode, None]} if periode == "journee" else periode
     for ins in inscrits:
-        em = await db.emargements.find_one({"stage_id": sid, "inscription_id": ins["id"], "session_date": session_date}, {"_id": 0})
+        em = await db.emargements.find_one(
+            {"stage_id": sid, "inscription_id": ins["id"], "session_date": session_date, "periode": periode_filter}, {"_id": 0}
+        )
         ins["emarge"] = bool(em)
         ins["present"] = em.get("present") if em else None
     return inscrits

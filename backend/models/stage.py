@@ -38,3 +38,6 @@ class EmargementIn(BaseModel):
     signature_data_url: str
     present: bool = True
     session_date: str
+    # "matin" | "apres_midi" | "journee" — permet un émargement par demi-journée
+    # (utile notamment pour les formations Carte VTC, voir cahier des charges).
+    periode: Optional[str] = "journee"

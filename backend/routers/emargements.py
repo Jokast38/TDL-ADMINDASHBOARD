@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,7 +7,7 @@ from fastapi.responses import Response
 
 from core.database import db
 from core.security import require_role
-from core.storage import put_object
+from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF
 from models.stage import EmargementIn
@@ -15,6 +16,14 @@ from services.pdf import generate_attestation_pdf, render_html_pdf
 from routers.stages import _stage_days, _stage_animateur_ids
 
 router = APIRouter(tags=["emargements"])
+
+_PERIODES = ("matin", "apres_midi", "journee")
+
+
+async def _path_to_data_url(path: str) -> str:
+    data, content_type = await get_object(path)
+    b64 = base64.b64encode(data).decode("ascii")
+    return f"data:{content_type or 'image/png'};base64,{b64}"
 
 
 @router.post("/emargements")
@@ -29,32 +38,46 @@ async def create_emargement(payload: EmargementIn, user: dict = Depends(require_
     valid_days = _stage_days(stage)
     if payload.session_date not in valid_days:
         raise HTTPException(status_code=400, detail=f"session_date doit être l'un de : {', '.join(valid_days)}")
+    periode = payload.periode or "journee"
+    if periode not in _PERIODES:
+        raise HTTPException(status_code=400, detail=f"periode doit être l'un de : {', '.join(_PERIODES)}")
 
     formation = await db.formations.find_one({"id": stage["formation_id"]}, {"_id": 0}) or {}
     student = await db.users.find_one({"id": payload.student_id}, {"_id": 0, "password_hash": 0}) or {"name": payload.student_name}
     animateur = await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0}) or {"name": user.get("name")}
 
+    animateur_signature_data_url = None
+    if animateur.get("signature_path"):
+        try:
+            animateur_signature_data_url = await _path_to_data_url(animateur["signature_path"])
+        except Exception:
+            pass
+
     em_doc = {
         "id": str(uuid.uuid4()), "stage_id": payload.stage_id,
         "inscription_id": payload.inscription_id, "student_id": payload.student_id,
-        "student_name": payload.student_name, "session_date": payload.session_date,
+        "student_name": payload.student_name, "session_date": payload.session_date, "periode": periode,
         "present": payload.present, "signed_by_animateur": user["id"], "signed_at": now_iso(),
+        "animateur_signed": bool(animateur_signature_data_url),
     }
     await db.emargements.update_one(
-        {"stage_id": payload.stage_id, "inscription_id": payload.inscription_id, "session_date": payload.session_date},
+        {"stage_id": payload.stage_id, "inscription_id": payload.inscription_id, "session_date": payload.session_date, "periode": periode},
         {"$set": em_doc}, upsert=True
     )
 
     settings_doc = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
-    pdf_bytes = await asyncio.to_thread(generate_attestation_pdf, stage, formation, student, animateur, payload.signature_data_url, payload.present, settings_doc)
-    path = f"{APP_NAME}/attestations/{payload.stage_id}/{payload.session_date}/{payload.inscription_id}.pdf"
+    pdf_bytes = await asyncio.to_thread(
+        generate_attestation_pdf, stage, formation, student, animateur, payload.signature_data_url, payload.present,
+        settings_doc, animateur_signature_data_url, periode,
+    )
+    path = f"{APP_NAME}/attestations/{payload.stage_id}/{payload.session_date}/{periode}/{payload.inscription_id}.pdf"
     result = await put_object(path, pdf_bytes, "application/pdf")
 
     doc_meta = {
         "id": str(uuid.uuid4()), "type_doc": "attestation_presence",
-        "nom_fichier": f"attestation_{student.get('name', '').replace(' ', '_')}_{payload.session_date}_{stage.get('id', '')[:8]}.pdf",
+        "nom_fichier": f"attestation_{student.get('name', '').replace(' ', '_')}_{payload.session_date}_{periode}_{stage.get('id', '')[:8]}.pdf",
         "stage_id": payload.stage_id, "inscription_id": payload.inscription_id,
-        "student_id": payload.student_id, "session_date": payload.session_date,
+        "student_id": payload.student_id, "session_date": payload.session_date, "periode": periode,
         "storage_path": result["path"], "size": result["size"],
         "generated_by": user["id"], "generated_at": now_iso(), "signed": True,
     }
@@ -75,10 +98,11 @@ async def create_emargement(payload: EmargementIn, user: dict = Depends(require_
 
 
 @router.get("/emargements")
-async def list_emargements(stage_id: Optional[str] = None, session_date: Optional[str] = None, user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+async def list_emargements(stage_id: Optional[str] = None, session_date: Optional[str] = None, periode: Optional[str] = None, user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
     q = {}
     if stage_id: q["stage_id"] = stage_id
     if session_date: q["session_date"] = session_date
+    if periode: q["periode"] = periode
     if user["role"] == "animateur":
         own = await db.stages.find(
             {"$or": [{"animateur_ids": user["id"]}, {"animateur_id": user["id"]}]}, {"_id": 0, "id": 1}
@@ -88,7 +112,7 @@ async def list_emargements(stage_id: Optional[str] = None, session_date: Optiona
 
 
 @router.get("/stages/{sid}/emargement-pdf")
-async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = None, user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = None, periode: Optional[str] = None, user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
     stage = await db.stages.find_one({"id": sid}, {"_id": 0})
     if not stage:
         raise HTTPException(status_code=404, detail="Stage introuvable")
@@ -98,6 +122,10 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
     session_date = session_date or valid_days[0]
     if session_date not in valid_days:
         raise HTTPException(status_code=400, detail=f"session_date doit être l'un de : {', '.join(valid_days)}")
+    periode = periode or "journee"
+    if periode not in _PERIODES:
+        raise HTTPException(status_code=400, detail=f"periode doit être l'un de : {', '.join(_PERIODES)}")
+    periode_label = {"matin": "Matin", "apres_midi": "Après-midi", "journee": "Journée"}[periode]
 
     formation = await db.formations.find_one({"id": stage["formation_id"]}, {"_id": 0}) or {}
     inscrits = await db.inscriptions.find({"formation_id": stage["formation_id"]}, {"_id": 0}).to_list(500)
@@ -105,9 +133,10 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
     animateurs_docs = await db.users.find({"id": {"$in": animateur_ids}}, {"_id": 0, "password_hash": 0}).to_list(20) if animateur_ids else []
     animateur = animateurs_docs[0] if animateurs_docs else None
 
+    periode_filter = {"$in": [periode, None]} if periode == "journee" else periode
     rows = ""
     for ins in inscrits:
-        em = await db.emargements.find_one({"stage_id": sid, "inscription_id": ins["id"], "session_date": session_date}, {"_id": 0})
+        em = await db.emargements.find_one({"stage_id": sid, "inscription_id": ins["id"], "session_date": session_date, "periode": periode_filter}, {"_id": 0})
         signed = "✓ Signé" if em and em.get("present") else ("Absent" if em else "—")
         rows += f'<tr><td style="padding:6px;">{ins.get("student_name", "")}</td><td style="padding:6px;text-align:right;">{signed}</td></tr>'
     if not rows:
@@ -127,7 +156,7 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
         "telephone": "01 80 90 72 49", "adresse": "59 avenue JOFFRE, 93800 EPINAY-SUR-SEINE",
         "code_postal": "93800", "ville": stage.get("lieu_ville", "EPINAY SUR SEINE"),
         "siret": "90096880100010", "numero_declaration_activite": "11930882293",
-        "formation_titre": formation.get("title", stage.get("formation_titre", "")),
+        "formation_titre": f"{formation.get('title', stage.get('formation_titre', ''))} — {periode_label}",
         "date_debut": session_date, "date_fin": session_date,
         "lieu_formation": f"{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}",
         "duree_totale": str(formation.get("duration_hours", "")),
@@ -141,8 +170,8 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
     for k, v in context.items():
         html = html.replace("{{ " + k + " }}", str(v)).replace("{{" + k + "}}", str(v))
     pdf_bytes = await asyncio.to_thread(render_html_pdf, html)
-    fname = f"emargement_{stage.get('formation_titre', 'session')}_{session_date}.pdf".replace(" ", "_")
-    path = f"{APP_NAME}/generated/emargement_{sid}_{session_date}.pdf"
+    fname = f"emargement_{stage.get('formation_titre', 'session')}_{session_date}_{periode}.pdf".replace(" ", "_")
+    path = f"{APP_NAME}/generated/emargement_{sid}_{session_date}_{periode}.pdf"
     result = await put_object(path, pdf_bytes, "application/pdf")
     doc_meta = {
         "id": str(uuid.uuid4()), "type_doc": "attestation",

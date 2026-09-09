@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FilePdf, DownloadSimple, MagnifyingGlass, Plus, FileText, Trash, Warning, PenNib, Eraser, Eye, Link as LinkIcon, Copy, ClipboardText } from "@phosphor-icons/react";
+import { FilePdf, DownloadSimple, MagnifyingGlass, Plus, FileText, Trash, Warning, PenNib, Eraser, Eye, Link as LinkIcon, Copy, ClipboardText, EnvelopeSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import SignatureCanvas from "react-signature-canvas";
@@ -93,10 +93,26 @@ export default function DocumentsLibrary() {
   const [tests, setTests] = useState([]);
   const [testOpen, setTestOpen] = useState(false);
   const [testNom, setTestNom] = useState("");
+  const [testCategory, setTestCategory] = useState("VTC_TAXI");
   const [testSession, setTestSession] = useState("");
   const [testEvaluateur, setTestEvaluateur] = useState("");
   const [staff, setStaff] = useState([]);
   const [creatingTest, setCreatingTest] = useState(false);
+  const [testEmail, setTestEmail] = useState("");
+  const [deletingTestId, setDeletingTestId] = useState(null);
+  const [sendTarget, setSendTarget] = useState(null); // { kind: "positioning"|"french", test }
+  const [sendEmailInput, setSendEmailInput] = useState("");
+  const [sendingLink, setSendingLink] = useState(false);
+
+  const [frenchTests, setFrenchTests] = useState([]);
+  const [ftOpen, setFtOpen] = useState(false);
+  const [ftNom, setFtNom] = useState("");
+  const [ftEmail, setFtEmail] = useState("");
+  const [ftCategory, setFtCategory] = useState("SSIAP");
+  const [ftSession, setFtSession] = useState("");
+  const [ftEvaluateur, setFtEvaluateur] = useState("");
+  const [creatingFt, setCreatingFt] = useState(false);
+  const [deletingFtId, setDeletingFtId] = useState(null);
 
   const [sigOpen, setSigOpen] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -117,11 +133,13 @@ export default function DocumentsLibrary() {
   };
 
   const loadTests = () => { api.get("/positioning-tests").then((r) => setTests(r.data)); };
+  const loadFrenchTests = () => { api.get("/french-tests").then((r) => setFrenchTests(r.data)); };
 
   useEffect(() => { load(); }, [type]);
   useEffect(() => { api.get("/doc-templates").then((r) => setTemplates(r.data)); }, []);
   useEffect(() => { checkSignature(); }, []);
   useEffect(() => { loadTests(); }, []);
+  useEffect(() => { loadFrenchTests(); }, []);
   useEffect(() => { api.get("/employees").then((r) => setStaff(r.data)).catch(() => {}); }, []);
   useEffect(() => { api.get("/dossiers").then((r) => setDossiers(r.data)).catch(() => {}); }, []);
 
@@ -227,11 +245,11 @@ export default function DocumentsLibrary() {
     if (!testNom.trim()) return toast.error("Indiquez le nom du candidat");
     setCreatingTest(true);
     try {
-      const res = await api.post("/positioning-tests", { stagiaire_nom: testNom, session: testSession, evaluateur: testEvaluateur });
+      const res = await api.post("/positioning-tests", { stagiaire_nom: testNom, stagiaire_email: testEmail || null, category: testCategory, session: testSession, evaluateur: testEvaluateur });
       await navigator.clipboard.writeText(res.data.link).catch(() => {});
-      toast.success("Lien créé et copié dans le presse-papiers");
+      toast.success(res.data.email_sent ? "Lien créé, copié et envoyé par email" : "Lien créé et copié dans le presse-papiers");
       setTestOpen(false);
-      setTestNom(""); setTestSession(""); setTestEvaluateur("");
+      setTestNom(""); setTestEmail(""); setTestSession(""); setTestEvaluateur("");
       loadTests();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur création du lien");
@@ -250,6 +268,75 @@ export default function DocumentsLibrary() {
       window.open(URL.createObjectURL(res.data), "_blank");
     } catch (e) {
       toast.error(e.response?.data?.detail || "Résultat non disponible");
+    }
+  };
+
+  const createFrenchTest = async () => {
+    if (!ftNom.trim()) return toast.error("Indiquez le nom du candidat");
+    setCreatingFt(true);
+    try {
+      const res = await api.post("/french-tests", { stagiaire_nom: ftNom, stagiaire_email: ftEmail || null, category: ftCategory, session: ftSession, evaluateur: ftEvaluateur });
+      await navigator.clipboard.writeText(res.data.link).catch(() => {});
+      toast.success(res.data.email_sent ? "Lien créé, copié et envoyé par email" : "Lien créé et copié dans le presse-papiers");
+      setFtOpen(false);
+      setFtNom(""); setFtEmail(""); setFtSession(""); setFtEvaluateur("");
+      loadFrenchTests();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur création du lien");
+    } finally {
+      setCreatingFt(false);
+    }
+  };
+
+  const downloadFrenchTestResult = async (t) => {
+    try {
+      const res = await api.get(`/french-tests/${t.id}/result/download`, { responseType: "blob" });
+      window.open(URL.createObjectURL(res.data), "_blank");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Résultat non disponible");
+    }
+  };
+
+  const deletePositioningTest = async (id) => {
+    try {
+      await api.delete(`/positioning-tests/${id}`);
+      toast.success("Test supprimé");
+      loadTests();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la suppression");
+    }
+    setDeletingTestId(null);
+  };
+
+  const deleteFrenchTest = async (id) => {
+    try {
+      await api.delete(`/french-tests/${id}`);
+      toast.success("Test supprimé");
+      loadFrenchTests();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la suppression");
+    }
+    setDeletingFtId(null);
+  };
+
+  const openSendLink = (kind, test) => {
+    setSendTarget({ kind, test });
+    setSendEmailInput(test.stagiaire_email || "");
+  };
+
+  const sendLink = async () => {
+    if (!sendEmailInput.trim()) return toast.error("Indiquez une adresse email");
+    setSendingLink(true);
+    try {
+      const base = sendTarget.kind === "positioning" ? "/positioning-tests" : "/french-tests";
+      await api.post(`${base}/${sendTarget.test.id}/send`, { email: sendEmailInput.trim() });
+      toast.success("Lien envoyé par email");
+      setSendTarget(null);
+      sendTarget.kind === "positioning" ? loadTests() : loadFrenchTests();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de l'envoi");
+    } finally {
+      setSendingLink(false);
     }
   };
 
@@ -424,6 +511,23 @@ export default function DocumentsLibrary() {
                 <Input value={testNom} onChange={(e) => setTestNom(e.target.value)} data-testid="test-nom" />
               </div>
               <div>
+                <label className="text-sm font-medium">Email du candidat (optionnel)</label>
+                <Input type="email" value={testEmail} onChange={(e) => setTestEmail(e.target.value)} placeholder="candidat@email.com" data-testid="test-email" />
+                <p className="text-xs text-gray-500 mt-1">Si renseigné, le lien est envoyé par email en plus d'être copié.</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Catégorie de formation</label>
+                <Select value={testCategory} onValueChange={setTestCategory}>
+                  <SelectTrigger data-testid="test-category"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["CACES", "PERMIS", "AUTO_ECOLE", "SSIAP", "VTC_TAXI", "ECSR", "VENTE"].map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">La première question du test est adaptée au thème de cette formation.</p>
+              </div>
+              <div>
                 <label className="text-sm font-medium">Session (optionnel)</label>
                 <Input value={testSession} onChange={(e) => setTestSession(e.target.value)} data-testid="test-session" />
               </div>
@@ -442,6 +546,61 @@ export default function DocumentsLibrary() {
               <Button variant="outline" onClick={() => setTestOpen(false)}>Annuler</Button>
               <Button onClick={createTest} disabled={creatingTest} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="test-create-submit">
                 {creatingTest ? "Création..." : "Créer le lien"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+        <Dialog open={ftOpen} onOpenChange={setFtOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" data-testid="new-french-test-btn">
+              <LinkIcon size={16} className="mr-1" /> Test de français
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Envoyer un test de connaissance du français</DialogTitle></DialogHeader>
+            <p className="text-xs text-gray-500">
+              Génère un lien unique à envoyer au candidat : il répond en ligne, sans compte à créer. Le contenu
+              (situation, QCM, calcul, phrases) est thématisé automatiquement selon la catégorie de formation choisie.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium">Nom du candidat</label>
+                <Input value={ftNom} onChange={(e) => setFtNom(e.target.value)} data-testid="ft-nom" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Email du candidat (optionnel)</label>
+                <Input type="email" value={ftEmail} onChange={(e) => setFtEmail(e.target.value)} placeholder="candidat@email.com" data-testid="ft-email" />
+                <p className="text-xs text-gray-500 mt-1">Si renseigné, le lien est envoyé par email en plus d'être copié.</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Catégorie de formation</label>
+                <Select value={ftCategory} onValueChange={setFtCategory}>
+                  <SelectTrigger data-testid="ft-category"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {["CACES", "PERMIS", "AUTO_ECOLE", "SSIAP", "VTC_TAXI", "ECSR", "VENTE"].map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Session (optionnel)</label>
+                <Input value={ftSession} onChange={(e) => setFtSession(e.target.value)} data-testid="ft-session" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Évaluateur assigné</label>
+                <Select value={ftEvaluateur} onValueChange={setFtEvaluateur}>
+                  <SelectTrigger data-testid="ft-evaluateur"><SelectValue placeholder="Choisir un évaluateur" /></SelectTrigger>
+                  <SelectContent>
+                    {staff.map((s) => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-2">
+              <Button variant="outline" onClick={() => setFtOpen(false)}>Annuler</Button>
+              <Button onClick={createFrenchTest} disabled={creatingFt} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="ft-create-submit">
+                {creatingFt ? "Création..." : "Créer le lien"}
               </Button>
             </div>
           </DialogContent>
@@ -611,15 +770,116 @@ export default function DocumentsLibrary() {
                     <td className="py-2 px-4 text-right">
                       <div className="inline-flex gap-1">
                         {t.status === "pending" && (
-                          <button onClick={() => copyTestLink(t.link)} className="p-1.5 hover:bg-gray-100 rounded" title="Copier le lien">
-                            <Copy size={14} />
-                          </button>
+                          <>
+                            <button onClick={() => copyTestLink(t.link)} className="p-1.5 hover:bg-gray-100 rounded" title="Copier le lien">
+                              <Copy size={14} />
+                            </button>
+                            <button onClick={() => openSendLink("positioning", t)} className="p-1.5 hover:bg-gray-100 rounded" title="Envoyer le lien par email">
+                              <EnvelopeSimple size={14} />
+                            </button>
+                          </>
                         )}
                         {t.status === "submitted" && (
                           <button onClick={() => downloadTestResult(t)} className="p-1.5 hover:bg-gray-100 rounded" title="Voir le résultat">
                             <ClipboardText size={14} />
                           </button>
                         )}
+                        <AlertDialog open={deletingTestId === t.id} onOpenChange={(v) => !v && setDeletingTestId(null)}>
+                          <AlertDialogTrigger asChild>
+                            <button onClick={() => setDeletingTestId(t.id)} className="p-1.5 hover:bg-red-50 rounded text-red-500 hover:text-red-600" title="Supprimer">
+                              <Trash size={14} />
+                            </button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="flex items-center gap-2"><Warning size={20} className="text-red-500" weight="fill" /> Supprimer le test</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Êtes-vous sûr de vouloir supprimer le test de <span className="font-semibold">{t.stagiaire_nom}</span> ?<br/>
+                                <span className="text-xs text-red-500">Cette action est irréversible.</span>
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Annuler</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deletePositioningTest(t.id)} className="bg-red-600 hover:bg-red-700 text-white">Supprimer</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {frenchTests.length > 0 && (
+        <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
+          <div className="px-4 py-3 border-b border-gray-200">
+            <p className="overline">Tests de français envoyés</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left border-b border-gray-200">
+                <tr>
+                  <th className="py-2 px-4 overline">Candidat</th>
+                  <th className="py-2 px-4 overline">Catégorie</th>
+                  <th className="py-2 px-4 overline">Session</th>
+                  <th className="py-2 px-4 overline">Évaluateur</th>
+                  <th className="py-2 px-4 overline">Statut</th>
+                  <th className="py-2 px-4 overline text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {frenchTests.map((t) => (
+                  <tr key={t.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2 px-4 font-medium">{t.stagiaire_nom}</td>
+                    <td className="py-2 px-4 text-xs text-gray-500">{t.category}</td>
+                    <td className="py-2 px-4 text-xs text-gray-500">{t.session || "—"}</td>
+                    <td className="py-2 px-4 text-xs text-gray-500">{t.evaluateur || "—"}</td>
+                    <td className="py-2 px-4">
+                      {t.status === "submitted"
+                        ? <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10 text-xs">Complété</Badge>
+                        : <Badge variant="outline" className="text-xs">En attente</Badge>}
+                    </td>
+                    <td className="py-2 px-4 text-right">
+                      <div className="inline-flex gap-1">
+                        {t.status === "pending" && (
+                          <>
+                            <button onClick={() => copyTestLink(t.link)} className="p-1.5 hover:bg-gray-100 rounded" title="Copier le lien">
+                              <Copy size={14} />
+                            </button>
+                            <button onClick={() => openSendLink("french", t)} className="p-1.5 hover:bg-gray-100 rounded" title="Envoyer le lien par email">
+                              <EnvelopeSimple size={14} />
+                            </button>
+                          </>
+                        )}
+                        {t.status === "submitted" && (
+                          <button onClick={() => downloadFrenchTestResult(t)} className="p-1.5 hover:bg-gray-100 rounded" title="Voir le résultat">
+                            <ClipboardText size={14} />
+                          </button>
+                        )}
+                        <AlertDialog open={deletingFtId === t.id} onOpenChange={(v) => !v && setDeletingFtId(null)}>
+                          <AlertDialogTrigger asChild>
+                            <button onClick={() => setDeletingFtId(t.id)} className="p-1.5 hover:bg-red-50 rounded text-red-500 hover:text-red-600" title="Supprimer">
+                              <Trash size={14} />
+                            </button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="flex items-center gap-2"><Warning size={20} className="text-red-500" weight="fill" /> Supprimer le test</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Êtes-vous sûr de vouloir supprimer le test de <span className="font-semibold">{t.stagiaire_nom}</span> ?<br/>
+                                <span className="text-xs text-red-500">Cette action est irréversible.</span>
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Annuler</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => deleteFrenchTest(t.id)} className="bg-red-600 hover:bg-red-700 text-white">Supprimer</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </td>
                   </tr>
@@ -722,6 +982,27 @@ export default function DocumentsLibrary() {
           </table>
         </div>
       </Card>
+
+      <Dialog open={!!sendTarget} onOpenChange={(v) => !v && setSendTarget(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Envoyer le lien par email</DialogTitle></DialogHeader>
+          {sendTarget && (
+            <div className="space-y-3 mt-2">
+              <p className="text-sm text-gray-500">Candidat : <b>{sendTarget.test.stagiaire_nom}</b></p>
+              <div>
+                <label className="text-sm font-medium">Adresse email</label>
+                <Input type="email" value={sendEmailInput} onChange={(e) => setSendEmailInput(e.target.value)} placeholder="candidat@email.com" data-testid="send-link-email" />
+              </div>
+              <div className="flex justify-end gap-2 mt-2">
+                <Button variant="outline" onClick={() => setSendTarget(null)}>Annuler</Button>
+                <Button onClick={sendLink} disabled={sendingLink} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+                  {sendingLink ? "Envoi..." : "Envoyer"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

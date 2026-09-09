@@ -21,12 +21,15 @@ from routers import (
     generated_docs, health, callback, tracking, reviews, chatbot, notifications,
     custom_email, lead_automations, limova, payments, push, reminders,
     company_documents, positioning_tests, backlinks, docs, places,
-    exams, appointments, stage_attestations,
+    exams, appointments, stage_attestations, modules, satisfaction, french_tests,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
+)
+from services.candidate_automation import (
+    send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -95,6 +98,9 @@ app.include_router(places.router,         prefix=_PREFIX)
 app.include_router(exams.router,          prefix=_PREFIX)
 app.include_router(appointments.router,   prefix=_PREFIX)
 app.include_router(stage_attestations.router, prefix=_PREFIX)
+app.include_router(modules.router,         prefix=_PREFIX)
+app.include_router(satisfaction.router,    prefix=_PREFIX)
+app.include_router(french_tests.router,    prefix=_PREFIX)
 
 # Fichiers uploadés depuis l'admin (ex: images de couverture d'articles de blog),
 # servis en statique — indépendant du service de stockage objet externe Emergent.
@@ -402,6 +408,66 @@ async def startup():
     asyncio.create_task(_session_reminders_loop())
     asyncio.create_task(_appointment_reminders_loop())
     asyncio.create_task(_formateur_dossier_reminders_loop())
+    asyncio.create_task(_convocations_loop())
+    asyncio.create_task(_auto_attestations_loop())
+    asyncio.create_task(_satisfaction_chaud_loop())
+    asyncio.create_task(_satisfaction_froid_loop())
+
+
+async def _convocations_loop():
+    """Toutes les 24h, envoie la convocation aux candidats des sessions
+    démarrant dans 7 jours (voir services/candidate_automation.py)."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_convocations()
+            if notified:
+                log.info(f"Convocations : {notified} envoyée(s)")
+        except Exception as e:
+            log.warning(f"Convocations : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
+
+
+async def _auto_attestations_loop():
+    """Toutes les 24h, génère et envoie l'attestation de fin de formation
+    pour les sessions terminées la veille ou le jour même."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_auto_attestations()
+            if notified:
+                log.info(f"Attestations auto : {notified} envoyée(s)")
+        except Exception as e:
+            log.warning(f"Attestations auto : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
+
+
+async def _satisfaction_chaud_loop():
+    """Toutes les 24h, envoie le questionnaire de satisfaction à chaud aux
+    candidats dont la session se termine le jour même."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_satisfaction_chaud()
+            if notified:
+                log.info(f"Satisfaction à chaud : {notified} envoyée(s)")
+        except Exception as e:
+            log.warning(f"Satisfaction à chaud : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
+
+
+async def _satisfaction_froid_loop():
+    """Toutes les 24h, envoie le questionnaire de satisfaction à froid (30 à
+    60 jours après la fin de session)."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_satisfaction_froid()
+            if notified:
+                log.info(f"Satisfaction à froid : {notified} envoyée(s)")
+        except Exception as e:
+            log.warning(f"Satisfaction à froid : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
 
 
 @app.on_event("shutdown")

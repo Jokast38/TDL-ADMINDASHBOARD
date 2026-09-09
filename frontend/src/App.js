@@ -25,6 +25,8 @@ import VtcFormationLanding from "@/pages/VtcFormationLanding";
 import CacesFormationLanding from "@/pages/CacesFormationLanding";
 import MentionsLegales from "@/pages/MentionsLegales";
 import PositioningTest from "@/pages/PositioningTest";
+import FrenchTest from "@/pages/FrenchTest";
+import SatisfactionSurvey from "@/pages/SatisfactionSurvey";
 import StageRecuperationMerci from "@/pages/StageRecuperationMerci";
 import FAQ from "@/pages/FAQ";
 
@@ -47,6 +49,8 @@ import Settings from "@/pages/Settings";
 import Marketing from "@/pages/Marketing";
 import AdminBlog from "@/pages/AdminBlog";
 import Stages from "@/pages/Stages";
+import Agenda from "@/pages/Agenda";
+import Modules from "@/pages/Modules";
 import AnimateurSpace from "@/pages/AnimateurSpace";
 import DocumentsLibrary from "@/pages/DocumentsLibrary";
 import DocTemplates from "@/pages/DocTemplates";
@@ -125,6 +129,8 @@ function App() {
             <Route path="/politique-de-confidentialite" element={<PolitiqueConfidentialite />} />
             <Route path="/faq" element={<FAQ />} />
             <Route path="/test-positionnement/:token" element={<PositioningTest />} />
+            <Route path="/test-francais/:token" element={<FrenchTest />} />
+            <Route path="/satisfaction/:type/:inscriptionId" element={<SatisfactionSurvey />} />
 
             <Route path="/espace-eleve" element={
               <ProtectedRoute roles={["etudiant"]}><StudentSpace /></ProtectedRoute>
@@ -141,6 +147,12 @@ function App() {
             } />
             <Route path="/admin/stages" element={
               <ProtectedRoute roles={["admin", "responsable_admission"]}><AdminLayout><Stages /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/agenda" element={
+              <ProtectedRoute roles={["admin", "responsable_admission", "animateur"]}><AdminLayout><Agenda /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/modules" element={
+              <ProtectedRoute roles={["admin", "responsable_admission"]}><AdminLayout><Modules /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/inscriptions" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Inscriptions /></AdminLayout></ProtectedRoute>

@@ -5,6 +5,9 @@ from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
 )
+from services.candidate_automation import (
+    send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
+)
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
 
@@ -69,4 +72,39 @@ async def run_formateur_dossier_reminders(user: dict = Depends(require_role("adm
     externe) — la boucle de fond (voir server.py) les envoie automatiquement
     toutes les 6h."""
     notified = await send_formateur_dossier_reminders()
+    return {"notified": notified}
+
+
+@router.post("/convocations/run")
+async def run_convocations(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel des convocations J-7 (test, ou cron externe) — la
+    boucle de fond (voir server.py) les envoie automatiquement chaque jour."""
+    notified = await send_convocations()
+    return {"notified": notified}
+
+
+@router.post("/attestations-auto/run")
+async def run_auto_attestations(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel des attestations de fin de formation
+    auto-générées (dernier jour / J+1) — la boucle de fond les envoie
+    automatiquement chaque jour."""
+    notified = await send_auto_attestations()
+    return {"notified": notified}
+
+
+@router.post("/satisfaction-chaud/run")
+async def run_satisfaction_chaud(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel du questionnaire de satisfaction à chaud (dernier
+    jour de formation) — la boucle de fond l'envoie automatiquement chaque
+    jour."""
+    notified = await send_satisfaction_chaud()
+    return {"notified": notified}
+
+
+@router.post("/satisfaction-froid/run")
+async def run_satisfaction_froid(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel du questionnaire de satisfaction à froid (1 à 2
+    mois après la fin de formation) — la boucle de fond l'envoie
+    automatiquement chaque jour."""
+    notified = await send_satisfaction_froid()
     return {"notified": notified}

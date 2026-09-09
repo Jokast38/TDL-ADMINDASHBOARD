@@ -8,8 +8,8 @@ from core.security import require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_DOCS_VIEW, PUBLIC_FRONTEND_URL
-from models.positioning_test import PositioningTestIn, PositioningTestSubmitIn
-from services.positioning_test_data import POSITIONING_QUESTIONS
+from models.positioning_test import PositioningTestIn, PositioningTestSubmitIn, PositioningTestSendIn
+from services.positioning_test_data import get_positioning_questions
 from services.pdf import render_html_pdf
 from services.email import send_email
 from services.push import send_push_to_users
@@ -27,6 +27,8 @@ async def create_positioning_test(payload: PositioningTestIn, user: dict = Depen
         "id": str(uuid.uuid4()),
         "token": secrets.token_urlsafe(16),
         "stagiaire_nom": payload.stagiaire_nom,
+        "stagiaire_email": payload.stagiaire_email,
+        "category": payload.category or "VTC_TAXI",
         "session": payload.session or "",
         "evaluateur": payload.evaluateur or "",
         "inscription_id": payload.inscription_id,
@@ -38,7 +40,39 @@ async def create_positioning_test(payload: PositioningTestIn, user: dict = Depen
     await db.positioning_tests.insert_one(doc)
     doc.pop("_id", None)
     doc["link"] = f"{PUBLIC_FRONTEND_URL}/test-positionnement/{doc['token']}"
+    if payload.stagiaire_email:
+        await _send_test_link_email(payload.stagiaire_email, payload.stagiaire_nom, doc["link"])
+        doc["email_sent"] = True
     return doc
+
+
+async def _send_test_link_email(email: str, nom: str, link: str) -> None:
+    await send_email(
+        email, "📋 Votre test de positionnement — TDL Formation",
+        f"<p>Bonjour {nom},</p>"
+        "<p>Merci de compléter votre test de positionnement en ligne avant votre entrée en formation :</p>"
+        f"<p><a href='{link}' style='background:#d4af37;color:#000;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold'>Accéder au test</a></p>"
+        "<p>TDL Formation</p>",
+    )
+
+
+@router.post("/{tid}/send")
+async def send_positioning_test_link(tid: str, payload: PositioningTestSendIn, user: dict = Depends(require_role(*ROLES_DOCS_VIEW))):
+    """Envoie (ou renvoie) le lien du test par email — à l'adresse fournie,
+    ou à celle déjà enregistrée à la création."""
+    t = await db.positioning_tests.find_one({"id": tid}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Test introuvable")
+    email = payload.email or t.get("stagiaire_email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Aucune adresse email — indiquez-en une")
+    if t["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Ce test a déjà été complété")
+    link = f"{PUBLIC_FRONTEND_URL}/test-positionnement/{t['token']}"
+    await _send_test_link_email(email, t["stagiaire_nom"], link)
+    if email != t.get("stagiaire_email"):
+        await db.positioning_tests.update_one({"id": tid}, {"$set": {"stagiaire_email": email}})
+    return {"ok": True}
 
 
 @router.get("")
@@ -61,7 +95,7 @@ async def get_positioning_test_public(token: str):
     return {
         "stagiaire_nom": t["stagiaire_nom"],
         "session": t["session"],
-        "questions": POSITIONING_QUESTIONS,
+        "questions": get_positioning_questions(t.get("category")),
     }
 
 
@@ -73,8 +107,9 @@ def _cb(checked: bool, label: str) -> str:
 
 
 def _build_result_html(t: dict, answers: dict, reponse_q17: str, domaines: list) -> str:
+    questions = get_positioning_questions(t.get("category"))
     rows = []
-    for i, q in enumerate(POSITIONING_QUESTIONS):
+    for i, q in enumerate(questions):
         chosen = answers.get(str(i))
         opts_html = " &nbsp;&nbsp; ".join(_cb(opt == chosen, opt) for opt in q["options"])
         rows.append(f"""
@@ -102,7 +137,7 @@ def _build_result_html(t: dict, answers: dict, reponse_q17: str, domaines: list)
     </table>
     <hr/>
     <h1 style="font-family:Helvetica-Bold;font-size:17pt;color:#0a0a0a;text-align:center;margin-bottom:2px;">Test de positionnement — Résultats</h1>
-    <p style="font-family:Helvetica-Bold;font-size:11pt;color:{GOLD};text-align:center;margin-top:0;">Formation VTC — Rempli en ligne par le candidat (RS5637)</p>
+    <p style="font-family:Helvetica-Bold;font-size:11pt;color:{GOLD};text-align:center;margin-top:0;">Catégorie : {t.get('category') or 'VTC_TAXI'} — Rempli en ligne par le candidat</p>
     <table width="100%" style="font-family:Helvetica;font-size:9.5pt;margin:10px 0;">
       <tr><td width="50%">Nom et prénom : <b>{t['stagiaire_nom']}</b></td><td width="50%">Date de passation : <b>{now_iso()[:10]}</b></td></tr>
       <tr><td>Session : <b>{t.get('session') or '—'}</b></td><td>Évaluateur assigné : <b>{t.get('evaluateur') or '—'}</b></td></tr>
@@ -111,11 +146,11 @@ def _build_result_html(t: dict, answers: dict, reponse_q17: str, domaines: list)
       {"".join(rows)}
     </table>
     <p style="font-family:Helvetica;font-size:9.5pt;margin-top:10px;">
-      <b>17. Deux comportements favorisant une prise en charge professionnelle (réponse libre) :</b><br/>
+      <b>{len(questions) + 1}. Deux comportements favorisant une prise en charge professionnelle (réponse libre) :</b><br/>
       {reponse_q17 or '<i>Non renseigné</i>'}
     </p>
     <p style="font-family:Helvetica;font-size:9.5pt;">
-      <b>18. Domaines à renforcer selon le candidat :</b><br/>{domaines_html}
+      <b>{len(questions) + 2}. Domaines à renforcer selon le candidat :</b><br/>{domaines_html}
     </p>
     <div style="page-break-before: always;"></div>
     <h2 style="font-family:Helvetica-Bold;font-size:13pt;color:#0a0a0a;">Partie évaluateur — à compléter manuellement</h2>
@@ -126,7 +161,7 @@ def _build_result_html(t: dict, answers: dict, reponse_q17: str, domaines: list)
         <td style="padding:6px;color:{GOLD};"><b>Adaptation pédagogique</b></td>
       </tr>
       <tr>
-        <td style="padding:8px;">........ / 16</td>
+        <td style="padding:8px;">........ / {len(questions)}</td>
         <td style="padding:8px;">{_cb(False, "Bases fragiles")} {_cb(False, "Intermédiaire")} {_cb(False, "Satisfaisant")}</td>
         <td style="padding:8px;">{_cb(False, "Renforcement ciblé")} {_cb(False, "Parcours standard")} {_cb(False, "Accompagnement individuel")}</td>
       </tr>
