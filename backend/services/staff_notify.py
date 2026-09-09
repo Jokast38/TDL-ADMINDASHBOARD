@@ -8,10 +8,44 @@ from services.email import send_email
 from services.push import send_push_to_users
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
+CEO_EMAIL = "r.tafial@curbee.fr"
+DOSSIER_MILESTONE_STEP = 50
 
 # Rôles concernés par les demandes de rappel (mêmes que _NOTIFY_ROLES dans
 # routers/callback.py — dupliqué ici pour éviter un import circulaire).
 CALLBACK_NOTIFY_ROLES = ("responsable_admission", "agent_admin", "commercial", "responsable_commercial")
+
+
+async def check_dossier_milestone(user_id: str) -> None:
+    """Félicite l'employé (email + push) et notifie le CEO dès qu'il franchit
+    un multiple de DOSSIER_MILESTONE_STEP dossiers traités (inscriptions
+    traitées + demandes de rappel traitées cumulées) — à appeler juste après
+    chaque action de traitement (voir routers/inscriptions.py::update_inscription
+    et routers/callback.py::update_callback_request)."""
+    inscr_count = await db.inscriptions.count_documents({"processed_by": user_id})
+    callback_count = await db.callback_requests.count_documents({"handled_by": user_id})
+    u = await db.users.find_one({"id": user_id}, {"_id": 0, "name": 1, "email": 1, "manual_dossier_adjustment": 1})
+    if not u:
+        return
+    total = inscr_count + callback_count + (u.get("manual_dossier_adjustment") or 0)
+    if total <= 0 or total % DOSSIER_MILESTONE_STEP != 0:
+        return
+    if u.get("email"):
+        await send_email(
+            u["email"], f"🏆 Félicitations — {total} dossiers traités !",
+            f"<p>Bonjour {u.get('name', '')},</p>"
+            f"<p>Vous venez de traiter votre <b>{total}ᵉ dossier</b> ! Merci pour votre sérieux et votre engagement, "
+            "ça ne passe pas inaperçu.</p><p>L'équipe TDL Formation</p>",
+        )
+    await send_email(
+        CEO_EMAIL, f"🏆 {u.get('name', '')} a traité {total} dossiers",
+        f"<p>Bonjour,</p><p><b>{u.get('name', '')}</b> ({u.get('email', '')}) vient de franchir la barre des "
+        f"<b>{total} dossiers traités</b> (inscriptions + demandes de rappel).</p><p>TDL Formation — Suivi d'activité</p>",
+    )
+    try:
+        await send_push_to_users([user_id], "🏆 Félicitations !", f"Vous avez traité {total} dossiers", "/admin/activite")
+    except Exception:
+        pass
 
 # Une demande toute fraîche (< 1h) ne doit pas déclencher de rappel dès le
 # premier passage de la boucle — l'email de notification immédiate suffit,

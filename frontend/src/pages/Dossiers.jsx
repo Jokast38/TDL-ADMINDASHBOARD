@@ -10,7 +10,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Kanban, FolderOpen, ArrowSquareOut, FileArrowUp, CheckCircle, XCircle, PaperPlaneTilt, Warning, Trash, MagnifyingGlass } from "@phosphor-icons/react";
+import {
+  Kanban, FolderOpen, ArrowSquareOut, FileArrowUp, CheckCircle, XCircle, PaperPlaneTilt, Warning, Trash, MagnifyingGlass,
+  Calendar, EnvelopeSimple, ClipboardText, PenNib, Books, Smiley, Clock,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const COLUMNS = [
@@ -28,6 +31,7 @@ export default function Dossiers() {
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
   const [docs, setDocs] = useState([]);
+  const [full, setFull] = useState(null);
   const [notes, setNotes] = useState("");
   const [dragging, setDragging] = useState(null);
   const [q, setQ] = useState("");
@@ -52,6 +56,8 @@ export default function Dossiers() {
     setNotes(fresh.data.notes || "");
     const r = await api.get(`/dossiers/${d.id}/documents`);
     setDocs(r.data);
+    setFull(null);
+    api.get(`/dossiers/${d.id}/full`).then((res) => setFull(res.data)).catch(() => setFull(null));
   };
 
   const moveTo = async (id, status) => {
@@ -360,6 +366,81 @@ export default function Dossiers() {
                   ))}
                   {!docs.length && <p className="text-sm text-gray-400 text-center py-4">Aucun document.</p>}
                 </div>
+              </div>
+
+              <div className="mt-6 border-t border-gray-200 pt-4">
+                <p className="overline mb-3">Vue 360 — parcours du candidat</p>
+                {!full ? (
+                  <p className="text-sm text-gray-400">Chargement...</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="border border-gray-200 rounded-md p-3">
+                      <p className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 mb-1"><Calendar size={13} /> Session</p>
+                      {full.stage ? (
+                        <p className="text-sm">{full.stage.date_debut} → {full.stage.date_fin} · {full.stage.lieu_ville}</p>
+                      ) : <p className="text-sm text-gray-400">Aucune session affectée</p>}
+                    </div>
+
+                    <div className="border border-gray-200 rounded-md p-3">
+                      <p className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 mb-1"><EnvelopeSimple size={13} /> Convocation & attestation</p>
+                      <p className="text-sm">
+                        Convocation : {full.inscription?.convocation_sent_at ? <span className="text-[#0B7238]">envoyée</span> : <span className="text-gray-400">non envoyée</span>}
+                      </p>
+                      <p className="text-sm">
+                        Attestation : {full.inscription?.attestation_auto_sent_at ? <span className="text-[#0B7238]">envoyée</span> : <span className="text-gray-400">non envoyée</span>}
+                      </p>
+                    </div>
+
+                    <div className="border border-gray-200 rounded-md p-3">
+                      <p className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 mb-1"><ClipboardText size={13} /> Test de positionnement</p>
+                      {full.positioning_tests?.length ? full.positioning_tests.map((t) => (
+                        <p key={t.id} className="text-sm">
+                          {t.status === "submitted" ? <span className="text-[#0B7238]">Complété</span> : <span className="text-gray-400">En attente</span>}
+                          {t.category ? ` · ${t.category}` : ""}
+                        </p>
+                      )) : <p className="text-sm text-gray-400">Aucun test créé</p>}
+                    </div>
+
+                    <div className="border border-gray-200 rounded-md p-3">
+                      <p className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 mb-1"><Books size={13} /> Test de français</p>
+                      {full.french_tests?.length ? full.french_tests.map((t) => (
+                        <p key={t.id} className="text-sm">
+                          {t.status === "submitted" ? <span className="text-[#0B7238]">Complété</span> : <span className="text-gray-400">En attente</span>}
+                          {t.category ? ` · ${t.category}` : ""}
+                        </p>
+                      )) : <p className="text-sm text-gray-400">Aucun test créé</p>}
+                    </div>
+
+                    <div className="border border-gray-200 rounded-md p-3">
+                      <p className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 mb-1"><PenNib size={13} /> Émargements</p>
+                      {full.emargements?.length ? (
+                        <p className="text-sm">{full.emargements.filter((e) => e.present).length}/{full.emargements.length} journée(s)/créneau(x) signé(s) présent</p>
+                      ) : <p className="text-sm text-gray-400">Aucun émargement</p>}
+                    </div>
+
+                    <div className="border border-gray-200 rounded-md p-3">
+                      <p className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 mb-1"><Smiley size={13} /> Satisfaction</p>
+                      <p className="text-sm">
+                        À chaud : {full.satisfaction?.some((s) => s.type === "chaud") ? <span className="text-[#0B7238]">répondu</span> : (full.inscription?.chaud_sent_at ? "envoyé, en attente" : <span className="text-gray-400">non envoyé</span>)}
+                      </p>
+                      <p className="text-sm">
+                        À froid : {full.satisfaction?.some((s) => s.type === "froid") ? <span className="text-[#0B7238]">répondu</span> : (full.inscription?.froid_sent_at ? "envoyé, en attente" : <span className="text-gray-400">non envoyé</span>)}
+                      </p>
+                    </div>
+
+                    <div className="border border-gray-200 rounded-md p-3 sm:col-span-2">
+                      <p className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 mb-1"><Clock size={13} /> Historique des emails ({full.emails?.length || 0})</p>
+                      <div className="max-h-32 overflow-y-auto space-y-1">
+                        {(full.emails || []).slice(0, 10).map((e, i) => (
+                          <p key={i} className="text-xs text-gray-500 truncate">
+                            {e.created_at?.slice(0, 10)} — {e.subject} <span className={e.status === "sent" || e.status === "mocked" ? "text-[#0B7238]" : "text-red-500"}>({e.status})</span>
+                          </p>
+                        ))}
+                        {!full.emails?.length && <p className="text-xs text-gray-400">Aucun email envoyé.</p>}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

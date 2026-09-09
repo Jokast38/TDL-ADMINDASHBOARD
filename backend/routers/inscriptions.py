@@ -17,7 +17,7 @@ from services.trello import TrelloService
 from services.n8n import trigger_n8n
 from services.email import send_email
 from services.email_template import render_branded_email
-from services.staff_notify import notify_new_contact, CATEGORY_LABELS
+from services.staff_notify import notify_new_contact, CATEGORY_LABELS, check_dossier_milestone
 from services.meta_capi import send_capi_event
 
 router = APIRouter(tags=["inscriptions"])
@@ -351,7 +351,18 @@ async def update_inscription(iid: str, payload: InscriptionUpdate, user: dict = 
     if not update:
         raise HTTPException(status_code=400, detail="Aucune modification fournie")
     update["updated_at"] = now_iso()
+    # `contact_status` est le signal qu'un membre de l'équipe vient de traiter
+    # cette inscription (relance, tag prospect non qualifié, finalisation...)
+    # — tracé pour la page Activité et la récompense des 50 dossiers traités
+    # (voir services/staff_notify.py::check_dossier_milestone).
+    if "contact_status" in update:
+        update["processed_by"] = user["id"]
     await db.inscriptions.update_one({"id": iid}, {"$set": update})
+    if "contact_status" in update:
+        try:
+            await check_dossier_milestone(user["id"])
+        except Exception:
+            pass
     return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
 
 
@@ -448,6 +459,58 @@ async def get_dossier(did: str, user: dict = Depends(get_current_user)):
     d["documents_manquants"] = manquants
     d["nb_documents_manquants"] = len(manquants)
     return d
+
+
+@router.get("/dossiers/{did}/full")
+async def get_dossier_full(did: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Vue centralisée du dossier candidat (cahier des charges — section
+    « Centralisation dans le dossier candidat ») : réunit en un seul appel
+    tout ce qui est aujourd'hui éparpillé entre plusieurs pages/outils —
+    session affectée, convocation, tests de positionnement/français,
+    émargements, questionnaires de satisfaction, attestation, historique des
+    emails envoyés — pour que l'équipe n'ait plus besoin de chercher ailleurs."""
+    d = await db.dossiers.find_one({"id": did}, {"_id": 0})
+    if not d:
+        raise HTTPException(status_code=404, detail="Dossier introuvable")
+
+    inscription = await db.inscriptions.find_one({"id": d.get("inscription_id")}, {"_id": 0}) if d.get("inscription_id") else None
+    stage = None
+    if inscription and inscription.get("stage_id"):
+        stage = await db.stages.find_one({"id": inscription["stage_id"]}, {"_id": 0})
+
+    insc_id = d.get("inscription_id")
+    # Le lien via inscription_id n'est renseigné que lorsque le test est créé
+    # depuis le sélecteur « apprenant existant » — à défaut, on retrouve aussi
+    # les tests créés par simple saisie du nom (cas le plus courant).
+    name_query = {"stagiaire_nom": {"$regex": f"^{re.escape(d.get('student_name', ''))}$", "$options": "i"}} if d.get("student_name") else {}
+    positioning_tests = await db.positioning_tests.find(
+        {"$or": [{"inscription_id": insc_id}, name_query]} if insc_id and name_query else ({"inscription_id": insc_id} if insc_id else name_query),
+        {"_id": 0, "answers": 0}
+    ).sort("created_at", -1).to_list(10) if (insc_id or name_query) else []
+    french_tests = await db.french_tests.find(
+        {"$or": [{"inscription_id": insc_id}, name_query]} if insc_id and name_query else ({"inscription_id": insc_id} if insc_id else name_query),
+        {"_id": 0, "reponses": 0}
+    ).sort("created_at", -1).to_list(10) if (insc_id or name_query) else []
+    emargements = await db.emargements.find(
+        {"inscription_id": insc_id}, {"_id": 0}
+    ).sort("session_date", 1).to_list(100) if insc_id else []
+    satisfaction = await db.satisfaction_responses.find(
+        {"inscription_id": insc_id}, {"_id": 0}
+    ).to_list(10) if insc_id else []
+    emails = await db.email_logs.find(
+        {"to": d.get("student_email")}, {"_id": 0, "body": 0}
+    ).sort("created_at", -1).to_list(30) if d.get("student_email") else []
+
+    return {
+        "dossier": d,
+        "inscription": inscription,
+        "stage": stage,
+        "positioning_tests": positioning_tests,
+        "french_tests": french_tests,
+        "emargements": emargements,
+        "satisfaction": satisfaction,
+        "emails": emails,
+    }
 
 
 @router.put("/dossiers/{did}")

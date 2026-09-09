@@ -196,7 +196,10 @@ export default function Stages() {
   };
 
   const groupedByFormation = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    // Évite toISOString() (conversion UTC) qui décale la date d'un jour
+    // selon le fuseau horaire et l'heure locale.
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const groups = new Map();
     for (const s of items) {
       const key = s.formation_id || "sans-formation";

@@ -45,6 +45,16 @@ class AgrementBafmIn(BaseModel):
     agrement_bafm_numero: Optional[str] = None
 
 
+class DossierAdjustmentIn(BaseModel):
+    # Ajustement manuel (positif ou négatif) du nombre de dossiers traités,
+    # ajouté au décompte automatique (voir GET /employees/activity) — sert à
+    # créditer un travail effectué avant la mise en place du traçage
+    # automatique (`processed_by`), qu'il est impossible de reconstituer avec
+    # certitude après coup.
+    manual_dossier_adjustment: int = 0
+    note: Optional[str] = None
+
+
 class ConventionSignIn(BaseModel):
     # Signature manuscrite capturée dans l'espace formateur pour signer la
     # convention de collaboration (voir POST /me/convention/sign) — utilisée

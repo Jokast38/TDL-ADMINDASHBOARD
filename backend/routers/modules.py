@@ -167,7 +167,12 @@ async def get_agenda(date_from: Optional[str] = None, date_to: Optional[str] = N
     date_from = date_from or today.isoformat()
     date_to = date_to or (today + timedelta(days=30)).isoformat()
 
-    q = {"modules": {"$exists": True, "$ne": []}}
+    # Toutes les sessions qui chevauchent la période — pas seulement celles
+    # avec un calendrier de modules déjà détaillé, sinon l'agenda reste vide
+    # tant que personne n'a saisi de modules (la plupart des sessions
+    # existantes n'en ont pas encore). Les sessions sans modules apparaissent
+    # comme un bloc « journée » générique au nom de la formation.
+    q = {"date_debut": {"$lte": date_to}, "date_fin": {"$gte": date_from}, "statut": {"$ne": "annule"}}
     if user["role"] == "animateur":
         q["$or"] = [{"animateur_ids": user["id"]}, {"animateur_id": user["id"]}]
     stages = await db.stages.find(q, {"_id": 0}).to_list(500)
@@ -177,25 +182,55 @@ async def get_agenda(date_from: Optional[str] = None, date_to: Optional[str] = N
         for m in s.get("modules") or []:
             if m.get("animateur_id"):
                 animateur_ids.add(m["animateur_id"])
+        for aid in (s.get("animateur_ids") or ([s["animateur_id"]] if s.get("animateur_id") else [])):
+            animateur_ids.add(aid)
     animateurs = await db.users.find({"id": {"$in": list(animateur_ids)}}, {"_id": 0, "id": 1, "name": 1}).to_list(200)
     animateur_names = {a["id"]: a["name"] for a in animateurs}
 
     events = []
     for s in stages:
-        for m in s.get("modules") or []:
-            if not (date_from <= m.get("date", "") <= date_to):
+        modules = s.get("modules") or []
+        if modules:
+            for m in modules:
+                if not (date_from <= m.get("date", "") <= date_to):
+                    continue
+                events.append({
+                    "id": m.get("id"),
+                    "date": m.get("date"),
+                    "heure_debut": m.get("heure_debut"),
+                    "heure_fin": m.get("heure_fin"),
+                    "module_nom": m.get("module_nom"),
+                    "stage_id": s["id"],
+                    "formation_titre": s.get("formation_titre"),
+                    "lieu_ville": s.get("lieu_ville"),
+                    "animateur_id": m.get("animateur_id"),
+                    "animateur_nom": animateur_names.get(m.get("animateur_id"), ""),
+                })
+        else:
+            # Pas de calendrier détaillé : un bloc par jour de la session,
+            # dans la limite de la période demandée.
+            try:
+                d1 = max(datetime.fromisoformat(s["date_debut"][:10]).date(), datetime.fromisoformat(date_from).date())
+                d2 = min(datetime.fromisoformat(s["date_fin"][:10]).date(), datetime.fromisoformat(date_to).date())
+            except Exception:
                 continue
-            events.append({
-                "id": m.get("id"),
-                "date": m.get("date"),
-                "heure_debut": m.get("heure_debut"),
-                "heure_fin": m.get("heure_fin"),
-                "module_nom": m.get("module_nom"),
-                "stage_id": s["id"],
-                "formation_titre": s.get("formation_titre"),
-                "lieu_ville": s.get("lieu_ville"),
-                "animateur_id": m.get("animateur_id"),
-                "animateur_nom": animateur_names.get(m.get("animateur_id"), ""),
-            })
+            stage_animateur_ids = s.get("animateur_ids") or ([s["animateur_id"]] if s.get("animateur_id") else [])
+            animateur_nom = ", ".join(animateur_names.get(aid, "") for aid in stage_animateur_ids if animateur_names.get(aid))
+            cur = d1
+            while cur <= d2:
+                events.append({
+                    "id": f"{s['id']}_{cur.isoformat()}",
+                    "date": cur.isoformat(),
+                    "heure_debut": "09:00",
+                    "heure_fin": "17:00",
+                    "module_nom": s.get("formation_titre") or "Session",
+                    "stage_id": s["id"],
+                    "formation_titre": s.get("formation_titre"),
+                    "lieu_ville": s.get("lieu_ville"),
+                    "animateur_id": stage_animateur_ids[0] if stage_animateur_ids else None,
+                    "animateur_nom": animateur_nom,
+                    "is_session_fallback": True,
+                })
+                cur += timedelta(days=1)
     events.sort(key=lambda e: (e["date"], e.get("heure_debut") or ""))
     return {"events": events, "date_from": date_from, "date_to": date_to}

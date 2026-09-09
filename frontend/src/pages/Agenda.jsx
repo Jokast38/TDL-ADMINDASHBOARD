@@ -30,7 +30,15 @@ function colorFor(key) {
   return PALETTE[h % PALETTE.length];
 }
 
-function toISO(d) { return d.toISOString().slice(0, 10); }
+// Évite toISOString() (conversion UTC) qui décale la date d'un jour selon le
+// fuseau horaire et l'heure locale — on formate directement les composants
+// de la date locale.
+function toISO(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function startOfWeek(d) {
   const x = new Date(d);
   const day = x.getDay();

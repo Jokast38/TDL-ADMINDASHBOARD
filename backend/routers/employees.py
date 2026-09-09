@@ -8,7 +8,7 @@ from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
-from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn
+from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 from services.pdf import generate_formateur_convention_pdf
 from services.email import send_email
@@ -418,7 +418,8 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
     ce suivi n'apparaissent pas rétroactivement."""
     staff = await db.users.find(
         {"role": {"$in": list(VALID_STAFF_ROLES)}},
-        {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1, "active": 1},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1, "assigned_categories": 1, "assigned_centers": 1,
+         "assigned_training_assignments": 1, "active": 1, "manual_dossier_adjustment": 1, "manual_dossier_adjustment_note": 1},
     ).to_list(500)
 
     result = []
@@ -428,6 +429,7 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
         leads_interesse = await db.leads.count_documents({"last_contacted_by": uid, "status": "interesse"})
         leads_pas_interesse = await db.leads.count_documents({"last_contacted_by": uid, "status": "pas_interesse"})
         callbacks_handled = await db.callback_requests.count_documents({"handled_by": uid})
+        inscriptions_traitees = await db.inscriptions.count_documents({"processed_by": uid})
 
         assigned = s.get("assigned_categories") or []
         pending_workload = None
@@ -437,17 +439,43 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
                 "contacted": {"$ne": True},
             })
 
+        adjustment = s.get("manual_dossier_adjustment") or 0
+        total_dossiers = leads_contacted + inscriptions_traitees + callbacks_handled + adjustment
         result.append({
             **s,
             "leads_contacted": leads_contacted,
             "leads_interesse": leads_interesse,
             "leads_pas_interesse": leads_pas_interesse,
             "callbacks_handled": callbacks_handled,
+            "inscriptions_traitees": inscriptions_traitees,
+            "manual_dossier_adjustment": adjustment,
+            "total_dossiers_traites": total_dossiers,
             "pending_workload": pending_workload,
         })
 
-    result.sort(key=lambda x: x["leads_contacted"], reverse=True)
+    result.sort(key=lambda x: x["total_dossiers_traites"], reverse=True)
     return result
+
+
+@router.put("/employees/{uid}/dossier-adjustment")
+async def set_dossier_adjustment(uid: str, payload: DossierAdjustmentIn, user: dict = Depends(require_role("admin"))):
+    """Ajustement manuel (positif ou négatif) ajouté au total de dossiers
+    traités d'un employé — sert à créditer un travail effectué avant la mise
+    en place du traçage automatique (`processed_by`), impossible à
+    reconstituer avec certitude après coup (voir GET /employees/activity)."""
+    u = await db.users.find_one({"id": uid}, {"_id": 0, "id": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="Employé introuvable")
+    await db.users.update_one({"id": uid}, {"$set": {
+        "manual_dossier_adjustment": payload.manual_dossier_adjustment,
+        "manual_dossier_adjustment_note": payload.note,
+    }})
+    from services.staff_notify import check_dossier_milestone
+    try:
+        await check_dossier_milestone(uid)
+    except Exception:
+        pass
+    return {"ok": True}
 
 
 @router.get("/staff/{uid}/profile")

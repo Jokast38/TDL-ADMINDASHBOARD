@@ -6,7 +6,7 @@ from core.security import require_role
 from core.utils import now_iso
 from core.config import ROLES_DOSSIERS_MGMT
 from models.callback import CallbackRequestIn, CallbackRequestUpdate
-from services.staff_notify import notify_new_contact, CATEGORY_LABELS
+from services.staff_notify import notify_new_contact, CATEGORY_LABELS, check_dossier_milestone
 from services.meta_capi import send_capi_event
 from routers.leads import create_lead_from_contact
 
@@ -145,6 +145,11 @@ async def update_callback_request(cid: str, payload: CallbackRequestUpdate, user
         update["handled_by"] = user["id"]
     update["updated_at"] = now_iso()
     await db.callback_requests.update_one({"id": cid}, {"$set": update})
+    if update.get("handled"):
+        try:
+            await check_dossier_milestone(user["id"])
+        except Exception:
+            pass
     return await db.callback_requests.find_one({"id": cid}, {"_id": 0})
 
 

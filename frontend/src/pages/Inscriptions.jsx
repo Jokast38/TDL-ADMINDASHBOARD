@@ -34,12 +34,14 @@ const PAYMENT_PAID_LIKE = ["paid", "cpf_valide"];
 const CONTACT_STATUS_LABEL = {
   en_cours: "En cours d'inscription", a_contacter: "À contacter",
   sans_reponse: "Sans réponse", finalisee: "Inscription finalisée",
+  non_qualifie: "Prospect non qualifié",
 };
 const CONTACT_STATUS_COLOR = {
   en_cours: "bg-blue-100 text-blue-700 hover:bg-blue-100",
   a_contacter: "bg-[#F5A623]/10 text-[#F5A623] hover:bg-[#F5A623]/10",
   sans_reponse: "bg-red-100 text-red-700 hover:bg-red-100",
   finalisee: "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10",
+  non_qualifie: "bg-gray-200 text-gray-600 hover:bg-gray-200",
 };
 
 // Statut du dossier de traitement (voir backend/routers/inscriptions.py — collection

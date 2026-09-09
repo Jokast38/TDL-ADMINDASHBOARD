@@ -99,6 +99,7 @@ export default function DocumentsLibrary() {
   const [staff, setStaff] = useState([]);
   const [creatingTest, setCreatingTest] = useState(false);
   const [testEmail, setTestEmail] = useState("");
+  const [testDossierQuery, setTestDossierQuery] = useState("");
   const [deletingTestId, setDeletingTestId] = useState(null);
   const [sendTarget, setSendTarget] = useState(null); // { kind: "positioning"|"french", test }
   const [sendEmailInput, setSendEmailInput] = useState("");
@@ -108,6 +109,7 @@ export default function DocumentsLibrary() {
   const [ftOpen, setFtOpen] = useState(false);
   const [ftNom, setFtNom] = useState("");
   const [ftEmail, setFtEmail] = useState("");
+  const [ftDossierQuery, setFtDossierQuery] = useState("");
   const [ftCategory, setFtCategory] = useState("SSIAP");
   const [ftSession, setFtSession] = useState("");
   const [ftEvaluateur, setFtEvaluateur] = useState("");
@@ -507,6 +509,33 @@ export default function DocumentsLibrary() {
             </p>
             <div className="space-y-3">
               <div>
+                <label className="text-sm font-medium">Choisir un apprenant existant (optionnel)</label>
+                <Input
+                  placeholder="Rechercher par nom..."
+                  value={testDossierQuery}
+                  onChange={(e) => setTestDossierQuery(e.target.value)}
+                  className="mb-2"
+                  data-testid="test-dossier-search"
+                />
+                {testDossierQuery && (
+                  <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-md divide-y">
+                    {dossiers.filter((d) => d.student_name?.toLowerCase().includes(testDossierQuery.toLowerCase())).slice(0, 20).map((d) => (
+                      <button
+                        type="button" key={d.id}
+                        onClick={() => { setTestNom(d.student_name); setTestEmail(d.student_email || ""); setTestDossierQuery(""); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                      >
+                        <span className="font-medium">{d.student_name}</span>
+                        <span className="text-xs text-gray-400 ml-2">{d.formation_title}</span>
+                      </button>
+                    ))}
+                    {!dossiers.filter((d) => d.student_name?.toLowerCase().includes(testDossierQuery.toLowerCase())).length && (
+                      <p className="px-3 py-2 text-xs text-gray-400">Aucun apprenant trouvé.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div>
                 <label className="text-sm font-medium">Nom du candidat</label>
                 <Input value={testNom} onChange={(e) => setTestNom(e.target.value)} data-testid="test-nom" />
               </div>
@@ -563,6 +592,33 @@ export default function DocumentsLibrary() {
               (situation, QCM, calcul, phrases) est thématisé automatiquement selon la catégorie de formation choisie.
             </p>
             <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium">Choisir un apprenant existant (optionnel)</label>
+                <Input
+                  placeholder="Rechercher par nom..."
+                  value={ftDossierQuery}
+                  onChange={(e) => setFtDossierQuery(e.target.value)}
+                  className="mb-2"
+                  data-testid="ft-dossier-search"
+                />
+                {ftDossierQuery && (
+                  <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-md divide-y">
+                    {dossiers.filter((d) => d.student_name?.toLowerCase().includes(ftDossierQuery.toLowerCase())).slice(0, 20).map((d) => (
+                      <button
+                        type="button" key={d.id}
+                        onClick={() => { setFtNom(d.student_name); setFtEmail(d.student_email || ""); setFtDossierQuery(""); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                      >
+                        <span className="font-medium">{d.student_name}</span>
+                        <span className="text-xs text-gray-400 ml-2">{d.formation_title}</span>
+                      </button>
+                    ))}
+                    {!dossiers.filter((d) => d.student_name?.toLowerCase().includes(ftDossierQuery.toLowerCase())).length && (
+                      <p className="px-3 py-2 text-xs text-gray-400">Aucun apprenant trouvé.</p>
+                    )}
+                  </div>
+                )}
+              </div>
               <div>
                 <label className="text-sm font-medium">Nom du candidat</label>
                 <Input value={ftNom} onChange={(e) => setFtNom(e.target.value)} data-testid="ft-nom" />
