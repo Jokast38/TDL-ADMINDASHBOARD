@@ -288,7 +288,7 @@ export default function Stages() {
               <Plus size={16} className="mr-1" /> Planifier une session
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{editingId ? "Modifier la session" : "Nouvelle session de stage"}</DialogTitle></DialogHeader>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
               <div className="sm:col-span-2">
