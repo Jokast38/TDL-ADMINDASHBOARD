@@ -273,6 +273,7 @@ function Hero({
                 <select
                   value={ville}
                   onChange={(e) => setVille(e.target.value)}
+                  aria-label="Choisissez votre ville"
                   className="w-full bg-[#1a1a1a] text-white text-sm rounded-md pl-8 pr-3 py-2.5 border border-white/10 appearance-none"
                 >
                   <option value="">Choisissez votre ville</option>

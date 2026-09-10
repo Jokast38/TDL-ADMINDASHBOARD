@@ -106,7 +106,15 @@ function AdminLayout({ children }) {
 // Fallback minimal pendant le chargement du chunk de la route — évite un
 // écran blanc sans pour autant peser sur le bundle initial.
 function RouteFallback() {
-  return <div className="min-h-screen" />;
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
+      <div
+        className="w-8 h-8 rounded-full border-[3px] border-[#d4af37]/25 border-t-[#d4af37] animate-spin"
+        role="status"
+        aria-label="Chargement"
+      />
+    </div>
+  );
 }
 
 function App() {

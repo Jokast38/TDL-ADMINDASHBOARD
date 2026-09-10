@@ -86,6 +86,22 @@
     </head>
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>
+        <!-- Repère visuel affiché avant même que React ne soit chargé/exécuté
+        (pur CSS, aucune dépendance JS) : sans lui, l'écran reste blanc pendant
+        le téléchargement + parsing du bundle JS sur mobile/4G lente, ce que
+        Lighthouse capture comme des vignettes vides dans le filmstrip. React
+        remplace tout le contenu de #root au montage, donc ce spinner
+        disparaît automatiquement dès que l'appli est prête — aucun nettoyage
+        à faire côté JS. -->
+        <style>
+          #root:empty { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #0a0a0a; }
+          #root:empty::after {
+            content: ""; width: 32px; height: 32px; border-radius: 50%;
+            border: 3px solid rgba(212, 175, 55, 0.25); border-top-color: #d4af37;
+            animation: tdl-spin 0.7s linear infinite;
+          }
+          @keyframes tdl-spin { to { transform: rotate(360deg); } }
+        </style>
         <div id="root"></div>
         <!--
       This HTML file is a template.

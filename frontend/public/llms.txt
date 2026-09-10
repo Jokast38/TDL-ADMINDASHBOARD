@@ -1,0 +1,20 @@
+# TDL Formation
+
+> Centre de formation professionnelle agréé en Île-de-France (Épinay-sur-Seine, Creil) : récupération de points de permis, CACES, auto-école, SSIAP, VTC/Taxi. Inscription en ligne, dossiers ANTS suivis, financement CPF.
+
+## Formations
+
+- [Stage de récupération de points](https://tdl-formation.fr/stage-recuperation-points): stage agréé de 2 jours, récupération jusqu'à 4 points.
+- [Formations CACES](https://tdl-formation.fr/formation-caces): certificats d'aptitude à la conduite d'engins en sécurité.
+- [SSIAP](https://tdl-formation.fr/formation-ssiap): agents et chefs d'équipe de sécurité incendie (SSIAP 1, 2, 3).
+- [Formation VTC](https://tdl-formation.fr/formation-vtc): préparation à l'examen VTC et formation continue.
+- [Formation Taxi](https://tdl-formation.fr/formation-taxi): préparation au certificat de capacité professionnelle taxi.
+- [Passerelle Taxi banlieue parisienne](https://tdl-formation.fr/passerelle-taxi-banlieue-parisien): transition VTC vers la carte professionnelle taxi.
+- [Mobilité Taxi parisien](https://tdl-formation.fr/mobilite-taxi): module de connaissance du territoire parisien.
+- [Toutes les formations](https://tdl-formation.fr/formations): catalogue complet avec sessions et tarifs.
+
+## Informations pratiques
+
+- [Foire aux questions](https://tdl-formation.fr/faq)
+- [Mentions légales](https://tdl-formation.fr/mentions-legales)
+- [Politique de confidentialité](https://tdl-formation.fr/politique-de-confidentialite)

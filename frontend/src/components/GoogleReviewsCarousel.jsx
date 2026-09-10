@@ -5,7 +5,7 @@ import { Star, StarHalf, ArrowSquareOut } from "@phosphor-icons/react";
 const GOLD = "#f5c518";
 
 const StarRow = ({ rating = 0, size = 18 }) => (
-  <div className="flex gap-1" aria-label={`${rating} sur 5 étoiles`}>
+  <div className="flex gap-1" role="img" aria-label={`${rating} sur 5 étoiles`}>
     {[1, 2, 3, 4, 5].map((i) => {
       if (rating >= i) return <Star key={i} weight="fill" size={size} style={{ color: GOLD }} />;
       if (rating >= i - 0.5) return <StarHalf key={i} weight="fill" size={size} style={{ color: GOLD }} />;
