@@ -79,20 +79,29 @@ const callbackInterest = (c) => {
 // saisie sur place par un agent, et un import en masse (Excel) qui suit un
 // traitement différent (financement CPF à instruire, pas de contact initial
 // à passer) — d'où l'intérêt de pouvoir l'isoler.
+// "meta_ads" n'est pas une vraie valeur d'origine (c'est un sous-ensemble de
+// ORIGIN_WEBSITE, détecté via `from_meta_ads` — voir backend/routers/
+// inscriptions.py) mais on la propose dans le même filtre "Origine" par
+// commodité : c'est la question qu'on se pose le plus souvent ("est-ce que ça
+// vient de la pub ?"), pas la peine d'ajouter un filtre séparé pour ça.
+const ORIGIN_META_ADS = "meta_ads";
 const ORIGIN_IMPORTED = "imported";
 const ORIGIN_WALKIN = "walkin";
 const ORIGIN_WEBSITE = "website";
 const ORIGIN_LABEL = {
-  [ORIGIN_WEBSITE]: "Site internet", [ORIGIN_WALKIN]: "Sur place (agent)", [ORIGIN_IMPORTED]: "Import Excel",
+  [ORIGIN_WEBSITE]: "Site internet", [ORIGIN_META_ADS]: "Pub Meta",
+  [ORIGIN_WALKIN]: "Sur place (agent)", [ORIGIN_IMPORTED]: "Import Excel",
 };
 const ORIGIN_COLOR = {
   [ORIGIN_WEBSITE]: "bg-blue-50 text-blue-700 border-blue-200",
+  [ORIGIN_META_ADS]: "bg-indigo-50 text-indigo-700 border-indigo-200",
   [ORIGIN_WALKIN]: "bg-purple-50 text-purple-700 border-purple-200",
   [ORIGIN_IMPORTED]: "bg-teal-50 text-teal-700 border-teal-200",
 };
 const getOrigin = (i) => {
   if ((i.source || "").startsWith("excel_import")) return ORIGIN_IMPORTED;
   if (i.source === "admin_walkin") return ORIGIN_WALKIN;
+  if (i.from_meta_ads) return ORIGIN_META_ADS;
   return ORIGIN_WEBSITE;
 };
 
@@ -407,6 +416,11 @@ export default function Inscriptions() {
                     Intérêt : {callbackInterest(c)}
                   </p>
                   {c.center && <p className="text-xs text-gray-500 mt-0.5">Centre : {c.center}</p>}
+                  {c.from_meta_ads && (
+                    <Badge variant="outline" className="text-[10px] mt-1 bg-indigo-50 text-indigo-700 border-indigo-200">
+                      Pub Meta
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button

@@ -16,7 +16,12 @@
         <link rel="apple-touch-icon" href="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
+        <!-- Chargée en non-bloquant (media="print" puis bascule sur "all" au
+        chargement) : une feuille de style Google Fonts classique bloque le
+        premier rendu le temps de sa récupération réseau (voir Lighthouse
+        "Requêtes de blocage du rendu"). -->
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+        <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" /></noscript>
         <!--
         manifest.json provides metadata used when your web app is installed on a
         user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/

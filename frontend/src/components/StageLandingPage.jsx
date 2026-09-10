@@ -59,7 +59,7 @@ function StageNav({ ctaLabel = "Réserver une session", ctaHref = "#form" }) {
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
+          <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" width="40" height="40" className="w-10 h-10 rounded object-contain bg-black" />
           <span className="font-display font-bold text-sm tracking-tight hidden lg:inline">TDL Formation</span>
         </Link>
         <nav className="hidden lg:flex items-center gap-6 text-xs font-semibold uppercase tracking-wide">
@@ -315,7 +315,10 @@ function Hero({
             className="relative aspect-[4/3] overflow-hidden bg-black"
             style={{ clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%, 0 32%)" }}
           >
-            <img src={heroImage} alt="" className="w-full h-full object-cover" style={{ objectPosition: "20% center" }} />
+            <img
+              src={heroImage} alt="" className="w-full h-full object-cover" style={{ objectPosition: "20% center" }}
+              loading="eager" fetchpriority="high"
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
           </div>
           {badgeNumber && (
@@ -589,7 +592,7 @@ function SessionBanner({ image, dateLabel, city, seats, price, priceLabel, origi
   return (
     <div className="bg-black text-white">
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-6 flex flex-col md:flex-row items-stretch gap-6">
-        <img src={image} alt="" className="w-full md:w-56 h-32 object-cover rounded-md shrink-0" />
+        <img src={image} alt="" width="224" height="128" loading="lazy" className="w-full md:w-56 h-32 object-cover rounded-md shrink-0" />
         <div className="flex-1 flex flex-col justify-center">
           <p className="text-[11px] font-bold uppercase tracking-widest mb-1" style={{ color: GOLD }}>Prochaine session</p>
           <p className="font-display text-2xl sm:text-3xl font-extrabold">{dateLabel}</p>

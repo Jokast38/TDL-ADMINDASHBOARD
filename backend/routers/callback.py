@@ -44,6 +44,9 @@ async def create_callback_request(payload: CallbackRequestIn, request: Request):
         "message": payload.message or "", "session": payload.session or "",
         "source": payload.source or "offre_fidelite", "interest": category,
         "center": payload.center or "",
+        # Voir routers/inscriptions.py — même logique : présence de `fbc` = arrivée
+        # via clic sur une pub Meta (fbclid), fiable contrairement à `source`.
+        "from_meta_ads": bool(payload.fbc),
         "handled": False, "notes": "",
         "created_at": now_iso(),
     }
@@ -58,7 +61,7 @@ async def create_callback_request(payload: CallbackRequestIn, request: Request):
         name=f"{payload.prenom} {payload.nom}".strip(),
         email=payload.email or None, phone=payload.telephone or None,
         interest=payload.session or CATEGORY_LABELS.get(category, "") or "",
-        notes=payload.message or "", source=doc["source"],
+        notes=payload.message or "", source=doc["source"], from_meta_ads=doc["from_meta_ads"],
     )
     if lead:
         await db.callback_requests.update_one({"id": doc["id"]}, {"$set": {"lead_id": lead["id"]}})

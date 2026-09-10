@@ -12,6 +12,11 @@ export default function CookieConsent() {
   const [visible, setVisible] = useState(false);
   const [customizing, setCustomizing] = useState(false);
   const [draft, setDraft] = useState({ analytics: false, marketing: false });
+  // Sur mobile, le bandeau complet cache une part trop importante du contenu
+  // (petits écrans = peu de hauteur disponible) — replié par défaut sur une
+  // version minimale (juste les 3 boutons), avec un texte "En savoir plus"
+  // pour dérouler l'explication complète si l'utilisateur le souhaite.
+  const [mobileExpanded, setMobileExpanded] = useState(false);
 
   useEffect(() => {
     // Pas de bandeau sur le dashboard interne (staff) — seulement les pages
@@ -37,17 +42,19 @@ export default function CookieConsent() {
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-[100] p-4 sm:p-6"
+      className="fixed inset-x-0 bottom-0 z-[100] p-2.5 sm:p-6"
       role="dialog"
       aria-label="Gestion des cookies"
       data-testid="cookie-consent-banner"
     >
-      <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-lg shadow-2xl p-5 sm:p-6">
+      <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-lg shadow-2xl p-3.5 sm:p-6">
         <div className="flex items-start gap-3">
-          <CookieIcon size={22} style={{ color: GOLD }} weight="fill" className="mt-0.5 shrink-0" />
-          <div className="min-w-0">
-            <h2 className="font-display font-bold text-base mb-1">Respect de votre vie privée</h2>
-            <p className="text-sm text-gray-600 leading-relaxed">
+          <CookieIcon size={20} style={{ color: GOLD }} weight="fill" className="mt-0.5 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display font-bold text-sm sm:text-base mb-1">Respect de votre vie privée</h2>
+            {/* Texte complet toujours visible dès sm ; replié sur mobile pour laisser
+                davantage voir le contenu de la page sous le bandeau. */}
+            <p className={`text-sm text-gray-600 leading-relaxed ${mobileExpanded ? "" : "hidden sm:block"}`}>
               Nous utilisons des cookies pour assurer le fonctionnement du site, mesurer notre audience et,
               si vous l'acceptez, personnaliser nos communications. Vous pouvez accepter, refuser ou choisir
               précisément vos préférences. Plus d'informations dans notre{" "}
@@ -55,6 +62,14 @@ export default function CookieConsent() {
                 politique de confidentialité
               </Link>.
             </p>
+            {!mobileExpanded && (
+              <button
+                onClick={() => setMobileExpanded(true)}
+                className="sm:hidden text-xs text-gray-500 underline mt-0.5"
+              >
+                En savoir plus
+              </button>
+            )}
           </div>
         </div>
 
@@ -96,11 +111,11 @@ export default function CookieConsent() {
           </div>
         )}
 
-        <div className="flex flex-wrap gap-2 mt-4 justify-end">
+        <div className="flex flex-wrap gap-2 mt-3 sm:mt-4 justify-end">
           {customizing ? (
             <button
               onClick={saveCustom}
-              className="px-4 py-2 text-sm font-semibold rounded-md bg-[#0a0a0a] text-white hover:bg-[#1a1a1a]"
+              className="px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-md bg-[#0a0a0a] text-white hover:bg-[#1a1a1a]"
               data-testid="cookie-save-custom"
             >
               Enregistrer mes choix
@@ -109,21 +124,21 @@ export default function CookieConsent() {
             <>
               <button
                 onClick={rejectAll}
-                className="px-4 py-2 text-sm font-semibold rounded-md border border-gray-300 hover:bg-gray-50"
+                className="px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-md border border-gray-300 hover:bg-gray-50"
                 data-testid="cookie-reject-all"
               >
                 Tout refuser
               </button>
               <button
                 onClick={() => { setDraft({ analytics: false, marketing: false }); setCustomizing(true); }}
-                className="px-4 py-2 text-sm font-semibold rounded-md border border-gray-300 hover:bg-gray-50"
+                className="px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-md border border-gray-300 hover:bg-gray-50"
                 data-testid="cookie-customize"
               >
                 Personnaliser
               </button>
               <button
                 onClick={acceptAll}
-                className="px-4 py-2 text-sm font-semibold rounded-md text-black hover:brightness-95"
+                className="px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-semibold rounded-md text-black hover:brightness-95"
                 style={{ backgroundColor: GOLD }}
                 data-testid="cookie-accept-all"
               >

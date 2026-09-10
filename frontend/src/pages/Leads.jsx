@@ -1821,6 +1821,11 @@ export default function Leads() {
                     {l.interest && (
                       <span className="block text-[10px] text-gray-400">{canonicalizeInterest(l.interest)}</span>
                     )}
+                    {l.from_meta_ads && (
+                      <Badge variant="outline" className="text-[10px] mt-1 bg-indigo-50 text-indigo-700 border-indigo-200">
+                        Pub Meta
+                      </Badge>
+                    )}
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex flex-wrap gap-1 max-w-[180px]">

@@ -371,6 +371,7 @@ def _normalize_lead_from_colmap(row: tuple, col_map: dict, source: str) -> Optio
 async def create_lead_from_contact(
     name: str, email: Optional[str], phone: Optional[str],
     interest: str = "", notes: str = "", source: str = "contact",
+    from_meta_ads: bool = False,
 ) -> Optional[dict]:
     """Crée (ou retrouve, dédoublonné par email/téléphone) un lead à partir
     d'un formulaire de contact public — appelé par tous les points d'entrée
@@ -392,6 +393,7 @@ async def create_lead_from_contact(
         "tags": ["a_appeler"] if phone and not email else [],
         "contacted": False, "status": "nouveau", "source": source,
         "category": _category_for_interest(interest),
+        "from_meta_ads": from_meta_ads,
         "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.leads.insert_one(lead)

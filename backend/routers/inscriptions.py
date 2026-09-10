@@ -92,6 +92,13 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         "price": formation.get("price", 0), "payment_status": "pending",
         "status": "active", "contact_status": "en_cours", "notes": payload.notes or "", "created_at": now_iso(),
         "source": payload.source or "", "landing_url": payload.landing_url or "",
+        # `fbc` (cookie Meta Click ID) n'existe QUE si le visiteur est arrivé en
+        # cliquant sur une pub Meta (voir lib/metaPixel.js synthesizeFbc, reconstruit
+        # depuis ?fbclid= si le cookie n'a pas encore été posé) — sa seule présence
+        # distingue donc de façon fiable une inscription "vient d'une pub Meta" d'une
+        # inscription organique sur la même landing page, contrairement à `source`
+        # qui identifie la page mais pas le canal d'arrivée réel.
+        "from_meta_ads": bool(payload.fbc),
         "session": payload.session or "", "center": payload.center or "",
         "stage_id": payload.stage_id, "stage_titre": stage_titre,
     }

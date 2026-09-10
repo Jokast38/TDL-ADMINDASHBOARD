@@ -1,68 +1,78 @@
 import "@/App.css";
+import { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
 
-import Landing from "@/pages/Landing";
-import Login from "@/pages/Login";
-import ForgotPassword from "@/pages/ForgotPassword";
-import ResetPassword from "@/pages/ResetPassword";
-import ChangePassword from "@/pages/ChangePassword";
-import PublicInscription from "@/pages/PublicInscription";
-import FormationDetail from "@/pages/FormationDetail";
-import PublicFormations from "@/pages/PublicFormations";
-import PublicKamiStreet from "@/pages/PublicKamiStreet";
-import StudentSpace from "@/pages/StudentSpace";
-import Blog from "@/pages/Blog";
-import BlogPost from "@/pages/BlogPost";
-import OffreFideliteLanding from "@/pages/OffreFideliteLanding";
-import StageRecuperationPointsLanding from "@/pages/StageRecuperationPointsLanding";
-import SsiapLanding from "@/pages/SsiapLanding";
-import TaxiFormationLanding from "@/pages/TaxiFormationLanding";
-import MobiliteTaxiLanding from "@/pages/MobiliteTaxiLanding";
-import PasserelleTaxiBanlieueLanding from "@/pages/PasserelleTaxiBanlieueLanding";
-import VtcFormationLanding from "@/pages/VtcFormationLanding";
-import CacesFormationLanding from "@/pages/CacesFormationLanding";
-import MentionsLegales from "@/pages/MentionsLegales";
-import PositioningTest from "@/pages/PositioningTest";
-import FrenchTest from "@/pages/FrenchTest";
-import SatisfactionSurvey from "@/pages/SatisfactionSurvey";
-import StageRecuperationMerci from "@/pages/StageRecuperationMerci";
-import FAQ from "@/pages/FAQ";
+// Toutes les pages sont chargées à la demande (React.lazy) plutôt
+// qu'importées statiquement — sans ça, un visiteur anonyme arrivant sur une
+// landing page publique (ex: /stage-recuperation-points) téléchargeait et
+// parsait aussi tout le code des ~40 pages de l'admin (Stages, Marketing,
+// IA...) avant le premier rendu, ce qui plombait les performances mobiles
+// (gros JS inutilisé, TBT/LCP élevés — voir rapport Lighthouse). Avec
+// React.lazy, chaque route devient son propre chunk téléchargé uniquement
+// quand on y navigue.
+const Landing = lazy(() => import("@/pages/Landing"));
+const Login = lazy(() => import("@/pages/Login"));
+const ForgotPassword = lazy(() => import("@/pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
+const ChangePassword = lazy(() => import("@/pages/ChangePassword"));
+const PublicInscription = lazy(() => import("@/pages/PublicInscription"));
+const FormationDetail = lazy(() => import("@/pages/FormationDetail"));
+const PublicFormations = lazy(() => import("@/pages/PublicFormations"));
+const PublicKamiStreet = lazy(() => import("@/pages/PublicKamiStreet"));
+const StudentSpace = lazy(() => import("@/pages/StudentSpace"));
+const Blog = lazy(() => import("@/pages/Blog"));
+const BlogPost = lazy(() => import("@/pages/BlogPost"));
+const OffreFideliteLanding = lazy(() => import("@/pages/OffreFideliteLanding"));
+const StageRecuperationPointsLanding = lazy(() => import("@/pages/StageRecuperationPointsLanding"));
+const SsiapLanding = lazy(() => import("@/pages/SsiapLanding"));
+const TaxiFormationLanding = lazy(() => import("@/pages/TaxiFormationLanding"));
+const MobiliteTaxiLanding = lazy(() => import("@/pages/MobiliteTaxiLanding"));
+const PasserelleTaxiBanlieueLanding = lazy(() => import("@/pages/PasserelleTaxiBanlieueLanding"));
+const VtcFormationLanding = lazy(() => import("@/pages/VtcFormationLanding"));
+const CacesFormationLanding = lazy(() => import("@/pages/CacesFormationLanding"));
+const MentionsLegales = lazy(() => import("@/pages/MentionsLegales"));
+const PositioningTest = lazy(() => import("@/pages/PositioningTest"));
+const FrenchTest = lazy(() => import("@/pages/FrenchTest"));
+const SatisfactionSurvey = lazy(() => import("@/pages/SatisfactionSurvey"));
+const StageRecuperationMerci = lazy(() => import("@/pages/StageRecuperationMerci"));
+const FAQ = lazy(() => import("@/pages/FAQ"));
+
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Formations = lazy(() => import("@/pages/Formations"));
+const Inscriptions = lazy(() => import("@/pages/Inscriptions"));
+const PaiementConfirmation = lazy(() => import("@/pages/PaiementConfirmation"));
+const Students = lazy(() => import("@/pages/Students"));
+const Exams = lazy(() => import("@/pages/Exams"));
+const Appointments = lazy(() => import("@/pages/Appointments"));
+const Dossiers = lazy(() => import("@/pages/Dossiers"));
+const KamiStreet = lazy(() => import("@/pages/KamiStreet"));
+const Orders = lazy(() => import("@/pages/Orders"));
+const AIAssistant = lazy(() => import("@/pages/AIAssistant"));
+const Employees = lazy(() => import("@/pages/Employees"));
+const Formateurs = lazy(() => import("@/pages/Formateurs"));
+const Activity = lazy(() => import("@/pages/Activity"));
+const Settings = lazy(() => import("@/pages/Settings"));
+const Marketing = lazy(() => import("@/pages/Marketing"));
+const AdminBlog = lazy(() => import("@/pages/AdminBlog"));
+const Stages = lazy(() => import("@/pages/Stages"));
+const Agenda = lazy(() => import("@/pages/Agenda"));
+const Modules = lazy(() => import("@/pages/Modules"));
+const AnimateurSpace = lazy(() => import("@/pages/AnimateurSpace"));
+const DocumentsLibrary = lazy(() => import("@/pages/DocumentsLibrary"));
+const DocTemplates = lazy(() => import("@/pages/DocTemplates"));
+const CompanyDocuments = lazy(() => import("@/pages/CompanyDocuments"));
+const Leads = lazy(() => import("@/pages/Leads"));
+const HelpCenter = lazy(() => import("@/pages/HelpCenter"));
+const Documentation = lazy(() => import("@/pages/Documentation"));
+const PolitiqueConfidentialite = lazy(() => import("@/pages/PolitiqueConfidentialite"));
 
 import Layout from "@/components/Layout";
-import Dashboard from "@/pages/Dashboard";
-import Formations from "@/pages/Formations";
-import Inscriptions from "@/pages/Inscriptions";
-import PaiementConfirmation from "@/pages/PaiementConfirmation";
-import Students from "@/pages/Students";
-import Exams from "@/pages/Exams";
-import Appointments from "@/pages/Appointments";
-import Dossiers from "@/pages/Dossiers";
-import KamiStreet from "@/pages/KamiStreet";
-import Orders from "@/pages/Orders";
-import AIAssistant from "@/pages/AIAssistant";
-import Employees from "@/pages/Employees";
-import Formateurs from "@/pages/Formateurs";
-import Activity from "@/pages/Activity";
-import Settings from "@/pages/Settings";
-import Marketing from "@/pages/Marketing";
-import AdminBlog from "@/pages/AdminBlog";
-import Stages from "@/pages/Stages";
-import Agenda from "@/pages/Agenda";
-import Modules from "@/pages/Modules";
-import AnimateurSpace from "@/pages/AnimateurSpace";
-import DocumentsLibrary from "@/pages/DocumentsLibrary";
-import DocTemplates from "@/pages/DocTemplates";
-import CompanyDocuments from "@/pages/CompanyDocuments";
-import Leads from "@/pages/Leads";
-import HelpCenter from "@/pages/HelpCenter";
-import Documentation from "@/pages/Documentation";
 import { TourProvider } from "@/contexts/TourContext";
 import TourOverlay from "@/components/TourOverlay";
 import AnalyticsLoader from "@/components/AnalyticsLoader";
 import CookieConsent from "@/components/CookieConsent";
-import PolitiqueConfidentialite from "@/pages/PolitiqueConfidentialite";
 
 function ProtectedRoute({ children, roles }) {
   const { user } = useAuth();
@@ -93,6 +103,12 @@ function AdminLayout({ children }) {
   return <Layout>{children}</Layout>;
 }
 
+// Fallback minimal pendant le chargement du chunk de la route — évite un
+// écran blanc sans pour autant peser sur le bundle initial.
+function RouteFallback() {
+  return <div className="min-h-screen" />;
+}
+
 function App() {
   return (
     <div className="App">
@@ -102,6 +118,7 @@ function App() {
           <AnalyticsLoader />
           <CookieConsent />
           <TourOverlay />
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
@@ -220,6 +237,7 @@ function App() {
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
           <Toaster position="top-right" richColors />
           </TourProvider>
         </AuthProvider>
