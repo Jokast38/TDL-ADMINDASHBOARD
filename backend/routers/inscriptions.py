@@ -3,6 +3,7 @@ import re
 import uuid
 import secrets
 import zipfile
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -50,6 +51,24 @@ async def create_inscription(payload: InscriptionIn, request: Request):
     formation = await db.formations.find_one({"id": payload.formation_id}, {"_id": 0})
     if not formation:
         raise HTTPException(status_code=404, detail="Formation introuvable")
+
+    # Garde-fou anti-double-soumission : un double-clic sur le bouton
+    # "Valider mon inscription" (ou un retry réseau) côté formulaire public
+    # envoyait plusieurs requêtes identiques en quelques centaines de ms,
+    # créant 2 à 3 inscriptions strictement identiques pour la même
+    # personne — observé en prod. Le correctif côté frontend (bouton
+    # désactivé pendant l'envoi) ne couvre pas un retry réseau ; on
+    # retourne ici l'inscription déjà créée au lieu d'en recréer une.
+    dedupe_since = (datetime.now(timezone.utc) - timedelta(seconds=30)).isoformat()
+    recent_duplicate = await db.inscriptions.find_one(
+        {
+            "student_email": payload.student_email.lower(), "formation_id": payload.formation_id,
+            "status": "active", "created_at": {"$gte": dedupe_since},
+        },
+        {"_id": 0}, sort=[("created_at", -1)],
+    )
+    if recent_duplicate:
+        return recent_duplicate
 
     # Doublon = même personne, même formation ET même session — un
     # réinscription sur une AUTRE session (ex: repassage d'examen VTC sur un
@@ -473,9 +492,35 @@ async def list_my_dossiers(user: dict = Depends(get_current_user)):
 @router.get("/dossiers")
 async def list_dossiers(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
     items = await db.dossiers.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+    # Jointure dossier -> inscription -> session (stage) affectée : sans ça,
+    # la génération de documents (convocation notamment) n'a aucun moyen de
+    # savoir si l'apprenant choisi est bien inscrit à une session, ni de
+    # préremplir automatiquement les dates/lieu — l'agent devait tout retaper
+    # à la main. `stage` est None si aucune session n'est encore affectée.
+    insc_ids = [d["inscription_id"] for d in items if d.get("inscription_id")]
+    inscriptions_by_id = {}
+    if insc_ids:
+        inscs = await db.inscriptions.find(
+            {"id": {"$in": insc_ids}}, {"_id": 0, "id": 1, "stage_id": 1, "price": 1, "payment_status": 1}
+        ).to_list(len(insc_ids))
+        inscriptions_by_id = {i["id"]: i for i in inscs}
+    stage_ids = list({i["stage_id"] for i in inscriptions_by_id.values() if i.get("stage_id")})
+    stages_by_id = {}
+    if stage_ids:
+        stages = await db.stages.find(
+            {"id": {"$in": stage_ids}}, {"_id": 0, "id": 1, "date_debut": 1, "date_fin": 1, "lieu_adresse": 1, "lieu_ville": 1}
+        ).to_list(len(stage_ids))
+        stages_by_id = {s["id"]: s for s in stages}
+
     for d in items:
         docs = await db.documents.find({"id": {"$in": d.get("documents", [])}, "is_deleted": False}, {"_id": 0}).to_list(200)
         d["nb_documents_manquants"] = len(_missing_docs(d, docs))
+        insc = inscriptions_by_id.get(d.get("inscription_id"))
+        stage = stages_by_id.get(insc["stage_id"]) if insc and insc.get("stage_id") else None
+        d["stage"] = stage
+        d["price"] = insc.get("price") if insc else None
+        d["payment_status"] = insc.get("payment_status") if insc else None
     return items
 
 

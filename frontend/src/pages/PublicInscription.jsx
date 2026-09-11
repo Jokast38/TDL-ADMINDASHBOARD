@@ -38,6 +38,7 @@ export default function PublicInscription() {
   const [allowKlarna, setAllowKlarna] = useState(false);
   const [privacyConsent, setPrivacyConsent] = useState(false);
   const [payLoading, setPayLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState("");
@@ -76,6 +77,11 @@ export default function PublicInscription() {
   };
 
   const submit = async () => {
+    // Garde anti-double-soumission : sans ça, un double-clic (ou un clic
+    // impatient pendant que la requête précédente est encore en vol sur un
+    // réseau lent) crée plusieurs inscriptions identiques en quelques
+    // centaines de ms — observé en prod avec 2 à 3 doublons du même candidat.
+    if (submitting) return;
     if (!privacyConsent) {
       return toast.error("Merci d'accepter l'utilisation de vos données pour continuer");
     }
@@ -85,6 +91,7 @@ export default function PublicInscription() {
     if (form.student_phone.trim() && !isValidPhone(form.student_phone)) {
       return toast.error("Merci de vérifier votre numéro de téléphone (10 chiffres, ex : 06 12 34 56 78)");
     }
+    setSubmitting(true);
     try {
       const leadEventId = newEventId();
       const { data } = await api.post("/inscriptions", {
@@ -103,6 +110,8 @@ export default function PublicInscription() {
       trackCompleteRegistration({ content_name: selected?.title, value: selected?.price, currency: "EUR" });
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -289,11 +298,11 @@ export default function PublicInscription() {
                 <Button variant="outline" onClick={() => setStep(needsSessionStep ? 1.5 : 1)} className="w-full sm:w-auto">← {needsSessionStep ? "Modifier la session" : "Modifier la formation"}</Button>
                 <Button
                   onClick={submit}
-                  disabled={!form.student_name || !form.student_email || !privacyConsent}
+                  disabled={!form.student_name || !form.student_email || !privacyConsent || submitting}
                   className="w-full sm:w-auto bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
                   data-testid="inscr-submit"
                 >
-                  Valider mon inscription <ArrowRight size={16} className="ml-2" />
+                  {submitting ? "Envoi en cours…" : (<>Valider mon inscription <ArrowRight size={16} className="ml-2" /></>)}
                 </Button>
               </div>
             </Card>

@@ -182,11 +182,17 @@ export default function DocumentsLibrary() {
   };
 
   // Pré-remplit les champs du formulaire à partir d'un dossier choisi dans la
-  // base — ne couvre que les correspondances évidentes (nom/email/formation),
-  // le reste des champs (spécifiques au modèle) reste à compléter à la main.
+  // base — couvre les correspondances évidentes (nom/email/formation) ainsi
+  // que la session (dates/lieu) si l'apprenant est bien affecté à un stage
+  // (voir dossier.stage, renvoyé par GET /dossiers) ; le reste des champs
+  // (spécifiques au modèle) reste à compléter à la main.
   const applyDossierToContext = (dossier) => {
     setSelectedDossierId(dossier.id);
     setSendEmail(dossier.student_email || "");
+    const stage = dossier.stage;
+    if (!stage) {
+      toast.warning(`${dossier.student_name || "Cet apprenant"} n'est affecté à aucune session pour le moment — les champs de dates/lieu ne seront pas pré-remplis.`);
+    }
     setCtx((c) => {
       const next = { ...c };
       Object.keys(next).forEach((k) => {
@@ -195,6 +201,17 @@ export default function DocumentsLibrary() {
         else if (key.includes("formation")) next[k] = dossier.formation_title || next[k];
         else if (key.includes("nom") && !key.includes("organisme") && !key.includes("representant") && !key.includes("signataire") && !key.includes("formateur") && !key.includes("service")) {
           next[k] = dossier.student_name || next[k];
+        } else if (stage && (key === "date_debut" || key === "date_debut_stage")) next[k] = stage.date_debut || next[k];
+        else if (stage && (key === "date_fin" || key === "date_fin_stage")) next[k] = stage.date_fin || next[k];
+        else if (stage && (key.includes("lieu") || key === "session")) {
+          next[k] = key === "session"
+            ? `${stage.date_debut || ""} au ${stage.date_fin || ""}`.trim()
+            : `${stage.lieu_adresse || ""}, ${stage.lieu_ville || ""}`.replace(/^, |, $/g, "");
+        } else if (dossier.price != null && (key.includes("prix") || key.includes("montant") || key === "total_ttc")) {
+          // Uniquement le montant simple (ex: "prix_formation") — jamais les
+          // champs de calcul (total_ht, taux_tva...) qui dépendent de règles
+          // de facturation qu'on ne peut pas déduire d'un seul prix.
+          next[k] = `${dossier.price.toFixed(2)} €`;
         }
       });
       return next;
@@ -716,6 +733,13 @@ export default function DocumentsLibrary() {
                         >
                           <span className="font-medium">{d.student_name}</span>
                           <span className="text-xs text-gray-400 ml-2">{d.formation_title}</span>
+                          {d.stage ? (
+                            <span className="text-xs text-[#0B7238] ml-2">
+                              Session du {d.stage.date_debut} au {d.stage.date_fin}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-amber-600 ml-2">Aucune session affectée</span>
+                          )}
                         </button>
                       ))}
                     {!filteredDossiers.length && <p className="px-3 py-2 text-xs text-gray-400">Aucun dossier trouvé.</p>}
