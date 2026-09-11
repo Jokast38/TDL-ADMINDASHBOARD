@@ -13,7 +13,7 @@ import logoTdlImage from "@/assets/logo-tdl.png";
 import StripeCheckout from "@/components/StripeCheckout";
 import {
   Check, CreditCard, Star, UsersThree, Envelope, Briefcase, Hourglass, CalendarBlank,
-  Car, Warning, MapPin, Handshake, CurrencyEur, Phone,
+  Car, Warning, MapPin, Handshake, CurrencyEur, Phone, ArrowRight,
 } from "@phosphor-icons/react";
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
@@ -95,6 +95,11 @@ const META_SESSION_FLAG = "tdl_meta_src_verified";
 function isFromMeta() {
   try {
     const params = new URLSearchParams(window.location.search);
+    // Prévisualisation depuis le dashboard (ex: lien "landing d'origine" sur
+    // la page Inscriptions) — l'agent doit pouvoir voir la vraie page Meta
+    // même quand l'URL enregistrée n'a plus de fbclid valide, sans être
+    // renvoyé vers la fiche publique à 200€.
+    if (params.get("preview") === "admin") return true;
     if (params.get("fbclid")) return true;
     if (sessionStorage.getItem(META_SESSION_FLAG) === "1") return true;
     if (getFbCookies().fbc) return true;
@@ -125,6 +130,15 @@ export default function StageRecuperationPointsLanding() {
   const [hoveredDate, setHoveredDate] = useState(null);
   const [showCalendar, setShowCalendar] = useState(false);
   const [tempCenter, setTempCenter] = useState("");
+
+  // Bouton "aucune date ne me convient" en haut de page (section sessions) —
+  // mini-formulaire indépendant du formulaire de réservation principal, qui
+  // lui impose de choisir une session avant de pouvoir être envoyé.
+  const [otherDatesOpen, setOtherDatesOpen] = useState(false);
+  const [otherDatesForm, setOtherDatesForm] = useState({ prenom: "", telephone: "" });
+  const [otherDatesSending, setOtherDatesSending] = useState(false);
+  const [otherDatesSent, setOtherDatesSent] = useState(false);
+  const [topSessionsExpanded, setTopSessionsExpanded] = useState(false);
 
   const revealRef = useReveal();
   const formRef = useRef(null);
@@ -310,6 +324,22 @@ export default function StageRecuperationPointsLanding() {
 
     return dates.sort((a, b) => a.date - b.date);
   }, [SESSIONS]);
+
+  // Cartes affichées dans la section sessions en haut de page (juste après la
+  // nav) — mêmes dates que le calendrier plus bas, mais dédupliquées par
+  // libellé (une session sur 2 jours a 2 entrées dans availableDates) et
+  // limitées aux prochaines pour ne pas surcharger l'écran d'accueil.
+  const upcomingSessionCards = useMemo(() => {
+    const seen = new Set();
+    const cards = [];
+    for (const d of availableDates) {
+      if (seen.has(d.label)) continue;
+      seen.add(d.label);
+      cards.push(d);
+      if (cards.length >= 20) break;
+    }
+    return cards;
+  }, [availableDates]);
 
   // Ajoutez ce useEffect pour déboguer
   useEffect(() => {
@@ -530,12 +560,150 @@ export default function StageRecuperationPointsLanding() {
     }
   };
 
+  const requestOtherDates = async () => {
+    if (!otherDatesForm.prenom.trim() || !otherDatesForm.telephone.trim()) {
+      return toast.error("Merci de renseigner votre prénom et votre téléphone");
+    }
+    if (!isValidPhone(otherDatesForm.telephone)) {
+      return toast.error("Merci de vérifier votre numéro de téléphone (10 chiffres, ex : 06 12 34 56 78)");
+    }
+    setOtherDatesSending(true);
+    try {
+      const eventId = newEventId();
+      await api.post("/callback-requests", {
+        prenom: otherDatesForm.prenom,
+        nom: "",
+        telephone: otherDatesForm.telephone,
+        session: "Autres dates demandées",
+        center: center,
+        source: "stage_recuperation_points_autres_dates",
+        page_url: window.location.href,
+        event_id: eventId,
+        ...getFbCookies(),
+      });
+      setOtherDatesSent(true);
+      trackLead({ content_name: "stage_recuperation_points_autres_dates", value: price, currency: "EUR" }, eventId);
+      toast.success("Merci ! Nous vous recontacterons avec de nouvelles dates.");
+    } catch (error) {
+      toast.error("Erreur lors de l'envoi, merci de réessayer ou de nous appeler directement.");
+    } finally {
+      setOtherDatesSending(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white" data-testid="stage-recup-points-page" ref={revealRef}>
       <a className="skip-link" href="#main">Aller au contenu</a>
 
       <TopBar />
       <StageNav ctaLabel="Réserver une session" ctaHref="#form" />
+
+      {/* SECTION 0 — Prochaines sessions, en tout premier après la nav :
+          l'intention de recherche principale de ce trafic publicitaire est
+          "quand puis-je faire mon stage ?" — montrer les dates disponibles
+          avant tout argumentaire réduit la friction et le temps avant
+          conversion (inspiré d'une landing PAP à fort taux de conversion). */}
+      <section className="py-10 sm:py-14 border-b border-gray-100" style={{ background: "linear-gradient(180deg,#fff8e6 0%,#ffffff 100%)" }} data-testid="top-sessions-section">
+        <div className="max-w-6xl mx-auto px-6 lg:px-8">
+          <div className="text-center max-w-2xl mx-auto mb-8">
+            <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#d4af37" }}>Prochaines sessions</p>
+            <h2 className="font-display text-2xl sm:text-4xl font-extrabold tracking-tight">Choisissez votre date et réservez en 2 minutes</h2>
+            <p className="text-sm text-gray-500 mt-2">Stage agréé à Épinay-sur-Seine (93) et Creil (60) — places limitées, sessions régulières toute l'année.</p>
+          </div>
+
+          {upcomingSessionCards.length > 0 ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                {(topSessionsExpanded ? upcomingSessionCards : upcomingSessionCards.slice(0, 5)).map((d) => (
+                  <button
+                    key={d.label}
+                    type="button"
+                    onClick={() => chooseSession(d.label)}
+                    data-testid={`top-session-${d.label}`}
+                    className={`text-left border-2 rounded-xl p-4 bg-white transition-all hover:shadow-md ${session === d.label ? "border-[#d4af37] bg-[#fff8e1]" : "border-gray-200 hover:border-[#d4af37]"
+                      }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <CalendarBlank size={16} weight="bold" style={{ color: "#d4af37" }} />
+                      <span className="font-display font-bold text-sm">{d.label}</span>
+                    </div>
+                    <p className="text-xs text-gray-400 flex items-center gap-1"><MapPin size={11} /> Épinay-sur-Seine (93)</p>
+                  </button>
+                ))}
+              </div>
+              {upcomingSessionCards.length > 5 && (
+                <div className="text-center mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setTopSessionsExpanded((v) => !v)}
+                    className="text-sm font-medium text-[#d4af37] hover:text-[#b8962f] transition-colors"
+                    data-testid="top-sessions-toggle"
+                  >
+                    {topSessionsExpanded ? "Voir moins" : `Voir plus de dates (${upcomingSessionCards.length - 5})`}
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-center text-sm text-gray-400">Dates à venir — contactez-nous pour être informé en priorité.</p>
+          )}
+
+          <div className="text-center mt-8">
+            <a href="#form" style={{ backgroundColor: "#d4af37" }} className="inline-flex items-center text-black font-bold uppercase text-sm tracking-wide px-10 py-4 rounded-md hover:opacity-90 transition-opacity">
+              Réserver ma session <ArrowRight size={16} className="ml-2" />
+            </a>
+
+            {!otherDatesOpen && !otherDatesSent && (
+              <div className="mt-4">
+                <button type="button" onClick={() => setOtherDatesOpen(true)} className="text-sm text-gray-500 underline hover:text-[#d4af37]" data-testid="other-dates-toggle">
+                  Aucune date ne vous convient ? Demandez-nous d'autres disponibilités
+                </button>
+              </div>
+            )}
+
+            {otherDatesSent && (
+              <p className="mt-4 text-sm text-[#0B7238] font-medium">Merci, nous revenons vers vous avec de nouvelles dates.</p>
+            )}
+
+            {otherDatesOpen && !otherDatesSent && (
+              <div className="mt-5 max-w-sm mx-auto bg-white border border-gray-200 rounded-md p-4 text-left" data-testid="other-dates-form">
+                <p className="text-sm font-semibold mb-3">On vous prévient dès qu'une nouvelle date est ouverte :</p>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Prénom"
+                    value={otherDatesForm.prenom}
+                    onChange={(e) => setOtherDatesForm((f) => ({ ...f, prenom: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    data-testid="other-dates-prenom"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="Téléphone"
+                    value={otherDatesForm.telephone}
+                    onChange={(e) => setOtherDatesForm((f) => ({ ...f, telephone: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    data-testid="other-dates-telephone"
+                  />
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button type="button" onClick={() => setOtherDatesOpen(false)} className="text-xs text-gray-400 hover:text-gray-600 px-3 py-2">Annuler</button>
+                  <button
+                    type="button"
+                    onClick={requestOtherDates}
+                    disabled={otherDatesSending}
+                    style={{ backgroundColor: "#0a0a0a" }}
+                    className="flex-1 text-white text-xs font-bold uppercase tracking-wide px-4 py-2.5 rounded-md"
+                    data-testid="other-dates-submit"
+                  >
+                    {otherDatesSending ? "Envoi..." : "M'avertir"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       <Hero
         titleLine1="Récupérez jusqu'à"

@@ -105,6 +105,22 @@ const getOrigin = (i) => {
   return ORIGIN_WEBSITE;
 };
 
+// La landing Meta (StageRecuperationPointsLanding.jsx) renvoie vers la fiche
+// publique à 200€ tout visiteur sans preuve d'origine Meta (fbclid, cookie
+// _fbc, referrer) — pour qu'un agent puisse quand même prévisualiser la
+// vraie page depuis le dashboard (ex: landing_url enregistrée il y a
+// longtemps, fbclid expiré), on ajoute ce paramètre que la page reconnaît
+// comme un accès de prévisualisation légitime.
+const previewLandingUrl = (url) => {
+  try {
+    const u = new URL(url);
+    u.searchParams.set("preview", "admin");
+    return u.toString();
+  } catch {
+    return url;
+  }
+};
+
 const PAGE_SIZE = 25;
 
 export default function Inscriptions() {
@@ -553,7 +569,7 @@ export default function Inscriptions() {
                     <td className="py-3 px-4">
                       {i.landing_url ? (
                         <a
-                          href={i.landing_url}
+                          href={previewLandingUrl(i.landing_url)}
                           target="_blank"
                           rel="noopener noreferrer"
                           title={`Voir la page d'origine : ${i.landing_url}`}

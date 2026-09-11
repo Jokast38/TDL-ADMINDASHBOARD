@@ -447,10 +447,17 @@ const LANDING_PAGES = [
 ];
 
 function LandingPageCard({ page }) {
+  // La landing Meta (StageRecuperationPointsLanding.jsx) redirige tout
+  // visiteur sans preuve d'origine Meta (fbclid, cookie _fbc, referrer) vers
+  // la fiche publique à 200€ — sans ce paramètre, la miniature en iframe ET
+  // le clic "Ouvrir la page" depuis ce dashboard tombaient dans ce cas et
+  // n'affichaient jamais la vraie page promo. Les autres landings ignorent
+  // ce paramètre sans effet de bord.
   const url = `${window.location.origin}${page.path}`;
+  const previewUrl = `${url}?preview=admin`;
   return (
     <a
-      href={url}
+      href={previewUrl}
       target="_blank"
       rel="noopener noreferrer"
       className="block overflow-hidden rounded-md cursor-pointer group hover:-translate-y-1 hover:shadow-lg transition-all"
@@ -461,9 +468,14 @@ function LandingPageCard({ page }) {
         {/* Aperçu miniature : la vraie page rendue dans un iframe, réduite à l'échelle.
             L'iframe garde sa largeur native (1280px) pour le rendu desktop, puis est
             recentrée via marginLeft (une fois réduite, elle est plus étroite que la
-            carte, sans quoi elle restait collée à gauche avec du vide à droite). */}
+            carte, sans quoi elle restait collée à gauche avec du vide à droite).
+            `?preview=admin` : la landing Meta (StageRecuperationPointsLanding.jsx)
+            redirige tout visiteur sans preuve d'origine Meta (fbclid, cookie _fbc,
+            referrer) vers la fiche publique à 200€ — sans ce paramètre, ni la
+            miniature ni le clic n'affichaient jamais la vraie page promo. Les
+            autres landings ignorent ce paramètre sans effet de bord. */}
           <iframe
-            src={url}
+            src={previewUrl}
             title={page.title}
             className="pointer-events-none border-0 absolute top-0 left-1/2"
             style={{
