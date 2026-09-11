@@ -8,6 +8,7 @@ from services.staff_notify import (
 )
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
+    send_review_requests,
 )
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
@@ -117,4 +118,14 @@ async def run_satisfaction_froid(user: dict = Depends(require_role("admin"))):
     mois après la fin de formation) — la boucle de fond l'envoie
     automatiquement chaque jour."""
     notified = await send_satisfaction_froid()
+    return {"notified": notified}
+
+
+@router.post("/reviews/run")
+async def run_review_requests(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel des demandes d'avis Google (test, ou cron
+    externe) — la boucle de fond (voir server.py) les envoie automatiquement
+    chaque jour : 48h après la fin pour les stages de récupération de
+    points, 1 semaine après pour les autres formations."""
+    notified = await send_review_requests()
     return {"notified": notified}

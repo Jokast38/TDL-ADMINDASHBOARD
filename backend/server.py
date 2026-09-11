@@ -31,6 +31,7 @@ from services.staff_notify import (
 )
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
+    send_review_requests,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -449,6 +450,7 @@ async def startup():
     asyncio.create_task(_auto_attestations_loop())
     asyncio.create_task(_satisfaction_chaud_loop())
     asyncio.create_task(_satisfaction_froid_loop())
+    asyncio.create_task(_review_requests_loop())
 
 
 async def _convocations_loop():
@@ -504,6 +506,21 @@ async def _satisfaction_froid_loop():
                 log.info(f"Satisfaction à froid : {notified} envoyée(s)")
         except Exception as e:
             log.warning(f"Satisfaction à froid : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
+
+
+async def _review_requests_loop():
+    """Toutes les 24h, invite les apprenants à laisser un avis Google : 48h
+    après la fin pour les stages de récupération de points, 1 semaine après
+    pour les autres formations (voir services/candidate_automation.py)."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_review_requests()
+            if notified:
+                log.info(f"Demandes d'avis Google : {notified} envoyée(s)")
+        except Exception as e:
+            log.warning(f"Demandes d'avis Google : erreur — {e}")
         await asyncio.sleep(24 * 3600)
 
 

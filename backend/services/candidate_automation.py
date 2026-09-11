@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from core.database import db
 from core.storage import put_object
 from core.utils import now_iso
-from core.config import PUBLIC_FRONTEND_URL
+from core.config import PUBLIC_FRONTEND_URL, GOOGLE_PLACE_ID
 from services.email import send_email
 from services.email_template import render_branded_email
 from services.pdf import generate_attestation_pdf
@@ -167,4 +167,68 @@ async def send_satisfaction_froid() -> int:
             await send_email(insc["student_email"], "📝 Retour d'expérience — quelques mois après votre formation", body)
             await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"froid_sent_at": now_iso()}})
             count += 1
+    return count
+
+
+# Délai avant relance avis Google après la fin de la formation — plus court
+# pour la récupération de points (rotation rapide, beaucoup de sessions,
+# l'expérience est encore fraîche) que pour les autres formations (on laisse
+# le temps à l'apprenant d'en tirer un vrai retour avant de le solliciter).
+REVIEW_CATEGORY_FAST = "PERMIS"
+REVIEW_DELAY_FAST_HOURS = 48
+REVIEW_DELAY_OTHERS_DAYS = 7
+
+
+async def _send_review_requests_for(formation_ids: list, target_dates: list) -> int:
+    if not formation_ids or not GOOGLE_PLACE_ID:
+        return 0
+    write_review_url = f"https://search.google.com/local/writereview?placeid={GOOGLE_PLACE_ID}"
+    stages = await db.stages.find(
+        {"formation_id": {"$in": formation_ids}, "date_fin": {"$in": target_dates}, "statut": {"$ne": "annule"}},
+        {"_id": 0},
+    ).to_list(500)
+    count = 0
+    for stage in stages:
+        inscriptions = await db.inscriptions.find(
+            {"stage_id": stage["id"], "status": "active", "review_request_sent_at": {"$exists": False}}, {"_id": 0}
+        ).to_list(300)
+        for insc in inscriptions:
+            if not insc.get("student_email"):
+                continue
+            message = (
+                f"Bonjour {insc.get('student_name', '')},\n\n"
+                f"Nous espérons que votre formation {stage.get('formation_titre', '')} s'est bien passée !\n\n"
+                "Votre avis compte beaucoup pour nous et pour les futurs apprenants — auriez-vous deux minutes "
+                "pour partager votre expérience sur Google ? Ça nous aide énormément."
+            )
+            await send_email(
+                insc["student_email"], f"Votre avis sur {stage.get('formation_titre', '')} ?",
+                render_branded_email(message, "Laisser un avis Google", write_review_url),
+            )
+            await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"review_request_sent_at": now_iso()}})
+            count += 1
+    return count
+
+
+async def send_review_requests() -> int:
+    """Invite les apprenants à laisser un avis Google une fois leur formation
+    terminée : 48h après pour les stages de récupération de points, 1
+    semaine après pour les autres formations. Fenêtre de rattrapage de 3
+    jours (comme send_satisfaction_froid) au cas où la boucle journalière
+    manquerait le créneau exact. N'envoie qu'une fois par inscription
+    (`review_request_sent_at`)."""
+    if not GOOGLE_PLACE_ID:
+        return 0
+    formations = await db.formations.find({}, {"_id": 0, "id": 1, "category": 1}).to_list(500)
+    fast_ids = [f["id"] for f in formations if f.get("category") == REVIEW_CATEGORY_FAST]
+    other_ids = [f["id"] for f in formations if f.get("category") != REVIEW_CATEGORY_FAST]
+
+    today = _today()
+    fast_target = today - timedelta(hours=REVIEW_DELAY_FAST_HOURS)
+    fast_window = [(fast_target - timedelta(days=d)).isoformat() for d in range(0, 3)]
+    others_target = today - timedelta(days=REVIEW_DELAY_OTHERS_DAYS)
+    others_window = [(others_target - timedelta(days=d)).isoformat() for d in range(0, 3)]
+
+    count = await _send_review_requests_for(fast_ids, fast_window)
+    count += await _send_review_requests_for(other_ids, others_window)
     return count
