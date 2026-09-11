@@ -3,6 +3,8 @@ import { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import ErrorPage from "@/pages/ErrorPage";
 
 // Toutes les pages sont chargées à la demande (React.lazy) plutôt
 // qu'importées statiquement — sans ça, un visiteur anonyme arrivant sur une
@@ -117,6 +119,7 @@ function RouteFallback() {
 function App() {
   return (
     <div className="App">
+      <ErrorBoundary>
       <BrowserRouter>
         <AuthProvider>
           <TourProvider>
@@ -243,13 +246,14 @@ function App() {
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Marketing /></AdminLayout></ProtectedRoute>
             } />
 
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<ErrorPage />} />
           </Routes>
           </Suspense>
           <Toaster position="top-right" richColors />
           </TourProvider>
         </AuthProvider>
       </BrowserRouter>
+      </ErrorBoundary>
     </div>
   );
 }
