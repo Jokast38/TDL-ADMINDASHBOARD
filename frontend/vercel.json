@@ -1,5 +1,6 @@
 {
   "buildCommand": "CI=false yarn build",
+  "outputDirectory": "build",
   "rewrites": [
     { "source": "/sitemap.xml", "destination": "https://tdl-admindashboard.onrender.com/api/sitemap.xml" },
     { "source": "/(.*)", "destination": "/index.html" }
