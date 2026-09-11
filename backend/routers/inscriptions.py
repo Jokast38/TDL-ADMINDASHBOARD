@@ -12,7 +12,7 @@ from fastapi.responses import Response
 from core.database import db
 from core.security import hash_password, get_current_user, require_role
 from core.utils import now_iso
-from core.config import ROLES_DOSSIERS_MGMT
+from core.config import ROLES_DOSSIERS_MGMT, PUBLIC_FRONTEND_URL
 from models.inscription import InscriptionIn, InscriptionUpdate, DossierUpdate, StageAssignIn
 from services.trello import TrelloService
 from services.n8n import trigger_n8n
@@ -20,6 +20,7 @@ from services.email import send_email
 from services.email_template import render_branded_email
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS, check_dossier_milestone
 from services.meta_capi import send_capi_event
+from services.password_reset import create_reset_token
 
 router = APIRouter(tags=["inscriptions"])
 
@@ -233,6 +234,20 @@ async def list_students(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))
             "last_inscription_at": my_inscriptions[0]["created_at"] if my_inscriptions else None,
         })
     return result
+
+
+@router.post("/students/{sid}/login-link")
+async def get_student_login_link(sid: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Génère un lien de connexion à usage unique (réutilise le mécanisme de
+    réinitialisation de mot de passe) — utilisé par la page Apprenants pour
+    joindre un accès direct à l'espace apprenant dans l'email de demande de
+    documents, sans que l'agent ait à connaître ou transmettre un mot de
+    passe."""
+    student = await db.users.find_one({"id": sid, "role": "etudiant"}, {"_id": 0, "id": 1})
+    if not student:
+        raise HTTPException(status_code=404, detail="Apprenant introuvable")
+    token = await create_reset_token(sid)
+    return {"url": f"{PUBLIC_FRONTEND_URL}/reset-password?token={token}"}
 
 
 async def _delete_student_cascade(uid: str) -> None:
@@ -481,6 +496,7 @@ async def list_my_dossiers(user: dict = Depends(get_current_user)):
     if user["role"] != "etudiant":
         raise HTTPException(status_code=403, detail="Réservé aux étudiants")
     items = await db.dossiers.find({"student_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    await _attach_stage_info(items)
     for d in items:
         docs = await db.documents.find({"id": {"$in": d.get("documents", [])}, "is_deleted": False}, {"_id": 0}).to_list(200)
         manquants = _missing_docs(d, docs)
@@ -489,15 +505,13 @@ async def list_my_dossiers(user: dict = Depends(get_current_user)):
     return items
 
 
-@router.get("/dossiers")
-async def list_dossiers(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
-    items = await db.dossiers.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
-
-    # Jointure dossier -> inscription -> session (stage) affectée : sans ça,
-    # la génération de documents (convocation notamment) n'a aucun moyen de
-    # savoir si l'apprenant choisi est bien inscrit à une session, ni de
-    # préremplir automatiquement les dates/lieu — l'agent devait tout retaper
-    # à la main. `stage` est None si aucune session n'est encore affectée.
+async def _attach_stage_info(items: list) -> list:
+    """Jointure dossier -> inscription -> session (stage) affectée, partagée
+    entre la vue admin (GET /dossiers) et la vue apprenant (GET /dossiers/me)
+    — sans ça, ni la génération de documents (convocation) ni l'accueil de
+    l'espace apprenant n'ont moyen de savoir à quelle session il est inscrit
+    ni d'en afficher les dates/lieu. `stage` est None si aucune session n'est
+    encore affectée."""
     insc_ids = [d["inscription_id"] for d in items if d.get("inscription_id")]
     inscriptions_by_id = {}
     if insc_ids:
@@ -514,13 +528,21 @@ async def list_dossiers(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))
         stages_by_id = {s["id"]: s for s in stages}
 
     for d in items:
-        docs = await db.documents.find({"id": {"$in": d.get("documents", [])}, "is_deleted": False}, {"_id": 0}).to_list(200)
-        d["nb_documents_manquants"] = len(_missing_docs(d, docs))
         insc = inscriptions_by_id.get(d.get("inscription_id"))
         stage = stages_by_id.get(insc["stage_id"]) if insc and insc.get("stage_id") else None
         d["stage"] = stage
         d["price"] = insc.get("price") if insc else None
         d["payment_status"] = insc.get("payment_status") if insc else None
+    return items
+
+
+@router.get("/dossiers")
+async def list_dossiers(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    items = await db.dossiers.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    await _attach_stage_info(items)
+    for d in items:
+        docs = await db.documents.find({"id": {"$in": d.get("documents", [])}, "is_deleted": False}, {"_id": 0}).to_list(200)
+        d["nb_documents_manquants"] = len(_missing_docs(d, docs))
     return items
 
 

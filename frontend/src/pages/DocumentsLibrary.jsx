@@ -13,6 +13,9 @@ import SignatureCanvas from "react-signature-canvas";
 
 const TYPES = ["all", "attestation_presence", "attestation", "facture", "devis", "convention", "autre"];
 
+const NIVEAU_LABEL = { bases_fragiles: "Bases fragiles", intermediaire: "Intermédiaire", satisfaisant: "Satisfaisant" };
+const ADAPTATION_LABEL = { renforcement_cible: "Renforcement ciblé", parcours_standard: "Parcours standard" };
+
 // Signatures prédéfinies proposées dans le dropdown (en plus du dessin manuel).
 // La première est celle utilisée par défaut à l'ouverture du dialogue.
 const PRESET_SIGNATURES = [
@@ -110,11 +113,17 @@ export default function DocumentsLibrary() {
   const [ftNom, setFtNom] = useState("");
   const [ftEmail, setFtEmail] = useState("");
   const [ftDossierQuery, setFtDossierQuery] = useState("");
+  const [ftDossierId, setFtDossierId] = useState(null);
   const [ftCategory, setFtCategory] = useState("SSIAP");
   const [ftSession, setFtSession] = useState("");
   const [ftEvaluateur, setFtEvaluateur] = useState("");
   const [creatingFt, setCreatingFt] = useState(false);
   const [deletingFtId, setDeletingFtId] = useState(null);
+  const [evalTarget, setEvalTarget] = useState(null);
+  const [evalNiveau, setEvalNiveau] = useState("intermediaire");
+  const [evalAdaptation, setEvalAdaptation] = useState("parcours_standard");
+  const [evalNotes, setEvalNotes] = useState("");
+  const [savingEval, setSavingEval] = useState(false);
 
   const [sigOpen, setSigOpen] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
@@ -207,10 +216,15 @@ export default function DocumentsLibrary() {
           next[k] = key === "session"
             ? `${stage.date_debut || ""} au ${stage.date_fin || ""}`.trim()
             : `${stage.lieu_adresse || ""}, ${stage.lieu_ville || ""}`.replace(/^, |, $/g, "");
-        } else if (dossier.price != null && (key.includes("prix") || key.includes("montant") || key === "total_ttc")) {
-          // Uniquement le montant simple (ex: "prix_formation") — jamais les
-          // champs de calcul (total_ht, taux_tva...) qui dépendent de règles
-          // de facturation qu'on ne peut pas déduire d'un seul prix.
+        } else if (dossier.price != null && key === "taux_tva") {
+          // Organisme de formation en franchise en base de TVA (voir mention
+          // légale "TVA non applicable - article 293B du CGI" sur le modèle
+          // de facture) : pas de TVA facturée, le prix payé est déjà le TTC.
+          next[k] = "0";
+        } else if (dossier.price != null && key === "montant_tva") {
+          next[k] = "0,00 €";
+        } else if (dossier.price != null && (key === "total_ht" || key === "total_ttc" || key.includes("prix") || key.includes("montant"))) {
+          // Sans TVA applicable, HT = TTC = prix payé par l'apprenant.
           next[k] = `${dossier.price.toFixed(2)} €`;
         }
       });
@@ -294,16 +308,40 @@ export default function DocumentsLibrary() {
     if (!ftNom.trim()) return toast.error("Indiquez le nom du candidat");
     setCreatingFt(true);
     try {
-      const res = await api.post("/french-tests", { stagiaire_nom: ftNom, stagiaire_email: ftEmail || null, category: ftCategory, session: ftSession, evaluateur: ftEvaluateur });
+      const res = await api.post("/french-tests", {
+        stagiaire_nom: ftNom, stagiaire_email: ftEmail || null, category: ftCategory,
+        session: ftSession, evaluateur: ftEvaluateur, inscription_id: ftDossierId || null,
+      });
       await navigator.clipboard.writeText(res.data.link).catch(() => {});
       toast.success(res.data.email_sent ? "Lien créé, copié et envoyé par email" : "Lien créé et copié dans le presse-papiers");
       setFtOpen(false);
-      setFtNom(""); setFtEmail(""); setFtSession(""); setFtEvaluateur("");
+      setFtNom(""); setFtEmail(""); setFtSession(""); setFtEvaluateur(""); setFtDossierId(null);
       loadFrenchTests();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur création du lien");
     } finally {
       setCreatingFt(false);
+    }
+  };
+
+  const openEval = (t) => {
+    setEvalTarget(t);
+    setEvalNiveau(t.niveau || "intermediaire");
+    setEvalAdaptation(t.adaptation || "parcours_standard");
+    setEvalNotes(t.notes || "");
+  };
+
+  const saveEval = async () => {
+    setSavingEval(true);
+    try {
+      await api.put(`/french-tests/${evalTarget.id}/evaluation`, { niveau: evalNiveau, adaptation: evalAdaptation, notes: evalNotes });
+      toast.success("Évaluation enregistrée");
+      setEvalTarget(null);
+      loadFrenchTests();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de l'enregistrement");
+    } finally {
+      setSavingEval(false);
     }
   };
 
@@ -623,7 +661,15 @@ export default function DocumentsLibrary() {
                     {dossiers.filter((d) => d.student_name?.toLowerCase().includes(ftDossierQuery.toLowerCase())).slice(0, 20).map((d) => (
                       <button
                         type="button" key={d.id}
-                        onClick={() => { setFtNom(d.student_name); setFtEmail(d.student_email || ""); setFtDossierQuery(""); }}
+                        onClick={() => {
+                          setFtNom(d.student_name); setFtEmail(d.student_email || "");
+                          // Thème du test aligné automatiquement sur la formation de
+                          // l'apprenant choisi — avant ça, la catégorie restait sur sa
+                          // valeur par défaut (SSIAP) tant que l'agent ne la changeait
+                          // pas lui-même à la main.
+                          if (d.category) setFtCategory(d.category);
+                          setFtDossierId(d.inscription_id || null); setFtDossierQuery("");
+                        }}
                         className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                       >
                         <span className="font-medium">{d.student_name}</span>
@@ -908,6 +954,7 @@ export default function DocumentsLibrary() {
                   <th className="py-2 px-4 overline">Session</th>
                   <th className="py-2 px-4 overline">Évaluateur</th>
                   <th className="py-2 px-4 overline">Statut</th>
+                  <th className="py-2 px-4 overline">Niveau</th>
                   <th className="py-2 px-4 overline text-right">Actions</th>
                 </tr>
               </thead>
@@ -922,6 +969,17 @@ export default function DocumentsLibrary() {
                       {t.status === "submitted"
                         ? <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10 text-xs">Complété</Badge>
                         : <Badge variant="outline" className="text-xs">En attente</Badge>}
+                    </td>
+                    <td className="py-2 px-4">
+                      {t.status !== "submitted" ? (
+                        <span className="text-xs text-gray-300">—</span>
+                      ) : t.niveau ? (
+                        <button onClick={() => openEval(t)} data-testid={`eval-ft-${t.id}`}>
+                          <Badge variant="outline" className="text-xs hover:bg-gray-100">{NIVEAU_LABEL[t.niveau] || t.niveau}</Badge>
+                        </button>
+                      ) : (
+                        <button onClick={() => openEval(t)} className="text-xs text-[#d4af37] hover:underline" data-testid={`eval-ft-${t.id}`}>Noter</button>
+                      )}
                     </td>
                     <td className="py-2 px-4 text-right">
                       <div className="inline-flex gap-1">
@@ -1077,6 +1135,45 @@ export default function DocumentsLibrary() {
                 <Button variant="outline" onClick={() => setSendTarget(null)}>Annuler</Button>
                 <Button onClick={sendLink} disabled={sendingLink} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
                   {sendingLink ? "Envoi..." : "Envoyer"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!evalTarget} onOpenChange={(v) => !v && setEvalTarget(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Évaluer le test de français</DialogTitle></DialogHeader>
+          {evalTarget && (
+            <div className="space-y-3 mt-2">
+              <p className="text-sm text-gray-500">Candidat : <b>{evalTarget.stagiaire_nom}</b></p>
+              <div>
+                <label className="text-sm font-medium">Niveau de français observé</label>
+                <Select value={evalNiveau} onValueChange={setEvalNiveau}>
+                  <SelectTrigger data-testid="eval-niveau"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(NIVEAU_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Adaptation pédagogique</label>
+                <Select value={evalAdaptation} onValueChange={setEvalAdaptation}>
+                  <SelectTrigger data-testid="eval-adaptation"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(ADAPTATION_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Notes (optionnel)</label>
+                <Textarea rows={3} value={evalNotes} onChange={(e) => setEvalNotes(e.target.value)} data-testid="eval-notes" />
+              </div>
+              <div className="flex justify-end gap-2 mt-2">
+                <Button variant="outline" onClick={() => setEvalTarget(null)}>Annuler</Button>
+                <Button onClick={saveEval} disabled={savingEval} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="eval-save">
+                  {savingEval ? "Enregistrement..." : "Enregistrer"}
                 </Button>
               </div>
             </div>

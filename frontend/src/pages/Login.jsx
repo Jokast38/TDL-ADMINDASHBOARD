@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Lock, Envelope, User as UserIcon, Phone } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { roleHome } from "@/lib/roleHome";
 
 export default function Login() {
   const { login, register } = useAuth();
@@ -27,9 +28,7 @@ export default function Login() {
     try {
       const u = await login(loginEmail, loginPwd);
       toast.success(`Bienvenue ${u.name}`);
-      if (u.role === "etudiant") navigate("/espace-eleve");
-      else if (u.role === "animateur") navigate("/espace-animateur");
-      else navigate("/admin");
+      navigate(roleHome(u.role));
     } catch (e) {
       toast.error(e.message);
     } finally {

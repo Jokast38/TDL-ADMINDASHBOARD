@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
 
 from core.database import db
-from core.security import require_role
+from core.security import require_role, get_current_user
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_DOCS_VIEW, PUBLIC_FRONTEND_URL, PUBLIC_BACKEND_URL
-from models.french_test import FrenchTestIn, FrenchTestSubmitIn, FrenchTestSendIn
+from models.french_test import FrenchTestIn, FrenchTestSubmitIn, FrenchTestSendIn, FrenchTestEvaluationIn
 from services.french_test_data import get_french_test_content
 from services.pdf import render_html_pdf
 from services.email import send_email
@@ -81,6 +81,26 @@ async def list_french_tests(user: dict = Depends(require_role(*ROLES_DOCS_VIEW))
     items = await db.french_tests.find({}, {"_id": 0, "reponses": 0}).sort("created_at", -1).to_list(500)
     for it in items:
         it["link"] = f"{PUBLIC_FRONTEND_URL}/test-francais/{it['token']}"
+    return items
+
+
+# IMPORTANT : cette route (chemin statique à un seul segment) doit rester
+# déclarée AVANT `GET /{token}` ci-dessous — Starlette matche les routes dans
+# l'ordre de déclaration, et "/me" correspondrait sinon au paramètre `token`
+# de la route publique au lieu d'atteindre ce handler.
+@router.get("/me")
+async def my_french_tests(user: dict = Depends(get_current_user)):
+    """Tests de français de l'apprenant connecté — affichés dans son espace
+    (bannière « à compléter », ou résultat/niveau une fois évalué). Associés
+    par email (le lien de création ne passe pas systématiquement par
+    inscription_id, voir routers/documents_library côté formulaire staff)."""
+    if user["role"] != "etudiant":
+        raise HTTPException(status_code=403, detail="Réservé aux apprenants")
+    import re as _re
+    items = await db.french_tests.find(
+        {"stagiaire_email": {"$regex": f"^{_re.escape(user['email'])}$", "$options": "i"}},
+        {"_id": 0, "reponses": 0},
+    ).sort("created_at", -1).to_list(50)
     return items
 
 
@@ -251,6 +271,25 @@ async def submit_french_test(token: str, payload: FrenchTestSubmitIn):
                 f"{t['stagiaire_nom']} a répondu au test", "/admin/documents-library",
             )
     return {"ok": True}
+
+
+@router.put("/{tid}/evaluation")
+async def evaluate_french_test(tid: str, payload: FrenchTestEvaluationIn, user: dict = Depends(require_role(*ROLES_DOCS_VIEW))):
+    """Enregistre l'appréciation de l'évaluateur (niveau observé, adaptation
+    pédagogique) — jusqu'ici uniquement renseignée à la main sur le PDF,
+    donc invisible ailleurs dans l'outil (dossier, liste des tests). Ne
+    remplace pas le PDF (toujours téléchargeable), mais rend l'information
+    exploitable dans le dashboard."""
+    t = await db.french_tests.find_one({"id": tid}, {"_id": 0})
+    if not t:
+        raise HTTPException(status_code=404, detail="Test introuvable")
+    if t["status"] != "submitted":
+        raise HTTPException(status_code=400, detail="Le candidat n'a pas encore répondu à ce test")
+    update = {k: v for k, v in payload.model_dump().items() if v is not None}
+    update["evaluated_at"] = now_iso()
+    update["evaluated_by"] = user["id"]
+    await db.french_tests.update_one({"id": tid}, {"$set": update})
+    return await db.french_tests.find_one({"id": tid}, {"_id": 0, "reponses": 0})
 
 
 @router.get("/{tid}/result/download")

@@ -337,8 +337,17 @@ export const HELP_CATEGORIES = [
   },
 ];
 
+// Rôles "terrain" qui ne doivent voir que leur propre parcours dans le
+// Centre d'aide — pas les visites guidées des autres types de compte
+// (employé, admission, commercial...), qui ne les concernent pas et
+// n'apportent que de la confusion. Les rôles "bureau" (admin, employé...)
+// gardent la vue complète : ils bénéficient de voir comment fonctionnent les
+// autres profils qu'ils encadrent ou avec qui ils collaborent.
+const ISOLATED_ROLES = ["animateur"];
+
 export function categoriesForRole(role) {
   const own = HELP_CATEGORIES.filter((c) => c.roles.includes(role));
+  if (ISOLATED_ROLES.includes(role)) return own;
   const others = HELP_CATEGORIES.filter((c) => !c.roles.includes(role));
   return [...own, ...others];
 }

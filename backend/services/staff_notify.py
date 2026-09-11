@@ -5,6 +5,7 @@ from core.config import ROLES_DOSSIERS_MGMT
 from core.database import db
 from core.utils import now_iso
 from services.email import send_email
+from services.email_template import render_branded_email
 from services.push import send_push_to_users
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
@@ -563,6 +564,66 @@ async def send_session_reminders() -> int:
             )
             notified += 1
         await db.stages.update_one({"id": stage["id"]}, {"$set": {"reminder_sent_at": now_iso()}})
+    return notified
+
+
+async def send_emargement_reminders() -> int:
+    """Rappel automatique aux formateurs : pour chaque jour de session déjà
+    passé (hier, pour laisser le temps de le faire en présentiel le jour
+    même) où AUCUN émargement n'a encore été enregistré pour un apprenant
+    actif, on relance le(s) formateur(s) pour qu'ils utilisent le bouton
+    « Demander les émargements » (signature à distance) s'ils n'ont pas pu
+    faire signer sur place. Un seul rappel par session/jour, quelle que soit
+    la période (`emargement_reminder_sent_dates` sur le stage)."""
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date().isoformat()
+    stages = await db.stages.find(
+        {"statut": {"$ne": "annule"}, "date_debut": {"$lte": yesterday}, "date_fin": {"$gte": yesterday}},
+        {"_id": 0},
+    ).to_list(500)
+    notified = 0
+    for stage in stages:
+        if yesterday in (stage.get("emargement_reminder_sent_dates") or []):
+            continue
+        inscrits = await db.inscriptions.find(
+            {"stage_id": stage["id"], "status": "active"}, {"_id": 0, "id": 1}
+        ).to_list(500)
+        if not inscrits:
+            continue
+        signed_count = await db.emargements.count_documents({
+            "stage_id": stage["id"], "session_date": yesterday,
+            "inscription_id": {"$in": [i["id"] for i in inscrits]},
+        })
+        if signed_count > 0:
+            # Au moins un émargement existe pour ce jour — l'animateur est
+            # visiblement déjà sur le coup, pas besoin de le relancer.
+            await db.stages.update_one({"id": stage["id"]}, {"$addToSet": {"emargement_reminder_sent_dates": yesterday}})
+            continue
+
+        animateur_ids = list(stage.get("animateur_ids") or [])
+        if stage.get("animateur_id") and stage["animateur_id"] not in animateur_ids:
+            animateur_ids.append(stage["animateur_id"])
+        if not animateur_ids:
+            continue
+        formateurs = await db.users.find({"id": {"$in": animateur_ids}}, {"_id": 0, "id": 1, "email": 1, "name": 1}).to_list(20)
+        message = (
+            f"Bonjour,\n\n"
+            f"La session {stage.get('formation_titre', '')} du {yesterday} n'a pas encore d'émargement enregistré "
+            f"pour ses {len(inscrits)} apprenant(s).\n\n"
+            "Si la signature n'a pas pu être prise en présentiel, vous pouvez demander à chaque apprenant de "
+            "signer lui-même à distance depuis votre espace formateur, avec le bouton « Demander les émargements »."
+        )
+        for f in formateurs:
+            if f.get("email"):
+                try:
+                    await send_email(f["email"], f"✏️ Émargements en attente — {yesterday}", render_branded_email(message))
+                except Exception:
+                    pass
+        await send_push_to_users(
+            [f["id"] for f in formateurs], "Émargements en attente",
+            f"Session du {yesterday} — pensez à demander les signatures", "/espace-animateur",
+        )
+        await db.stages.update_one({"id": stage["id"]}, {"$addToSet": {"emargement_reminder_sent_dates": yesterday}})
+        notified += len(formateurs)
     return notified
 
 

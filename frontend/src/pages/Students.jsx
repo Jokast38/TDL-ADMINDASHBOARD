@@ -98,10 +98,12 @@ export default function Students() {
   const [bulkSending, setBulkSending] = useState(false);
   const [bulkNotifying, setBulkNotifying] = useState(false);
   const [bulkDownloading, setBulkDownloading] = useState(false);
-  const [mailTemplate, setMailTemplate] = useState("libre"); // "libre" | "convocation"
+  const [mailTemplate, setMailTemplate] = useState("libre"); // "libre" | "convocation" | "demande_documents"
   const [convocIntitule, setConvocIntitule] = useState("");
   const [convocDate, setConvocDate] = useState("");
   const [convocCentre, setConvocCentre] = useState(CENTER_OPTIONS[0]);
+  const [composeButtonUrl, setComposeButtonUrl] = useState("");
+  const [preparingDocsTemplate, setPreparingDocsTemplate] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -171,6 +173,7 @@ export default function Students() {
     setComposeMessage("");
     setMailTemplate("libre");
     setConvocIntitule(""); setConvocDate(""); setConvocCentre(CENTER_OPTIONS[0]);
+    setComposeButtonUrl("");
   };
 
   const insertConvocationTemplate = () => {
@@ -179,6 +182,44 @@ export default function Students() {
     });
     setComposeSubject(subject);
     setComposeMessage(message);
+  };
+
+  // Modèle "Demande de documents" : va chercher les documents encore
+  // manquants pour la formation de cet apprenant (dossier.documents_requis /
+  // documents_manquants, voir GET /dossiers/{id}) et génère un lien de
+  // connexion à usage unique vers son espace (réutilise le mécanisme de
+  // réinitialisation de mot de passe) pour qu'il puisse déposer ses
+  // documents en un clic, sans avoir à connaître son mot de passe.
+  const insertDocumentsTemplate = async () => {
+    if (!composeTarget?.dossier_id) {
+      return toast.error("Aucun dossier pour cet apprenant — impossible de déterminer les documents requis");
+    }
+    setPreparingDocsTemplate(true);
+    try {
+      const [dossierRes, linkRes] = await Promise.all([
+        api.get(`/dossiers/${composeTarget.dossier_id}`),
+        api.post(`/students/${composeTarget.id}/login-link`),
+      ]);
+      const dossier = dossierRes.data;
+      const missing = dossier.documents_manquants?.length ? dossier.documents_manquants : (dossier.documents_requis || []);
+      const labels = missing.map((t) => DOC_TYPE_LABELS[t] || t);
+      setComposeSubject(`Documents à transmettre — ${dossier.formation_title || ""}`);
+      setComposeMessage(
+        `Bonjour ${composeTarget.name},\n\n` +
+        `Pour compléter votre dossier "${dossier.formation_title || ""}", merci de nous transmettre le(s) document(s) suivant(s) :\n\n` +
+        (labels.length ? labels.map((l) => `- ${l}`).join("\n") : "- (détail disponible dans votre espace)") +
+        `\n\nVous pouvez les déposer directement depuis votre espace apprenant en cliquant sur le bouton ci-dessous.\n\n` +
+        `Cordialement,\nTDL Formation`
+      );
+      setComposeButtonUrl(linkRes.data.url);
+      if (!missing.length) {
+        toast.info("Aucun document manquant recensé pour cet apprenant — vérifiez le modèle avant l'envoi.");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la préparation du modèle");
+    } finally {
+      setPreparingDocsTemplate(false);
+    }
   };
 
   const sendCompose = async () => {
@@ -191,6 +232,10 @@ export default function Students() {
       fd.append("to", composeTarget.email);
       fd.append("subject", composeSubject.trim());
       fd.append("message", composeMessage);
+      if (composeButtonUrl) {
+        fd.append("button_text", "Accéder à mon espace");
+        fd.append("button_url", composeButtonUrl);
+      }
       await api.post("/email/send-custom", fd, { headers: { "Content-Type": "multipart/form-data" } });
       toast.success("Email envoyé");
       setComposeTarget(null);
@@ -632,14 +677,29 @@ export default function Students() {
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium">Modèle</label>
-                  <Select value={mailTemplate} onValueChange={setMailTemplate}>
+                  <Select value={mailTemplate} onValueChange={(v) => { setMailTemplate(v); setComposeButtonUrl(""); }}>
                     <SelectTrigger data-testid="compose-email-template"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="libre">Message libre</SelectItem>
                       <SelectItem value="convocation">Convocation à un examen</SelectItem>
+                      <SelectItem value="demande_documents">Demande de documents</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
+                {mailTemplate === "demande_documents" && (
+                  <div className="border border-gray-200 rounded-md p-3 space-y-2 bg-gray-50">
+                    <p className="text-xs text-gray-500">
+                      Récupère les documents encore manquants pour la formation de cet apprenant et génère un lien de connexion direct vers son espace (pas besoin de mot de passe).
+                    </p>
+                    <Button type="button" variant="outline" size="sm" onClick={insertDocumentsTemplate} disabled={preparingDocsTemplate} data-testid="docs-insert">
+                      {preparingDocsTemplate ? "Préparation..." : "Insérer le modèle dans l'objet / message"}
+                    </Button>
+                    {composeButtonUrl && (
+                      <p className="text-xs text-[#0B7238]">Lien de connexion généré — un bouton « Accéder à mon espace » sera ajouté à l'email.</p>
+                    )}
+                  </div>
+                )}
 
                 {mailTemplate === "convocation" && (
                   <div className="border border-gray-200 rounded-md p-3 space-y-3 bg-gray-50">

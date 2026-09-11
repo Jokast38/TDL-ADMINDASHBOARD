@@ -4,6 +4,7 @@ from core.security import require_role
 from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
+    send_emargement_reminders,
 )
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
@@ -63,6 +64,15 @@ async def run_appointment_reminders(user: dict = Depends(require_role("admin")))
     externe) — la boucle de fond (voir server.py) les envoie automatiquement
     chaque jour, pour les rendez-vous du lendemain."""
     notified = await send_appointment_reminders()
+    return {"notified": notified}
+
+
+@router.post("/emargements/run")
+async def run_emargement_reminders(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel des rappels émargements manquants (test, ou cron
+    externe) — la boucle de fond (voir server.py) les envoie automatiquement
+    chaque jour, pour les sessions de la veille sans aucun émargement."""
+    notified = await send_emargement_reminders()
     return {"notified": notified}
 
 

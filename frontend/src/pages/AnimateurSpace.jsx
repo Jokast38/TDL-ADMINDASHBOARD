@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, MapPin, Users, PenNib, CheckCircle, XCircle, Eraser, FilePdf, UserCircle, FileArrowUp, Signature } from "@phosphor-icons/react";
+import { Calendar, MapPin, Users, PenNib, CheckCircle, XCircle, Eraser, FilePdf, UserCircle, FileArrowUp, Signature, PaperPlaneTilt } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 // Pièces justifiant le droit d'exercer — doit rester synchronisé avec
@@ -256,6 +256,7 @@ export default function AnimateurSpace() {
   const [signTarget, setSignTarget] = useState(null);
   const [presence, setPresence] = useState(true);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [requestingSignatures, setRequestingSignatures] = useState(false);
   const padRef = useRef(null);
 
   const load = () => api.get("/stages").then((r) => setStages(r.data));
@@ -334,6 +335,22 @@ export default function AnimateurSpace() {
       refreshInscrits(sessionDate, periode);
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
+  const requestSignatures = async () => {
+    setRequestingSignatures(true);
+    try {
+      const { data } = await api.post(`/stages/${selected.id}/emargements/request`, { session_date: sessionDate, periode });
+      if (data.notified > 0) {
+        toast.success(`${data.notified} apprenant(s) invité(s) à signer depuis leur espace`);
+      } else {
+        toast.info("Tous les apprenants ont déjà signé ou ont déjà été relancés pour ce créneau");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la demande");
+    } finally {
+      setRequestingSignatures(false);
     }
   };
 
@@ -447,9 +464,14 @@ export default function AnimateurSpace() {
             <div className="mt-6">
               <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
                 <p className="overline flex items-center gap-2"><Users size={12} /> Liste d'émargement {sessionDate ? `— ${new Date(sessionDate).toLocaleDateString("fr-FR")}` : ""}</p>
-                <Button size="sm" variant="outline" onClick={generateSheet} disabled={generatingPdf} data-testid="generate-emargement-pdf">
-                  <FilePdf size={14} className="mr-1" /> {generatingPdf ? "Génération..." : "Générer la feuille PDF"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={requestSignatures} disabled={requestingSignatures} data-testid="request-emargements">
+                    <PaperPlaneTilt size={14} className="mr-1" /> {requestingSignatures ? "Envoi..." : "Demander les émargements"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={generateSheet} disabled={generatingPdf} data-testid="generate-emargement-pdf">
+                    <FilePdf size={14} className="mr-1" /> {generatingPdf ? "Génération..." : "Générer la feuille PDF"}
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2">
                 {inscrits.map((ins) => (

@@ -27,6 +27,7 @@ from routers.lead_automations import run_due_automations
 from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
+    send_emargement_reminders,
 )
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
@@ -367,6 +368,21 @@ async def _session_reminders_loop():
         await asyncio.sleep(24 * 3600)
 
 
+async def _emargement_reminders_loop():
+    """Toutes les 24h, relance le(s) formateur(s) d'une session dont aucun
+    émargement n'a encore été enregistré pour la veille (voir
+    services/staff_notify.py::send_emargement_reminders)."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_emargement_reminders()
+            if notified:
+                log.info(f"Rappels émargements : {notified} formateur(s) notifié(s)")
+        except Exception as e:
+            log.warning(f"Rappels émargements : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
+
+
 async def _appointment_reminders_loop():
     """Toutes les 24h, envoie un rappel la veille de chaque rendez-vous
     réservé (voir services/staff_notify.py)."""
@@ -426,6 +442,7 @@ async def startup():
     asyncio.create_task(_wordpress_auto_sync_loop())
     asyncio.create_task(_weekly_admin_report_loop())
     asyncio.create_task(_session_reminders_loop())
+    asyncio.create_task(_emargement_reminders_loop())
     asyncio.create_task(_appointment_reminders_loop())
     asyncio.create_task(_formateur_dossier_reminders_loop())
     asyncio.create_task(_convocations_loop())

@@ -40,6 +40,7 @@ const StageRecuperationMerci = lazy(() => import("@/pages/StageRecuperationMerci
 const FAQ = lazy(() => import("@/pages/FAQ"));
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const EmployeeHome = lazy(() => import("@/pages/EmployeeHome"));
 const Formations = lazy(() => import("@/pages/Formations"));
 const Inscriptions = lazy(() => import("@/pages/Inscriptions"));
 const PaiementConfirmation = lazy(() => import("@/pages/PaiementConfirmation"));
@@ -73,6 +74,7 @@ import { TourProvider } from "@/contexts/TourContext";
 import TourOverlay from "@/components/TourOverlay";
 import AnalyticsLoader from "@/components/AnalyticsLoader";
 import CookieConsent from "@/components/CookieConsent";
+import { roleHome } from "@/lib/roleHome";
 
 function ProtectedRoute({ children, roles }) {
   const { user } = useAuth();
@@ -89,12 +91,7 @@ function ProtectedRoute({ children, roles }) {
     return <Navigate to="/change-password" replace />;
   }
   if (roles && !roles.includes(user.role)) {
-    const fallback =
-      user.role === "etudiant" ? "/espace-eleve" :
-      user.role === "animateur" ? "/espace-animateur" :
-      user.role === "commercial" ? "/admin/leads" :
-      "/admin";
-    return <Navigate to={fallback} replace />;
+    return <Navigate to={roleHome(user.role)} replace />;
   }
   return children;
 }
@@ -165,7 +162,10 @@ function App() {
             } />
 
             <Route path="/admin" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "responsable_commercial"]}><AdminLayout><Dashboard /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_commercial"]}><AdminLayout><Dashboard /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/accueil" element={
+              <ProtectedRoute roles={["responsable_admission", "agent_admin"]}><AdminLayout><EmployeeHome /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/formations" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission"]}><AdminLayout><Formations /></AdminLayout></ProtectedRoute>

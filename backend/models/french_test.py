@@ -20,3 +20,11 @@ class FrenchTestSubmitIn(BaseModel):
     qcm_answers: dict = {}  # {"0": "3 personnes", ...} indexé par position de question
     calcul_answers: dict = {}  # {"0": "36", ...} indexé par position de calcul
     phrases_reponses: List[str] = []  # phrase remise en ordre par le candidat, même index que "phrases"
+
+
+class FrenchTestEvaluationIn(BaseModel):
+    # "bases_fragiles" | "intermediaire" | "satisfaisant" — même échelle que
+    # la partie évaluateur du PDF (voir _build_result_html).
+    niveau: Optional[str] = None
+    adaptation: Optional[str] = None  # "renforcement_cible" | "parcours_standard"
+    notes: Optional[str] = ""

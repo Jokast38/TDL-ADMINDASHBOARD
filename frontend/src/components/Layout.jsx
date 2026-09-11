@@ -10,7 +10,19 @@ import {
 } from "@phosphor-icons/react";
 
 const navAll = [
-  { to: "/admin", label: "Dashboard", icon: House, roles: ["admin", "employe", "responsable_admission", "agent_admin", "responsable_commercial"], end: true },
+  // Limité aux rôles ayant réellement accès à GET /api/dashboard/stats côté
+  // backend (voir require_role dans routers/dashboard.py) — responsable_admission
+  // et agent_admin pouvaient auparavant ouvrir cette page depuis le menu mais
+  // recevaient une erreur "Accès refusé" au chargement des statistiques,
+  // faute d'autorisation backend. Leur page d'accueil est /admin/accueil
+  // (voir lib/roleHome.js et pages/EmployeeHome.jsx).
+  { to: "/admin", label: "Dashboard", icon: House, roles: ["admin", "employe", "responsable_commercial"], end: true },
+  { to: "/admin/accueil", label: "Accueil", icon: House, roles: ["responsable_admission", "agent_admin"], end: true },
+  // Seul lien de retour vers l'espace animateur depuis le reste du dashboard —
+  // sans ça, un formateur qui clique sur Agenda/Assistant IA/Centre d'aide
+  // n'avait aucun moyen de revenir à /espace-animateur (pas de "Dashboard"
+  // dans son menu, contrairement aux autres rôles).
+  { to: "/espace-animateur", label: "Accueil", icon: House, roles: ["animateur"], end: true },
   { to: "/admin/formations", label: "Formations", icon: GraduationCap, roles: ["admin", "employe", "responsable_admission"] },
   { to: "/admin/stages", label: "Sessions de stage", icon: CalendarCheck, roles: ["admin", "responsable_admission"] },
   { to: "/admin/agenda", label: "Agenda", icon: CalendarBlank, roles: ["admin", "responsable_admission", "animateur"] },

@@ -16,6 +16,8 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
+const NIVEAU_LABEL = { bases_fragiles: "Bases fragiles", intermediaire: "Intermédiaire", satisfaisant: "Satisfaisant" };
+
 const COLUMNS = [
   { key: "nouveau", label: "Nouveau", color: "#868e96" },
   { key: "en_verification", label: "En vérification", color: "#F5A623" },
@@ -243,7 +245,7 @@ export default function Dossiers() {
       </div>
 
       <Dialog open={!!selected} onOpenChange={(v) => !v && setSelected(null)}>
-        <DialogContent className="max-w-3xl" data-testid="dossier-dialog">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto" data-testid="dossier-dialog">
           {selected && (
             <>
               <DialogHeader>
@@ -407,6 +409,7 @@ export default function Dossiers() {
                         <p key={t.id} className="text-sm">
                           {t.status === "submitted" ? <span className="text-[#0B7238]">Complété</span> : <span className="text-gray-400">En attente</span>}
                           {t.category ? ` · ${t.category}` : ""}
+                          {t.niveau ? ` · Niveau : ${NIVEAU_LABEL[t.niveau] || t.niveau}` : ""}
                         </p>
                       )) : <p className="text-sm text-gray-400">Aucun test créé</p>}
                     </div>

@@ -424,14 +424,96 @@ function AttestationSection({ dossierId }) {
   );
 }
 
+// Checklist des documents requis pour un dossier, avec dépôt par
+// glisser-déposer pour chaque document manquant — utilisée dans l'onglet
+// Accueil (partie statut du dossier). `dossier.documents_manquants` fait
+// foi (calculé côté backend, voir _missing_docs) plutôt que la simple
+// présence d'un document du bon type : un document rejeté redevient
+// "manquant" jusqu'à ce qu'il soit renvoyé.
+function DocumentChecklist({ dossier, docs, onUpload }) {
+  const [dragOver, setDragOver] = useState(null);
+  const requis = dossier.documents_requis || [];
+  const missing = new Set(dossier.documents_manquants || []);
+
+  if (!requis.length) {
+    return <p className="text-xs text-gray-400">Aucun document requis pour cette formation.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {requis.map((docType) => {
+        const label = DOC_TYPE_LABELS[docType] || docType;
+        const isMissing = missing.has(docType);
+        const existing = [...docs].reverse().find((d) => d.doc_type === docType);
+
+        if (!isMissing) {
+          return (
+            <div key={docType} className="flex items-center justify-between text-sm p-2.5 border border-green-200 bg-green-50 rounded-md">
+              <span className="flex items-center gap-2 text-green-800"><CheckCircle size={16} weight="fill" className="text-green-600 shrink-0" /> {label}</span>
+              {existing && (
+                <Badge variant="outline" className={
+                  existing.verification_status === "approved" ? "border-green-500 text-green-600 text-[10px]" : "text-gray-500 text-[10px]"
+                }>{existing.verification_status === "approved" ? "Approuvé" : "Transmis"}</Badge>
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <label
+            key={docType}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(docType); }}
+            onDragLeave={() => setDragOver((d) => (d === docType ? null : d))}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver((d) => (d === docType ? null : d));
+              const file = e.dataTransfer.files?.[0];
+              if (file) onUpload(file, docType);
+            }}
+            className={`flex items-center justify-between text-sm p-2.5 border-2 border-dashed rounded-md cursor-pointer transition-colors ${
+              dragOver === docType ? "border-[#d4af37] bg-[#fff8e1]" : "border-gray-300 hover:border-gray-400 bg-white"
+            }`}
+            data-testid={`dropzone-${dossier.id}-${docType}`}
+          >
+            <span className="flex items-center gap-2 text-gray-600">
+              <FileArrowUp size={16} className="shrink-0" />
+              {label} {existing?.verification_status === "rejected" ? "— rejeté, à renvoyer" : "— glissez-déposez ou cliquez"}
+            </span>
+            <input
+              type="file"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f, docType); e.target.value = ""; }}
+            />
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function StudentSpace() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [dossiers, setDossiers] = useState([]);
   const [docsByDossier, setDocsByDossier] = useState({});
   const [uploadType, setUploadType] = useState({});
+  const [emargementRequests, setEmargementRequests] = useState([]);
+  const [activeTab, setActiveTab] = useState("accueil"); // "accueil" | "dossiers"
+  const [signEmargementTarget, setSignEmargementTarget] = useState(null);
+  const [signingEmargement, setSigningEmargement] = useState(false);
+  const emargementPadRef = useRef(null);
+  const [frenchTests, setFrenchTests] = useState([]);
 
-  useEffect(() => { fetchDossiers(); }, []);
+  useEffect(() => { fetchDossiers(); fetchEmargementRequests(); fetchFrenchTests(); }, []);
+
+  const fetchFrenchTests = async () => {
+    try {
+      const { data } = await api.get("/french-tests/me");
+      setFrenchTests(data);
+    } catch {
+      setFrenchTests([]);
+    }
+  };
 
   const fetchDossiers = async () => {
     try {
@@ -444,6 +526,33 @@ export default function StudentSpace() {
     }
   };
 
+  const fetchEmargementRequests = async () => {
+    try {
+      const { data } = await api.get("/me/emargement-requests");
+      setEmargementRequests(data);
+    } catch {
+      setEmargementRequests([]);
+    }
+  };
+
+  const submitEmargementSign = async () => {
+    if (emargementPadRef.current?.isEmpty()) {
+      return toast.error("Veuillez signer dans la zone prévue");
+    }
+    const dataUrl = emargementPadRef.current.getCanvas().toDataURL("image/png");
+    setSigningEmargement(true);
+    try {
+      await api.post("/me/emargements/sign", { request_id: signEmargementTarget.id, signature_data_url: dataUrl });
+      toast.success("Émargement signé · attestation disponible dans votre espace");
+      setSignEmargementTarget(null);
+      fetchEmargementRequests();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la signature");
+    } finally {
+      setSigningEmargement(false);
+    }
+  };
+
   const loadDocs = async (dossierId) => {
     try {
       const { data } = await api.get(`/dossiers/${dossierId}/documents`);
@@ -453,26 +562,47 @@ export default function StudentSpace() {
     }
   };
 
-  const upload = async (e, dossierId) => {
-    const file = e.target.files?.[0];
+  const uploadFile = async (file, dossierId, docType) => {
     if (!file) return;
-    const docType = uploadType[dossierId] || "autre";
     const fd = new FormData();
     fd.append("file", file);
-    fd.append("doc_type", docType);
+    fd.append("doc_type", docType || "autre");
     try {
       await api.post(`/dossiers/${dossierId}/documents`, fd, {
         headers: { "Content-Type": "multipart/form-data" }
       });
       toast.success("Document envoyé !");
       loadDocs(dossierId);
-      fetchDossiers(); // recalcule le compteur de documents manquants
+      fetchDossiers(); // recalcule le compteur de documents manquants et le statut affiché à l'Accueil
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
+  const upload = async (e, dossierId) => {
+    const file = e.target.files?.[0];
+    const docType = uploadType[dossierId] || "autre";
+    try {
+      await uploadFile(file, dossierId, docType);
     } finally {
       e.target.value = "";
     }
   };
+
+  // Synthèse pour l'onglet Accueil — dérivée des dossiers déjà chargés, sans
+  // appel réseau supplémentaire : documents encore manquants (tous dossiers
+  // confondus), prochaine session à venir (la plus proche parmi les stages
+  // affectés), et total des documents déjà transmis.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const missingByDossier = dossiers
+    .map((d) => ({ dossier: d, manquants: d.documents_manquants || [] }))
+    .filter((x) => x.manquants.length > 0);
+  const totalDocsSent = Object.values(docsByDossier).reduce((sum, docs) => sum + docs.length, 0);
+  const upcomingSessions = dossiers
+    .filter((d) => d.stage?.date_debut && d.stage.date_debut >= todayIso)
+    .sort((a, b) => a.stage.date_debut.localeCompare(b.stage.date_debut));
+  const nextSession = upcomingSessions[0];
+  const needsAttention = dossiers.filter((d) => d.status === "rejete");
 
   return (
     <div className="min-h-screen bg-gray-50" data-testid="student-space">
@@ -494,8 +624,134 @@ export default function StudentSpace() {
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
         <p className="overline">Mon espace</p>
-        <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-1 mb-6 sm:mb-8">Mes formations & dossiers</h1>
+        <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-1 mb-6">Bonjour {user?.name?.split(" ")[0] || ""}</h1>
 
+        <div className="flex gap-2 mb-6 border-b border-gray-200">
+          {[["accueil", "Accueil"], ["dossiers", "Mes dossiers"]].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === key ? "border-[#0a0a0a] text-[#0a0a0a]" : "border-transparent text-gray-400 hover:text-gray-600"
+              }`}
+              data-testid={`student-tab-${key}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "accueil" && (
+          <div className="space-y-5" data-testid="student-home">
+            {emargementRequests.length > 0 && (
+              <div className="space-y-2" data-testid="emargement-requests">
+                {emargementRequests.map((r) => (
+                  <Card key={r.id} className="p-4 border border-amber-300 bg-amber-50 rounded-md shadow-none flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-start gap-2">
+                      <Signature size={18} className="text-amber-700 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-900">
+                          Émargement à signer — {r.formation_titre || "votre formation"}
+                        </p>
+                        <p className="text-xs text-amber-700">
+                          Session du {new Date(r.session_date).toLocaleDateString("fr-FR")}
+                          {r.periode !== "journee" ? ` · ${r.periode === "matin" ? "matin" : "après-midi"}` : ""}
+                          {r.lieu_ville ? ` · ${r.lieu_ville}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <Button size="sm" className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" onClick={() => setSignEmargementTarget(r)} data-testid={`sign-emargement-${r.id}`}>
+                      <Signature size={14} className="mr-1" /> Signer maintenant
+                    </Button>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {frenchTests.filter((t) => t.status === "pending").map((t) => (
+              <Card key={t.id} className="p-4 border border-amber-300 bg-amber-50 rounded-md shadow-none flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-start gap-2">
+                  <Sparkle size={18} className="text-amber-700 mt-0.5 shrink-0" />
+                  <p className="text-sm font-medium text-amber-900">Test de connaissance du français à compléter</p>
+                </div>
+                <a href={`/test-francais/${t.token}`} target="_blank" rel="noopener noreferrer">
+                  <Button size="sm" className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid={`start-french-test-${t.id}`}>
+                    Passer le test
+                  </Button>
+                </a>
+              </Card>
+            ))}
+
+            {missingByDossier.map(({ dossier, manquants }) => (
+              <Card key={dossier.id} className="p-4 border border-amber-300 bg-amber-50 rounded-md shadow-none">
+                <div className="flex items-start gap-2">
+                  <Warning size={18} weight="fill" className="text-amber-700 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-900">
+                      {manquants.length} document{manquants.length > 1 ? "s" : ""} manquant{manquants.length > 1 ? "s" : ""} — {dossier.formation_title}
+                    </p>
+                    <p className="text-xs text-amber-700 mt-0.5">{manquants.map((m) => DOC_TYPE_LABELS[m] || m).join(", ")}</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+
+            {needsAttention.map((d) => (
+              <Card key={d.id} className="p-4 border border-red-300 bg-red-50 rounded-md shadow-none">
+                <div className="flex items-start gap-2">
+                  <Warning size={18} weight="fill" className="text-red-600 mt-0.5 shrink-0" />
+                  <p className="text-sm font-medium text-red-700">
+                    Votre dossier « {d.formation_title} » nécessite une correction — consultez vos emails ou contactez-nous.
+                  </p>
+                </div>
+              </Card>
+            ))}
+
+            {!emargementRequests.length && !missingByDossier.length && !needsAttention.length && !frenchTests.some((t) => t.status === "pending") && (
+              <Card className="p-4 border border-green-200 bg-green-50 rounded-md shadow-none flex items-center gap-2">
+                <CheckCircle size={18} weight="fill" className="text-green-600 shrink-0" />
+                <p className="text-sm text-green-700">Rien à signaler — tout est à jour de votre côté.</p>
+              </Card>
+            )}
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Card className="p-5 border border-gray-200 rounded-md shadow-none">
+                <p className="overline mb-1">Prochaine session</p>
+                {nextSession ? (
+                  <>
+                    <p className="font-display font-bold text-lg">{new Date(nextSession.stage.date_debut).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</p>
+                    <p className="text-xs text-gray-500 mt-1">{nextSession.formation_title}</p>
+                    {nextSession.stage.lieu_ville && <p className="text-xs text-gray-400 flex items-center gap-1 mt-1"><MapPin size={12} /> {nextSession.stage.lieu_ville}</p>}
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-400 mt-2">Aucune session programmée pour le moment.</p>
+                )}
+              </Card>
+              <Card className="p-5 border border-gray-200 rounded-md shadow-none">
+                <p className="overline mb-1">Documents transmis</p>
+                <p className="font-display font-bold text-lg">{totalDocsSent}</p>
+                <p className="text-xs text-gray-500 mt-1">document{totalDocsSent > 1 ? "s" : ""} envoyé{totalDocsSent > 1 ? "s" : ""} au total</p>
+              </Card>
+            </div>
+
+            <div>
+              <p className="overline mb-2">Statut de mon dossier</p>
+              <div className="space-y-3">
+                {dossiers.length ? dossiers.map((d) => (
+                  <Card key={d.id} className="p-4 sm:p-5 border border-gray-200 rounded-md shadow-none" data-testid={`home-dossier-${d.id}`}>
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <p className="font-display font-bold">{d.formation_title}</p>
+                      <Badge className={`${STATUS_COLOR[d.status] || ""} hover:${STATUS_COLOR[d.status] || ""} text-[10px] shrink-0`}>{STATUS_LABEL[d.status] || d.status}</Badge>
+                    </div>
+                    <DocumentChecklist dossier={d} docs={docsByDossier[d.id] || []} onUpload={(file, docType) => uploadFile(file, d.id, docType)} />
+                  </Card>
+                )) : <p className="text-sm text-gray-400">Aucun dossier</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "dossiers" && (
         <div className="space-y-4">
           {dossiers.map((d) => {
             const docs = docsByDossier[d.id] || [];
@@ -575,7 +831,38 @@ export default function StudentSpace() {
             </Card>
           )}
         </div>
+        )}
       </main>
+
+      <Dialog open={!!signEmargementTarget} onOpenChange={(v) => !v && setSignEmargementTarget(null)}>
+        <DialogContent className="max-w-sm" data-testid="emargement-sign-dialog">
+          {signEmargementTarget && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-display">Signer mon émargement</DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-gray-500 -mt-2 mb-2">
+                {signEmargementTarget.formation_titre} — session du {new Date(signEmargementTarget.session_date).toLocaleDateString("fr-FR")}
+                {signEmargementTarget.periode !== "journee" ? ` (${signEmargementTarget.periode === "matin" ? "matin" : "après-midi"})` : ""}
+              </p>
+              <div className="border-2 border-dashed border-gray-300 rounded-md bg-white">
+                <SignatureCanvas
+                  ref={emargementPadRef}
+                  canvasProps={{ width: 400, height: 160, className: "w-full rounded-md", "data-testid": "emargement-signature-pad" }}
+                  penColor="#0a0a0a"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2 mt-2">
+                <Button variant="ghost" size="sm" onClick={() => emargementPadRef.current?.clear()}><Eraser size={12} className="mr-1" /> Effacer</Button>
+                <Button size="sm" onClick={submitEmargementSign} disabled={signingEmargement} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="emargement-sign-submit">
+                  {signingEmargement ? "Signature..." : "Confirmer ma présence"}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <ChatWidget />
       <ContactBubble />
     </div>
