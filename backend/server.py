@@ -246,6 +246,25 @@ async def _callback_reminders_loop():
         await asyncio.sleep(4 * 3600)
 
 
+async def _payment_sync_loop():
+    """Filet de sécurité : toutes les 15 min, relit sur Stripe le statut de
+    toute inscription restée bloquée en 'processing'/'pending' (webhook qui
+    n'a jamais atteint le backend — secret mal configuré, coupure réseau,
+    retries Stripe épuisés). Sans cette boucle, un paiement confirmé par
+    Stripe pouvait rester indéfiniment affiché comme non payé sur le
+    dashboard tant que personne ne cliquait sur le bouton de synchronisation
+    manuelle (voir POST /api/payments/{iid}/sync)."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            updated = await payments.sync_pending_stripe_payments()
+            if updated:
+                log.info(f"Synchronisation paiements Stripe : {updated} inscription(s) mise(s) à jour")
+        except Exception as e:
+            log.warning(f"Synchronisation paiements Stripe : erreur — {e}")
+        await asyncio.sleep(15 * 60)
+
+
 async def _document_reminders_loop():
     """Toutes les 24h, relance par email les apprenants dont le dossier a des
     documents manquants (au plus 1 relance/72h par dossier, voir
@@ -403,6 +422,7 @@ async def startup():
     asyncio.create_task(_callback_reminders_loop())
     asyncio.create_task(_daily_dossiers_digest_loop())
     asyncio.create_task(_document_reminders_loop())
+    asyncio.create_task(_payment_sync_loop())
     asyncio.create_task(_wordpress_auto_sync_loop())
     asyncio.create_task(_weekly_admin_report_loop())
     asyncio.create_task(_session_reminders_loop())

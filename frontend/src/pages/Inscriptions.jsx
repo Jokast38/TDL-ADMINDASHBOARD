@@ -551,7 +551,20 @@ export default function Inscriptions() {
                     <td className="py-3 px-4">{i.formation_title}</td>
                     <td className="py-3 px-4"><Badge variant="outline">{i.category}</Badge></td>
                     <td className="py-3 px-4">
-                      <Badge variant="outline" className={`text-[10px] ${ORIGIN_COLOR[getOrigin(i)]}`}>{ORIGIN_LABEL[getOrigin(i)]}</Badge>
+                      {i.landing_url ? (
+                        <a
+                          href={i.landing_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Voir la page d'origine : ${i.landing_url}`}
+                        >
+                          <Badge variant="outline" className={`text-[10px] hover:underline cursor-pointer ${ORIGIN_COLOR[getOrigin(i)]}`}>
+                            {ORIGIN_LABEL[getOrigin(i)]}
+                          </Badge>
+                        </a>
+                      ) : (
+                        <Badge variant="outline" className={`text-[10px] ${ORIGIN_COLOR[getOrigin(i)]}`}>{ORIGIN_LABEL[getOrigin(i)]}</Badge>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1">

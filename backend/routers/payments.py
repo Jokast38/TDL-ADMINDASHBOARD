@@ -10,6 +10,7 @@ from services import stripe_service
 from services.meta_capi import send_capi_event
 from services.pdf import generate_payment_receipt_pdf
 from services.email import send_email
+from services.email_template import render_branded_email
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 log = logging.getLogger(__name__)
@@ -34,6 +35,88 @@ _LANDING_CANCEL_PATHS = {
 
 async def _settings() -> dict:
     return await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
+
+
+async def _mark_paid_and_notify(inscription_id: str, amount_paid: float, payment_intent: str | None):
+    """Marque l'inscription payée puis envoie l'évènement CAPI Purchase et le
+    reçu de paiement — factorisé entre le webhook Stripe et le filet de
+    sécurité (/sync et la boucle de réconciliation périodique) pour que les
+    deux chemins aient exactement le même comportement côté notification."""
+    result = await db.inscriptions.update_one(
+        {"id": inscription_id},
+        {"$set": {
+            "payment_status": "paid", "amount_paid": amount_paid,
+            "stripe_payment_intent": payment_intent, "paid_at": now_iso(), "updated_at": now_iso(),
+        }},
+    )
+    if result.matched_count == 0:
+        log.warning(f"_mark_paid_and_notify : inscription {inscription_id} introuvable en base")
+        return
+    inscription = await db.inscriptions.find_one({"id": inscription_id}, {"_id": 0})
+    if not inscription:
+        return
+    try:
+        await send_capi_event(
+            "Purchase",
+            event_id=f"purchase_{inscription_id}",
+            email=inscription.get("student_email"),
+            phone=inscription.get("student_phone"),
+            custom_data={"value": amount_paid, "currency": "EUR", "content_name": inscription.get("source") or "inscription_formation"},
+            event_source_url=inscription.get("landing_url") or f"{PUBLIC_FRONTEND_URL}/inscription",
+            client_ip_address=inscription.get("checkout_client_ip"),
+            client_user_agent=inscription.get("checkout_user_agent"),
+            fbc=inscription.get("checkout_fbc"), fbp=inscription.get("checkout_fbp"),
+            external_id=inscription_id,
+        )
+    except Exception as e:
+        log.warning(f"_mark_paid_and_notify : événement CAPI non envoyé pour {inscription_id} — {e}")
+    if inscription.get("student_email"):
+        try:
+            import base64 as _b64
+            formation = await db.formations.find_one({"id": inscription.get("formation_id")}, {"_id": 0})
+            settings_doc = await _settings()
+            pdf_bytes = generate_payment_receipt_pdf(inscription, formation, settings_doc)
+            message = (
+                f"Bonjour {inscription.get('student_name', '')},\n\n"
+                f"Nous confirmons la bonne réception de votre paiement de {amount_paid:.2f} € "
+                f"pour {inscription.get('formation_title', '')}.\n\n"
+                f"Vous trouverez votre reçu en pièce jointe."
+            )
+            await send_email(
+                inscription["student_email"],
+                f"Reçu de paiement — {inscription.get('formation_title', '')}",
+                render_branded_email(message),
+                attachment={"filename": "recu-paiement.pdf", "content_b64": _b64.b64encode(pdf_bytes).decode("ascii")},
+            )
+        except Exception as e:
+            log.warning(f"_mark_paid_and_notify : reçu de paiement non envoyé pour {inscription_id} — {e}")
+
+
+async def sync_pending_stripe_payments() -> int:
+    """Filet de sécurité automatique : relit sur Stripe l'état de toute
+    inscription restée bloquée en 'processing'/'pending' alors qu'elle a une
+    session Stripe associée — couvre les cas où le webhook n'a jamais atteint
+    le backend (secret mal configuré, coupure réseau, retries Stripe épuisés
+    avant qu'on s'en aperçoive). Voir aussi POST /payments/{iid}/sync pour le
+    déclenchement manuel depuis le dashboard."""
+    candidates = await db.inscriptions.find(
+        {"payment_status": {"$in": ["processing", "pending"]}, "stripe_session_id": {"$exists": True, "$ne": None}},
+        {"_id": 0, "id": 1, "stripe_session_id": 1},
+    ).to_list(500)
+    updated = 0
+    for c in candidates:
+        try:
+            session = await stripe_service.retrieve_checkout_session(c["stripe_session_id"])
+        except Exception as e:
+            log.warning(f"sync_pending_stripe_payments : lecture Stripe impossible pour {c['id']} — {e}")
+            continue
+        stripe_status = session.get("payment_status") if isinstance(session, dict) else session.payment_status
+        if stripe_status == "paid":
+            amount_total = session.get("amount_total") if isinstance(session, dict) else session.amount_total
+            payment_intent = session.get("payment_intent") if isinstance(session, dict) else session.payment_intent
+            await _mark_paid_and_notify(c["id"], (amount_total or 0) / 100, payment_intent)
+            updated += 1
+    return updated
 
 
 @router.get("/status")
@@ -118,6 +201,15 @@ async def create_checkout(payload: CheckoutIn, request: Request):
     return {"url": session.url}
 
 
+@router.post("/sync-pending")
+async def run_sync_pending_payments(user: dict = Depends(require_role("admin", "employe"))):
+    """Déclenchement manuel de la réconciliation Stripe (voir aussi la boucle
+    de fond toutes les 15 min dans server.py) — utile pour forcer une
+    vérification immédiate sans attendre le prochain passage automatique."""
+    updated = await sync_pending_stripe_payments()
+    return {"updated": updated}
+
+
 @router.post("/{iid}/sync")
 async def sync_payment_from_stripe(iid: str, user: dict = Depends(require_role("admin", "employe"))):
     """Filet de sécurité : relit l'état réel du paiement directement sur
@@ -142,13 +234,7 @@ async def sync_payment_from_stripe(iid: str, user: dict = Depends(require_role("
         amount_total = session.get("amount_total") if isinstance(session, dict) else session.amount_total
         payment_intent = session.get("payment_intent") if isinstance(session, dict) else session.payment_intent
         amount_paid = (amount_total or 0) / 100
-        await db.inscriptions.update_one(
-            {"id": iid},
-            {"$set": {
-                "payment_status": "paid", "amount_paid": amount_paid,
-                "stripe_payment_intent": payment_intent, "paid_at": now_iso(), "updated_at": now_iso(),
-            }},
-        )
+        await _mark_paid_and_notify(iid, amount_paid, payment_intent)
         return {"updated": True, "payment_status": "paid", "stripe_payment_status": stripe_status}
     return {"updated": False, "payment_status": inscription.get("payment_status"), "stripe_payment_status": stripe_status}
 
@@ -185,65 +271,10 @@ async def stripe_webhook(request: Request):
         else:
             try:
                 amount_paid = (session.get("amount_total") or 0) / 100
-                result = await db.inscriptions.update_one(
-                    {"id": inscription_id},
-                    {"$set": {
-                        "payment_status": "paid", "amount_paid": amount_paid,
-                        "stripe_payment_intent": session.get("payment_intent"), "paid_at": now_iso(),
-                        "updated_at": now_iso(),
-                    }},
-                )
-                if result.matched_count == 0:
-                    log.warning(f"Stripe webhook {event_type} : inscription {inscription_id} introuvable en base")
-                inscription = await db.inscriptions.find_one({"id": inscription_id}, {"_id": 0})
+                await _mark_paid_and_notify(inscription_id, amount_paid, session.get("payment_intent"))
             except Exception as e:
                 log.error(f"Stripe webhook {event_type} : échec mise à jour inscription {inscription_id} — {e}")
                 raise
-            if inscription:
-                try:
-                    await send_capi_event(
-                        "Purchase",
-                        # ID déterministe à partir de l'inscription — le pixel navigateur
-                        # (StageRecuperationMerci.jsx) calcule le même `purchase_{id}`
-                        # indépendamment, ce qui suffit à Meta pour dédupliquer les deux
-                        # évènements sans aucune coordination réseau entre les deux.
-                        event_id=f"purchase_{inscription_id}",
-                        email=inscription.get("student_email"),
-                        phone=inscription.get("student_phone"),
-                        custom_data={"value": amount_paid, "currency": "EUR", "content_name": inscription.get("source") or "inscription_formation"},
-                        event_source_url=inscription.get("landing_url") or f"{PUBLIC_FRONTEND_URL}/inscription",
-                        client_ip_address=inscription.get("checkout_client_ip"),
-                        client_user_agent=inscription.get("checkout_user_agent"),
-                        fbc=inscription.get("checkout_fbc"), fbp=inscription.get("checkout_fbp"),
-                        external_id=inscription_id,
-                    )
-                except Exception as e:
-                    # Ne jamais faire échouer le webhook (et donc déclencher un
-                    # retry Stripe inutile) pour un évènement de tracking marketing
-                    # — l'inscription est déjà marquée payée à ce stade.
-                    log.warning(f"Stripe webhook {event_type} : événement CAPI non envoyé — {e}")
-                if inscription.get("student_email"):
-                    try:
-                        import base64 as _b64
-                        formation = await db.formations.find_one({"id": inscription.get("formation_id")}, {"_id": 0})
-                        settings_doc = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
-                        pdf_bytes = generate_payment_receipt_pdf(inscription, formation, settings_doc)
-                        await send_email(
-                            inscription["student_email"],
-                            f"Reçu de paiement — {inscription.get('formation_title', '')}",
-                            (
-                                f"<p>Bonjour {inscription.get('student_name', '')},</p>"
-                                f"<p>Nous confirmons la bonne réception de votre paiement de "
-                                f"<b>{amount_paid:.2f} €</b> pour <b>{inscription.get('formation_title', '')}</b>.</p>"
-                                f"<p>Vous trouverez votre reçu en pièce jointe.</p><p>TDL Formation</p>"
-                            ),
-                            attachment={"filename": "recu-paiement.pdf", "content_b64": _b64.b64encode(pdf_bytes).decode("ascii")},
-                        )
-                    except Exception as e:
-                        # Le paiement reste marqué "paid" même si le reçu échoue à
-                        # partir — l'agent peut toujours le régénérer manuellement
-                        # depuis la Bibliothèque PDF / page Inscriptions.
-                        log.warning(f"Stripe webhook {event_type} : reçu de paiement non envoyé — {e}")
     elif event_type == "checkout.session.async_payment_failed":
         session = event["data"]["object"]
         inscription_id = (session.get("metadata") or {}).get("inscription_id")
@@ -255,15 +286,15 @@ async def stripe_webhook(request: Request):
             log.info(f"Stripe webhook async_payment_failed : inscription {inscription_id} repassée en attente")
             insc = await db.inscriptions.find_one({"id": inscription_id}, {"_id": 0})
             if insc and insc.get("student_email"):
+                message = (
+                    f"Bonjour {insc.get('student_name', '')},\n\n"
+                    f"Votre paiement pour {insc.get('formation_title', '')} n'a pas pu être finalisé. "
+                    f"Vous pouvez réessayer depuis votre espace ou nous contacter directement."
+                )
                 await send_email(
                     insc["student_email"],
                     "Votre paiement n'a pas abouti",
-                    (
-                        f"<p>Bonjour {insc.get('student_name', '')},</p>"
-                        f"<p>Votre paiement pour <b>{insc.get('formation_title', '')}</b> n'a pas pu être finalisé. "
-                        f"Vous pouvez réessayer depuis votre espace ou nous contacter directement.</p>"
-                        f"<p>TDL Formation</p>"
-                    ),
+                    render_branded_email(message),
                 )
     elif event_type == "checkout.session.expired":
         session = event["data"]["object"]

@@ -12,6 +12,7 @@ from core.storage import put_object
 from core.utils import now_iso
 from core.config import PUBLIC_FRONTEND_URL
 from services.email import send_email
+from services.email_template import render_branded_email
 from services.pdf import generate_attestation_pdf
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
@@ -35,18 +36,15 @@ async def send_convocations() -> int:
         for insc in inscriptions:
             if not insc.get("student_email"):
                 continue
-            body = (
-                f"<p>Bonjour {insc.get('student_name', '')},</p>"
-                f"<p>Nous vous confirmons votre convocation à la formation <b>{stage.get('formation_titre', '')}</b>.</p>"
-                "<table style='border-collapse:collapse;margin:12px 0'>"
-                f"<tr><td style='padding:4px 12px 4px 0;color:#666'>Dates</td><td><b>Du {stage.get('date_debut', '')} au {stage.get('date_fin', '')}</b></td></tr>"
-                f"<tr><td style='padding:4px 12px 4px 0;color:#666'>Lieu</td><td>{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}</td></tr>"
-                "</table>"
-                "<p>Merci de vous présenter avec une pièce d'identité valide et les documents demandés dans votre dossier.</p>"
-                f"<p>Pour toute question, contactez-nous : {CONTACT_EMAIL}.</p>"
-                "<p>TDL Formation</p>"
+            message = (
+                f"Bonjour {insc.get('student_name', '')},\n\n"
+                f"Nous vous confirmons votre convocation à la formation {stage.get('formation_titre', '')}.\n\n"
+                f"Dates : du {stage.get('date_debut', '')} au {stage.get('date_fin', '')}\n"
+                f"Lieu : {stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}\n\n"
+                "Merci de vous présenter avec une pièce d'identité valide et les documents demandés dans votre dossier.\n\n"
+                f"Pour toute question, contactez-nous : {CONTACT_EMAIL}."
             )
-            await send_email(insc["student_email"], f"📋 Convocation — {stage.get('formation_titre', '')}", body)
+            await send_email(insc["student_email"], f"📋 Convocation — {stage.get('formation_titre', '')}", render_branded_email(message))
             await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"convocation_sent_at": now_iso()}})
             count += 1
     return count

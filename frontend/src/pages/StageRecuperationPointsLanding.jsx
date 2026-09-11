@@ -75,7 +75,43 @@ const FAQ = [
 const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
 const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 
+// Cette page ne reçoit que le trafic des campagnes Meta (redirection fixe
+// vers /stage-recuperation-points) — le tarif est donc fixe. Le tarif
+// fidélité (189€, campagne mail) vit sur /offre-fidelite
+// (OffreFideliteLanding.jsx) et le tarif plein (200€, site public) sur la
+// fiche formation /formations/:id (prix stocké en base, formation e22bcca0-…).
+const PRICE = 179;
+
+// Le tarif 179€ est réservé au trafic publicitaire Meta : si la page est
+// ouverte sans preuve d'origine Meta (lien partagé, favori, accès direct),
+// on renvoie vers la fiche formation publique au tarif plein plutôt que de
+// laisser fuiter le tarif promo. `fbclid` est posé par Meta sur chaque clic
+// pub ; le cookie `_fbc` (voir getFbCookies) et le referrer couvrent les cas
+// où l'utilisateur navigue sur une autre page du site avant d'arriver ici.
+const PUBLIC_FORMATION_URL = "/formations/e22bcca0-6656-4335-b6a6-8a06235a2770";
+const META_REFERRER_RE = /(^|\.)(facebook|instagram|messenger|fb)\.com$/i;
+const META_SESSION_FLAG = "tdl_meta_src_verified";
+
+function isFromMeta() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("fbclid")) return true;
+    if (sessionStorage.getItem(META_SESSION_FLAG) === "1") return true;
+    if (getFbCookies().fbc) return true;
+    if (document.referrer) {
+      const host = new URL(document.referrer).hostname;
+      if (META_REFERRER_RE.test(host)) return true;
+    }
+  } catch {
+    // en cas d'erreur (cookies/sessionStorage bloqués, referrer invalide...),
+    // ne pas bloquer l'accès à la page
+    return true;
+  }
+  return false;
+}
+
 export default function StageRecuperationPointsLanding() {
+  const price = PRICE;
   const [session, setSession] = useState("");
   const [center, setCenter] = useState(VILLES[0]);
   const [form, setForm] = useState({ prenom: "", nom: "", telephone: "", ville: "", session: "" });
@@ -99,7 +135,7 @@ export default function StageRecuperationPointsLanding() {
     setSent(true);
     trackPurchase({
       content_name: "stage_recuperation_points",
-      value: 179,
+      value: price,
       currency: "EUR",
       session,
       inscription_id: paymentData?.inscription_id
@@ -136,7 +172,7 @@ export default function StageRecuperationPointsLanding() {
         student_name: `${form.prenom.trim()} ${form.nom.trim()}`,
         student_phone: form.telephone.trim(),
         student_email: form.email?.trim() || `${form.prenom.toLowerCase()}${form.nom.toLowerCase()}@temp.fr`,
-        price: 179,
+        price,
         category: "PERMIS",
         session: session,
         center: selectedVille || center,
@@ -154,8 +190,8 @@ export default function StageRecuperationPointsLanding() {
       // "être rappelé" envoyait un évènement Lead ; la quasi-totalité des
       // vraies inscriptions (via ce formulaire principal) n'était jamais
       // comptée comme prospect par Meta, faussant le ciblage des audiences.
-      trackLead({ content_name: "stage_recuperation_points", value: 179, currency: "EUR", session }, leadEventId);
-      trackInitiateCheckout({ content_name: "stage_recuperation_points", value: 179, currency: "EUR", session });
+      trackLead({ content_name: "stage_recuperation_points", value: price, currency: "EUR", session }, leadEventId);
+      trackInitiateCheckout({ content_name: "stage_recuperation_points", value: price, currency: "EUR", session });
 
       const checkoutResponse = await api.post("/payments/checkout", {
         inscription_id: inscription.id,
@@ -185,15 +221,27 @@ export default function StageRecuperationPointsLanding() {
   };
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    // Le retour d'un paiement annulé (voir plus bas) revient sur cette même
+    // page sans fbclid dans l'URL — ne pas le traiter comme un accès hors
+    // Meta sous peine de renvoyer l'utilisateur ailleurs en pleine tentative
+    // de paiement.
+    if (params.get("paiement") !== "annule" && !isFromMeta()) {
+      window.location.replace(PUBLIC_FORMATION_URL);
+      return;
+    }
+    if (isFromMeta()) {
+      try { sessionStorage.setItem(META_SESSION_FLAG, "1"); } catch { /* ignore */ }
+    }
+
     setPageMeta({
       title: "Stage Récupération de Points Épinay-sur-Seine (93) | TDL Formation",
-      description: "Récupérez jusqu'à 4 points sur votre permis en 2 jours à Épinay-sur-Seine (93), aussi à Creil (60). Stage agréé — 179€, réservation en ligne.",
+      description: "Récupérez jusqu'à 4 points sur votre permis en 2 jours à Épinay-sur-Seine (93), aussi à Creil (60). Stage agréé, réservation en ligne.",
       path: "/stage-recuperation-points",
     });
     // Un paiement réussi redirige désormais vers /stage-recuperation-points/merci
     // (voir routers/payments.py _LANDING_THANK_YOU_PATHS) — seul un paiement
     // annulé revient sur cette page.
-    const params = new URLSearchParams(window.location.search);
     const paymentStatus = params.get("paiement");
 
     if (paymentStatus === "annule") {
@@ -319,7 +367,7 @@ export default function StageRecuperationPointsLanding() {
       setSelectedDate({ day, month, year });
       setSession(label);
       setShowCalendar(false);
-      trackSchedule({ content_name: label, value: 179, currency: "EUR" });
+      trackSchedule({ content_name: label, value: price, currency: "EUR" });
       toast.success(`Session sélectionnée : ${label}`);
     }
   };
@@ -417,7 +465,7 @@ export default function StageRecuperationPointsLanding() {
 
   const chooseSession = (label) => {
     setSession(label);
-    trackSchedule({ content_name: label, value: 179, currency: "EUR" });
+    trackSchedule({ content_name: label, value: price, currency: "EUR" });
 
     // Mettre à jour la date sélectionnée
     const found = availableDates.find(d => d.label === label);
@@ -464,13 +512,13 @@ export default function StageRecuperationPointsLanding() {
         telephone: form.telephone,
         session: session, // La session sélectionnée
         center: selectedVille || center,
-        source: "stage_recuperation_points_179",
+        source: "stage_recuperation_points",
         page_url: window.location.href,
         event_id: eventId,
         ...getFbCookies(),
       });
       setSent(true);
-      trackLead({ content_name: "stage_recuperation_points", value: 179, currency: "EUR", session }, eventId);
+      trackLead({ content_name: "stage_recuperation_points", value: price, currency: "EUR", session }, eventId);
       toast.success("Votre demande a bien été enregistrée. Nous vous recontacterons sous 24h.");
       // Réinitialiser le formulaire après envoi
       setForm({ prenom: "", nom: "", telephone: "", privacyConsent: false });
@@ -500,7 +548,7 @@ export default function StageRecuperationPointsLanding() {
         onFindSessions={(ville, chosenSession) => {
           setSelectedVille(ville);
           setSession(chosenSession);
-          trackSchedule({ content_name: chosenSession, value: 179, currency: "EUR" });
+          trackSchedule({ content_name: chosenSession, value: price, currency: "EUR" });
           setTimeout(() => {
             formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
           }, 100);
@@ -809,7 +857,7 @@ export default function StageRecuperationPointsLanding() {
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-semibold mb-10">
             <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> Jusqu'à 4 points récupérés</span>
             <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> Paiement en plusieurs fois</span>
-            <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> À partir de 179 €</span>
+            <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> À partir de {price} €</span>
             <span className="inline-flex items-center gap-1.5"><Check size={15} weight="bold" style={{ color: "#d4af37" }} /> Réservation rapide</span>
           </div>
           <a href="#form" style={{ backgroundColor: "#d4af37" }} className="inline-flex items-center text-black font-bold uppercase text-sm tracking-wide px-12 py-5 rounded-md">
@@ -838,7 +886,7 @@ export default function StageRecuperationPointsLanding() {
         sent={sent}
         onSubmit={submit}
         onDirectPayment={handleDirectPayment}
-        price={179}
+        price={price}
         priceLabel="tarif standard"
         onPaymentSuccess={handlePaymentSuccess}
         onInscriptionCreated={handleInscriptionCreated}

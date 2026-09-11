@@ -402,6 +402,31 @@ async def assign_inscription_stage(iid: str, payload: StageAssignIn, user: dict 
     await db.inscriptions.update_one(
         {"id": iid}, {"$set": {"stage_id": payload.stage_id, "stage_titre": stage_titre, "updated_at": now_iso()}}
     )
+
+    # Envoyer la convocation immédiatement à l'affectation plutôt que
+    # d'attendre la relance automatique J-7 (voir send_convocations dans
+    # services/candidate_automation.py) — sans ça, un candidat affecté
+    # manuellement à une session par le staff ne reçoit sa convocation que
+    # 7 jours avant le stage, ce qui n'a pas de sens quand l'affectation a
+    # lieu bien avant. On ne marque `convocation_sent_at` que dans ce cas
+    # pour éviter un double envoi par la relance automatique.
+    if payload.stage_id and inscription.get("student_email") and not inscription.get("convocation_sent_at"):
+        try:
+            message = (
+                f"Bonjour {inscription.get('student_name', '')},\n\n"
+                f"Nous vous confirmons votre convocation à la formation {stage.get('formation_titre', '')}.\n\n"
+                f"Dates : du {stage.get('date_debut', '')} au {stage.get('date_fin', '')}\n"
+                f"Lieu : {stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}\n\n"
+                "Merci de vous présenter avec une pièce d'identité valide et les documents demandés dans votre dossier.\n\n"
+                "Pour toute question, contactez-nous : contact@tdl-formation.fr."
+            )
+            await send_email(inscription["student_email"], f"📋 Convocation — {stage.get('formation_titre', '')}", render_branded_email(message))
+            await db.inscriptions.update_one({"id": iid}, {"$set": {"convocation_sent_at": now_iso()}})
+        except Exception:
+            # L'affectation reste effective même si l'envoi échoue — l'agent
+            # peut toujours renvoyer la convocation manuellement.
+            pass
+
     return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
 
 
