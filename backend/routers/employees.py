@@ -88,6 +88,7 @@ MANAGEABLE_ROLES_BY_MANAGER = ("commercial",)
 MANAGEABLE_ROLES_BY_ROLE = {
     "responsable_commercial": ("commercial",),
     "agent_admin": ("animateur",),
+    "responsable_admission": ("animateur",),
 }
 
 
@@ -96,7 +97,7 @@ def _manageable_roles(role: str) -> tuple:
 
 
 @router.get("/employees")
-async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin"))):
+async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin", "responsable_admission"))):
     roles = list(VALID_STAFF_ROLES) if user["role"] == "admin" else list(_manageable_roles(user["role"]))
     staff = await db.users.find(
         {"role": {"$in": roles}},
@@ -110,7 +111,7 @@ async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "ag
 
 
 @router.post("/employees")
-async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin"))):
+async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin", "responsable_admission"))):
     existing = await db.users.find_one({"email": payload.email.lower()})
     if existing:
         raise HTTPException(status_code=400, detail="Email déjà utilisé")
@@ -206,7 +207,7 @@ async def update_employee_assignments(uid: str, payload: AssignedTrainingAssignm
 
 
 @router.put("/employees/{uid}/titre")
-async def update_employee_titre(uid: str, payload: EmployeeTitreIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin"))):
+async def update_employee_titre(uid: str, payload: EmployeeTitreIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin", "responsable_admission"))):
     """Intitulé affiché sur les documents générés (attestations...) pour ce
     formateur — ex: "Formateur BAFM", "Moniteur auto-école"."""
     target = await db.users.find_one({"id": uid}, {"_id": 0})
