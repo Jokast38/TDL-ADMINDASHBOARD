@@ -20,18 +20,19 @@ const chromium = require("@sparticuz/chromium");
 const puppeteer = require("puppeteer-core");
 
 let browserPromise = null;
-function getBrowser() {
+async function getBrowser() {
   if (!browserPromise) {
-    browserPromise = puppeteer
-      .launch({
+    browserPromise = (async () => {
+      const executablePath = await chromium.executablePath();
+      return puppeteer.launch({
         headless: true,
-        executablePath: chromium.executablePath(),
+        executablePath,
         args: chromium.args,
-      })
-      .catch((e) => {
-        browserPromise = null;
-        throw e;
       });
+    })().catch((e) => {
+      browserPromise = null;
+      throw e;
+    });
   }
   return browserPromise;
 }
@@ -58,6 +59,13 @@ module.exports = async (req, res) => {
     res.status(200).send(html);
   } catch (e) {
     console.warn(`[render] Échec sur ${safePath}, repli sur le SPA brut :`, e.message);
+    // ?debug=1 : renvoie l'erreur en clair au lieu du 302 silencieux, pour
+    // diagnostiquer un souci de lancement de Chromium sans dépendre des
+    // logs Vercel.
+    if (req.query.debug) {
+      res.status(500).json({ error: e.message, stack: e.stack });
+      return;
+    }
     // Best-effort : si Chromium échoue pour une raison quelconque, on
     // laisse passer le visiteur (bot ou non) vers le SPA normal plutôt que
     // de casser la page.
