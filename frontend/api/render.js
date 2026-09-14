@@ -25,8 +25,11 @@
 // libraries. Spoofing the env var (must happen before requiring the module,
 // since the LD_LIBRARY_PATH side of this runs at module-load time) makes it
 // go through the same code path it would on real Lambda.
+// "al2" (non-Node20) pack turned out incomplete for Vercel's actual base OS
+// (missing libnspr4.so even after libnss3.so resolved) — use the Node20
+// code path instead, which extracts the newer "al2023" lib pack.
 if (!process.env["AWS_EXECUTION_ENV"] && !process.env["AWS_LAMBDA_JS_RUNTIME"]) {
-  process.env["AWS_EXECUTION_ENV"] = "AWS_Lambda_nodejs18.x";
+  process.env["AWS_EXECUTION_ENV"] = "AWS_Lambda_nodejs20.x";
 }
 const chromium = require("@sparticuz/chromium");
 const puppeteer = require("puppeteer-core");
