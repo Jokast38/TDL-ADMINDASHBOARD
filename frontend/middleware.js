@@ -9,8 +9,13 @@
  */
 import { rewrite } from "@vercel/edge";
 
+// "ahrefs" (pas juste "ahrefsbot") : l'outil Site Audit d'Ahrefs envoie un
+// User-Agent "AhrefsSiteAudit", distinct du crawler de backlinks
+// "AhrefsBot" — un match trop strict le loupait entièrement, si bien que
+// Site Audit recevait la coquille vide du SPA et remontait "orphan page" /
+// "no outgoing links" sur toutes les pages, homepage comprise.
 const BOT_UA_REGEX =
-  /googlebot|bingbot|yandexbot|baiduspider|duckduckbot|slurp|facebookexternalhit|twitterbot|linkedinbot|whatsapp|telegrambot|ahrefsbot|semrushbot|mj12bot|dotbot|rogerbot|applebot|discordbot|slackbot|pinterestbot|redditbot|petalbot|sogou|exabot|ia_archiver|embedly|quora link preview|showyoubot|outbrain|w3c_validator|screaming frog|headlesschrome/i;
+  /googlebot|bingbot|yandexbot|baiduspider|duckduckbot|slurp|facebookexternalhit|twitterbot|linkedinbot|whatsapp|telegrambot|ahrefs|semrush|mj12bot|dotbot|rogerbot|applebot|discordbot|slackbot|pinterest|redditbot|petalbot|sogou|exabot|ia_archiver|embedly|quora link preview|showyoubot|outbrain|w3c_validator|screaming frog|headlesschrome/i;
 
 export default function middleware(request) {
   // Requête interne émise par api/render.js lui-même — ne pas la
