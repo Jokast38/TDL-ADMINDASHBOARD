@@ -360,19 +360,37 @@ def generate_stage_recup_points_attestation(
     return buf.getvalue()
 
 
+def _fetch_logo_reader(url: str):
+    """Récupère le logo TDL Formation (servi statiquement par le frontend)
+    pour l'inclure dans le PDF — best-effort : le document reste généré sans
+    logo si le frontend est injoignable au moment précis de la signature."""
+    try:
+        import requests
+        from reportlab.lib.utils import ImageReader
+        import io as _io
+        r = requests.get(url, timeout=5)
+        if r.status_code == 200:
+            return ImageReader(_io.BytesIO(r.content))
+    except Exception:
+        pass
+    return None
+
+
 def generate_formateur_convention_pdf(
     formateur: dict, signature_data_url: str, centre: Optional[dict] = None,
     cachet_data_url: Optional[str] = None,
 ) -> bytes:
-    """Convention de collaboration signée par un formateur/animateur/
-    psychologue nouvellement créé (voir POST /me/convention/sign côté
-    routers/employees.py) — engagement à être présent pour assurer les
-    sessions qui lui sont assignées. Remplace le passage par une plateforme
-    tierce (Digiforma...) pour ce document."""
+    """Convention de prestation de services signée par un formateur/animateur
+    BAFM ou psychologue (voir POST /me/convention/sign côté
+    routers/employees.py) — reproduit le modèle papier historique utilisé par
+    TDL Formation (texte, mise en page, logo) avec l'identité de l'Intervenant
+    rendue dynamique (nom, qualité, numéro d'immatriculation). Remplace le
+    passage par une plateforme tierce (Digiforma...) pour ce document."""
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.lib import colors
     from reportlab.lib.units import cm
+    from core.config import PUBLIC_FRONTEND_URL
     import io as _io
 
     centre = centre or {}
@@ -380,100 +398,226 @@ def generate_formateur_convention_pdf(
     c = rl_canvas.Canvas(buf, pagesize=A4)
     w, h = A4
     black = colors.HexColor("#0a0a0a")
-    gold = colors.HexColor("#d4af37")
     margin = 2 * cm
+    content_width = w - 2 * margin
+    top_start = h - 4.2 * cm
+    bottom_limit = 2.2 * cm
 
-    c.setFillColor(black)
-    c.rect(0, h - 3 * cm, w, 3 * cm, fill=1, stroke=0)
-    c.setFillColor(gold)
-    c.setFont("Helvetica-Bold", 20)
-    c.drawString(margin, h - 1.8 * cm, centre.get("nom", "TDL Formation").upper())
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica", 10)
-    c.drawString(margin, h - 2.5 * cm, "Convention de collaboration — Formateur / Animateur / Psychologue")
+    logo = _fetch_logo_reader(f"{PUBLIC_FRONTEND_URL}/tdl.png")
 
-    y = h - 5 * cm
-    c.setFillColor(black)
-    c.setFont("Helvetica", 10.5)
+    # Qualité de l'Intervenant (BAFM ou Psychologue) — déduite du `titre`
+    # renseigné sur son compte (voir Formateurs.jsx) ; "BAFM" par défaut
+    # puisque c'est la qualité la plus courante des animateurs. Le
+    # co-intervenant mentionné dans le texte (celui avec qui il co-anime)
+    # est automatiquement l'autre qualité.
+    titre_raw = (formateur.get("titre") or "").upper()
+    is_psy = "PSY" in titre_raw
+    qualite = "PSYCHOLOGUE" if is_psy else "BAFM"
+    co_qualite_lower = "BAFM" if is_psy else "psychologue"
 
-    def _wrap(text, size=10.5, max_width=w - 2 * margin):
+    nom = (formateur.get("name") or "").strip()
+    civ = f"Mr {nom}" if nom else "L'Intervenant"
+    immatriculation = formateur.get("agrement_bafm_numero") or "(à compléter)"
+    today = datetime.now(timezone.utc)
+    today_label = today.strftime("%d/%m/%Y")
+    year = today.strftime("%Y")
+    centre_nom = centre.get("nom", "TOP DRIVE LEARNING")
+    centre_adresse = centre.get("adresse", "")
+    centre_ville = centre.get("ville", "")
+    centre_siret = centre.get("siret", "")
+    directeur_nom = centre.get("directeur_nom", "")
+
+    state = {"y": top_start, "page": 1}
+
+    def _draw_header():
+        if logo:
+            try:
+                c.drawImage(logo, margin, h - 2.6 * cm, width=1.9 * cm, height=1.9 * cm, mask='auto', preserveAspectRatio=True)
+            except Exception:
+                pass
+
+    def _new_page():
+        c.showPage()
+        _draw_header()
+        state["y"] = h - 3.4 * cm
+        state["page"] += 1
+
+    def _ensure_space(needed):
+        if state["y"] - needed < bottom_limit:
+            _new_page()
+
+    def _wrap(text, font, size, max_width):
         words = text.split(" ")
         lines, cur = [], ""
         for word in words:
             trial = f"{cur} {word}".strip()
-            if c.stringWidth(trial, "Helvetica", size) <= max_width:
+            if c.stringWidth(trial, font, size) <= max_width:
                 cur = trial
             else:
-                lines.append(cur)
+                if cur:
+                    lines.append(cur)
                 cur = word
         if cur:
             lines.append(cur)
         return lines
 
-    intro = (
-        f"Entre {centre.get('nom', 'TDL Formation')}, {centre.get('adresse', '')} {centre.get('ville', '')}, "
-        f"représenté par {centre.get('directeur_nom', '')}, ci-après « le Centre »,"
-    )
-    for line in _wrap(intro):
-        c.drawString(margin, y, line)
-        y -= 0.5 * cm
-    y -= 0.3 * cm
-    person = (
-        f"Et {formateur.get('name', '')} ({formateur.get('titre') or 'Formateur'}), "
-        f"{formateur.get('email', '')}, ci-après « l'Intervenant »,"
-    )
-    for line in _wrap(person):
-        c.drawString(margin, y, line)
-        y -= 0.5 * cm
+    def para(text, size=10, leading=0.48, bold=False, indent=0, space_after=0.35):
+        font = "Helvetica-Bold" if bold else "Helvetica"
+        c.setFont(font, size)
+        c.setFillColor(black)
+        for line in _wrap(text, font, size, content_width - indent):
+            _ensure_space(leading * cm)
+            c.drawString(margin + indent, state["y"], line)
+            state["y"] -= leading * cm
+        state["y"] -= space_after * cm
 
-    y -= 0.8 * cm
+    def heading(text, size=11):
+        _ensure_space(0.9 * cm)
+        c.setFont("Helvetica-Bold", size)
+        c.setFillColor(black)
+        c.drawString(margin, state["y"], text)
+        state["y"] -= 0.55 * cm
+
+    def centered(text, size=10):
+        _ensure_space(0.5 * cm)
+        c.setFont("Helvetica", size)
+        c.setFillColor(black)
+        c.drawCentredString(w / 2, state["y"], text)
+        state["y"] -= 0.45 * cm
+
+    def spacer(cm_h=0.3):
+        state["y"] -= cm_h * cm
+
+    _draw_header()
+
+    c.setFont("Helvetica-Bold", 14)
+    c.setFillColor(black)
+    c.drawCentredString(w / 2, state["y"], f"Convention de prestation de services {year}")
+    state["y"] -= 0.6 * cm
     c.setFont("Helvetica-Bold", 11)
-    c.drawString(margin, y, "Article 1 — Objet")
-    y -= 0.6 * cm
-    c.setFont("Helvetica", 10.5)
-    for line in _wrap(
-        "L'Intervenant s'engage à assurer, avec assiduité et professionnalisme, les sessions de formation, "
-        "d'animation ou d'accompagnement qui lui sont assignées par le Centre via le tableau de bord TDL "
-        "Formation, aux dates et lieux qui y sont indiqués."
-    ):
-        c.drawString(margin, y, line)
-        y -= 0.5 * cm
+    c.drawCentredString(w / 2, state["y"], "Animation de stages de sensibilisation à la sécurité routière.")
+    state["y"] -= 1 * cm
 
-    y -= 0.6 * cm
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(margin, y, "Article 2 — Documents fournis")
-    y -= 0.6 * cm
-    c.setFont("Helvetica", 10.5)
-    for line in _wrap(
-        "L'Intervenant certifie avoir fourni au Centre l'ensemble des pièces justificatives de son droit "
-        "d'exercer (pièce d'identité, diplômes et attestations d'habilitation, KBIS le cas échéant, "
-        "attestation de vigilance URSSAF, justificatif de domicile) et s'engage à en signaler toute "
-        "évolution ou expiration sans délai."
-    ):
-        c.drawString(margin, y, line)
-        y -= 0.5 * cm
+    para(f"Entre les soussignés : {centre_nom}", bold=False)
+    para(f"Immatriculation : N° {centre_siret}")
+    para("Dont le siège social est situé au")
+    para(centre_adresse)
+    para(centre_ville)
+    para(f"Représenté par Mr {directeur_nom} son dirigeant d'une part")
+    spacer(0.2)
+    para(
+        f"Et {civ}, {qualite} immatriculé(e) à l'Insee sous le n° {immatriculation}, ci-après « l'Intervenant », d'autre part."
+    )
+    spacer(0.2)
+    para(
+        f"Rappels : {civ} est agréé(e) par le Ministère des transports pour l'animation de stages de sensibilisation "
+        f"à la sécurité routière en tant que {qualite}. La Société {centre_nom} dispense des stages de "
+        "sensibilisation à la sécurité routière destinés aux conducteurs infractionnistes dans le cadre de : "
+        "La loi n°2011-267 du 14/03/2011, art.70 à 87 du code de la route pour ses articles :"
+    )
+    centered("L 212-1 à L 212-5     L 213-1 à L 213-8     L 223-1 à L 223-9")
+    centered("R 212-1 à R 212-8     R 223-1 à R 223-8")
+    spacer(0.2)
+    para("Du décret n° 2009-1678 du 29/12/2009 · De l'arrêté du 08/01/2001 · De l'arrêté du 25/02/2004 · Des arrêtés du 26/06/2012.")
 
-    y -= 1.2 * cm
-    c.setFont("Helvetica", 10.5)
-    today = datetime.now(timezone.utc).strftime("%d/%m/%Y")
-    c.drawString(margin, y, f"Fait à {centre.get('ville', '')}, le {today}")
+    heading("Stages :")
+    para(
+        "Cas n°1 : stage de sensibilisation à la sécurité routière permettant la récupération maximale de 4 points "
+        "de permis par les conducteurs s'étant vu notifier un retrait de points par l'autorité compétente."
+    )
+    para(
+        "Cas n°2 : stage de sensibilisation à la sécurité routière obligatoire dans le cadre d'un permis probatoire "
+        "dont le titulaire a commis une infraction entraînant une perte de 3 points ou plus."
+    )
+    para("Cas n°3 : stage de sensibilisation à la sécurité routière dans le cadre de l'alternative à des poursuites judiciaires et pénales.")
+    para("Cas n°4 : stage de sensibilisation à la sécurité routière dans le cadre d'une peine complémentaire prononcée par le juge.")
 
-    y -= 1.8 * cm
-    col1, col2 = margin, 11 * cm
+    heading("Objet de la présente convention :")
+    para(f"La Ste {centre_nom} et {civ} se sont accordés sur une collaboration pour l'animation de stages pour l'année {year}.")
+    para(
+        f"{civ} aura, en sa qualité de {qualite}, la charge de co-animer les stages qui lui seront confiés par la "
+        f"Société {centre_nom} avec un(e) {co_qualite_lower}. À ce titre, {civ} a fourni à l'entreprise {centre_nom} "
+        "une copie de son autorisation d'animer les stages de sensibilisation à la sécurité routière destinés aux "
+        f"conducteurs infractionnistes qui lui a été délivrée par la préfecture de son département de résidence. "
+        f"{civ} s'engage par la présente à informer dans les plus brefs délais l'entreprise {centre_nom} de toute "
+        "modification concernant cette autorisation d'animer."
+    )
+
+    heading("Obligations réciproques :")
+    para(
+        f"1 - La Ste {centre_nom} est chargée de l'organisation administrative (inscription, accueil et contrôle des "
+        "stagiaires, suivi des dossiers) et matérielle des stages (salles de stages avec leur équipement : tables, "
+        "chaises, matériel audiovisuel et informatique, paper-board, feuilles et stylos…) dans le cadre de la "
+        "réglementation en vigueur."
+    )
+    para("Ces stages devant obligatoirement se dérouler sur 14 heures réparties sur 2 jours consécutifs et comprenant au minimum un temps de pause méridien de 45 minutes.")
+    para(
+        f"2 - {civ} en sa qualité de {qualite} est habilité(e) à co-animer avec un(e) {co_qualite_lower} ; dans ce "
+        "cadre il/elle devra : veiller au respect de la réglementation en vigueur, et dispenser le programme "
+        "obligatoire « G2 ». Préparer en amont les stages avec le binôme d'animation afin de bien s'accorder sur "
+        "les orientations pédagogiques. Favoriser la co-animation en respectant les échanges."
+    )
+    para("- Respecter les objectifs des stages tout en ayant une démarche pédagogique", indent=0.3)
+    para("- Respecter les séquences (durées, contenus, objectifs, déroulement et bilans)", indent=0.3)
+    para("- Favoriser l'implication des stagiaires (partage d'avis, de connaissances, d'expériences…)", indent=0.3)
+    para("- Veiller au respect des groupes de stagiaires (écoute, attention, neutralité…)", indent=0.3)
+    para("- Respecter le volume horaire indiqué par la réglementation", indent=0.3)
+    para("- Réaliser, après la fin du stage, un débriefing avec le binôme d'animation afin d'analyser le déroulement des diverses séquences et s'assurer de leur adéquation avec les objectifs définis.", indent=0.3)
+
+    para(f"2 - Planning d'intervention : les stages de l'année {year} se dérouleront selon le calendrier retenu et communiqué par le Centre, aux dates et lieux qui y sont indiqués via le tableau de bord TDL Formation.")
+    para(f"3 - Durée et effets de la convention : la présente convention prend effet à sa signature et couvre l'année {year}. Le cas échéant, une résiliation anticipée ne pourra intervenir que 15 jours après la réception par la partie défaillante d'une lettre recommandée avec accusé de réception de mise en demeure de retour à la normale.")
+
+    heading("4 - Déprogrammation de stages :")
+    para(
+        f"La Ste {centre_nom} aura la possibilité de déprogrammer un stage avec un préavis d'une semaine. Seul un "
+        "cas de force majeure justifiera une annulation plus courte : nombre réglementaire de stagiaires non "
+        "atteint, défection du co-animateur, salle de formation indisponible du fait du loueur. Ces différentes "
+        "raisons rendant réglementairement impossible la tenue du stage. En cas d'annulation de sa part dans un "
+        f"délai inférieur à une semaine, {civ} devra obligatoirement produire un justificatif d'absence sous 48h."
+    )
+
+    heading("5 - Conditions d'exécution de la convention :")
+    para(
+        f"En signant la présente convention, {civ} s'engage à : respecter le planning auquel il/elle s'est engagé(e) "
+        f"auprès de la Ste {centre_nom} ; faire connaître dans les plus brefs délais à la Ste {centre_nom} toute "
+        "modification concernant son autorisation d'animer les stages de sensibilisation à la sécurité routière "
+        "(suspension ou annulation de celle-ci) et à l'actualiser ; être couvert(e) par une assurance en "
+        "responsabilité civile (attestation à fournir pour la signature de cette convention)."
+    )
+    para(
+        f"En signant la présente convention, Mr {directeur_nom} s'engage à : organiser les stages aux dates convenues "
+        "dans un des sites agréés par la préfecture compétente en respectant le calendrier établi ; prévenir dans "
+        f"les plus brefs délais {civ} de tout problème pouvant intervenir quant à l'organisation d'un stage (agrément, salle…)."
+    )
+
+    heading("6 - Confidentialité :")
+    para(
+        f"La Ste {centre_nom} et {civ} s'obligent réciproquement à une obligation de discrétion et de confidentialité "
+        "quant à l'identité des stagiaires ainsi que sur la teneur des informations pouvant être recueillies dans "
+        "le cadre de l'animation des stages."
+    )
+
+    heading("7 - Contentieux :")
+    para("Tous les éventuels litiges entre les parties seront soumis aux tribunaux compétents de Bobigny (93).")
+    spacer(0.3)
+    para(f"Fait à {centre_ville or 'Epinay sur Seine'} en deux exemplaires le {today_label}.")
+
+    _ensure_space(6 * cm)
+    col1, col2 = margin, margin + content_width / 2 + 0.5 * cm
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(col1, y, "Le Centre")
-    c.drawString(col2, y, "L'Intervenant")
-    text_top = y - 0.5 * cm
+    c.drawString(col1, state["y"], centre_nom)
+    c.drawString(col2, state["y"], qualite)
+    text_top = state["y"] - 0.5 * cm
     c.setFont("Helvetica", 9.5)
-    c.drawString(col1, text_top, centre.get("directeur_nom", ""))
-    c.drawString(col2, text_top, formateur.get("name", ""))
-    sig_w, sig_h = 9 * cm, 5 * cm
+    c.drawString(col1, text_top, directeur_nom)
+    c.drawString(col2, text_top, nom)
+    sig_w, sig_h = 8 * cm, 4.5 * cm
     _draw_data_url_image(c, cachet_data_url, col1, text_top - 0.35 * cm - sig_h, sig_w, sig_h)
     _draw_data_url_image(c, signature_data_url, col2, text_top - 0.35 * cm - sig_h, sig_w, sig_h)
 
     c.setFillColor(colors.HexColor("#666"))
     c.setFont("Helvetica", 7.5)
-    c.drawCentredString(w / 2, 1.2 * cm, f"{centre.get('nom', 'TDL Formation')} · SIRET {centre.get('siret', '')}")
+    c.drawCentredString(w / 2, 1.2 * cm, f"{centre_nom} · SIRET {centre_siret}")
     c.showPage()
     c.save()
     return buf.getvalue()
