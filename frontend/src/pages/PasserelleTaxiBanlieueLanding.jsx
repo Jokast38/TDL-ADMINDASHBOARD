@@ -134,7 +134,7 @@ export default function PasserelleTaxiBanlieueLanding() {
           </div>
           <div className="relative">
             <div className="relative aspect-[4/3] overflow-hidden bg-black" style={{ clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%, 0 32%)" }}>
-              <img src="https://tdl-formation.fr/wp-content/uploads/2026/06/Passerelle-Taxi-Banlieue-Parisienne-–-Accompagnemen-Grande.jpeg" alt="Passerelle Taxi Banlieue vers Parisien" className="w-full h-full object-cover" />
+              <img src="https://sandybrown-badger-274857.hostingersite.com/wp-content/uploads/2026/06/Passerelle-Taxi-Banlieue-Parisienne-–-Accompagnemen-Grande.jpeg" alt="Passerelle Taxi Banlieue vers Parisien" className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
             </div>
           </div>
@@ -165,7 +165,7 @@ export default function PasserelleTaxiBanlieueLanding() {
       <section className="py-4">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="relative aspect-[21/9] overflow-hidden rounded-md bg-black">
-            <img src="https://tdl-formation.fr/wp-content/uploads/2026/06/Passerelle-Taxi-Banlieue-Parisienne-Conduite-pratique-Grande.jpeg" alt="Conduite pratique - Passerelle Taxi Banlieue vers Parisien" className="w-full h-full object-cover" />
+            <img src="https://sandybrown-badger-274857.hostingersite.com/wp-content/uploads/2026/06/Passerelle-Taxi-Banlieue-Parisienne-Conduite-pratique-Grande.jpeg" alt="Conduite pratique - Passerelle Taxi Banlieue vers Parisien" className="w-full h-full object-cover" />
           </div>
         </div>
       </section>
