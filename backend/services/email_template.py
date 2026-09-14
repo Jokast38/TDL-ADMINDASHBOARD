@@ -5,9 +5,9 @@ qu'un email écrit en texte simple ressorte avec l'identité visuelle standard,
 sans que l'utilisateur ait à connaître la moindre balise HTML."""
 import html
 
-TDL_SITE = "https://tdl-formation.fr"
+TDL_SITE = "https://www.tdl-formation.fr"
 TDL_PHONE = "01 80 90 72 49"
-TDL_LOGO = "https://tdl-formation.fr/tdl.png"
+TDL_LOGO = "https://www.tdl-formation.fr/tdl.png"
 
 _HEADER = f"""
 <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:32px 0;font-family:Helvetica,Arial,sans-serif;">

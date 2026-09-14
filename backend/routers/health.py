@@ -28,7 +28,7 @@ async def sitemap():
     s = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
     base = (s.get("public_base_url") or os.environ.get("PUBLIC_BASE_URL") or "").rstrip("/")
     if not base:
-        base = "https://tdl-formation.fr"
+        base = "https://www.tdl-formation.fr"
     # Toutes les pages publiques réellement indexables (voir les routes
     # publiques déclarées dans frontend/src/App.js) — le sitemap n'en listait
     # auparavant que 3, ce qui limitait la découverte des landings marketing,
@@ -81,7 +81,7 @@ async def sitemap():
 @router.get("/robots.txt")
 async def robots():
     s = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
-    base = (s.get("public_base_url") or "https://tdl-formation.fr").rstrip("/")
+    base = (s.get("public_base_url") or "https://www.tdl-formation.fr").rstrip("/")
     body = f"""User-agent: *
 Allow: /
 Disallow: /admin

@@ -39,7 +39,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 app = FastAPI(title="TDL Formation API")
 
-_cors_env = os.environ.get('CORS_ORIGINS') or 'https://tdl-formation.fr'
+_cors_env = os.environ.get('CORS_ORIGINS') or 'https://www.tdl-formation.fr'
 _allowed_origins = [o.strip().rstrip('/') for o in _cors_env.split(',') if o.strip()]
 
 if _allowed_origins == ['*']:

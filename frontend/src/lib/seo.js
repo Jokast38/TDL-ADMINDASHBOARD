@@ -1,4 +1,9 @@
-const SITE_URL = "https://tdl-formation.fr";
+// Le domaine sans "www" redirige (308) vers celui-ci — un canonical qui
+// pointe vers une URL qui redirige elle-même est un signal négatif fort
+// pour Google (et ce qu'Ahrefs remonte comme "Canonical points to
+// redirect" sur la quasi-totalité des pages). Toujours utiliser le domaine
+// final ici.
+const SITE_URL = "https://www.tdl-formation.fr";
 
 function upsertMeta(attr, key, content) {
   let el = document.head.querySelector(`meta[${attr}="${key}"]`);
