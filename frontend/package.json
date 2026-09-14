@@ -4,7 +4,7 @@
   "private": true,
   "dependencies": {
     "@hookform/resolvers": "5.0.1",
-    "@sparticuz/chromium": "123",
+    "@sparticuz/chromium": "121.0.0",
     "@vercel/edge": "^1.2.1",
     "@phosphor-icons/react": "^2.1.10",
     "@radix-ui/react-accordion": "1.2.8",
