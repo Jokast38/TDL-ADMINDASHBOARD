@@ -18,6 +18,7 @@ export default function SiteFooter({ className = "border-t border-gray-200 py-8"
         <p className="text-sm text-gray-500">© 2026 TDL Formation · Tous droits réservés.</p>
         <div className="flex flex-wrap items-center gap-5">
           <Link to="/faq" className="text-xs text-gray-400 hover:text-[#d4af37]">FAQ</Link>
+          <Link to="/contact" className="text-xs text-gray-400 hover:text-[#d4af37]">Contact</Link>
           <Link to="/mentions-legales" className="text-xs text-gray-400 hover:text-[#d4af37]">Mentions légales</Link>
           <Link to="/politique-de-confidentialite" className="text-xs text-gray-400 hover:text-[#d4af37]">Confidentialité</Link>
           <button onClick={() => openCookieSettings()} className="text-xs text-gray-400 hover:text-[#d4af37]" data-testid="footer-cookie-settings">

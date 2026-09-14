@@ -40,6 +40,7 @@ const FrenchTest = lazy(() => import("@/pages/FrenchTest"));
 const SatisfactionSurvey = lazy(() => import("@/pages/SatisfactionSurvey"));
 const StageRecuperationMerci = lazy(() => import("@/pages/StageRecuperationMerci"));
 const FAQ = lazy(() => import("@/pages/FAQ"));
+const Contact = lazy(() => import("@/pages/Contact"));
 
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const EmployeeHome = lazy(() => import("@/pages/EmployeeHome"));
@@ -153,6 +154,7 @@ function App() {
             <Route path="/mentions-legales" element={<MentionsLegales />} />
             <Route path="/politique-de-confidentialite" element={<PolitiqueConfidentialite />} />
             <Route path="/faq" element={<FAQ />} />
+            <Route path="/contact" element={<Contact />} />
             <Route path="/test-positionnement/:token" element={<PositioningTest />} />
             <Route path="/test-francais/:token" element={<FrenchTest />} />
             <Route path="/satisfaction/:type/:inscriptionId" element={<SatisfactionSurvey />} />
