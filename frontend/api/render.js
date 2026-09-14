@@ -16,6 +16,18 @@
  * React ait fini de rendre, et on renvoie le HTML final — mis en cache par
  * le CDN Vercel pour éviter de relancer Chromium à chaque crawl.
  */
+// @sparticuz/chromium only extracts the shared-libs pack (which contains
+// libnss3.so and friends) and points LD_LIBRARY_PATH at it when it detects
+// it's running inside real AWS Lambda (via AWS_EXECUTION_ENV /
+// AWS_LAMBDA_JS_RUNTIME). Vercel's Node.js function runtime is Lambda-based
+// under the hood but doesn't set those vars, so the package silently skips
+// both steps — the chromium binary exists in /tmp but can't resolve its own
+// libraries. Spoofing the env var (must happen before requiring the module,
+// since the LD_LIBRARY_PATH side of this runs at module-load time) makes it
+// go through the same code path it would on real Lambda.
+if (!process.env["AWS_EXECUTION_ENV"] && !process.env["AWS_LAMBDA_JS_RUNTIME"]) {
+  process.env["AWS_EXECUTION_ENV"] = "AWS_Lambda_nodejs18.x";
+}
 const chromium = require("@sparticuz/chromium");
 const puppeteer = require("puppeteer-core");
 
