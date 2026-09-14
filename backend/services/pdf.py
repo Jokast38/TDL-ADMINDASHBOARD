@@ -467,8 +467,9 @@ def generate_formateur_convention_pdf(
     c.setFont("Helvetica", 9.5)
     c.drawString(col1, text_top, centre.get("directeur_nom", ""))
     c.drawString(col2, text_top, formateur.get("name", ""))
-    _draw_data_url_image(c, cachet_data_url, col1, text_top - 0.35 * cm - 2.2 * cm, 4 * cm, 2.2 * cm)
-    _draw_data_url_image(c, signature_data_url, col2, text_top - 0.35 * cm - 2.2 * cm, 4 * cm, 2.2 * cm)
+    sig_w, sig_h = 9 * cm, 5 * cm
+    _draw_data_url_image(c, cachet_data_url, col1, text_top - 0.35 * cm - sig_h, sig_w, sig_h)
+    _draw_data_url_image(c, signature_data_url, col2, text_top - 0.35 * cm - sig_h, sig_w, sig_h)
 
     c.setFillColor(colors.HexColor("#666"))
     c.setFont("Helvetica", 7.5)
