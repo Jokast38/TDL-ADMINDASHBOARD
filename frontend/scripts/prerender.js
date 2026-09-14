@@ -156,6 +156,19 @@ async function main() {
     console.warn("[prerender] Dossier build/ introuvable — étape ignorée.");
     return;
   }
+  if (ON_VERCEL) {
+    // Désactivé pour le moment : ni le Chromium de "puppeteer", ni celui de
+    // "@sparticuz/chromium" (pourtant conçu pour les environnements Vercel/
+    // Lambda restreints) ne parviennent à démarrer sur le conteneur de BUILD
+    // de Vercel — "libnss3.so" manquant dans les deux cas. Ce conteneur de
+    // build n'est apparemment pas le même environnement que celui des
+    // fonctions serverless pour lequel @sparticuz/chromium est prévu. Plutôt
+    // que de retenter à chaque déploiement (et perdre du temps de build pour
+    // rien), on coupe ici en attendant une vraie solution d'infra (rendu via
+    // le backend Render, ou un service de prerendering tiers).
+    console.warn("[prerender] Désactivé sur Vercel (Chromium indisponible dans ce conteneur de build) — rendu 100% client-side.");
+    return;
+  }
   const dynamicRoutes = await discoverDynamicRoutes();
   const routes = [...STATIC_ROUTES, ...dynamicRoutes];
   console.log(`[prerender] ${routes.length} page(s) à pré-rendre (${STATIC_ROUTES.length} statiques + ${dynamicRoutes.length} dynamiques).`);
