@@ -21,3 +21,7 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Régénéré à chaque build par scripts/build-sitemap.js (fetch live depuis le
+# backend) — jamais versionné.
+/public/sitemap.xml

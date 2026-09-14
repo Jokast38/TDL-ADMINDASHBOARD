@@ -12,11 +12,11 @@
  * robots/outils en profitent, et Google lui-même indexe plus vite un
  * contenu déjà présent au premier passage plutôt qu'après un rendu différé.
  *
- * Best-effort : si l'API backend est injoignable au moment du build (les
- * routes dynamiques ne peuvent alors pas être découvertes), le script ne
- * fait échouer ni le pré-rendu des pages statiques, ni le build lui-même —
- * mieux vaut un site qui déploie avec un SEO partiellement amélioré qu'un
- * déploiement cassé.
+ * Les routes à pré-rendre viennent de build/sitemap.xml (écrit juste avant
+ * par scripts/build-sitemap.js) — best-effort partout : si ce fichier est
+ * absent, si Chromium ne démarre pas, ou si une page précise échoue, rien de
+ * tout ça ne fait échouer le build lui-même — mieux vaut un site qui déploie
+ * avec un SEO partiellement amélioré qu'un déploiement cassé.
  */
 const fs = require("fs");
 const path = require("path");
@@ -47,55 +47,30 @@ async function launchBrowser() {
 }
 
 const BUILD_DIR = path.join(__dirname, "..", "build");
+const SITEMAP_FILE = path.join(BUILD_DIR, "sitemap.xml");
 const PORT = 45678;
-const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL || "").replace(/\/$/, "");
 
-// Pages publiques statiques (voir les routes déclarées dans src/App.js) —
-// tout ce qui n'est pas admin/espace privé/formulaire d'auth.
-const STATIC_ROUTES = [
-  "/",
-  "/formations",
-  "/inscription",
-  "/blog",
-  "/kami-street",
-  "/offre-fidelite",
-  "/stage-recuperation-points",
-  "/formation-ssiap",
-  "/formation-taxi",
-  "/mobilite-taxi",
-  "/passerelle-taxi-banlieue-parisien",
-  "/formation-vtc",
-  "/formation-caces",
-  "/faq",
-  "/mentions-legales",
-  "/politique-de-confidentialite",
-];
-
-async function fetchJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url} -> ${res.status}`);
-  return res.json();
-}
-
-async function discoverDynamicRoutes() {
-  const routes = [];
-  if (!BACKEND_URL) {
-    console.warn("[prerender] REACT_APP_BACKEND_URL absent — routes dynamiques ignorées.");
-    return routes;
+// Liste des routes à pré-rendre à partir du sitemap.xml déjà écrit dans
+// build/ (voir scripts/build-sitemap.js, exécuté juste avant `craco build`)
+// — une seule source de vérité pour "quelles pages publiques existent",
+// plutôt que de la dupliquer ici en dur + refaire des appels API séparés.
+function routesFromSitemap() {
+  if (!fs.existsSync(SITEMAP_FILE)) {
+    console.warn("[prerender] Pas de sitemap.xml dans build/ — rien à pré-rendre.");
+    return [];
   }
-  try {
-    const formations = await fetchJson(`${BACKEND_URL}/api/formations?active_only=true`);
-    for (const f of formations) routes.push(`/formations/${f.slug || f.id}`);
-  } catch (e) {
-    console.warn("[prerender] Impossible de récupérer les formations :", e.message);
-  }
-  try {
-    const posts = await fetchJson(`${BACKEND_URL}/api/blog/posts?limit=500`);
-    for (const p of posts) routes.push(`/blog/${p.slug}`);
-  } catch (e) {
-    console.warn("[prerender] Impossible de récupérer les articles de blog :", e.message);
-  }
-  return routes;
+  const xml = fs.readFileSync(SITEMAP_FILE, "utf-8");
+  const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((m) => m[1]);
+  const paths = locs
+    .map((loc) => {
+      try {
+        return new URL(loc).pathname;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  return [...new Set(paths)];
 }
 
 // Petit serveur statique avec repli SPA (sert build/index.html pour toute
@@ -157,24 +132,24 @@ async function main() {
     console.warn("[prerender] Dossier build/ introuvable — étape ignorée.");
     return;
   }
-  const dynamicRoutes = await discoverDynamicRoutes();
-  const routes = [...STATIC_ROUTES, ...dynamicRoutes];
-  console.log(`[prerender] ${routes.length} page(s) à pré-rendre (${STATIC_ROUTES.length} statiques + ${dynamicRoutes.length} dynamiques).`);
+  const routes = routesFromSitemap();
+  if (!routes.length) return;
+  console.log(`[prerender] ${routes.length} page(s) à pré-rendre (depuis sitemap.xml).`);
 
   const server = await startServer();
   let browser;
   try {
     browser = await launchBrowser();
     let ok = 0;
-    const CONCURRENCY = 4;
-    let i = 0;
-    async function next() {
-      const idx = i++;
-      if (idx >= routes.length) return;
-      if (await prerenderRoute(browser, routes[idx])) ok++;
-      await next();
+    // Séquentiel plutôt qu'en parallèle : plus lent, mais nettement plus
+    // fiable, surtout sur un conteneur de build (Vercel) probablement moins
+    // généreux en mémoire/CPU qu'un poste de dev — 4 onglets Chrome ouverts
+    // en même temps s'est montré instable en test local. ~82 pages tiennent
+    // largement dans le budget de temps de build en séquentiel (~8 min
+    // observées).
+    for (const route of routes) {
+      if (await prerenderRoute(browser, route)) ok++;
     }
-    await Promise.all(Array.from({ length: CONCURRENCY }, next));
     console.log(`[prerender] Terminé : ${ok}/${routes.length} pages pré-rendues.`);
   } catch (e) {
     console.warn("[prerender] Erreur globale — le build continue avec le rendu 100% client-side :", e.message);
