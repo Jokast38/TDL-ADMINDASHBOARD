@@ -21,7 +21,29 @@
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
-const puppeteer = require("puppeteer");
+
+// Le Chromium embarqué dans le paquet "puppeteer" (utilisé en local) ne
+// démarre pas sur l'environnement de build de Vercel — il lui manque des
+// librairies système (libnss3.so...) qu'on ne peut pas installer (pas de
+// root, pas d'apt-get). `@sparticuz/chromium` fournit un binaire Chromium
+// autonome conçu pour ce genre d'environnement restreint (Vercel/AWS
+// Lambda) ; on ne l'utilise que là, et le "puppeteer" classique en local où
+// son propre Chromium fonctionne très bien (Windows/Mac/Linux de dev).
+const ON_VERCEL = !!process.env.VERCEL;
+const puppeteer = ON_VERCEL ? require("puppeteer-core") : require("puppeteer");
+const chromium = ON_VERCEL ? require("@sparticuz/chromium") : null;
+
+async function launchBrowser() {
+  if (ON_VERCEL) {
+    return puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    });
+  }
+  return puppeteer.launch({ headless: "new", args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+}
 
 const BUILD_DIR = path.join(__dirname, "..", "build");
 const PORT = 45678;
@@ -141,7 +163,7 @@ async function main() {
   const server = await startServer();
   let browser;
   try {
-    browser = await puppeteer.launch({ headless: "new", args: ["--no-sandbox", "--disable-setuid-sandbox"] });
+    browser = await launchBrowser();
     let ok = 0;
     for (const route of routes) {
       const success = await prerenderRoute(browser, route);
