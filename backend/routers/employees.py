@@ -342,6 +342,52 @@ async def _next_upcoming_stage_for_animateur(uid: str) -> dict | None:
     return {**stage, "days_until": days_until}
 
 
+async def _upcoming_permis_sessions_for(uid: str) -> list:
+    """Sessions de récupération de points (catégorie PERMIS) à venir que ce
+    formateur animera — utilisées pour l'annexe « Dates et lieux de stages »
+    de la convention (voir generate_formateur_convention_pdf), qui doit
+    lister le planning réel plutôt qu'un calendrier générique."""
+    formations = await db.formations.find({"category": "PERMIS"}, {"_id": 0, "id": 1}).to_list(200)
+    permis_ids = [f["id"] for f in formations]
+    if not permis_ids:
+        return []
+    today = now_iso()[:10]
+    stages = await db.stages.find(
+        {
+            "formation_id": {"$in": permis_ids}, "date_debut": {"$gte": today}, "statut": {"$ne": "annule"},
+            "$or": [{"animateur_ids": uid}, {"animateur_id": uid}],
+        },
+        {"_id": 0},
+    ).sort("date_debut", 1).to_list(50)
+    if not stages:
+        return []
+    other_ids = set()
+    for s in stages:
+        for aid in _stage_animateur_ids_local(s):
+            if aid != uid:
+                other_ids.add(aid)
+    others_by_id = {}
+    if other_ids:
+        others = await db.users.find({"id": {"$in": list(other_ids)}}, {"_id": 0, "id": 1, "name": 1}).to_list(50)
+        others_by_id = {o["id"]: o.get("name", "") for o in others}
+    sessions = []
+    for s in stages:
+        co_names = [others_by_id[aid] for aid in _stage_animateur_ids_local(s) if aid != uid and aid in others_by_id]
+        sessions.append({
+            "date_debut": s.get("date_debut"), "date_fin": s.get("date_fin"),
+            "lieu_adresse": s.get("lieu_adresse", ""), "lieu_ville": s.get("lieu_ville", ""),
+            "co_animateur": ", ".join(co_names),
+        })
+    return sessions
+
+
+def _stage_animateur_ids_local(stage: dict) -> list:
+    ids = list(stage.get("animateur_ids") or [])
+    if stage.get("animateur_id") and stage["animateur_id"] not in ids:
+        ids.append(stage["animateur_id"])
+    return ids
+
+
 @router.get("/me/formateur-dossier")
 async def get_my_formateur_dossier(user: dict = Depends(require_role("animateur"))):
     """État du dossier d'habilitation du formateur connecté (documents +
@@ -397,7 +443,8 @@ async def sign_my_convention(payload: ConventionSignIn, user: dict = Depends(req
         except Exception:
             cachet_data_url = None
 
-    pdf_bytes = generate_formateur_convention_pdf(u, payload.signature_data_url, centre, cachet_data_url)
+    sessions = await _upcoming_permis_sessions_for(user["id"])
+    pdf_bytes = generate_formateur_convention_pdf(u, payload.signature_data_url, centre, cachet_data_url, sessions)
     path = f"{APP_NAME}/conventions/{user['id']}.pdf"
     result = await put_object(path, pdf_bytes, "application/pdf")
     signed_at = now_iso()

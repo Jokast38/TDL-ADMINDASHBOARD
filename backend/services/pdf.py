@@ -378,7 +378,7 @@ def _fetch_logo_reader(url: str):
 
 def generate_formateur_convention_pdf(
     formateur: dict, signature_data_url: str, centre: Optional[dict] = None,
-    cachet_data_url: Optional[str] = None,
+    cachet_data_url: Optional[str] = None, sessions: Optional[list] = None,
 ) -> bytes:
     """Convention de prestation de services signée par un formateur/animateur
     BAFM ou psychologue (voir POST /me/convention/sign côté
@@ -618,6 +618,89 @@ def generate_formateur_convention_pdf(
     c.setFillColor(colors.HexColor("#666"))
     c.setFont("Helvetica", 7.5)
     c.drawCentredString(w / 2, 1.2 * cm, f"{centre_nom} · SIRET {centre_siret}")
+
+    if sessions is not None:
+        _new_page()
+        c.setFont("Helvetica-Bold", 12)
+        c.setFillColor(black)
+        c.drawCentredString(w / 2, state["y"], f"Convention de prestation de services {year}, Animation")
+        state["y"] -= 0.55 * cm
+        c.drawCentredString(w / 2, state["y"], "de stages de sensibilisation à la sécurité routière.")
+        state["y"] -= 0.9 * cm
+        c.setFont("Helvetica-Bold", 10.5)
+        c.drawCentredString(w / 2, state["y"], "Annexe")
+        state["y"] -= 0.55 * cm
+        c.drawCentredString(w / 2, state["y"], f"Dates et lieux de stages {year} :")
+        state["y"] -= 0.9 * cm
+
+        headers = [f"Dates {year}", "Lieu du stage", qualite, co_qualite_lower.upper()]
+        col_widths = [4.2 * cm, 5.5 * cm, 3.4 * cm, 3.4 * cm]
+        row_h = 0.75 * cm
+        header_h = 0.9 * cm
+        table_x = margin
+        table_w = sum(col_widths)
+
+        def _table_row(y_top, cells, height, bold=False, fill=None):
+            if fill:
+                c.setFillColor(fill)
+                c.rect(table_x, y_top - height, table_w, height, fill=1, stroke=0)
+            c.setStrokeColor(colors.HexColor("#999"))
+            c.setLineWidth(0.5)
+            x = table_x
+            for cw in col_widths:
+                c.rect(x, y_top - height, cw, height, fill=0, stroke=1)
+                x += cw
+            c.setFont("Helvetica-Bold" if bold else "Helvetica", 8.5)
+            c.setFillColor(black)
+            x = table_x
+            for cell, cw in zip(cells, col_widths):
+                for i, line in enumerate(_wrap(cell, "Helvetica-Bold" if bold else "Helvetica", 8.5, cw - 0.3 * cm)[:3]):
+                    c.drawString(x + 0.15 * cm, y_top - 0.35 * cm - i * 0.32 * cm, line)
+                x += cw
+
+        _ensure_space(header_h)
+        _table_row(state["y"], headers, header_h, bold=True, fill=colors.HexColor("#f0f0f0"))
+        state["y"] -= header_h
+
+        if sessions:
+            for s in sessions:
+                dates_label = f"{s.get('date_debut', '')} - {s.get('date_fin', '')}"
+                lieu_label = ", ".join([p for p in [s.get("lieu_adresse", ""), s.get("lieu_ville", "")] if p]) or f"{centre_adresse}, {centre_ville}"
+                cells = [dates_label, lieu_label, nom, s.get("co_animateur") or "—"]
+                _ensure_space(row_h)
+                if state["y"] - row_h < bottom_limit:
+                    _new_page()
+                    _ensure_space(header_h)
+                    _table_row(state["y"], headers, header_h, bold=True, fill=colors.HexColor("#f0f0f0"))
+                    state["y"] -= header_h
+                _table_row(state["y"], cells, row_h)
+                state["y"] -= row_h
+        else:
+            cells = ["—", "Aucune session programmée pour le moment", "—", "—"]
+            _table_row(state["y"], cells, row_h)
+            state["y"] -= row_h
+
+        state["y"] -= 1 * cm
+        para(f"Adresses des lieux de stage : {centre_adresse}, {centre_ville}.")
+        para("Horaires : selon planning communiqué par le Centre.")
+        state["y"] -= 0.6 * cm
+
+        _ensure_space(6 * cm)
+        col1, col2 = margin, margin + content_width / 2 + 0.5 * cm
+        c.setFont("Helvetica", 9.5)
+        c.drawString(col1, state["y"], f"Bon pour accord, le {today_label}")
+        c.drawString(col2, state["y"], f"Bon pour accord, le {today_label}")
+        state["y"] -= 0.6 * cm
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(col1, state["y"], centre_nom)
+        c.drawString(col2, state["y"], qualite)
+        text_top2 = state["y"] - 0.5 * cm
+        c.setFont("Helvetica", 9.5)
+        c.drawString(col1, text_top2, directeur_nom)
+        c.drawString(col2, text_top2, nom)
+        _draw_data_url_image(c, cachet_data_url, col1, text_top2 - 0.35 * cm - sig_h, sig_w, sig_h)
+        _draw_data_url_image(c, signature_data_url, col2, text_top2 - 0.35 * cm - sig_h, sig_w, sig_h)
+
     c.showPage()
     c.save()
     return buf.getvalue()
