@@ -1,6 +1,9 @@
 {
   "buildCommand": "CI=false yarn build",
   "outputDirectory": "build",
+  "functions": {
+    "api/render.js": { "maxDuration": 30 }
+  },
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
