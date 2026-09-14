@@ -5,4 +5,4 @@ Disallow: /api
 Disallow: /login
 Disallow: /espace-eleve
 
-Sitemap: https://tdl-formation.fr/sitemap.xml
+Sitemap: https://www.tdl-formation.fr/sitemap.xml
