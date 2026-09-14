@@ -324,6 +324,24 @@ async def get_my_signature_image(user: dict = Depends(require_role(*ROLES_ALL_ST
     return Response(content=data, media_type=ct or "image/png")
 
 
+async def _next_upcoming_stage_for_animateur(uid: str) -> dict | None:
+    """Prochaine session (non annulée) que ce formateur doit animer — utilisée
+    pour afficher une urgence concrète ("vous animez une session le ... dans
+    N jours") plutôt que le seul délai générique de 24h après création du
+    compte, qui ne dit rien pour un formateur de longue date réassigné à une
+    nouvelle session."""
+    today = now_iso()[:10]
+    stages = await db.stages.find(
+        {"$or": [{"animateur_ids": uid}, {"animateur_id": uid}], "date_debut": {"$gte": today}, "statut": {"$ne": "annule"}},
+        {"_id": 0, "id": 1, "date_debut": 1, "formation_titre": 1},
+    ).sort("date_debut", 1).to_list(1)
+    if not stages:
+        return None
+    stage = stages[0]
+    days_until = (datetime.fromisoformat(stage["date_debut"]).date() - datetime.fromisoformat(today).date()).days
+    return {**stage, "days_until": days_until}
+
+
 @router.get("/me/formateur-dossier")
 async def get_my_formateur_dossier(user: dict = Depends(require_role("animateur"))):
     """État du dossier d'habilitation du formateur connecté (documents +
@@ -333,7 +351,13 @@ async def get_my_formateur_dossier(user: dict = Depends(require_role("animateur"
     profile = await _get_or_create_staff_profile(user["id"])
     docs = await db.documents.find({"id": {"$in": profile.get("documents", [])}, "is_deleted": False}, {"_id": 0}).to_list(200)
     status = await _formateur_dossier_status(user["id"], u.get("created_at") or now_iso(), u.get("convention_signed_at"))
-    return {**status, "documents_details": docs, "document_types": FORMATEUR_DOC_TYPES, "convention_pdf_available": bool(u.get("convention_pdf_path"))}
+    next_stage = None
+    if not status["convention_signed"]:
+        next_stage = await _next_upcoming_stage_for_animateur(user["id"])
+    return {
+        **status, "documents_details": docs, "document_types": FORMATEUR_DOC_TYPES,
+        "convention_pdf_available": bool(u.get("convention_pdf_path")), "next_upcoming_stage": next_stage,
+    }
 
 
 @router.post("/me/convention/sign")

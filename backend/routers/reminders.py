@@ -4,7 +4,7 @@ from core.security import require_role
 from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
-    send_emargement_reminders,
+    send_emargement_reminders, send_convention_session_reminders,
 )
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
@@ -83,6 +83,15 @@ async def run_formateur_dossier_reminders(user: dict = Depends(require_role("adm
     externe) — la boucle de fond (voir server.py) les envoie automatiquement
     toutes les 6h."""
     notified = await send_formateur_dossier_reminders()
+    return {"notified": notified}
+
+
+@router.post("/convention-sessions/run")
+async def run_convention_session_reminders(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel des rappels de convention ciblés sur une session
+    à venir (≤10 jours, test ou cron externe) — la boucle de fond (voir
+    server.py) les envoie automatiquement chaque jour."""
+    notified = await send_convention_session_reminders()
     return {"notified": notified}
 
 

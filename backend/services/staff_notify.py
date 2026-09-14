@@ -683,6 +683,47 @@ async def send_formateur_dossier_reminders() -> int:
     return notified
 
 
+async def send_convention_session_reminders() -> int:
+    """Rappel de signature de convention ciblé sur une session précise : si
+    un formateur n'a pas signé sa convention et anime une session qui
+    débute dans 10 jours ou moins, on le relance (email + notification dans
+    son espace) — plus pertinent que le seul délai générique de 24h après
+    création du compte (send_formateur_dossier_reminders), qui ne couvre pas
+    un formateur ancien réassigné à une nouvelle session bien après la
+    création de son compte. Un seul rappel par session concernée
+    (`convention_reminder_stage_id` sur le compte) — s'il est réassigné à
+    une autre session avant d'avoir signé, un nouveau rappel repart."""
+    from routers.employees import _next_upcoming_stage_for_animateur
+
+    animateurs = await db.users.find(
+        {"role": "animateur", "active": True, "convention_signed_at": {"$exists": False}}, {"_id": 0}
+    ).to_list(500)
+    notified = 0
+    for a in animateurs:
+        stage = await _next_upcoming_stage_for_animateur(a["id"])
+        if not stage or stage["days_until"] > 10 or stage["days_until"] < 0:
+            continue
+        if a.get("convention_reminder_stage_id") == stage["id"]:
+            continue
+        plural = "s" if stage["days_until"] > 1 else ""
+        if a.get("email"):
+            message = (
+                f"Bonjour {a.get('name', '')},\n\n"
+                f"Vous animez la session {stage.get('formation_titre', '')} du {stage['date_debut']} "
+                f"(dans {stage['days_until']} jour{plural}), mais votre convention de collaboration n'est pas "
+                "encore signée.\n\n"
+                "Merci de la signer avant le début de la session, depuis votre espace formateur (onglet « Mon dossier »)."
+            )
+            await send_email(a["email"], "⏰ Convention à signer avant votre prochaine session", render_branded_email(message))
+        await send_push_to_users(
+            [a["id"]], "Convention à signer",
+            f"Session du {stage['date_debut']} dans {stage['days_until']} jour{plural} — convention non signée", "/espace-animateur",
+        )
+        await db.users.update_one({"id": a["id"]}, {"$set": {"convention_reminder_stage_id": stage["id"]}})
+        notified += 1
+    return notified
+
+
 async def send_appointment_reminders() -> int:
     """Rappel automatique la veille d'un rendez-vous réservé (examen,
     entretien...) — voir _appointment_reminders_loop dans server.py. Chaque

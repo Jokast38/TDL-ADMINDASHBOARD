@@ -27,6 +27,7 @@ from routers.lead_automations import run_due_automations
 from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
+    send_convention_session_reminders,
     send_emargement_reminders,
 )
 from services.candidate_automation import (
@@ -413,6 +414,21 @@ async def _formateur_dossier_reminders_loop():
         await asyncio.sleep(6 * 3600)
 
 
+async def _convention_session_reminders_loop():
+    """Toutes les 24h, relance les formateurs dont la convention n'est pas
+    signée alors qu'ils animent une session dans 10 jours ou moins (voir
+    services/staff_notify.py)."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_convention_session_reminders()
+            if notified:
+                log.info(f"Rappels convention (session à venir) : {notified} notification(s) envoyée(s)")
+        except Exception as e:
+            log.warning(f"Rappels convention (session à venir) : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
+
+
 async def _wordpress_auto_sync_loop():
     """Toutes les 15 min, si la synchro auto du blog est activée (bouton
     on/off dans AdminBlog.jsx, réglage wp_blog_auto_sync_enabled), importe en
@@ -446,6 +462,7 @@ async def startup():
     asyncio.create_task(_emargement_reminders_loop())
     asyncio.create_task(_appointment_reminders_loop())
     asyncio.create_task(_formateur_dossier_reminders_loop())
+    asyncio.create_task(_convention_session_reminders_loop())
     asyncio.create_task(_convocations_loop())
     asyncio.create_task(_auto_attestations_loop())
     asyncio.create_task(_satisfaction_chaud_loop())

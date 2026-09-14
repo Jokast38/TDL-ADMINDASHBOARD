@@ -174,6 +174,12 @@ function DossierTab() {
           ⏰ Le délai de 24h pour compléter votre dossier est dépassé — merci de finaliser au plus vite les documents et la convention manquants.
         </div>
       )}
+      {!dossier.convention_signed && dossier.next_upcoming_stage && (
+        <div className={`border rounded-md p-3 text-sm ${dossier.next_upcoming_stage.days_until <= 10 ? "border-red-300 bg-red-50 text-red-700" : "border-amber-300 bg-amber-50 text-amber-800"}`} data-testid="convention-session-alert">
+          ✏️ Vous animez <b>{dossier.next_upcoming_stage.formation_titre}</b> le {new Date(dossier.next_upcoming_stage.date_debut).toLocaleDateString("fr-FR")}
+          {" "}(dans {dossier.next_upcoming_stage.days_until} jour{dossier.next_upcoming_stage.days_until > 1 ? "s" : ""}) — merci de signer votre convention avant le début de la session.
+        </div>
+      )}
       {!dossier.dossier_complete && !dossier.dossier_overdue && dossier.dossier_deadline && (
         <div className="border border-amber-300 bg-amber-50 text-amber-800 rounded-md p-3 text-sm">
           À compléter avant le {new Date(dossier.dossier_deadline).toLocaleString("fr-FR")} (documents + convention).
