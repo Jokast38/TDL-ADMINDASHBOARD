@@ -23,25 +23,26 @@ const path = require("path");
 const http = require("http");
 
 // Le Chromium embarqué dans le paquet "puppeteer" (utilisé en local) ne
-// démarre pas sur l'environnement de build de Vercel — il lui manque des
-// librairies système (libnss3.so...) qu'on ne peut pas installer (pas de
-// root, pas d'apt-get). `@sparticuz/chromium` fournit un binaire Chromium
-// autonome conçu pour ce genre d'environnement restreint (Vercel/AWS
-// Lambda) ; on ne l'utilise que là, et le "puppeteer" classique en local où
-// son propre Chromium fonctionne très bien (Windows/Mac/Linux de dev).
-const ON_VERCEL = !!process.env.VERCEL;
-const puppeteer = ON_VERCEL ? require("puppeteer-core") : require("puppeteer");
-const chromium = ON_VERCEL ? require("@sparticuz/chromium") : null;
+// démarre pas sur l'environnement de build Linux de Vercel — il lui manque
+// des librairies système qu'on ne peut pas installer (pas de root, pas
+// d'apt-get). `@sparticuz/chromium` fournit un binaire Chromium autonome
+// conçu pour ce genre d'environnement restreint ; on ne l'utilise que sur
+// Linux (CI/Vercel), et le "puppeteer" classique en local (Windows/Mac de
+// dev) où son propre Chromium fonctionne très bien.
+const puppeteer = process.platform === "linux" ? require("puppeteer-core") : require("puppeteer");
+const chromium = process.platform === "linux" ? require("@sparticuz/chromium") : null;
 
 async function launchBrowser() {
-  if (ON_VERCEL) {
+  if (process.platform === "linux") {
     return puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
+      headless: true,
       executablePath: await chromium.executablePath(),
-      headless: chromium.headless,
+      args: chromium.args,
     });
   }
+  // Local (Windows/Mac de dev) : le Chromium fourni par le paquet complet
+  // "puppeteer" (téléchargé à l'installation) fonctionne directement, pas
+  // besoin d'un Chrome système.
   return puppeteer.launch({ headless: "new", args: ["--no-sandbox", "--disable-setuid-sandbox"] });
 }
 
@@ -156,19 +157,6 @@ async function main() {
     console.warn("[prerender] Dossier build/ introuvable — étape ignorée.");
     return;
   }
-  if (ON_VERCEL) {
-    // Désactivé pour le moment : ni le Chromium de "puppeteer", ni celui de
-    // "@sparticuz/chromium" (pourtant conçu pour les environnements Vercel/
-    // Lambda restreints) ne parviennent à démarrer sur le conteneur de BUILD
-    // de Vercel — "libnss3.so" manquant dans les deux cas. Ce conteneur de
-    // build n'est apparemment pas le même environnement que celui des
-    // fonctions serverless pour lequel @sparticuz/chromium est prévu. Plutôt
-    // que de retenter à chaque déploiement (et perdre du temps de build pour
-    // rien), on coupe ici en attendant une vraie solution d'infra (rendu via
-    // le backend Render, ou un service de prerendering tiers).
-    console.warn("[prerender] Désactivé sur Vercel (Chromium indisponible dans ce conteneur de build) — rendu 100% client-side.");
-    return;
-  }
   const dynamicRoutes = await discoverDynamicRoutes();
   const routes = [...STATIC_ROUTES, ...dynamicRoutes];
   console.log(`[prerender] ${routes.length} page(s) à pré-rendre (${STATIC_ROUTES.length} statiques + ${dynamicRoutes.length} dynamiques).`);
@@ -178,10 +166,15 @@ async function main() {
   try {
     browser = await launchBrowser();
     let ok = 0;
-    for (const route of routes) {
-      const success = await prerenderRoute(browser, route);
-      if (success) ok++;
+    const CONCURRENCY = 4;
+    let i = 0;
+    async function next() {
+      const idx = i++;
+      if (idx >= routes.length) return;
+      if (await prerenderRoute(browser, routes[idx])) ok++;
+      await next();
     }
+    await Promise.all(Array.from({ length: CONCURRENCY }, next));
     console.log(`[prerender] Terminé : ${ok}/${routes.length} pages pré-rendues.`);
   } catch (e) {
     console.warn("[prerender] Erreur globale — le build continue avec le rendu 100% client-side :", e.message);
@@ -191,9 +184,11 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  // Ne jamais faire échouer le build à cause du pré-rendu — un déploiement
-  // avec un SEO partiellement amélioré vaut toujours mieux qu'un
-  // déploiement cassé.
-  console.warn("[prerender] Erreur non gérée — le build continue :", e);
-});
+main()
+  .catch((e) => {
+    // Ne jamais faire échouer le build à cause du pré-rendu — un déploiement
+    // avec un SEO partiellement amélioré vaut toujours mieux qu'un
+    // déploiement cassé.
+    console.warn("[prerender] Erreur non gérée — le build continue :", e);
+  })
+  .finally(() => process.exit(0));
