@@ -323,7 +323,7 @@ export default function Landing() {
           const f = byTitle(title);
           return (
             <DropdownMenuItem key={title} asChild>
-              <Link to={override || (f ? `/formations/${f.id}` : "#formations")} className="text-sm">
+              <Link to={override || (f ? `/formations/${f.slug || f.id}` : "#formations")} className="text-sm">
                 {title}
               </Link>
             </DropdownMenuItem>
@@ -348,7 +348,7 @@ export default function Landing() {
             <NavDropdown label="Formations Taxi" titles={NAV_TAXI} />
             <Link to="/formation-caces" className="hover:text-[#d4af37]">CACES 93</Link>
             <Link to="/formations?category=ECSR" className="hover:text-[#d4af37]">ECSR</Link>
-            <Link to={conseillerVente ? `/formations/${conseillerVente.id}` : "#formations"} className="hover:text-[#d4af37]">Conseiller de Vente</Link>
+            <Link to={conseillerVente ? `/formations/${conseillerVente.slug || conseillerVente.id}` : "#formations"} className="hover:text-[#d4af37]">Conseiller de Vente</Link>
             <Link to="/formations" className="hover:text-[#d4af37]">Nos formations</Link>
             <Link to="/blog" className="hover:text-[#d4af37]">Blog</Link>
           </nav>
@@ -392,7 +392,7 @@ export default function Landing() {
               <Link to="/formations?category=ECSR" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
                 ECSR
               </Link>
-              <Link to={conseillerVente ? `/formations/${conseillerVente.id}` : "#formations"} className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
+              <Link to={conseillerVente ? `/formations/${conseillerVente.slug || conseillerVente.id}` : "#formations"} className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>
                 Conseiller de Vente
               </Link>
               <Link to="/formations" className="py-3 border-b border-gray-100" onClick={() => setMobileOpen(false)}>Nos formations</Link>
@@ -707,7 +707,7 @@ export default function Landing() {
           </div>
           {conseillerVente && (
             <div className="flex justify-center mt-12">
-              <Link to={`/formations/${conseillerVente.id}`}>
+              <Link to={`/formations/${conseillerVente.slug || conseillerVente.id}`}>
                 <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
                   Voir la fiche formation <ArrowRight size={16} className="ml-2" />
                 </Button>
@@ -861,7 +861,7 @@ function MobileSubMenu({ label, titles, byTitle, open, onToggle, onNavigate }) {
             return (
               <Link
                 key={title}
-                to={override || (f ? `/formations/${f.id}` : "#formations")}
+                to={override || (f ? `/formations/${f.slug || f.id}` : "#formations")}
                 className="py-2 text-gray-600 text-sm"
                 onClick={onNavigate}
               >

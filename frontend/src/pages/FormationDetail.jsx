@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { TopBar } from "@/components/StageLandingPage";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ const CATEGORY_PROGRAM_PDF = {
 
 export default function FormationDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [formation, setFormation] = useState(null);
   const [others, setOthers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,20 +33,28 @@ export default function FormationDetail() {
   useEffect(() => {
     setLoading(true);
     api.get("/formations", { params: { active_only: true } }).then(({ data }) => {
-      const found = data.find((f) => f.id === id);
+      // Accepte aussi bien le slug lisible (/formations/caces-r489) que
+      // l'ancien identifiant UUID — les liens déjà partagés/indexés avec
+      // l'UUID continuent de fonctionner, mais sont redirigés vers l'URL
+      // canonique en slug dès qu'on connaît sa formation.
+      const found = data.find((f) => f.slug === id) || data.find((f) => f.id === id);
       setFormation(found || null);
       if (found) {
+        if (found.slug && found.slug !== id) {
+          navigate(`/formations/${found.slug}`, { replace: true });
+          return;
+        }
         setOthers(data.filter((f) => f.category === found.category && f.id !== found.id).slice(0, 3));
         setPageMeta({
           title: `${found.title} — TDL Formation`,
           description: (found.description || "").slice(0, 155) || `${found.title} — formation professionnelle chez TDL Formation, Épinay-sur-Seine (93) et Creil (60).`,
-          path: `/formations/${found.id}`,
+          path: `/formations/${found.slug || found.id}`,
         });
       }
       setLoading(false);
     });
     window.scrollTo(0, 0);
-  }, [id]);
+  }, [id, navigate]);
 
   if (loading) {
     return (
@@ -239,7 +248,7 @@ export default function FormationDetail() {
                   {others.map((o) => (
                     <Link
                       key={o.id}
-                      to={`/formations/${o.id}`}
+                      to={`/formations/${o.slug || o.id}`}
                       className="block p-3 border border-gray-200 rounded-md hover:border-[#d4af37] text-sm"
                     >
                       {o.title}

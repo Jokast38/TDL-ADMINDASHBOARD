@@ -59,12 +59,15 @@ async def sitemap():
             "lastmod": lastmod.split("T")[0] if isinstance(lastmod, str) else str(lastmod),
             "priority": "0.7", "changefreq": "monthly"
         })
-    # Fiche formation dédiée (/formations/{id}, description complète + schema)
-    # plutôt que l'URL du tunnel d'inscription — c'est la page de contenu que
-    # Google doit indexer, pas le formulaire de conversion.
-    formations = await db.formations.find({"active": True}, {"_id": 0, "id": 1}).to_list(500)
+    # Fiche formation dédiée (/formations/{slug}, description complète +
+    # schema) plutôt que l'URL du tunnel d'inscription — c'est la page de
+    # contenu que Google doit indexer, pas le formulaire de conversion. Le
+    # slug (mot-clé lisible) est préféré à l'UUID brut, meilleur pour le
+    # référencement ; repli sur l'id pour les formations créées avant l'ajout
+    # de ce champ et pas encore ré-enregistrées.
+    formations = await db.formations.find({"active": True}, {"_id": 0, "id": 1, "slug": 1}).to_list(500)
     for f in formations:
-        urls.append({"loc": f"{base}/formations/{f['id']}", "priority": "0.6", "changefreq": "monthly"})
+        urls.append({"loc": f"{base}/formations/{f.get('slug') or f['id']}", "priority": "0.6", "changefreq": "monthly"})
     xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     for u in urls:
         xml.append("  <url>")
