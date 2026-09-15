@@ -1,33 +1,53 @@
 import uuid
 import json as _json
-from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import Response
 
 from core.database import db
 from core.security import require_role
+from core.storage import put_object, get_object
 from core.utils import now_iso, slugify
-from core.config import PUBLIC_BACKEND_URL
+from core.config import PUBLIC_BACKEND_URL, APP_NAME, ROLES_MAILBOX
 from models.blog import BlogPostIn, BlogPostUpdate, BlogGenerateIn
 from services.chatbot import call_ollama
 
 router = APIRouter(prefix="/blog", tags=["blog"])
 
-UPLOADS_DIR = Path(__file__).parent.parent / "uploads" / "blog"
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 
 
 @router.post("/upload-image")
-async def blog_upload_image(file: UploadFile = File(...), user: dict = Depends(require_role("admin", "employe"))):
+async def blog_upload_image(file: UploadFile = File(...), user: dict = Depends(require_role(*ROLES_MAILBOX))):
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Format d'image non supporté (jpg, png, webp, gif)")
     data = await file.read()
     if len(data) > 8 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image trop volumineuse (max 8MB)")
     ext = (file.filename or "jpg").rsplit(".", 1)[-1].lower()
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4()}.{ext}"
-    (UPLOADS_DIR / filename).write_bytes(data)
-    return {"url": f"{PUBLIC_BACKEND_URL}/uploads/blog/{filename}"}
+    # Stockage durable (même mécanisme que les documents entreprise) — le
+    # disque local du serveur Render est éphémère et remis à zéro à chaque
+    # déploiement, ce qui cassait silencieusement toutes les images
+    # précédemment uploadées (le lien restait en base mais pointait vers un
+    # fichier disparu).
+    await put_object(f"{APP_NAME}/blog/{filename}", data, file.content_type)
+    return {"url": f"{PUBLIC_BACKEND_URL}/api/blog/images/{filename}"}
+
+
+@router.get("/images/{filename}")
+async def blog_image(filename: str):
+    """Public (pas d'authentification) — les images d'articles doivent
+    s'afficher dans les balises <img> du site public comme n'importe quelle
+    image statique."""
+    try:
+        data, content_type = await get_object(f"{APP_NAME}/blog/{filename}")
+    except Exception:
+        raise HTTPException(status_code=404, detail="Image introuvable")
+    return Response(
+        content=data,
+        media_type=content_type or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 SEED_ARTICLES_TOPICS = [
     {"topic": "Le CACES R489 en 2026 : guide complet sur les catégories, prix et durée", "category": "conseils", "keywords": "CACES R489, chariot élévateur, formation CACES, prix CACES"},
@@ -42,7 +62,7 @@ SEED_ARTICLES_TOPICS = [
 
 
 @router.post("/posts")
-async def blog_create(payload: BlogPostIn, user: dict = Depends(require_role("admin", "employe"))):
+async def blog_create(payload: BlogPostIn, user: dict = Depends(require_role(*ROLES_MAILBOX))):
     base_slug = payload.slug or slugify(payload.title)
     slug = base_slug
     i = 2
@@ -81,12 +101,12 @@ async def blog_get_public(slug: str):
 
 
 @router.get("/admin/posts")
-async def blog_list_admin(user: dict = Depends(require_role("admin", "employe"))):
+async def blog_list_admin(user: dict = Depends(require_role(*ROLES_MAILBOX))):
     return await db.blog_posts.find({}, {"_id": 0, "content": 0}).sort("created_at", -1).to_list(500)
 
 
 @router.get("/admin/posts/{post_id}")
-async def blog_get_admin(post_id: str, user: dict = Depends(require_role("admin", "employe"))):
+async def blog_get_admin(post_id: str, user: dict = Depends(require_role(*ROLES_MAILBOX))):
     post = await db.blog_posts.find_one({"id": post_id}, {"_id": 0})
     if not post:
         raise HTTPException(status_code=404, detail="Article introuvable")
@@ -94,7 +114,7 @@ async def blog_get_admin(post_id: str, user: dict = Depends(require_role("admin"
 
 
 @router.put("/posts/{post_id}")
-async def blog_update(post_id: str, payload: BlogPostUpdate, user: dict = Depends(require_role("admin", "employe"))):
+async def blog_update(post_id: str, payload: BlogPostUpdate, user: dict = Depends(require_role(*ROLES_MAILBOX))):
     existing = await db.blog_posts.find_one({"id": post_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Article introuvable")
@@ -116,7 +136,7 @@ async def blog_delete(post_id: str, user: dict = Depends(require_role("admin")))
 
 
 @router.post("/generate")
-async def blog_generate(payload: BlogGenerateIn, user: dict = Depends(require_role("admin", "employe"))):
+async def blog_generate(payload: BlogGenerateIn, user: dict = Depends(require_role(*ROLES_MAILBOX))):
     system = (
         "Tu es un rédacteur SEO senior pour TDL Formation (organisme de formation français : CACES, permis, "
         "auto-école, SSIAP, VTC/Taxi) et KAMI STREET (mobilité électrique). Tu écris des articles de blog "

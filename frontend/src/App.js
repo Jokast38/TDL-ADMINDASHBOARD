@@ -236,7 +236,7 @@ function App() {
               <ProtectedRoute roles={["admin", "employe", "commercial", "responsable_commercial"]}><AdminLayout><Orders /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/blog" element={
-              <ProtectedRoute roles={["admin", "employe"]}><AdminLayout><AdminBlog /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><AdminBlog /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/ai" element={
               <ProtectedRoute roles={["admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><AIAssistant /></AdminLayout></ProtectedRoute>

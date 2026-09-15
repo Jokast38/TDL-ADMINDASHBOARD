@@ -45,7 +45,7 @@ export const navAll = [
   { to: "/admin/kami-street", label: "KAMI STREET", icon: ShoppingCart, roles: ["admin", "employe", "commercial", "responsable_commercial"] },
   { to: "/admin/orders", label: "Commandes", icon: Storefront, roles: ["admin", "employe", "commercial", "responsable_commercial"] },
   { to: "/admin/ai", label: "Assistant IA", icon: Robot, roles: ["admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
-  { to: "/admin/blog", label: "Blog", icon: Article, roles: ["admin", "employe"] },
+  { to: "/admin/blog", label: "Blog", icon: Article, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
   { to: "/admin/employees", label: "Employés", icon: Users, roles: ["admin", "responsable_commercial"] },
   { to: "/admin/activite", label: "Activité", icon: TrendUp, roles: ["admin"] },
   { to: "/admin/settings", label: "Paramètres", icon: Gear, roles: ["admin"] },
