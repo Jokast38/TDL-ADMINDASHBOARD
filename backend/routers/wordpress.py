@@ -11,7 +11,7 @@ from core.security import require_role
 from core.utils import now_iso, slugify
 from core.config import (
     WORDPRESS_SITE, WORDPRESS_SITE_K, WORDPRESS_USER, WORDPRESS_APP_PASSWORD, WORDPRESS_APP_PASSWORD_K,
-    GA4_PROPERTY_ID, GA4_PROPERTY_ID_K, GA4_SERVICE_ACCOUNT_PATH, ROLES_KAMI_STREET,
+    GA4_PROPERTY_ID, GA4_PROPERTY_ID_K, GA4_SERVICE_ACCOUNT_PATH, ROLES_KAMI_STREET, ROLES_MAILBOX,
 )
 from models.document import WooProductUpdate
 from models.blog import WordPressBlogImportIn
@@ -133,7 +133,7 @@ def _html_to_markdown(html: str, canonical_site_url: str = "") -> str:
 
 
 @router.get("/blog/import-preview")
-async def wordpress_blog_import_preview(user: dict = Depends(require_role("admin", "employe"))):
+async def wordpress_blog_import_preview(user: dict = Depends(require_role(*ROLES_MAILBOX))):
     """Liste les articles publiés sur tdl-formation.fr (avec leurs métas Rank Math
     si exposées) et indique lesquels sont déjà importés dans le blog interne."""
     if not WORDPRESS_SITE or not WORDPRESS_USER or not WORDPRESS_APP_PASSWORD:
@@ -221,7 +221,7 @@ async def _import_wp_posts(wp_ids: Optional[list], status: str, author_id: str, 
 @router.post("/blog/import")
 async def wordpress_blog_import(
     payload: WordPressBlogImportIn = WordPressBlogImportIn(),
-    user: dict = Depends(require_role("admin", "employe")),
+    user: dict = Depends(require_role(*ROLES_MAILBOX)),
 ):
     """Importe les articles WordPress sélectionnés (ou tous les nouveaux si
     wp_ids est vide) dans le blog interne, en conservant le SEO Rank Math
@@ -257,7 +257,7 @@ async def auto_sync_wordpress_posts() -> int:
 
 
 @router.get("/blog/auto-sync")
-async def get_wordpress_auto_sync(user: dict = Depends(require_role("admin", "employe"))):
+async def get_wordpress_auto_sync(user: dict = Depends(require_role(*ROLES_MAILBOX))):
     settings = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
     return {
         "enabled": bool(settings.get("wp_blog_auto_sync_enabled", False)),
@@ -267,7 +267,7 @@ async def get_wordpress_auto_sync(user: dict = Depends(require_role("admin", "em
 
 
 @router.put("/blog/auto-sync")
-async def set_wordpress_auto_sync(payload: dict, user: dict = Depends(require_role("admin", "employe"))):
+async def set_wordpress_auto_sync(payload: dict, user: dict = Depends(require_role(*ROLES_MAILBOX))):
     enabled = bool(payload.get("enabled"))
     await db.settings.update_one(
         {"id": "global"}, {"$set": {"wp_blog_auto_sync_enabled": enabled, "updated_at": now_iso()}}, upsert=True
@@ -279,7 +279,7 @@ _ANY_UPLOADS_URL_RE = re.compile(r'https?://[^\s")\]]+/wp-content/uploads/[^\s")
 
 
 @router.post("/blog/fix-image-hosts")
-async def wordpress_blog_fix_image_hosts(user: dict = Depends(require_role("admin", "employe"))):
+async def wordpress_blog_fix_image_hosts(user: dict = Depends(require_role(*ROLES_MAILBOX))):
     """Corrige les articles déjà importés dont les images pointent vers un host
     différent du site WordPress configuré (ex: un sous-domaine "blog." resté
     parqué chez l'hébergeur au lieu du domaine réel) — ces images sont mortes
