@@ -59,6 +59,20 @@ META_PIXEL_ID = os.getenv("META_PIXEL_ID")
 META_API_TOKEN = os.getenv("META_API_TOKEN")
 META_PIXEL_TEST_ID = os.getenv("META_PIXEL_TEST_ID")  # renseigné = events visibles dans l'onglet "Test Events" sans polluer les stats prod
 
+# Récupération des leads Meta Lead Ads (formulaires publicitaires "instant
+# form") — distinct du Pixel/CAPI ci-dessus qui ne fait que du tracking de
+# conversion sortant. Ici on reçoit les leads entrants via webhook.
+# META_APP_SECRET : App Secret de l'app Meta (Réglages de l'app > Basique)
+#   — sert à vérifier la signature X-Hub-Signature-256 de chaque webhook.
+# META_WEBHOOK_VERIFY_TOKEN : chaîne arbitraire choisie ici, à recopier telle
+#   quelle dans la configuration du webhook côté Meta (vérification initiale).
+# META_PAGE_ACCESS_TOKEN : jeton d'accès Page avec la permission
+#   leads_retrieval — sert à appeler l'API Graph pour récupérer le détail
+#   de chaque lead (le webhook ne transmet que son identifiant).
+META_APP_SECRET = os.getenv("META_APP_SECRET")
+META_WEBHOOK_VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN")
+META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
+
 # Notifications push navigateur (Web Push / VAPID).
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")

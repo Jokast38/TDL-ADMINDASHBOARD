@@ -121,6 +121,7 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         "from_meta_ads": bool(payload.fbc),
         "session": payload.session or "", "center": payload.center or "",
         "stage_id": payload.stage_id, "stage_titre": stage_titre,
+        "financing_mode": payload.financing_mode or "",
     }
     await db.inscriptions.insert_one(inscription)
 

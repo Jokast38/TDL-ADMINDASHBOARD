@@ -36,6 +36,10 @@ export default function PublicInscription() {
   const [success, setSuccess] = useState(null);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   const [allowKlarna, setAllowKlarna] = useState(false);
+  // Choix requis uniquement pour une formation cpf_eligible (voir plus bas) —
+  // "cpf" (prise en charge, pas de paiement en ligne, l'équipe recontacte)
+  // ou "auto" (auto-financement, débloque le paiement Stripe/Klarna).
+  const [financingMode, setFinancingMode] = useState(null);
   const [privacyConsent, setPrivacyConsent] = useState(false);
   const [payLoading, setPayLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -99,6 +103,7 @@ export default function PublicInscription() {
         stage_id: selectedStageId || undefined,
         source: "inscription_publique", landing_url: window.location.href,
         event_id: leadEventId, ...getFbCookies(),
+        financing_mode: selected?.cpf_eligible ? financingMode : undefined,
       });
       setSuccess(data);
       setStep(3);
@@ -291,6 +296,43 @@ export default function PublicInscription() {
                   <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3} data-testid="inscr-notes" />
                 </div>
               </div>
+
+              {selected?.cpf_eligible && (
+                <div className="mt-4" data-testid="financing-mode-section">
+                  <label className="text-sm font-medium block mb-2">Mode de financement *</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label
+                      className={`flex items-start gap-2 p-3 rounded-md border cursor-pointer text-sm transition-colors ${financingMode === "cpf" ? "border-[#d4af37] bg-[#d4af37]/5" : "border-gray-200"}`}
+                    >
+                      <input
+                        type="radio" name="financing_mode" className="mt-0.5"
+                        checked={financingMode === "cpf"}
+                        onChange={() => setFinancingMode("cpf")}
+                        data-testid="financing-mode-cpf"
+                      />
+                      <span>
+                        <strong className="block">CPF</strong>
+                        Prise en charge via votre Compte Personnel de Formation — aucun paiement maintenant, notre équipe vous recontacte pour finaliser votre dossier.
+                      </span>
+                    </label>
+                    <label
+                      className={`flex items-start gap-2 p-3 rounded-md border cursor-pointer text-sm transition-colors ${financingMode === "auto" ? "border-[#d4af37] bg-[#d4af37]/5" : "border-gray-200"}`}
+                    >
+                      <input
+                        type="radio" name="financing_mode" className="mt-0.5"
+                        checked={financingMode === "auto"}
+                        onChange={() => setFinancingMode("auto")}
+                        data-testid="financing-mode-auto"
+                      />
+                      <span>
+                        <strong className="block">Auto-financement</strong>
+                        Vous réglez vous-même par carte, en une fois ou en plusieurs fois avec Klarna, à l'étape suivante.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
               <div className="mt-4">
                 <PrivacyConsentCheckbox checked={privacyConsent} onChange={setPrivacyConsent} testId="inscr-privacy-consent" />
               </div>
@@ -298,7 +340,7 @@ export default function PublicInscription() {
                 <Button variant="outline" onClick={() => setStep(needsSessionStep ? 1.5 : 1)} className="w-full sm:w-auto">← {needsSessionStep ? "Modifier la session" : "Modifier la formation"}</Button>
                 <Button
                   onClick={submit}
-                  disabled={!form.student_name || !form.student_email || !privacyConsent || submitting}
+                  disabled={!form.student_name || !form.student_email || !privacyConsent || submitting || (selected?.cpf_eligible && !financingMode)}
                   className="w-full sm:w-auto bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
                   data-testid="inscr-submit"
                 >
@@ -318,7 +360,20 @@ export default function PublicInscription() {
               Vous allez recevoir un email avec les étapes suivantes.
             </p>
 
-            {paymentsEnabled && !selected?.cpf_eligible && selected?.price > 0 && (
+            {selected?.cpf_eligible && financingMode === "cpf" && (
+              <Card className="max-w-md mx-auto mt-8 p-6 border border-gray-200 rounded-md shadow-none text-left" data-testid="cpf-followup-section">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle size={20} className="text-[#0B7238]" weight="duotone" />
+                  <h2 className="font-display text-lg font-bold">Financement CPF</h2>
+                </div>
+                <p className="text-sm text-gray-500">
+                  Aucun paiement n'est requis de votre part. Notre équipe prépare votre dossier de prise en charge et
+                  vous recontacte prochainement pour le finaliser.
+                </p>
+              </Card>
+            )}
+
+            {paymentsEnabled && (!selected?.cpf_eligible || financingMode === "auto") && selected?.price > 0 && (
               <Card className="max-w-md mx-auto mt-8 p-6 border border-gray-200 rounded-md shadow-none text-left" data-testid="payment-section">
                 <div className="flex items-center gap-2 mb-3">
                   <CreditCard size={20} className="text-[#d4af37]" weight="duotone" />

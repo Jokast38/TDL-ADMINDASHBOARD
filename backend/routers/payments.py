@@ -153,7 +153,12 @@ async def create_checkout(payload: CheckoutIn, request: Request):
         raise HTTPException(status_code=404, detail="Inscription introuvable")
 
     formation = await db.formations.find_one({"id": inscription["formation_id"]}, {"_id": 0})
-    if formation and formation.get("cpf_eligible"):
+    # Formation CPF-éligible : le paiement en ligne reste bloqué par défaut
+    # (prise en charge CPF attendue), sauf si l'étudiant a explicitement
+    # choisi l'auto-financement sur le formulaire d'inscription (voir
+    # financing_mode dans models/inscription.py et le choix affiché côté
+    # PublicInscription.jsx pour les formations éligibles).
+    if formation and formation.get("cpf_eligible") and inscription.get("financing_mode") != "auto":
         raise HTTPException(status_code=400, detail="Cette formation est éligible CPF — le paiement en ligne n'est pas proposé")
 
     if inscription.get("payment_status") in ("paid", "cpf_valide"):

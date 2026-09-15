@@ -22,6 +22,12 @@ class InscriptionIn(BaseModel):
     # créées sans session assignée, puis affectées plus tard (voir
     # PUT /inscriptions/{iid}/stage).
     stage_id: Optional[str] = None
+    # Choix explicite de l'étudiant sur le formulaire public, uniquement
+    # affiché/requis pour une formation cpf_eligible : "cpf" (prise en
+    # charge, pas de paiement en ligne, l'équipe recontacte pour finaliser
+    # le dossier) ou "auto" (auto-financement — débloque le paiement Stripe
+    # normalement réservé aux formations non-CPF, voir routers/payments.py).
+    financing_mode: Optional[str] = None
     # Suivi Meta Pixel/CAPI côté serveur (voir callback.py pour le même
     # pattern) — `event_id` permet la déduplication avec l'événement "Lead"
     # envoyé côté navigateur (même id des deux côtés), fbc/fbp sont les
