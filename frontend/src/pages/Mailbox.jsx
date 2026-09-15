@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   EnvelopeSimple, EnvelopeOpen, PaperPlaneTilt, Paperclip, DownloadSimple,
-  Plus, ArrowClockwise, ArrowLeft, ArrowRight, X,
+  Plus, ArrowClockwise, ArrowLeft, ArrowRight, X, PencilSimple,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -31,6 +31,7 @@ export default function Mailbox() {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [signatureOpen, setSignatureOpen] = useState(false);
 
   useEffect(() => {
     api.get("/mailbox/status").then((r) => setConfigured(r.data.configured)).catch(() => setConfigured(false));
@@ -103,6 +104,9 @@ export default function Mailbox() {
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">contact@tdl-formation.fr</h1>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setSignatureOpen(true)} data-testid="mailbox-signature-btn">
+            <PencilSimple size={16} className="mr-1" /> Ma signature
+          </Button>
           <Button variant="outline" size="sm" onClick={load} disabled={loading} data-testid="mailbox-refresh">
             <ArrowClockwise size={16} className={loading ? "animate-spin" : ""} />
           </Button>
@@ -215,7 +219,60 @@ export default function Mailbox() {
           body: searchParams.get("nom") ? `Bonjour ${searchParams.get("nom")},\n\n` : "",
         }}
       />
+      <SignatureDialog open={signatureOpen} onOpenChange={setSignatureOpen} />
     </div>
+  );
+}
+
+function SignatureDialog({ open, onOpenChange }) {
+  const [signature, setSignature] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    api.get("/mailbox/me/signature")
+      .then((r) => setSignature(r.data.signature))
+      .catch(() => toast.error("Erreur de chargement de la signature"))
+      .finally(() => setLoading(false));
+  }, [open]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.put("/mailbox/me/signature", { signature });
+      toast.success("Signature enregistrée");
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de l'enregistrement");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>Ma signature</DialogTitle></DialogHeader>
+        <p className="text-xs text-gray-500 -mt-2">
+          Ajoutée automatiquement à la fin de chaque email que vous envoyez depuis la messagerie.
+        </p>
+        <Textarea
+          rows={5}
+          value={signature}
+          onChange={(e) => setSignature(e.target.value)}
+          disabled={loading}
+          data-testid="signature-textarea"
+        />
+        <div className="flex justify-end gap-2 mt-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+          <Button onClick={save} disabled={saving || loading} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="signature-save">
+            {saving ? "Enregistrement..." : "Enregistrer"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -293,7 +350,7 @@ function ComposeDialog({ open, onOpenChange, onSent, prefill }) {
           <Input placeholder="Objet" value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="compose-subject" />
           <Textarea rows={8} placeholder="Votre message..." value={body} onChange={(e) => setBody(e.target.value)} data-testid="compose-body" />
           <p className="text-[11px] text-gray-400 -mt-2">
-            Texte simple — l'email envoyé reprend automatiquement l'habillage TDL Formation (logo, signature, pied de page).
+            Texte simple — l'email envoyé reprend automatiquement l'habillage TDL Formation, votre signature (réglable via "Ma signature") et vous met en copie.
           </p>
 
           <div>

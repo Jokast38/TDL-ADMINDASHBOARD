@@ -37,7 +37,7 @@ const navAll = [
   { to: "/admin/documents-library", label: "Bibliothèque PDF", icon: FilePdf, roles: ["admin", "responsable_admission", "agent_admin"] },
   { to: "/admin/doc-templates", label: "Modèles PDF", icon: FileText, roles: ["admin"] },
   { to: "/admin/company-documents", label: "Documents entreprise", icon: Archive, roles: ["admin", "responsable_admission", "agent_admin"] },
-  { to: "/admin/messagerie", label: "Messagerie", icon: EnvelopeSimple, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
+  { to: "/admin/messagerie", label: "Messagerie", icon: EnvelopeSimple, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
   { to: "/admin/kami-street", label: "KAMI STREET", icon: ShoppingCart, roles: ["admin", "employe", "commercial", "responsable_commercial"] },
   { to: "/admin/orders", label: "Commandes", icon: Storefront, roles: ["admin", "employe", "commercial", "responsable_commercial"] },
   { to: "/admin/ai", label: "Assistant IA", icon: Robot, roles: ["admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },

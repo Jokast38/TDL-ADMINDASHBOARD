@@ -6,11 +6,13 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
+from pydantic import BaseModel
 
-from core.config import ROLES_DOSSIERS_MGMT
+from core.config import ROLES_MAILBOX
 from core.security import require_role
 from core.storage import get_object
 from core.database import db
+from core.utils import now_iso
 from services.email_template import render_branded_email
 import services.mailbox as mailbox
 
@@ -27,7 +29,7 @@ def _resolve_folder(folder: str) -> str:
 
 
 @router.get("/status")
-async def mailbox_status(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+async def mailbox_status(user: dict = Depends(require_role(*ROLES_MAILBOX))):
     return {"configured": mailbox.mailbox_configured()}
 
 
@@ -39,10 +41,32 @@ def _require_configured():
         )
 
 
+def _default_signature(user: dict) -> str:
+    return f"{user.get('name') or ''}\nTDL Formation".strip()
+
+
+class SignatureIn(BaseModel):
+    signature: str
+
+
+@router.get("/me/signature")
+async def get_my_signature(user: dict = Depends(require_role(*ROLES_MAILBOX))):
+    """Signature texte ajoutée en bas des emails envoyés par l'utilisateur —
+    distincte de signature_data_url (image de signature manuscrite pour les
+    conventions animateurs, voir routers/employees.py)."""
+    return {"signature": user.get("email_signature") or _default_signature(user)}
+
+
+@router.put("/me/signature")
+async def update_my_signature(payload: SignatureIn, user: dict = Depends(require_role(*ROLES_MAILBOX))):
+    await db.users.update_one({"id": user["id"]}, {"$set": {"email_signature": payload.signature, "updated_at": now_iso()}})
+    return {"signature": payload.signature}
+
+
 @router.get("/library/documents")
 async def list_library_documents(
     category: Optional[str] = None,
-    user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT)),
+    user: dict = Depends(require_role(*ROLES_MAILBOX)),
 ):
     """Documents déjà stockés (bibliothèque de documents de l'entreprise) —
     utilisé par le compositeur pour joindre un fichier sans le re-uploader.
@@ -61,7 +85,7 @@ async def list_messages(
     folder: str,
     limit: int = 30,
     offset: int = 0,
-    user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT)),
+    user: dict = Depends(require_role(*ROLES_MAILBOX)),
 ):
     _require_configured()
     real_folder = _resolve_folder(folder)
@@ -77,7 +101,7 @@ async def list_messages(
 async def get_message(
     folder: str,
     uid: str,
-    user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT)),
+    user: dict = Depends(require_role(*ROLES_MAILBOX)),
 ):
     _require_configured()
     real_folder = _resolve_folder(folder)
@@ -95,7 +119,7 @@ async def download_attachment(
     folder: str,
     uid: str,
     part_index: int,
-    user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT)),
+    user: dict = Depends(require_role(*ROLES_MAILBOX)),
 ):
     _require_configured()
     real_folder = _resolve_folder(folder)
@@ -123,7 +147,7 @@ async def send_message(
     button_url: str = Form(""),
     library_document_ids: str = Form(""),
     files: List[UploadFile] = File(default=[]),
-    user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT)),
+    user: dict = Depends(require_role(*ROLES_MAILBOX)),
 ):
     _require_configured()
     attachments = []
@@ -143,13 +167,22 @@ async def send_message(
         attachments.append({"filename": doc.get("original_filename") or doc.get("nom") or doc_id, "content": content})
 
     cc_list = [c.strip() for c in cc.split(",") if c.strip()]
+    # L'employé qui envoie doit systématiquement recevoir une copie — ça lui
+    # sert de trace/suivi de ce qui est parti en son nom depuis la boîte
+    # partagée contact@. Pas de doublon si déjà destinataire ou déjà en cc.
+    sender_email = (user.get("email") or "").strip()
+    if sender_email and sender_email.lower() not in [to.strip().lower()] + [c.lower() for c in cc_list]:
+        cc_list.append(sender_email)
+
+    signature = (user.get("email_signature") or _default_signature(user)).strip()
+    body_with_signature = f"{body}\n\n{signature}" if signature else body
 
     # Le compositeur ne fait saisir que du texte simple (pas d'éditeur HTML) —
     # render_branded_email l'habille avec le gabarit TDL (logo, signature,
     # pied de page) déjà utilisé pour les relances Leads, et ajoute le bouton
     # d'action si renseigné.
     html_body = render_branded_email(
-        body,
+        body_with_signature,
         button_label=button_label.strip() or None,
         button_url=button_url.strip() or None,
     )

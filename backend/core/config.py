@@ -91,5 +91,8 @@ ROLES_DOSSIERS_MGMT = ("admin", "employe", "responsable_admission", "agent_admin
 ROLES_DOCS_VIEW = ("admin", "employe", "responsable_admission", "agent_admin")
 ROLES_ANIMATEUR_PLUS = ("admin", "animateur")
 ROLES_LEADS = ("admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial")
+# Tous les employés internes (bureau) — pas les animateurs, qui ont leur
+# propre espace dédié (/espace-animateur) et pas accès au reste du dashboard.
+ROLES_MAILBOX = ROLES_LEADS
 ROLES_TEAM_MGMT = ("admin", "responsable_commercial")
 ROLES_KAMI_STREET = ("admin", "employe", "commercial", "responsable_commercial")

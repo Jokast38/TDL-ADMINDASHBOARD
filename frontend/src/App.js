@@ -216,7 +216,7 @@ function App() {
               <ProtectedRoute roles={["admin", "responsable_admission", "agent_admin"]}><AdminLayout><CompanyDocuments /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/messagerie" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Mailbox /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Mailbox /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/kami-street" element={
               <ProtectedRoute roles={["admin", "employe", "commercial", "responsable_commercial"]}><AdminLayout><KamiStreet /></AdminLayout></ProtectedRoute>
