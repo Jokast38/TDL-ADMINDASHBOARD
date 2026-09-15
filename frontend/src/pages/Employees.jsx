@@ -12,10 +12,17 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { Plus, Trash, Pause, Play, Archive, Warning, Key, Tag } from "@phosphor-icons/react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { navAll } from "@/components/Layout";
+import { Plus, Trash, Pause, Play, Archive, Warning, Key, Tag, Lock } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-const empty = { email: "", name: "", role: "employe", phone: "", department: "", password: "", assigned_categories: [], assigned_centers: [], assigned_training_assignments: [] };
+const empty = { email: "", name: "", role: "employe", phone: "", department: "", password: "", assigned_categories: [], assigned_centers: [], assigned_training_assignments: [], allowed_pages: [] };
+
+// Une seule ligne par page du menu (certains chemins comme /admin apparaissent
+// pour plusieurs rôles avec des libellés différents — "Dashboard"/"Accueil" —
+// on ne garde que la première occurrence pour ne pas dupliquer les cases).
+const PAGE_OPTIONS = navAll.filter((n, i) => navAll.findIndex((x) => x.to === n.to) === i);
 const CENTER_OPTIONS = [
   { key: "Épinay-sur-Seine (93)", label: "Épinay-sur-Seine (93)" },
   { key: "Creil (60)", label: "Creil (60)" },
@@ -54,6 +61,9 @@ export default function Employees() {
   const [centersDraft, setCentersDraft] = useState([]);
   const [assignmentsDraft, setAssignmentsDraft] = useState([]);
   const [savingCategories, setSavingCategories] = useState(false);
+  const [pagesTarget, setPagesTarget] = useState(null); // employee being edited
+  const [pagesDraft, setPagesDraft] = useState([]);
+  const [savingPages, setSavingPages] = useState(false);
 
   const load = () => api.get("/employees").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
@@ -106,6 +116,26 @@ export default function Employees() {
   };
 
   const accountStatus = (u) => u.account_status || (u.active === false ? "suspendu" : "actif");
+
+  const openPages = (u) => {
+    setPagesTarget(u);
+    setPagesDraft(u.allowed_pages || []);
+  };
+
+  const savePages = async () => {
+    if (!pagesTarget) return;
+    setSavingPages(true);
+    try {
+      await api.put(`/employees/${pagesTarget.id}/pages`, { allowed_pages: pagesDraft });
+      toast.success("Accès aux pages mis à jour");
+      setPagesTarget(null);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSavingPages(false);
+    }
+  };
 
   const openCategories = (u) => {
     setCategoriesTarget(u);
@@ -207,6 +237,11 @@ export default function Employees() {
                   />
                 </div>
               )}
+              <div className="sm:col-span-2">
+                <label className="text-sm font-medium mb-1 block">Pages accessibles (facultatif)</label>
+                <p className="text-xs text-gray-500 mb-2">Aucune case cochée = accès complet selon le rôle (comportement par défaut).</p>
+                <PagesPicker value={form.allowed_pages} onChange={(allowed_pages) => setForm((f) => ({ ...f, allowed_pages }))} />
+              </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
@@ -322,6 +357,16 @@ export default function Employees() {
                             <Tag size={14} />
                           </button>
                         )}
+                        {u.id !== user?.id && (
+                          <button
+                            onClick={() => openPages(u)}
+                            className={`p-1.5 rounded hover:bg-gray-100 ${(u.allowed_pages || []).length ? "text-[#d4af37]" : "text-gray-600"}`}
+                            title="Gérer l'accès aux pages"
+                            data-testid={`pages-${u.id}`}
+                          >
+                            <Lock size={14} />
+                          </button>
+                        )}
                         <button
                           onClick={() => sendPasswordReset(u)}
                           className="p-1.5 text-gray-600 hover:bg-gray-100 rounded" title="Réinitialiser le mot de passe"
@@ -394,6 +439,36 @@ export default function Employees() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!pagesTarget} onOpenChange={(v) => !v && setPagesTarget(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Pages accessibles — {pagesTarget?.name}</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-500 -mt-1">
+            Restreint ce que cette personne voit dans le menu et peut ouvrir, en plus de son rôle. Aucune case cochée = accès complet selon le rôle (comportement par défaut).
+          </p>
+          <PagesPicker value={pagesDraft} onChange={setPagesDraft} />
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setPagesTarget(null)} disabled={savingPages}>Annuler</Button>
+            <Button onClick={savePages} disabled={savingPages} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="save-pages">
+              {savingPages ? "Enregistrement..." : "Enregistrer"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function PagesPicker({ value, onChange }) {
+  const toggle = (path) => onChange(value.includes(path) ? value.filter((p) => p !== path) : [...value, path]);
+  return (
+    <div className="grid grid-cols-2 gap-1.5 max-h-64 overflow-y-auto border border-gray-200 rounded-md p-3">
+      {PAGE_OPTIONS.map((p) => (
+        <label key={p.to} className="flex items-center gap-2 text-sm py-0.5 cursor-pointer">
+          <Checkbox checked={value.includes(p.to)} onCheckedChange={() => toggle(p.to)} />
+          {p.label}
+        </label>
+      ))}
     </div>
   );
 }

@@ -9,7 +9,11 @@ import {
   ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple
 } from "@phosphor-icons/react";
 
-const navAll = [
+// Exporté pour être réutilisé par le sélecteur de pages autorisées sur la
+// page Employés (voir pages/Employees.jsx) — une seule source de vérité pour
+// "quelles pages existent dans le dashboard", évite que les deux listes
+// dérivent l'une de l'autre au fil des ajouts de pages.
+export const navAll = [
   // Limité aux rôles ayant réellement accès à GET /api/dashboard/stats côté
   // backend (voir require_role dans routers/dashboard.py) — responsable_admission
   // et agent_admin pouvaient auparavant ouvrir cette page depuis le menu mais
@@ -68,7 +72,12 @@ export default function Layout({ children }) {
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
-  const nav = navAll.filter((n) => n.roles.includes(user?.role));
+  // allowed_pages non vide = restriction supplémentaire posée par un admin
+  // depuis la page Employés (voir PUT /employees/{uid}/pages) — en plus du
+  // rôle, pas à sa place ; vide (cas par défaut) = comportement historique,
+  // uniquement le rôle compte.
+  const restricted = Array.isArray(user?.allowed_pages) && user.allowed_pages.length > 0;
+  const nav = navAll.filter((n) => n.roles.includes(user?.role) && (!restricted || user.allowed_pages.includes(n.to)));
 
   const handleLogout = async () => {
     await logout();

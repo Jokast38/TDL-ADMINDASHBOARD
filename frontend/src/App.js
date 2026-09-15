@@ -73,7 +73,7 @@ const HelpCenter = lazy(() => import("@/pages/HelpCenter"));
 const Documentation = lazy(() => import("@/pages/Documentation"));
 const PolitiqueConfidentialite = lazy(() => import("@/pages/PolitiqueConfidentialite"));
 
-import Layout from "@/components/Layout";
+import Layout, { navAll } from "@/components/Layout";
 import { TourProvider } from "@/contexts/TourContext";
 import TourOverlay from "@/components/TourOverlay";
 import AnalyticsLoader from "@/components/AnalyticsLoader";
@@ -96,6 +96,17 @@ function ProtectedRoute({ children, roles }) {
   }
   if (roles && !roles.includes(user.role)) {
     return <Navigate to={roleHome(user.role)} replace />;
+  }
+  // Restriction fine par page (voir components/Layout.jsx navAll + PUT
+  // /employees/{uid}/pages) — ne s'applique qu'aux chemins qui existent
+  // effectivement dans le menu (navAll), pour ne jamais bloquer une
+  // sous-page qui n'y figure pas (ex: détail, édition) sur la seule base
+  // d'une liste pensée pour les pages du menu.
+  if (Array.isArray(user.allowed_pages) && user.allowed_pages.length > 0) {
+    const isMenuPage = navAll.some((n) => n.to === location.pathname);
+    if (isMenuPage && !user.allowed_pages.includes(location.pathname)) {
+      return <Navigate to={roleHome(user.role)} replace />;
+    }
   }
   return children;
 }

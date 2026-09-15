@@ -16,10 +16,21 @@ class EmployeeIn(BaseModel):
     # formateurs, ex: "Formateur BAFM", "Moniteur auto-école" — distinct du
     # `role` (enum technique) qui reste "animateur".
     titre: Optional[str] = None
+    # Restriction fine des pages du dashboard visibles/accessibles, en plus
+    # du rôle — liste de chemins (ex: "/admin/leads"). Vide = pas de
+    # restriction, l'employé voit tout ce que son rôle autorise normalement
+    # (comportement historique, inchangé pour qui n'a jamais cette liste
+    # renseignée). Voir PUT /employees/{uid}/pages pour la modifier après
+    # création.
+    allowed_pages: List[str] = []
 
 
 class EmployeeTitreIn(BaseModel):
     titre: Optional[str] = None
+
+
+class AllowedPagesIn(BaseModel):
+    allowed_pages: List[str] = []
 
 
 class AccountStatusIn(BaseModel):

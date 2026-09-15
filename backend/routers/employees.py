@@ -8,7 +8,7 @@ from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
-from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn
+from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn, AllowedPagesIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 from services.pdf import generate_formateur_convention_pdf
 from services.email import send_email
@@ -125,6 +125,7 @@ async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role
         "assigned_centers": payload.assigned_centers,
         "assigned_training_assignments": payload.assigned_training_assignments,
         "titre": payload.titre,
+        "allowed_pages": payload.allowed_pages,
         "password_hash": hash_password(payload.password),
         "created_at": now_iso(), "active": True, "account_status": "actif",
         "must_change_password": True,
@@ -192,6 +193,23 @@ async def update_employee_centers(uid: str, payload: AssignedCentersIn, user: di
     if user["role"] != "admin" and target.get("role") not in MANAGEABLE_ROLES_BY_MANAGER:
         raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes commerciaux")
     await db.users.update_one({"id": uid}, {"$set": {"assigned_centers": payload.assigned_centers, "updated_at": now_iso()}})
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+
+
+@router.put("/employees/{uid}/pages")
+async def update_employee_allowed_pages(uid: str, payload: AllowedPagesIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT))):
+    """Restreint les pages du dashboard visibles/accessibles pour cet
+    employé, en plus de son rôle (voir models/employee.py:AllowedPagesIn).
+    Liste vide = pas de restriction (l'employé retrouve tout ce que son rôle
+    autorise normalement)."""
+    if uid == user["id"]:
+        raise HTTPException(status_code=400, detail="Impossible de modifier ses propres accès")
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user["role"] != "admin" and target.get("role") not in MANAGEABLE_ROLES_BY_MANAGER:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes commerciaux")
+    await db.users.update_one({"id": uid}, {"$set": {"allowed_pages": payload.allowed_pages, "updated_at": now_iso()}})
     return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
 
 
