@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,13 @@ export default function AdminBlog() {
   const [tagsInput, setTagsInput] = useState("");
   const [coverUploading, setCoverUploading] = useState(false);
   const [galleryUploading, setGalleryUploading] = useState(false);
+  // Le clic déclenchant l'input file passe par une ref plutôt que par le
+  // pattern classique <label><input hidden/><Button/></label> : à
+  // l'intérieur d'un Dialog Radix, la couche de gestion du focus intercepte
+  // le clic avant qu'il n'atteigne le label, et le sélecteur de fichiers ne
+  // s'ouvrait jamais (observé en prod — le bouton "Choisir" ne faisait rien).
+  const coverInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
   const [seeding, setSeeding] = useState(false);
   const [fixingImages, setFixingImages] = useState(false);
   const [wpOpen, setWpOpen] = useState(false);
@@ -423,12 +430,13 @@ export default function AdminBlog() {
                       placeholder="https://... ou téléversez un fichier"
                       data-testid="post-cover-url"
                     />
-                    <label className="shrink-0">
-                      <input type="file" accept="image/*" className="hidden" onChange={uploadCover} data-testid="post-cover-upload" />
-                      <Button type="button" variant="outline" disabled={coverUploading} className="cursor-pointer">
-                        <UploadSimple size={14} className="mr-1" /> {coverUploading ? "Envoi..." : "Choisir"}
-                      </Button>
-                    </label>
+                    <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={uploadCover} data-testid="post-cover-upload" />
+                    <Button
+                      type="button" variant="outline" disabled={coverUploading} className="shrink-0"
+                      onClick={() => coverInputRef.current?.click()}
+                    >
+                      <UploadSimple size={14} className="mr-1" /> {coverUploading ? "Envoi..." : "Choisir"}
+                    </Button>
                   </div>
                   {form.cover_image ? (
                     <div className="mt-3 aspect-video w-full max-w-xs bg-gray-100 rounded-md overflow-hidden border border-gray-200">
@@ -448,12 +456,13 @@ export default function AdminBlog() {
                 <div className="sm:col-span-2">
                   <label className="text-sm font-medium">Images supplémentaires</label>
                   <p className="text-xs text-gray-400 mb-2">Détectées automatiquement dans le contenu Markdown, plus celles que vous téléversez ici. Cliquez sur une image pour l'insérer dans le contenu, ou pour la retirer.</p>
-                  <label className="inline-block">
-                    <input type="file" accept="image/*" multiple className="hidden" onChange={uploadGalleryImages} data-testid="post-images-upload" />
-                    <Button type="button" variant="outline" disabled={galleryUploading} className="cursor-pointer">
-                      <UploadSimple size={14} className="mr-1" /> {galleryUploading ? "Envoi..." : "Ajouter des images"}
-                    </Button>
-                  </label>
+                  <input ref={galleryInputRef} type="file" accept="image/*" multiple className="hidden" onChange={uploadGalleryImages} data-testid="post-images-upload" />
+                  <Button
+                    type="button" variant="outline" disabled={galleryUploading}
+                    onClick={() => galleryInputRef.current?.click()}
+                  >
+                    <UploadSimple size={14} className="mr-1" /> {galleryUploading ? "Envoi..." : "Ajouter des images"}
+                  </Button>
                   {form.images?.length > 0 && (
                     <div className="mt-3 grid grid-cols-3 sm:grid-cols-4 gap-3">
                       {form.images.map((url) => (
