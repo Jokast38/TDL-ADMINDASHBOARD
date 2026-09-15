@@ -11,6 +11,7 @@ from core.config import ROLES_DOSSIERS_MGMT
 from core.security import require_role
 from core.storage import get_object
 from core.database import db
+from services.email_template import render_branded_email
 import services.mailbox as mailbox
 
 router = APIRouter(prefix="/mailbox", tags=["mailbox"])
@@ -36,6 +37,23 @@ def _require_configured():
             status_code=503,
             detail="Messagerie non configurée (IMAP_HOST/SMTP2_HOST/MAILBOX_USER/MAILBOX_PASSWORD manquants)",
         )
+
+
+@router.get("/library/documents")
+async def list_library_documents(
+    category: Optional[str] = None,
+    user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT)),
+):
+    """Documents déjà stockés (bibliothèque de documents de l'entreprise) —
+    utilisé par le compositeur pour joindre un fichier sans le re-uploader.
+    Déclarée avant /{folder} et /{folder}/{uid} : FastAPI matche les routes
+    dans leur ordre de déclaration, et "/library/documents" correspondrait
+    sinon au motif générique /{folder}/{uid} (folder="library",
+    uid="documents") — c'est exactement ce qui causait le 404."""
+    q = {}
+    if category:
+        q["category"] = category
+    return await db.company_documents.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
 
 
 @router.get("/{folder}")
@@ -95,25 +113,14 @@ async def download_attachment(
     )
 
 
-@router.get("/library/documents")
-async def list_library_documents(
-    category: Optional[str] = None,
-    user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT)),
-):
-    """Documents déjà stockés (bibliothèque de documents de l'entreprise) —
-    utilisé par le compositeur pour joindre un fichier sans le re-uploader."""
-    q = {}
-    if category:
-        q["category"] = category
-    return await db.company_documents.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
-
-
 @router.post("/send")
 async def send_message(
     to: str = Form(...),
     subject: str = Form(...),
     body: str = Form(...),
     cc: str = Form(""),
+    button_label: str = Form(""),
+    button_url: str = Form(""),
     library_document_ids: str = Form(""),
     files: List[UploadFile] = File(default=[]),
     user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT)),
@@ -137,8 +144,18 @@ async def send_message(
 
     cc_list = [c.strip() for c in cc.split(",") if c.strip()]
 
+    # Le compositeur ne fait saisir que du texte simple (pas d'éditeur HTML) —
+    # render_branded_email l'habille avec le gabarit TDL (logo, signature,
+    # pied de page) déjà utilisé pour les relances Leads, et ajoute le bouton
+    # d'action si renseigné.
+    html_body = render_branded_email(
+        body,
+        button_label=button_label.strip() or None,
+        button_url=button_url.strip() or None,
+    )
+
     try:
-        result = await mailbox.send_and_save(to.strip(), subject, body, attachments, cc_list)
+        result = await mailbox.send_and_save(to.strip(), subject, html_body, attachments, cc_list)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Échec de l'envoi : {e}")
     return result

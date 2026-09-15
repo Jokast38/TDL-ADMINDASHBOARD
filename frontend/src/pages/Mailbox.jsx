@@ -209,7 +209,10 @@ export default function Mailbox() {
         prefill={{
           to: searchParams.get("to") || "",
           subject: searchParams.get("subject") || "",
-          body: searchParams.get("nom") ? `<p>Bonjour ${searchParams.get("nom")},</p><p><br></p>` : "",
+          // Texte simple (pas de balises) : le compositeur envoie du texte
+          // brut, mis en forme et habillé du gabarit TDL côté serveur
+          // (render_branded_email) au moment de l'envoi.
+          body: searchParams.get("nom") ? `Bonjour ${searchParams.get("nom")},\n\n` : "",
         }}
       />
     </div>
@@ -221,6 +224,9 @@ function ComposeDialog({ open, onOpenChange, onSent, prefill }) {
   const [cc, setCc] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [showButton, setShowButton] = useState(false);
+  const [buttonLabel, setButtonLabel] = useState("");
+  const [buttonUrl, setButtonUrl] = useState("");
   const [files, setFiles] = useState([]);
   const [libraryDocs, setLibraryDocs] = useState([]);
   const [selectedLibraryIds, setSelectedLibraryIds] = useState([]);
@@ -231,6 +237,7 @@ function ComposeDialog({ open, onOpenChange, onSent, prefill }) {
     if (open) {
       setTo(prefill.to); setSubject(prefill.subject); setBody(prefill.body);
       setCc(""); setFiles([]); setSelectedLibraryIds([]); setShowLibrary(false);
+      setShowButton(false); setButtonLabel(""); setButtonUrl("");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -249,6 +256,9 @@ function ComposeDialog({ open, onOpenChange, onSent, prefill }) {
   const send = async () => {
     if (!to.trim()) return toast.error("Destinataire requis");
     if (!subject.trim()) return toast.error("Objet requis");
+    if (showButton && (!buttonLabel.trim() || !buttonUrl.trim())) {
+      return toast.error("Renseignez le texte et le lien du bouton, ou décochez-le");
+    }
     setSending(true);
     try {
       const fd = new FormData();
@@ -256,6 +266,10 @@ function ComposeDialog({ open, onOpenChange, onSent, prefill }) {
       fd.append("cc", cc.trim());
       fd.append("subject", subject.trim());
       fd.append("body", body);
+      if (showButton) {
+        fd.append("button_label", buttonLabel.trim());
+        fd.append("button_url", buttonUrl.trim());
+      }
       fd.append("library_document_ids", selectedLibraryIds.join(","));
       files.forEach((f) => fd.append("files", f));
       await api.post("/mailbox/send", fd, { headers: { "Content-Type": "multipart/form-data" } });
@@ -278,6 +292,9 @@ function ComposeDialog({ open, onOpenChange, onSent, prefill }) {
           <Input placeholder="Cc (facultatif, séparés par des virgules)" value={cc} onChange={(e) => setCc(e.target.value)} data-testid="compose-cc" />
           <Input placeholder="Objet" value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="compose-subject" />
           <Textarea rows={8} placeholder="Votre message..." value={body} onChange={(e) => setBody(e.target.value)} data-testid="compose-body" />
+          <p className="text-[11px] text-gray-400 -mt-2">
+            Texte simple — l'email envoyé reprend automatiquement l'habillage TDL Formation (logo, signature, pied de page).
+          </p>
 
           <div>
             <div className="flex items-center gap-2 flex-wrap">
@@ -294,7 +311,22 @@ function ComposeDialog({ open, onOpenChange, onSent, prefill }) {
               >
                 <Paperclip size={12} /> Depuis la bibliothèque {selectedLibraryIds.length > 0 && `(${selectedLibraryIds.length})`}
               </button>
+              <button
+                type="button"
+                onClick={() => setShowButton((v) => !v)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition-colors ${showButton ? "border-[#d4af37] text-[#d4af37]" : "border-gray-200 hover:border-[#d4af37] hover:text-[#d4af37]"}`}
+                data-testid="compose-toggle-button"
+              >
+                <Plus size={12} /> Bouton d'action
+              </button>
             </div>
+
+            {showButton && (
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <Input placeholder="Texte du bouton (ex: Voir ma formation)" value={buttonLabel} onChange={(e) => setButtonLabel(e.target.value)} data-testid="compose-button-label" />
+                <Input placeholder="Lien du bouton (https://...)" value={buttonUrl} onChange={(e) => setButtonUrl(e.target.value)} data-testid="compose-button-url" />
+              </div>
+            )}
 
             {files.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
