@@ -22,6 +22,7 @@ from routers import (
     custom_email, lead_automations, limova, payments, push, reminders,
     company_documents, positioning_tests, backlinks, docs, places,
     exams, appointments, stage_attestations, modules, satisfaction, french_tests,
+    mailbox,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import (
@@ -94,6 +95,7 @@ app.include_router(payments.router,       prefix=_PREFIX)
 app.include_router(push.router,           prefix=_PREFIX)
 app.include_router(reminders.router,      prefix=_PREFIX)
 app.include_router(company_documents.router, prefix=_PREFIX)
+app.include_router(mailbox.router, prefix=_PREFIX)
 app.include_router(positioning_tests.router, prefix=_PREFIX)
 app.include_router(backlinks.router,      prefix=_PREFIX)
 app.include_router(docs.router,           prefix=_PREFIX)

@@ -35,6 +35,17 @@ LIMOVA_API_KEY = os.getenv("LIMOVA_API_KEY")
 
 # Paiement des inscriptions (formations non éligibles CPF) — mêmes priorités :
 # Paramètres → Stripe (db.settings) prioritaire si renseigné, sinon ces env vars.
+# Boîte de messagerie interne (Messagerie du dashboard) — distincte du SMTP
+# de secours (SMTP_HOST/administration@) utilisé par services/email.py pour
+# les envois automatiques : ce compte (contact@) sert la messagerie type
+# Gmail (réception IMAP + envoi/archivage SMTP) consultée depuis l'admin.
+IMAP_HOST = os.getenv("IMAP_HOST")
+IMAP_PORT = int(os.getenv("IMAP_PORT", "993"))
+SMTP2_HOST = os.getenv("SMTP2_HOST")
+SMTP2_PORT = int(os.getenv("SMTP2_PORT", "465"))
+MAILBOX_USER = os.getenv("MAILBOX_USER")
+MAILBOX_PASSWORD = os.getenv("MAILBOX_PASSWORD")
+
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")

@@ -67,6 +67,7 @@ const AnimateurSpace = lazy(() => import("@/pages/AnimateurSpace"));
 const DocumentsLibrary = lazy(() => import("@/pages/DocumentsLibrary"));
 const DocTemplates = lazy(() => import("@/pages/DocTemplates"));
 const CompanyDocuments = lazy(() => import("@/pages/CompanyDocuments"));
+const Mailbox = lazy(() => import("@/pages/Mailbox"));
 const Leads = lazy(() => import("@/pages/Leads"));
 const HelpCenter = lazy(() => import("@/pages/HelpCenter"));
 const Documentation = lazy(() => import("@/pages/Documentation"));
@@ -213,6 +214,9 @@ function App() {
             } />
             <Route path="/admin/company-documents" element={
               <ProtectedRoute roles={["admin", "responsable_admission", "agent_admin"]}><AdminLayout><CompanyDocuments /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/messagerie" element={
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Mailbox /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/kami-street" element={
               <ProtectedRoute roles={["admin", "employe", "commercial", "responsable_commercial"]}><AdminLayout><KamiStreet /></AdminLayout></ProtectedRoute>
