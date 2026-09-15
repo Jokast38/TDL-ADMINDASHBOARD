@@ -117,9 +117,14 @@ export default function Employees() {
 
   const accountStatus = (u) => u.account_status || (u.active === false ? "suspendu" : "actif");
 
+  // Pages qu'un rôle voit par défaut (sans restriction explicite) — sert à
+  // pré-cocher l'accès réellement actif aujourd'hui plutôt que d'ouvrir sur
+  // une liste vide qu'on pourrait confondre avec "aucun accès".
+  const defaultPagesForRole = (role) => PAGE_OPTIONS.filter((p) => p.roles.includes(role)).map((p) => p.to);
+
   const openPages = (u) => {
     setPagesTarget(u);
-    setPagesDraft(u.allowed_pages || []);
+    setPagesDraft((u.allowed_pages || []).length ? u.allowed_pages : defaultPagesForRole(u.role));
   };
 
   const savePages = async () => {
@@ -177,7 +182,13 @@ export default function Employees() {
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Employés</h1>
           <p className="text-gray-500 mt-2">{items.length} membre(s).</p>
         </div>
-        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (v && !isAdmin) setForm((f) => ({ ...f, role: "commercial" })); }}>
+        <Dialog open={open} onOpenChange={(v) => {
+          setOpen(v);
+          if (v) {
+            const role = isAdmin ? form.role : "commercial";
+            setForm((f) => ({ ...f, role, allowed_pages: defaultPagesForRole(role) }));
+          }
+        }}>
           <DialogTrigger asChild>
             <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="add-employee-btn">
               <Plus size={16} className="mr-2" /> Nouvel employé
@@ -200,7 +211,7 @@ export default function Employees() {
               </div>
               <div>
                 <label className="text-sm font-medium">Rôle</label>
-                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v, allowed_pages: defaultPagesForRole(v) })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {isAdmin ? (
@@ -238,8 +249,13 @@ export default function Employees() {
                 </div>
               )}
               <div className="sm:col-span-2">
-                <label className="text-sm font-medium mb-1 block">Pages accessibles (facultatif)</label>
-                <p className="text-xs text-gray-500 mb-2">Aucune case cochée = accès complet selon le rôle (comportement par défaut).</p>
+                <label className="text-sm font-medium mb-1 block">Pages accessibles</label>
+                <p className="text-xs text-gray-500 mb-2">
+                  Pré-coché selon le rôle choisi — décochez pour restreindre, ou{" "}
+                  <button type="button" className="underline hover:text-[#d4af37]" onClick={() => setForm((f) => ({ ...f, allowed_pages: defaultPagesForRole(f.role) }))}>
+                    réinitialisez selon le rôle
+                  </button>.
+                </p>
                 <PagesPicker value={form.allowed_pages} onChange={(allowed_pages) => setForm((f) => ({ ...f, allowed_pages }))} />
               </div>
             </div>
@@ -444,14 +460,26 @@ export default function Employees() {
         <DialogContent>
           <DialogHeader><DialogTitle>Pages accessibles — {pagesTarget?.name}</DialogTitle></DialogHeader>
           <p className="text-sm text-gray-500 -mt-1">
-            Restreint ce que cette personne voit dans le menu et peut ouvrir, en plus de son rôle. Aucune case cochée = accès complet selon le rôle (comportement par défaut).
+            Les cases cochées reflètent l'accès actuel de cette personne (déjà enregistré, ou déduit de son rôle).
+            Décochez pour retirer une page, ou <button type="button" className="underline hover:text-[#d4af37]" onClick={() => pagesTarget && setPagesDraft(defaultPagesForRole(pagesTarget.role))}>réinitialisez selon son rôle</button>.
           </p>
           <PagesPicker value={pagesDraft} onChange={setPagesDraft} />
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setPagesTarget(null)} disabled={savingPages}>Annuler</Button>
-            <Button onClick={savePages} disabled={savingPages} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="save-pages">
-              {savingPages ? "Enregistrement..." : "Enregistrer"}
-            </Button>
+          <div className="flex justify-between items-center gap-2 mt-4">
+            <button
+              type="button"
+              className="text-xs text-gray-500 underline hover:text-gray-700"
+              onClick={() => setPagesDraft([])}
+              title="Supprime toute restriction : la personne retrouvera automatiquement tout ce que son rôle autorise, y compris les futures pages ajoutées pour ce rôle"
+              data-testid="reset-pages-auto"
+            >
+              Revenir à l'accès automatique (aucune restriction)
+            </button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setPagesTarget(null)} disabled={savingPages}>Annuler</Button>
+              <Button onClick={savePages} disabled={savingPages} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="save-pages">
+                {savingPages ? "Enregistrement..." : "Enregistrer"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
