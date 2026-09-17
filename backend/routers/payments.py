@@ -26,9 +26,11 @@ log = logging.getLogger(__name__)
 # confirmation dédiée côté dashboard plutôt que le tunnel public.
 _LANDING_THANK_YOU_PATHS = {
     "stage_recuperation_points": "/stage-recuperation-points/merci",
+    "flash_recup_points_sept2026": "/offre-flash-points/merci",
     "admin_walkin": "/admin/paiement-confirmation",
 }
 _LANDING_CANCEL_PATHS = {
+    "flash_recup_points_sept2026": "/offre-flash-points",
     "admin_walkin": "/admin/inscriptions",
 }
 

@@ -28,6 +28,8 @@ const Blog = lazy(() => import("@/pages/Blog"));
 const BlogPost = lazy(() => import("@/pages/BlogPost"));
 const OffreFideliteLanding = lazy(() => import("@/pages/OffreFideliteLanding"));
 const StageRecuperationPointsLanding = lazy(() => import("@/pages/StageRecuperationPointsLanding"));
+const OffreFlashPointsLanding = lazy(() => import("@/pages/OffreFlashPointsLanding"));
+const OffreFlashPointsMerci = lazy(() => import("@/pages/OffreFlashPointsMerci"));
 const SsiapLanding = lazy(() => import("@/pages/SsiapLanding"));
 const TaxiFormationLanding = lazy(() => import("@/pages/TaxiFormationLanding"));
 const MobiliteTaxiLanding = lazy(() => import("@/pages/MobiliteTaxiLanding"));
@@ -157,6 +159,8 @@ function App() {
             <Route path="/offre-fidelite" element={<OffreFideliteLanding />} />
             <Route path="/stage-recuperation-points" element={<StageRecuperationPointsLanding />} />
             <Route path="/stage-recuperation-points/merci" element={<StageRecuperationMerci />} />
+            <Route path="/offre-flash-points" element={<OffreFlashPointsLanding />} />
+            <Route path="/offre-flash-points/merci" element={<OffreFlashPointsMerci />} />
             <Route path="/formation-ssiap" element={<SsiapLanding />} />
             <Route path="/formation-taxi" element={<TaxiFormationLanding />} />
             <Route path="/mobilite-taxi" element={<MobiliteTaxiLanding />} />
