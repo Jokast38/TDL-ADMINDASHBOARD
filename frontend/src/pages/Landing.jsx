@@ -499,9 +499,8 @@ export default function Landing() {
       <section className="py-16 lg:py-24 bg-white border-b border-gray-200 overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <div data-reveal className="reveal text-center max-w-2xl mx-auto mb-12 lg:mb-16">
-            <p className="overline">Qualiopi · Résultats publics</p>
-            <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2 mb-3">
-              Nos résultats, en toute transparence
+            <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mb-3">
+              Nos résultats
             </h2>
             <p className="text-gray-600">
               Taux de réussite aux examens par formation et satisfaction de nos stagiaires — indicateurs publiés
