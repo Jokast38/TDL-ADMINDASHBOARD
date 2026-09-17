@@ -34,22 +34,48 @@ if (!process.env["AWS_EXECUTION_ENV"] && !process.env["AWS_LAMBDA_JS_RUNTIME"]) 
 const chromium = require("@sparticuz/chromium");
 const puppeteer = require("puppeteer-core");
 
+// Le mode graphique (SwiftShader, rendu 3D logiciel) est activé par défaut
+// dans @sparticuz/chromium mais totalement inutile pour un simple instantané
+// HTML — il fait grossir l'extraction et surtout la mémoire utilisée par
+// Chromium, une ressource déjà rare dans l'environnement contraint d'une
+// fonction serverless (cause probable des "net::ERR_INSUFFICIENT_RESOURCES"
+// observés en prod sur ce endpoint).
+chromium.setGraphicsMode = false;
+
 let browserPromise = null;
+async function launchBrowser() {
+  const executablePath = await chromium.executablePath();
+  return puppeteer.launch({
+    headless: true,
+    executablePath,
+    args: chromium.args,
+  });
+}
+
 async function getBrowser() {
   if (!browserPromise) {
-    browserPromise = (async () => {
-      const executablePath = await chromium.executablePath();
-      return puppeteer.launch({
-        headless: true,
-        executablePath,
-        args: chromium.args,
-      });
-    })().catch((e) => {
+    browserPromise = launchBrowser().catch((e) => {
       browserPromise = null;
       throw e;
     });
   }
   return browserPromise;
+}
+
+// Si le navigateur partagé (réutilisé entre requêtes tant que la fonction
+// reste "chaude") se retrouve dans un état dégradé après une erreur de
+// navigation, le garder en cache ferait échouer aussi toutes les requêtes
+// suivantes sur cette même instance jusqu'à son recyclage naturel par
+// Vercel. On le ferme et on force un relancement propre au prochain appel.
+async function discardBrowser() {
+  const current = browserPromise;
+  browserPromise = null;
+  try {
+    const browser = await current;
+    await browser?.close();
+  } catch {
+    // rien à faire : le navigateur était déjà dans un état incertain
+  }
 }
 
 module.exports = async (req, res) => {
@@ -63,7 +89,11 @@ module.exports = async (req, res) => {
     page = await browser.newPage();
     // Empêche middleware.js de re-router cette requête interne vers /api/render.
     await page.setExtraHTTPHeaders({ "x-prerender-bypass": "1" });
-    await page.goto(target, { waitUntil: "networkidle0", timeout: 15000 });
+    // "networkidle2" (≤2 connexions actives, pas 0) plutôt que networkidle0 —
+    // plus tolérant à une éventuelle requête d'analytics/tracking qui traîne
+    // en arrière-plan sans jamais se couper, ce qui ferait sinon attendre le
+    // timeout complet à chaque rendu pour rien.
+    await page.goto(target, { waitUntil: "networkidle2", timeout: 15000 });
     await new Promise((r) => setTimeout(r, 300));
     const html = await page.content();
     res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -74,6 +104,7 @@ module.exports = async (req, res) => {
     res.status(200).send(html);
   } catch (e) {
     console.warn(`[render] Échec sur ${safePath}, repli sur le SPA brut :`, e.message);
+    await discardBrowser();
     // ?debug=1 : renvoie l'erreur en clair au lieu du 302 silencieux, pour
     // diagnostiquer un souci de lancement de Chromium sans dépendre des
     // logs Vercel.
@@ -82,10 +113,21 @@ module.exports = async (req, res) => {
       return;
     }
     // Best-effort : si Chromium échoue pour une raison quelconque, on
-    // laisse passer le visiteur (bot ou non) vers le SPA normal plutôt que
-    // de casser la page.
-    res.setHeader("Location", safePath);
-    res.status(302).end();
+    // renvoie quand même la page (SPA brute, non pré-rendue) en 200 — un
+    // 302 ici est exactement ce qui faisait remonter ces pages comme "non
+    // indexables" côté outils SEO : le crawler ne voit qu'une redirection
+    // au lieu d'un contenu, même dégradé. Pas de cache sur ce repli (pas de
+    // s-maxage), pour que le prochain passage retente un vrai rendu.
+    try {
+      const fallback = await fetch(target, { headers: { "x-prerender-bypass": "1" } });
+      const body = await fallback.text();
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.status(200).send(body);
+    } catch (fallbackError) {
+      console.warn(`[render] Repli SPA brut également en échec sur ${safePath} :`, fallbackError.message);
+      res.status(200).setHeader("Content-Type", "text/html; charset=utf-8");
+      res.end("<!DOCTYPE html><html><head><title>TDL Formation</title></head><body></body></html>");
+    }
   } finally {
     if (page) await page.close().catch(() => {});
   }
