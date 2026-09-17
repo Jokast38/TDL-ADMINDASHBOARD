@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { api, API } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -357,10 +357,18 @@ export default function Dossiers() {
                           d.verification_status === "approved" ? "border-green-500 text-green-600" :
                           d.verification_status === "rejected" ? "border-red-500 text-red-600" : ""
                         }>{d.verification_status}</Badge>
-                        <button onClick={() => verifyDoc(d.id, "approved")} className="p-1.5 text-green-600 hover:bg-green-50 rounded">
+                        <button
+                          onClick={() => window.open(`${API}/documents/${d.id}/download?auth=${localStorage.getItem("tdl_token")}`, "_blank")}
+                          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"
+                          title="Consulter le document"
+                          data-testid={`view-doc-${d.id}`}
+                        >
+                          <ArrowSquareOut size={16} />
+                        </button>
+                        <button onClick={() => verifyDoc(d.id, "approved")} className="p-1.5 text-green-600 hover:bg-green-50 rounded" title="Approuver">
                           <CheckCircle size={16} weight="fill" />
                         </button>
-                        <button onClick={() => verifyDoc(d.id, "rejected")} className="p-1.5 text-red-600 hover:bg-red-50 rounded">
+                        <button onClick={() => verifyDoc(d.id, "rejected")} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Rejeter">
                           <XCircle size={16} weight="fill" />
                         </button>
                       </div>

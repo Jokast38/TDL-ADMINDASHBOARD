@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { api, API } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -616,10 +616,20 @@ export default function Students() {
                     {selectedDocs.map((doc) => (
                       <div key={doc.id} className="flex items-center justify-between text-xs border border-gray-100 rounded px-3 py-2">
                         <span className="truncate">{DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type} — {doc.original_filename}</span>
-                        <Badge variant="outline" className={
-                          doc.verification_status === "approved" ? "border-green-500 text-green-600" :
-                          doc.verification_status === "rejected" ? "border-red-500 text-red-600" : "text-gray-500"
-                        }>{doc.verification_status === "approved" ? "Approuvé" : doc.verification_status === "rejected" ? "Rejeté" : "En attente"}</Badge>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge variant="outline" className={
+                            doc.verification_status === "approved" ? "border-green-500 text-green-600" :
+                            doc.verification_status === "rejected" ? "border-red-500 text-red-600" : "text-gray-500"
+                          }>{doc.verification_status === "approved" ? "Approuvé" : doc.verification_status === "rejected" ? "Rejeté" : "En attente"}</Badge>
+                          <button
+                            onClick={() => window.open(`${API}/documents/${doc.id}/download?auth=${localStorage.getItem("tdl_token")}`, "_blank")}
+                            className="p-1 text-gray-500 hover:bg-gray-100 rounded"
+                            title="Consulter le document"
+                            data-testid={`view-student-doc-${doc.id}`}
+                          >
+                            <DownloadSimple size={14} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -100,7 +100,14 @@ async def download_document(doc_id: str, auth: Optional[str] = None, request: Re
     if not doc:
         raise HTTPException(status_code=404, detail="Document introuvable")
     data, ct = await get_object(doc["storage_path"])
-    return Response(content=data, media_type=doc.get("content_type") or ct)
+    return Response(
+        content=data,
+        media_type=doc.get("content_type") or ct,
+        # "inline" (pas "attachment") : l'équipe doit pouvoir consulter le
+        # document (image, PDF) directement dans un nouvel onglet avant de
+        # l'approuver/rejeter, plutôt que de forcer un téléchargement.
+        headers={"Content-Disposition": f'inline; filename="{doc.get("original_filename") or "document"}"'},
+    )
 
 
 @router.put("/documents/{doc_id}/verify")
