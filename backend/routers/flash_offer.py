@@ -14,7 +14,7 @@ from pydantic import BaseModel, EmailStr
 
 from core.database import db
 from core.security import require_role
-from core.config import ROLES_LEADS, PUBLIC_FRONTEND_URL
+from core.config import ROLES_LEADS
 from models.inscription import InscriptionIn
 from routers.inscriptions import create_inscription
 from services import mailbox
@@ -76,7 +76,7 @@ async def flash_inscription(payload: InscriptionIn, request: Request):
 # ── Campagne email (envoi via la messagerie interne o2switch, pas Brevo, pour
 #    éviter la limite d'envoi du fournisseur principal) ───────────────────────
 
-LANDING_URL = f"{PUBLIC_FRONTEND_URL}/offre-flash-points"
+LANDING_URL = "https://www.tdl-formation.fr/offre-flash-points"
 CAMPAIGN_SUBJECT = "⚡ Offre flash -50% : 120€ au lieu de 240€ — Stage récupération de points"
 
 

@@ -159,6 +159,7 @@ function App() {
             <Route path="/offre-fidelite" element={<OffreFideliteLanding />} />
             <Route path="/stage-recuperation-points" element={<StageRecuperationPointsLanding />} />
             <Route path="/stage-recuperation-points/merci" element={<StageRecuperationMerci />} />
+            <Route path="/offre-flash-point" element={<OffreFlashPointsLanding />} />
             <Route path="/offre-flash-points" element={<OffreFlashPointsLanding />} />
             <Route path="/offre-flash-points/merci" element={<OffreFlashPointsMerci />} />
             <Route path="/formation-ssiap" element={<SsiapLanding />} />
