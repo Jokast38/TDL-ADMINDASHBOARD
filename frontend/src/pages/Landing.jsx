@@ -15,7 +15,7 @@ import {
   IdentificationCard, Truck, FireSimple, Car, Phone, EnvelopeSimple, MapPin,
   List, X, DownloadSimple, ArrowUp,
   Certificate, UsersThree, ClipboardText, Target, CalendarBlank, DoorOpen,
-  Clock, PiggyBank, NotePencil, Wheelchair, Storefront, Star,
+  Clock, PiggyBank, NotePencil, Wheelchair, Storefront, Star, StarHalf,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { trackLead, newEventId, getFbCookies } from "@/lib/metaPixel";
@@ -262,7 +262,20 @@ export default function Landing() {
   const [contactSent, setContactSent] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileSubOpen, setMobileSubOpen] = useState(null); // "vtc" | "taxi" | null
+  // Note/nombre d'avis Google du bandeau de confiance du hero — mêmes
+  // données live que le carrousel d'avis plus bas sur la page
+  // (GoogleReviewsCarousel, GET /reviews/google), pour ne jamais afficher un
+  // chiffre périmé à côté d'un chiffre à jour sur la même page. Valeurs de
+  // repli = les anciens chiffres codés en dur, utilisées tant que la requête
+  // n'a pas répondu ou si l'API Google échoue (quota, etc.).
+  const [googleRating, setGoogleRating] = useState({ rating: 4.9, user_ratings_total: 705 });
   const revealRef = useReveal();
+
+  useEffect(() => {
+    api.get("/reviews/google").then((r) => {
+      if (r.data?.rating != null) setGoogleRating(r.data);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     // VTC/Taxi est notre cœur de métier — mis en avant en premier dans le
@@ -436,14 +449,6 @@ export default function Landing() {
                 </Button>
               </a>
             </div>
-            <div className="grid grid-cols-2 gap-4 mt-10 max-w-md animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
-              <Stat label="Réussite examen VTC" value="97%" accent="#0B7238" />
-              <Stat label="Réussite examen Taxi" value="92%" accent="#0B7238" />
-              <Stat label="Examens réussis" value="5000+" accent="#d4af37" />
-              <Stat label="Formateurs qualifiés" value="15" accent="#d4af37" />
-              <Stat label="Inscrits par mois" value="30-40" accent="#0B7238" />
-              <Stat label="Taux de satisfaction" value="98%" accent="#0B7238" />
-            </div>
           </div>
 
           <div className="relative flex flex-col">
@@ -466,12 +471,23 @@ export default function Landing() {
               <span className="h-12 lg:h-20 w-px bg-gray-200 shrink-0" />
               <div>
                 <div className="flex items-center gap-1 lg:gap-1.5">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Star key={i} size={20} weight="fill" className="text-[#d4af37] lg:w-7 lg:h-7" />
-                  ))}
-                  <span className="font-display font-bold text-base lg:text-2xl ml-1">4,9/5</span>
+                  {[1, 2, 3, 4, 5].map((i) => {
+                    const r = googleRating.rating || 0;
+                    const Icon = r >= i ? Star : r >= i - 0.5 ? StarHalf : Star;
+                    return (
+                      <Icon
+                        key={i} size={20} weight={r >= i - 0.5 ? "fill" : "regular"}
+                        className="text-[#d4af37] lg:w-7 lg:h-7"
+                      />
+                    );
+                  })}
+                  <span className="font-display font-bold text-base lg:text-2xl ml-1">
+                    {String(googleRating.rating).replace(".", ",")}/5
+                  </span>
                 </div>
-                <p className="text-sm lg:text-base text-gray-500 mt-1 lg:mt-2">705+ avis Google · Centres Épinay-sur-Seine & Creil</p>
+                <p className="text-sm lg:text-base text-gray-500 mt-1 lg:mt-2">
+                  {googleRating.user_ratings_total?.toLocaleString("fr-FR")}+ avis Google · Centres Épinay-sur-Seine & Creil
+                </p>
               </div>
             </div>
           </div>
@@ -504,6 +520,23 @@ export default function Landing() {
             </div>
             <div data-reveal className="reveal reveal-delay-4">
               <AnimatedRing value={98} label="Satisfaction stagiaires" sublabel="Tous parcours confondus" icon={Star} accent="#d4af37" />
+            </div>
+          </div>
+
+          {/* Chiffres complémentaires (pas des %, donc pas de jauge circulaire)
+              — reprennent ici les anciennes cases du bandeau du hero
+              (examens réussis, formateurs, inscriptions/mois) sous la même
+              forme animée que les résultats ci-dessus, au lieu d'une grille
+              à part déconnectée visuellement. */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-14 lg:mt-16 max-w-3xl mx-auto">
+            <div data-reveal className="reveal reveal-delay-1">
+              <AnimatedNumberCard value={5000} suffix="+" label="Examens réussis" accent="#d4af37" />
+            </div>
+            <div data-reveal className="reveal reveal-delay-2">
+              <AnimatedNumberCard value={15} label="Formateurs qualifiés" accent="#0B7238" />
+            </div>
+            <div data-reveal className="reveal reveal-delay-3">
+              <AnimatedNumberCard display="30-40" label="Inscrits par mois" accent="#d4af37" />
             </div>
           </div>
         </div>
@@ -973,6 +1006,62 @@ function AnimatedRing({ value, label, sublabel, icon: Icon, accent }) {
       <p className="font-display font-bold text-sm sm:text-base mt-3 sm:mt-4">{label}</p>
       {sublabel && <p className="text-xs text-gray-500 mt-1 max-w-[10rem]">{sublabel}</p>}
     </div>
+  );
+}
+
+// Carte chiffre animé (comptage 0 → valeur) pour les stats qui ne sont pas
+// des pourcentages (donc pas de jauge circulaire) — même déclenchement au
+// scroll qu'AnimatedRing, pour rester visuellement cohérent avec le reste de
+// la section. `display` (optionnel) court-circuite le comptage pour une
+// valeur non numérique comme une fourchette ("30-40").
+function AnimatedNumberCard({ value, suffix = "", display, label, accent }) {
+  const ref = useRef(null);
+  const [started, setStarted] = useState(false);
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setStarted(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.4 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!started || display != null || value == null) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setCount(value);
+      return;
+    }
+    const duration = 1200;
+    const startTime = performance.now();
+    let frameId;
+    const tick = (now) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.round(eased * value));
+      if (progress < 1) frameId = requestAnimationFrame(tick);
+    };
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [started, value, display]);
+
+  return (
+    <Card ref={ref} className="p-5 border border-gray-200 rounded-md shadow-none text-center">
+      <div className="w-8 h-1 mx-auto mb-2 rounded-sm" style={{ background: accent }} />
+      <p className="font-display font-extrabold text-3xl tracking-tight">
+        {display != null ? display : `${count.toLocaleString("fr-FR")}${suffix}`}
+      </p>
+      <p className="overline mt-1">{label}</p>
+    </Card>
   );
 }
 
