@@ -427,6 +427,12 @@ const LANDING_PAGES = [
     color: "#0052CC",
   },
   {
+    title: "⚡ Offre flash -50% — Récupération de points",
+    desc: "Landing provisoire : 15 places à 120€ (au lieu de 240€) pour la session du 21-22 septembre 2026. Campagne email anciens leads.",
+    path: "/offre-flash-points",
+    color: "#d4af37",
+  },
+  {
     title: "Formation SSIAP",
     desc: "Landing dédiée aux formations SSIAP 1, 2 et 3 (sécurité incendie).",
     path: "/formation-ssiap",
