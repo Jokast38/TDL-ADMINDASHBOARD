@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import Kit, { TopBar } from "@/components/StageLandingPage";
 import { api } from "@/lib/api";
@@ -438,11 +438,11 @@ export default function Landing() {
             </div>
             <div className="grid grid-cols-2 gap-4 mt-10 max-w-md animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
               <Stat label="Réussite examen VTC" value="97%" accent="#0B7238" />
-              <Stat label="Réussite examen Taxi" value="95%" accent="#0B7238" />
+              <Stat label="Réussite examen Taxi" value="92%" accent="#0B7238" />
               <Stat label="Examens réussis" value="5000+" accent="#d4af37" />
               <Stat label="Formateurs qualifiés" value="15" accent="#d4af37" />
               <Stat label="Inscrits par mois" value="30-40" accent="#0B7238" />
-              <Stat label="Taux de satisfaction" value="90%" accent="#0B7238" />
+              <Stat label="Taux de satisfaction" value="98%" accent="#0B7238" />
             </div>
           </div>
 
@@ -473,6 +473,37 @@ export default function Landing() {
                 </div>
                 <p className="text-sm lg:text-base text-gray-500 mt-1 lg:mt-2">705+ avis Google · Centres Épinay-sur-Seine & Creil</p>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Résultats Qualiopi — taux de réussite par formation + satisfaction,
+          publiés conformément à la certification Qualiopi (indicateur 26). */}
+      <section className="py-16 lg:py-24 bg-white border-b border-gray-200 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <div data-reveal className="reveal text-center max-w-2xl mx-auto mb-12 lg:mb-16">
+            <p className="overline">Qualiopi · Résultats publics</p>
+            <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2 mb-3">
+              Nos résultats, en toute transparence
+            </h2>
+            <p className="text-gray-600">
+              Taux de réussite aux examens par formation et satisfaction de nos stagiaires — indicateurs publiés
+              conformément à notre certification Qualiopi.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-y-10 gap-x-4 sm:gap-x-8 justify-items-center">
+            <div data-reveal className="reveal reveal-delay-1">
+              <AnimatedRing value={97} label="Formation VTC" sublabel="Taux de réussite examen" icon={Car} accent="#0B7238" />
+            </div>
+            <div data-reveal className="reveal reveal-delay-2">
+              <AnimatedRing value={92} label="Formation Taxi" sublabel="Taux de réussite examen" icon={IdentificationCard} accent="#0B7238" />
+            </div>
+            <div data-reveal className="reveal reveal-delay-3">
+              <AnimatedRing value={95} label="SSIAP" sublabel="Taux de réussite examen" icon={FireSimple} accent="#0B7238" />
+            </div>
+            <div data-reveal className="reveal reveal-delay-4">
+              <AnimatedRing value={98} label="Satisfaction stagiaires" sublabel="Tous parcours confondus" icon={Star} accent="#d4af37" />
             </div>
           </div>
         </div>
@@ -871,6 +902,76 @@ function MobileSubMenu({ label, titles, byTitle, open, onToggle, onNavigate }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+// Jauge circulaire animée (comptage 0 → valeur + tracé du cercle) déclenchée
+// au scroll — utilisée pour les résultats Qualiopi (taux de réussite par
+// formation, satisfaction). Anime une seule fois (pas de re-déclenchement en
+// remontant/redescendant), respecte prefers-reduced-motion.
+function AnimatedRing({ value, label, sublabel, icon: Icon, accent }) {
+  const ref = useRef(null);
+  const [started, setStarted] = useState(false);
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setStarted(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.4 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!started) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setDisplay(value);
+      return;
+    }
+    const duration = 1200;
+    const startTime = performance.now();
+    let frameId;
+    const tick = (now) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubique
+      setDisplay(Math.round(eased * value));
+      if (progress < 1) frameId = requestAnimationFrame(tick);
+    };
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [started, value]);
+
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - display / 100);
+
+  return (
+    <div ref={ref} className="flex flex-col items-center text-center">
+      <div className="relative w-24 h-24 sm:w-28 sm:h-28 lg:w-32 lg:h-32">
+        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+          <circle cx="50" cy="50" r={radius} fill="none" stroke="#eef0ef" strokeWidth="8" />
+          <circle
+            cx="50" cy="50" r={radius} fill="none" stroke={accent} strokeWidth="8" strokeLinecap="round"
+            strokeDasharray={circumference} strokeDashoffset={offset}
+            style={{ transition: "stroke-dashoffset 0.1s linear" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          {Icon && <Icon size={16} className="mb-1 sm:mb-1.5" style={{ color: accent }} weight="duotone" />}
+          <span className="font-display font-extrabold text-xl sm:text-2xl lg:text-3xl tracking-tight leading-none">{display}%</span>
+        </div>
+      </div>
+      <p className="font-display font-bold text-sm sm:text-base mt-3 sm:mt-4">{label}</p>
+      {sublabel && <p className="text-xs text-gray-500 mt-1 max-w-[10rem]">{sublabel}</p>}
     </div>
   );
 }
