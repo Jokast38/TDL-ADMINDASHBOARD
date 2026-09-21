@@ -45,8 +45,14 @@ chromium.setGraphicsMode = false;
 let browserPromise = null;
 async function launchBrowser() {
   const executablePath = await chromium.executablePath();
+  // headless/defaultViewport : valeurs fournies par @sparticuz/chromium (mode
+  // "shell", le binaire livré est un headless_shell). Avec `headless: true`,
+  // puppeteer ajoute `--headless=new` en plus du `--headless='shell'` déjà
+  // présent dans chromium.args : flags contradictoires, et le navigateur se
+  // lance mais `newPage()` ne répond jamais (étape observée dans les logs).
   return puppeteer.launch({
-    headless: true,
+    headless: chromium.headless,
+    defaultViewport: chromium.defaultViewport,
     executablePath,
     args: chromium.args,
   });
