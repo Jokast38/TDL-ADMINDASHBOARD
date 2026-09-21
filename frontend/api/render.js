@@ -141,7 +141,7 @@ module.exports = async (req, res) => {
     // diagnostiquer un souci de lancement de Chromium sans dépendre des
     // logs Vercel.
     if (req.query.debug) {
-      res.status(500).json({ error: e.message, stack: e.stack });
+      res.status(500).json({ stage: state.stage, error: e.message, stack: e.stack });
       return;
     }
     // Best-effort : si Chromium échoue pour une raison quelconque, on
