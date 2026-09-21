@@ -78,24 +78,48 @@ async function discardBrowser() {
   }
 }
 
+// Budget de temps pour le rendu Chromium. La fonction est tuée à 30s par Vercel
+// (maxDuration) : si Chromium se fige (lancement, newPage, goto), on renvoyait
+// un 504 FUNCTION_INVOCATION_TIMEOUT aux crawlers — pire qu'une page non
+// rendue. Passé ce délai, on abandonne le rendu et on bascule sur le repli
+// (SPA brute en 200), qui garde de la marge avant les 30s.
+const RENDER_BUDGET_MS = 12000;
+const FALLBACK_FETCH_TIMEOUT_MS = 8000;
+
+async function renderHtml(target, state) {
+  // state.stage : dernière étape atteinte, pour savoir où Chromium se fige
+  // quand le budget de temps est dépassé (visible dans les logs Vercel).
+  state.stage = "launch";
+  const browser = await getBrowser();
+  state.stage = "newPage";
+  state.page = await browser.newPage();
+  state.stage = "goto";
+  // Empêche middleware.js de re-router cette requête interne vers /api/render.
+  await state.page.setExtraHTTPHeaders({ "x-prerender-bypass": "1" });
+  // "networkidle2" (≤2 connexions actives, pas 0) plutôt que networkidle0 —
+  // plus tolérant à une éventuelle requête d'analytics/tracking qui traîne
+  // en arrière-plan sans jamais se couper, ce qui ferait sinon attendre le
+  // timeout complet à chaque rendu pour rien.
+  await state.page.goto(target, { waitUntil: "networkidle2", timeout: 8000 });
+  state.stage = "content";
+  await new Promise((r) => setTimeout(r, 300));
+  return state.page.content();
+}
+
 module.exports = async (req, res) => {
   const routePath = typeof req.query.path === "string" ? req.query.path : "/";
   const safePath = routePath.startsWith("/") ? routePath : `/${routePath}`;
   const target = `https://${req.headers.host}${safePath}`;
 
-  let page;
+  const state = {};
+  let timer;
   try {
-    const browser = await getBrowser();
-    page = await browser.newPage();
-    // Empêche middleware.js de re-router cette requête interne vers /api/render.
-    await page.setExtraHTTPHeaders({ "x-prerender-bypass": "1" });
-    // "networkidle2" (≤2 connexions actives, pas 0) plutôt que networkidle0 —
-    // plus tolérant à une éventuelle requête d'analytics/tracking qui traîne
-    // en arrière-plan sans jamais se couper, ce qui ferait sinon attendre le
-    // timeout complet à chaque rendu pour rien.
-    await page.goto(target, { waitUntil: "networkidle2", timeout: 15000 });
-    await new Promise((r) => setTimeout(r, 300));
-    const html = await page.content();
+    const html = await Promise.race([
+      renderHtml(target, state),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`rendu Chromium > ${RENDER_BUDGET_MS}ms`)), RENDER_BUDGET_MS);
+      }),
+    ]);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     // Le HTML rendu ne change pas d'une requête à l'autre pour un même
     // contenu : on laisse le CDN le servir directement aux crawlers
@@ -103,9 +127,11 @@ module.exports = async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800");
     res.status(200).send(html);
   } catch (e) {
-    console.warn(`[render] Échec sur ${safePath}, repli sur le SPA brut :`, e.message);
-    await discardBrowser();
-    // ?debug=1 : renvoie l'erreur en clair au lieu du 302 silencieux, pour
+    console.warn(`[render] Échec sur ${safePath} (étape : ${state.stage}), repli sur le SPA brut :`, e.message);
+    // Sans await : si Chromium est figé, fermer le navigateur peut lui aussi
+    // se figer, et on ne doit plus rien bloquer à partir d'ici.
+    discardBrowser();
+    // ?debug=1 : renvoie l'erreur en clair au lieu du repli silencieux, pour
     // diagnostiquer un souci de lancement de Chromium sans dépendre des
     // logs Vercel.
     if (req.query.debug) {
@@ -114,12 +140,14 @@ module.exports = async (req, res) => {
     }
     // Best-effort : si Chromium échoue pour une raison quelconque, on
     // renvoie quand même la page (SPA brute, non pré-rendue) en 200 — un
-    // 302 ici est exactement ce qui faisait remonter ces pages comme "non
-    // indexables" côté outils SEO : le crawler ne voit qu'une redirection
-    // au lieu d'un contenu, même dégradé. Pas de cache sur ce repli (pas de
-    // s-maxage), pour que le prochain passage retente un vrai rendu.
+    // 302 ou un 504 ici ferait remonter ces pages comme "non indexables"
+    // côté outils SEO. Pas de cache sur ce repli (pas de s-maxage), pour que
+    // le prochain passage retente un vrai rendu.
     try {
-      const fallback = await fetch(target, { headers: { "x-prerender-bypass": "1" } });
+      const fallback = await fetch(target, {
+        headers: { "x-prerender-bypass": "1" },
+        signal: AbortSignal.timeout(FALLBACK_FETCH_TIMEOUT_MS),
+      });
       const body = await fallback.text();
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(body);
@@ -129,7 +157,8 @@ module.exports = async (req, res) => {
       res.end("<!DOCTYPE html><html><head><title>TDL Formation</title></head><body></body></html>");
     }
   } finally {
-    if (page) await page.close().catch(() => {});
+    clearTimeout(timer);
+    state.page?.close().catch(() => {});
   }
 };
 
