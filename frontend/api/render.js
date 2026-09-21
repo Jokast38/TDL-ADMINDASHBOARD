@@ -89,8 +89,8 @@ async function discardBrowser() {
 // un 504 FUNCTION_INVOCATION_TIMEOUT aux crawlers — pire qu'une page non
 // rendue. Passé ce délai, on abandonne le rendu et on bascule sur le repli
 // (SPA brute en 200), qui garde de la marge avant les 30s.
-const RENDER_BUDGET_MS = 12000;
-const FALLBACK_FETCH_TIMEOUT_MS = 8000;
+const RENDER_BUDGET_MS = 20000;
+const FALLBACK_FETCH_TIMEOUT_MS = 5000;
 
 async function renderHtml(target, state) {
   // state.stage : dernière étape atteinte, pour savoir où Chromium se fige
@@ -106,7 +106,14 @@ async function renderHtml(target, state) {
   // plus tolérant à une éventuelle requête d'analytics/tracking qui traîne
   // en arrière-plan sans jamais se couper, ce qui ferait sinon attendre le
   // timeout complet à chaque rendu pour rien.
-  await state.page.goto(target, { waitUntil: "networkidle2", timeout: 8000 });
+  await state.page.goto(target, { waitUntil: "networkidle2", timeout: 12000 });
+  // "networkidle2" ne garantit pas que React a fini d'afficher la page : on
+  // pouvait capturer la coquille encore vide (titre générique, ni <h1> ni
+  // lien) et la servir 24h depuis le CDN comme un rendu réussi. On attend un
+  // vrai contenu ; sinon on lève une erreur → repli non mis en cache, le
+  // passage suivant retente.
+  state.stage = "hydratation";
+  await state.page.waitForSelector("#root h1, #root a", { timeout: 6000 });
   state.stage = "content";
   await new Promise((r) => setTimeout(r, 300));
   return state.page.content();

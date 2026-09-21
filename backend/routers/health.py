@@ -38,7 +38,9 @@ async def sitemap():
         {"loc": f"{base}/formations", "priority": "0.9", "changefreq": "weekly"},
         {"loc": f"{base}/inscription", "priority": "0.8", "changefreq": "monthly"},
         {"loc": f"{base}/blog", "priority": "0.8", "changefreq": "weekly"},
-        {"loc": f"{base}/stage-recuperation-points", "priority": "0.8", "changefreq": "monthly"},
+        # /stage-recuperation-points (landing de campagne) déclare pour canonical
+        # /formations/recuperation-points-de-permis : elle n'a rien à faire dans
+        # le sitemap, qui ne doit lister que des URLs canoniques.
         {"loc": f"{base}/offre-fidelite", "priority": "0.6", "changefreq": "monthly"},
         {"loc": f"{base}/formation-ssiap", "priority": "0.7", "changefreq": "monthly"},
         {"loc": f"{base}/formation-taxi", "priority": "0.7", "changefreq": "monthly"},

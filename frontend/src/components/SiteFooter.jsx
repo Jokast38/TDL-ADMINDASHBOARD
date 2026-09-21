@@ -10,10 +10,28 @@ const SOCIALS = [
   { icon: YoutubeLogo, label: "YouTube", href: "https://youtube.com/@tdlformationtaxivtc6584?si=4SVsQlU8DMZ1dsoz" },
 ];
 
+// Landings publiques sinon liées de nulle part dans le site (« orphan pages »
+// pour les outils SEO) : le pied de page est commun à toutes les pages
+// publiques, c'est le moyen le plus simple de leur donner des liens entrants.
+const FORMATION_LINKS = [
+  { to: "/formation-vtc", label: "Formation VTC" },
+  { to: "/formation-taxi", label: "Formation Taxi" },
+  { to: "/passerelle-taxi-banlieue-parisien", label: "Passerelle Taxi" },
+  { to: "/mobilite-taxi", label: "Mobilité Taxi" },
+  { to: "/formation-ssiap", label: "Formation SSIAP" },
+  { to: "/offre-fidelite", label: "Offre fidélité" },
+  { to: "/kami-street", label: "KAMI STREET" },
+];
+
 // Pied de page commun aux pages publiques : mentions légales, FAQ, réseaux sociaux.
 export default function SiteFooter({ className = "border-t border-gray-200 py-8" }) {
   return (
     <footer className={className}>
+      <nav aria-label="Nos formations" className="max-w-7xl mx-auto px-6 lg:px-8 mb-6 flex flex-wrap gap-x-5 gap-y-2">
+        {FORMATION_LINKS.map((l) => (
+          <Link key={l.to} to={l.to} className="text-xs text-gray-400 hover:text-[#d4af37]">{l.label}</Link>
+        ))}
+      </nav>
       <div className="max-w-7xl mx-auto px-6 lg:px-8 flex flex-wrap gap-4 items-center justify-between">
         <p className="text-sm text-gray-500">© 2026 TDL Formation · Tous droits réservés.</p>
         <div className="flex flex-wrap items-center gap-5">
