@@ -134,11 +134,22 @@ module.exports = async (req, res) => {
       }),
     ]);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
+    // La SPA signale ses pages d'erreur (404...) via <meta name=
+    // "prerender-status-code"> : on la traduit en vrai statut HTTP, sinon
+    // toute URL inexistante ressort en 200 (soft 404) pour les crawlers.
+    const statusMatch = html.match(/<meta[^>]+name="prerender-status-code"[^>]+content="(\d{3})"/i);
+    const status = statusMatch ? Number(statusMatch[1]) : 200;
     // Le HTML rendu ne change pas d'une requête à l'autre pour un même
     // contenu : on laisse le CDN le servir directement aux crawlers
     // suivants pendant 24h plutôt que de relancer Chromium à chaque fois.
-    res.setHeader("Cache-Control", "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800");
-    res.status(200).send(html);
+    // Cache plus court pour une page d'erreur (l'URL peut être créée ensuite).
+    res.setHeader(
+      "Cache-Control",
+      status === 200
+        ? "public, max-age=0, s-maxage=86400, stale-while-revalidate=604800"
+        : "public, max-age=0, s-maxage=3600"
+    );
+    res.status(status).send(html);
   } catch (e) {
     console.warn(`[render] Échec sur ${safePath} (étape : ${state.stage}), repli sur le SPA brut :`, e.message);
     // Sans await : si Chromium est figé, fermer le navigateur peut lui aussi

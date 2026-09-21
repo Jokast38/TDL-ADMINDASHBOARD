@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "@phosphor-icons/react";
@@ -13,6 +14,22 @@ export default function ErrorPage({
   title = "Page introuvable",
   message = "La page que vous cherchez n'existe pas ou plus, ou l'adresse est mal orthographiée.",
 }) {
+  // Une SPA répond toujours 200 : pour que le pré-rendu (api/render.js) — et
+  // donc Google/Ahrefs — voie un vrai 404 sur les URLs inexistantes, on pose
+  // la balise `prerender-status-code` (convention des services de pré-rendu)
+  // que render.js lit pour fixer le statut HTTP. Retirée au démontage : sinon
+  // la navigation vers une page valide garderait la balise.
+  useEffect(() => {
+    const meta = document.createElement("meta");
+    meta.name = "prerender-status-code";
+    meta.content = String(code);
+    const robots = document.createElement("meta");
+    robots.name = "robots";
+    robots.content = "noindex";
+    document.head.append(meta, robots);
+    return () => { meta.remove(); robots.remove(); };
+  }, [code]);
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col items-center justify-center px-6 py-16 text-center" data-testid="error-page">
       <img

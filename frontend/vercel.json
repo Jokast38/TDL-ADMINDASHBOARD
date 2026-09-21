@@ -5,6 +5,7 @@
     "api/render.js": { "maxDuration": 30 }
   },
   "rewrites": [
+    { "source": "/(.*)\\.(jpg|jpeg|png|webp|svg|gif|ico|pdf)", "destination": "/__fichier-introuvable__" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
