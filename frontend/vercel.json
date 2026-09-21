@@ -2,30 +2,174 @@
   "buildCommand": "CI=false yarn build",
   "outputDirectory": "build",
   "functions": {
-    "api/render.js": { "maxDuration": 30 }
+    "api/render.js": {
+      "maxDuration": 30
+    }
   },
-  "rewrites": [
-    { "source": "/(.*)\\.(jpg|jpeg|png|webp|svg|gif|ico|pdf)", "destination": "/__fichier-introuvable__" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
   "headers": [
     {
       "source": "/static/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/tdl-image/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800, stale-while-revalidate=86400"
+        }
       ]
     },
     {
       "source": "/(.*)\\.(jpg|jpeg|png|webp|svg|gif|ico)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=604800, stale-while-revalidate=86400"
+        }
       ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/kami-street",
+      "destination": "https://kamistreet.fr/",
+      "permanent": true
+    },
+    {
+      "source": "/caces-debouches-metiers-cariste/",
+      "destination": "/blog/debouches-caces-metiers-salaires-et-secteurs-qui-recrutent",
+      "permanent": true
+    },
+    {
+      "source": "/caces-debouches-metiers-cariste",
+      "destination": "/blog/debouches-caces-metiers-salaires-et-secteurs-qui-recrutent",
+      "permanent": true
+    },
+    {
+      "source": "/passerelle-vtc-taxi/",
+      "destination": "/formations/formation-passerelle-vtc-vers-taxi",
+      "permanent": true
+    },
+    {
+      "source": "/passerelle-vtc-taxi",
+      "destination": "/formations/formation-passerelle-vtc-vers-taxi",
+      "permanent": true
+    },
+    {
+      "source": "/formation-caces-r489-chariots/",
+      "destination": "/formations/caces-r489-cat-3-chariot-elevateur",
+      "permanent": true
+    },
+    {
+      "source": "/formation-caces-r489-chariots",
+      "destination": "/formations/caces-r489-cat-3-chariot-elevateur",
+      "permanent": true
+    },
+    {
+      "source": "/financement-formation-taxi-cpf/",
+      "destination": "/blog/financement-formation-taxi-cpf-2026-demarches-et-montants",
+      "permanent": true
+    },
+    {
+      "source": "/financement-formation-taxi-cpf",
+      "destination": "/blog/financement-formation-taxi-cpf-2026-demarches-et-montants",
+      "permanent": true
+    },
+    {
+      "source": "/renouvellement-carte-taxi/",
+      "destination": "/blog/renouvellement-carte-taxi-2026-formation-continue-obligatoire",
+      "permanent": true
+    },
+    {
+      "source": "/renouvellement-carte-taxi",
+      "destination": "/blog/renouvellement-carte-taxi-2026-formation-continue-obligatoire",
+      "permanent": true
+    },
+    {
+      "source": "/formation-caces-guide-complet/",
+      "destination": "/blog/formation-caces-2026-guide-complet-des-certifications",
+      "permanent": true
+    },
+    {
+      "source": "/formation-caces-guide-complet",
+      "destination": "/blog/formation-caces-2026-guide-complet-des-certifications",
+      "permanent": true
+    },
+    {
+      "source": "/prix-formation-caces-financement-cpf/",
+      "destination": "/blog/prix-formation-caces-2026-tarifs-et-financement-cpf",
+      "permanent": true
+    },
+    {
+      "source": "/prix-formation-caces-financement-cpf",
+      "destination": "/blog/prix-formation-caces-2026-tarifs-et-financement-cpf",
+      "permanent": true
+    },
+    {
+      "source": "/formation-caces-r482-engins-chantier/",
+      "destination": "/formations/caces-r482-engins-de-chantier",
+      "permanent": true
+    },
+    {
+      "source": "/formation-caces-r482-engins-chantier",
+      "destination": "/formations/caces-r482-engins-de-chantier",
+      "permanent": true
+    },
+    {
+      "source": "/formation-caces-r486-nacelles/",
+      "destination": "/formations/caces-r486-cat-b-nacelle-elevatrice",
+      "permanent": true
+    },
+    {
+      "source": "/formation-caces-r486-nacelles",
+      "destination": "/formations/caces-r486-cat-b-nacelle-elevatrice",
+      "permanent": true
+    },
+    {
+      "source": "/formation-taxi-initiale-programme/",
+      "destination": "/blog/formation-taxi-initiale-2026-programme-et-duree-complete",
+      "permanent": true
+    },
+    {
+      "source": "/formation-taxi-initiale-programme",
+      "destination": "/blog/formation-taxi-initiale-2026-programme-et-duree-complete",
+      "permanent": true
+    },
+    {
+      "source": "/formation-taxi-guide-complet/",
+      "destination": "/blog/formation-taxi-2026-guide-complet-pour-devenir-chauffeur",
+      "permanent": true
+    },
+    {
+      "source": "/formation-taxi-guide-complet",
+      "destination": "/blog/formation-taxi-2026-guide-complet-pour-devenir-chauffeur",
+      "permanent": true
+    },
+    {
+      "source": "/licence-ads-taxi/",
+      "destination": "/blog/licence-ads-taxi-2026-obtention-location-et-couts",
+      "permanent": true
+    },
+    {
+      "source": "/licence-ads-taxi",
+      "destination": "/blog/licence-ads-taxi-2026-obtention-location-et-couts",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/(.*)\\.(jpg|jpeg|png|webp|svg|gif|ico|pdf)",
+      "destination": "/__fichier-introuvable__"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

@@ -20,7 +20,6 @@ const FORMATION_LINKS = [
   { to: "/mobilite-taxi", label: "Mobilité Taxi" },
   { to: "/formation-ssiap", label: "Formation SSIAP" },
   { to: "/offre-fidelite", label: "Offre fidélité" },
-  { to: "/kami-street", label: "KAMI STREET" },
 ];
 
 // Pied de page commun aux pages publiques : mentions légales, FAQ, réseaux sociaux.

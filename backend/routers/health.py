@@ -48,7 +48,7 @@ async def sitemap():
         {"loc": f"{base}/formation-caces", "priority": "0.7", "changefreq": "monthly"},
         {"loc": f"{base}/mobilite-taxi", "priority": "0.6", "changefreq": "monthly"},
         {"loc": f"{base}/passerelle-taxi-banlieue-parisien", "priority": "0.6", "changefreq": "monthly"},
-        {"loc": f"{base}/kami-street", "priority": "0.5", "changefreq": "monthly"},
+        # /kami-street redirige (301) vers kamistreet.fr : pas une page du site.
         {"loc": f"{base}/faq", "priority": "0.5", "changefreq": "monthly"},
         {"loc": f"{base}/contact", "priority": "0.5", "changefreq": "monthly"},
         {"loc": f"{base}/mentions-legales", "priority": "0.2", "changefreq": "yearly"},
