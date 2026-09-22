@@ -91,7 +91,7 @@ export default function OffreFideliteLanding() {
         titleLine2Gold="au tarif fidélité 189 €"
         subheadline="Réservé à nos anciens stagiaires."
         description="Votre dernier stage date de plus d'un an et votre solde de points a de nouveau diminué ? Bénéficiez de notre tarif fidélité et récupérez jusqu'à 4 points en 2 jours."
-        heroImage="/tdl-image/image-securite-routiere-rectangle-sans-fond-blanc.png"
+        heroImage="/tdl-image/image-securite-routiere-rectangle-sans-fond-blanc.webp"
         villes={VILLES}
         onFindSessions={handleFindSessions}
       />

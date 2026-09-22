@@ -36,9 +36,9 @@ export const CATEGORY_GALLERY = {
   ],
   SSIAP: [
     `${IMG}/banniere-formation-ssiap-inspection-equipement-incendie-Moyenne.jpeg`,
-    `${IMG}/formation-ssiap-cours-theorique-securite-incendie.png`,
-    `${IMG}/formation-ssiap-equipe-securite-incendie.png`,
-    `${IMG}/formation-ssiap-systeme-securite-incendie-tableau-alarme.png`,
+    `${IMG}/formation-ssiap-cours-theorique-securite-incendie.webp`,
+    `${IMG}/formation-ssiap-equipe-securite-incendie.webp`,
+    `${IMG}/formation-ssiap-systeme-securite-incendie-tableau-alarme.webp`,
   ],
   VTC_TAXI: [
     `${IMG}/formation-conduite-taxi-vtc-tdl-Grande.jpeg`,
