@@ -101,7 +101,7 @@ export default function BlogPost() {
         <div className="aspect-video bg-gray-100 rounded-md overflow-hidden mb-10">
           <CoverImage
             src={post.cover_image || heroForCategory(faqCategory || "VTC_TAXI")}
-            alt={post.title}
+            alt={post.title || "Article TDL Formation"}
             className="w-full h-full"
             onError={(e) => {
               const fallback = heroForCategory(faqCategory || "VTC_TAXI");
