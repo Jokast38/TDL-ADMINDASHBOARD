@@ -164,11 +164,7 @@
   ],
   "rewrites": [
     {
-      "source": "/(.*)\\.(jpg|jpeg|png|webp|svg|gif|ico|pdf)",
-      "destination": "/__fichier-introuvable__"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!.*\\.[a-zA-Z0-9]+$).*)",
       "destination": "/index.html"
     }
   ]
