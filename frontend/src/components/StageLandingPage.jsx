@@ -317,7 +317,7 @@ function Hero({
             style={{ clipPath: "polygon(22% 0, 100% 0, 100% 100%, 0 100%, 0 32%)" }}
           >
             <img
-              src={heroImage} alt="" className="w-full h-full object-cover" style={{ objectPosition: "20% center" }}
+              src={heroImage} alt="Stage de récupération de points TDL Formation" className="w-full h-full object-cover" style={{ objectPosition: "20% center" }}
               loading="eager" fetchpriority="high"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
@@ -593,7 +593,7 @@ function SessionBanner({ image, dateLabel, city, seats, price, priceLabel, origi
   return (
     <div className="bg-black text-white">
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-6 flex flex-col md:flex-row items-stretch gap-6">
-        <img src={image} alt="" width="224" height="128" loading="lazy" className="w-full md:w-56 h-32 object-cover rounded-md shrink-0" />
+        <img src={image} alt="Centre de formation TDL Formation" width="224" height="128" loading="lazy" className="w-full md:w-56 h-32 object-cover rounded-md shrink-0" />
         <div className="flex-1 flex flex-col justify-center">
           <p className="text-[11px] font-bold uppercase tracking-widest mb-1" style={{ color: GOLD }}>Prochaine session</p>
           <p className="font-display text-2xl sm:text-3xl font-extrabold">{dateLabel}</p>
