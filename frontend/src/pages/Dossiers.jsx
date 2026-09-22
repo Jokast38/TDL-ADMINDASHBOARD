@@ -18,6 +18,15 @@ import { toast } from "sonner";
 
 const NIVEAU_LABEL = { bases_fragiles: "Bases fragiles", intermediaire: "Intermédiaire", satisfaisant: "Satisfaisant" };
 
+// Champs d'identité du profil apprenant (voir GET /dossiers/{id}/full,
+// backend/services/identity_extraction.py) — remplis par OCR au dépôt d'une
+// pièce (permis, CNI, justificatif de domicile) ou par une saisie humaine.
+const IDENTITY_FIELD_LABELS = {
+  nom: "Nom", prenom: "Prénom", date_naissance: "Date de naissance", lieu_naissance: "Lieu de naissance",
+  numero_permis: "N° de permis", date_delivrance_permis: "Délivré le", prefecture_delivrance: "Préfecture",
+  adresse: "Adresse", ville: "Ville", code_postal: "Code postal",
+};
+
 const COLUMNS = [
   { key: "nouveau", label: "Nouveau", color: "#868e96" },
   { key: "en_verification", label: "En vérification", color: "#F5A623" },
@@ -333,6 +342,25 @@ export default function Dossiers() {
                   Enregistrer
                 </Button>
               </div>
+
+              {full?.identity && Object.keys(full.identity).length > 0 && (
+                <div className="mt-6">
+                  <p className="overline mb-2">Informations détectées</p>
+                  <div className="bg-gray-50 border border-gray-200 rounded-md p-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                    {Object.entries(IDENTITY_FIELD_LABELS)
+                      .filter(([key]) => full.identity[key])
+                      .map(([key, label]) => (
+                        <div key={key}>
+                          <span className="text-gray-500">{label}</span>
+                          <p className="font-medium">{full.identity[key]}</p>
+                        </div>
+                      ))}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Extraites automatiquement des pièces déposées (permis, CNI, justificatif) — à vérifier avant usage officiel.
+                  </p>
+                </div>
+              )}
 
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-3">

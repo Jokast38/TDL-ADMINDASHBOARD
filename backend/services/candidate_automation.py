@@ -6,6 +6,7 @@ fonctions, et routers/reminders.py pour le déclenchement manuel."""
 import base64
 import uuid
 from datetime import datetime, timedelta
+from typing import Optional
 
 from core.database import db
 from core.storage import put_object
@@ -50,62 +51,132 @@ async def send_convocations() -> int:
     return count
 
 
+def _hours_since_end(stage: dict) -> Optional[float]:
+    """Nombre d'heures écoulées depuis minuit le lendemain de `date_fin`, ou
+    None si la date est absente/invalide. Sert de garde-fou unique, partagé
+    par l'envoi automatique et le déclenchement manuel (voir
+    routers/inscriptions.py) : jamais d'attestation de fin de formation avant
+    que 24h ne soient passées depuis la fin de la session."""
+    date_fin = stage.get("date_fin")
+    if not date_fin:
+        return None
+    try:
+        end = datetime.strptime(date_fin, "%Y-%m-%d") + timedelta(days=1)
+    except ValueError:
+        return None
+    return (datetime.now() - end).total_seconds() / 3600
+
+
+async def _send_attestation_for_inscription(insc: dict, stage: dict, formation: dict, settings_doc: dict) -> bool:
+    """Génère, enregistre et envoie l'attestation de fin de formation pour
+    UNE inscription. Ne vérifie ni l'éligibilité (24h, déjà envoyée...) ni
+    l'existence de l'email — laissé aux appelants (send_auto_attestations et
+    le déclenchement manuel), qui n'ont pas les mêmes garde-fous à appliquer
+    autour (silencieux pour la boucle de fond, erreurs explicites pour un
+    humain qui clique)."""
+    animateur_ids = list(stage.get("animateur_ids") or ([stage["animateur_id"]] if stage.get("animateur_id") else []))
+    animateur = {"name": "TDL Formation"}
+    if animateur_ids:
+        found = await db.users.find_one({"id": animateur_ids[0]}, {"_id": 0, "name": 1})
+        if found:
+            animateur = found
+    student = {"name": insc.get("student_name", ""), "email": insc.get("student_email", "")}
+    pdf_bytes = generate_attestation_pdf(stage, formation, student, animateur, None, True, settings_doc)
+    fname = f"Attestation_{(insc.get('student_name') or 'candidat').replace(' ', '_')}.pdf"
+    try:
+        path = f"generated/attestations/{uuid.uuid4()}.pdf"
+        result = await put_object(path, pdf_bytes, "application/pdf")
+        await db.generated_docs.insert_one({
+            "id": str(uuid.uuid4()), "type_doc": "attestation", "nom_fichier": fname,
+            "storage_path": result["path"], "size": result["size"], "stage_id": stage["id"],
+            "inscription_id": insc["id"], "student_name": insc.get("student_name"),
+            "auto_generated": True, "created_at": now_iso(),
+        })
+    except Exception:
+        pass
+    body = (
+        f"<p>Bonjour {insc.get('student_name', '')},</p>"
+        f"<p>Félicitations pour avoir suivi la formation <b>{stage.get('formation_titre', '')}</b> "
+        f"du {stage.get('date_debut', '')} au {stage.get('date_fin', '')}.</p>"
+        "<p>Vous trouverez votre attestation de fin de formation en pièce jointe.</p>"
+        "<p>TDL Formation</p>"
+    )
+    await send_email(
+        insc["student_email"], f"🎓 Attestation de fin de formation — {stage.get('formation_titre', '')}", body,
+        attachment={"filename": fname, "content_b64": base64.b64encode(pdf_bytes).decode()},
+    )
+    await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"attestation_auto_sent_at": now_iso()}})
+    return True
+
+
 async def send_auto_attestations() -> int:
-    """Génère et envoie automatiquement l'attestation de fin de formation le
-    dernier jour de la session ou le lendemain (rattrapage si la boucle
-    tourne une fois par jour et a manqué le jour exact)."""
+    """Génère et envoie automatiquement l'attestation de fin de formation
+    24h après le dernier jour de la session — jamais le jour même (voir
+    incident du 18/09/2026 : des sessions VTC créées en masse par l'import
+    Excel, routers/vtc_import.py, avaient une date_fin provisoire/approximative
+    jamais corrigée ; l'envoi le jour J même laisse zéro marge pour repérer et
+    corriger une date fausse avant que l'attestation ne parte). La requête
+    Mongo ne fait qu'un premier filtrage large (jusqu'à 7 jours en arrière,
+    pour rattraper une boucle restée arrêtée quelques jours) ; la décision
+    précise par session utilise ensuite _hours_since_end (même règle,
+    exactement, que le déclenchement manuel — voir send_attestation_manual) :
+    cette boucle tournant en continu depuis le démarrage du serveur (pas à
+    heure fixe), un simple filtre par date pourrait sinon laisser passer un
+    envoi entre 0 et 24h après la vraie limite selon l'heure d'exécution."""
+    week_ago_iso = (_today() - timedelta(days=7)).isoformat()
     today_iso = _today().isoformat()
-    yesterday_iso = (_today() - timedelta(days=1)).isoformat()
     stages = await db.stages.find(
-        {"date_fin": {"$in": [today_iso, yesterday_iso]}, "statut": {"$ne": "annule"}}, {"_id": 0}
+        {"date_fin": {"$gte": week_ago_iso, "$lte": today_iso}, "statut": {"$ne": "annule"}}, {"_id": 0}
     ).to_list(200)
     count = 0
     settings_doc = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
     for stage in stages:
+        hours = _hours_since_end(stage)
+        if hours is None or hours < 24:
+            continue
         formation = await db.formations.find_one({"id": stage["formation_id"]}, {"_id": 0}) or {}
-        animateur_ids = list(stage.get("animateur_ids") or ([stage["animateur_id"]] if stage.get("animateur_id") else []))
-        animateur = {"name": "TDL Formation"}
-        if animateur_ids:
-            found = await db.users.find_one({"id": animateur_ids[0]}, {"_id": 0, "name": 1})
-            if found:
-                animateur = found
         inscriptions = await db.inscriptions.find(
             {"stage_id": stage["id"], "status": "active", "attestation_auto_sent_at": {"$exists": False}}, {"_id": 0}
         ).to_list(300)
         for insc in inscriptions:
             if not insc.get("student_email"):
                 continue
-            student = {"name": insc.get("student_name", ""), "email": insc.get("student_email", "")}
             try:
-                pdf_bytes = generate_attestation_pdf(stage, formation, student, animateur, None, True, settings_doc)
+                await _send_attestation_for_inscription(insc, stage, formation, settings_doc)
+                count += 1
             except Exception:
                 continue
-            fname = f"Attestation_{(insc.get('student_name') or 'candidat').replace(' ', '_')}.pdf"
-            try:
-                path = f"generated/attestations/{uuid.uuid4()}.pdf"
-                result = await put_object(path, pdf_bytes, "application/pdf")
-                await db.generated_docs.insert_one({
-                    "id": str(uuid.uuid4()), "type_doc": "attestation", "nom_fichier": fname,
-                    "storage_path": result["path"], "size": result["size"], "stage_id": stage["id"],
-                    "inscription_id": insc["id"], "student_name": insc.get("student_name"),
-                    "auto_generated": True, "created_at": now_iso(),
-                })
-            except Exception:
-                pass
-            body = (
-                f"<p>Bonjour {insc.get('student_name', '')},</p>"
-                f"<p>Félicitations pour avoir suivi la formation <b>{stage.get('formation_titre', '')}</b> "
-                f"du {stage.get('date_debut', '')} au {stage.get('date_fin', '')}.</p>"
-                "<p>Vous trouverez votre attestation de fin de formation en pièce jointe.</p>"
-                "<p>TDL Formation</p>"
-            )
-            await send_email(
-                insc["student_email"], f"🎓 Attestation de fin de formation — {stage.get('formation_titre', '')}", body,
-                attachment={"filename": fname, "content_b64": base64.b64encode(pdf_bytes).decode()},
-            )
-            await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"attestation_auto_sent_at": now_iso()}})
-            count += 1
     return count
+
+
+async def send_attestation_manual(inscription_id: str) -> dict:
+    """Déclenchement manuel, depuis la page Apprenants (voir
+    routers/inscriptions.py), avec la MÊME règle des 24h que l'envoi
+    automatique — appliquée ici côté serveur, jamais seulement côté écran :
+    un bouton désactivé dans le navigateur ne protège de rien si l'API
+    l'accepte quand même."""
+    insc = await db.inscriptions.find_one({"id": inscription_id}, {"_id": 0})
+    if not insc:
+        raise ValueError("Inscription introuvable")
+    if not insc.get("stage_id"):
+        raise ValueError("Aucune session assignée à cette inscription")
+    stage = await db.stages.find_one({"id": insc["stage_id"]}, {"_id": 0})
+    if not stage:
+        raise ValueError("Session introuvable")
+    hours = _hours_since_end(stage)
+    if hours is None:
+        raise ValueError("Date de fin de session absente ou invalide — à corriger avant l'envoi")
+    if hours < 24:
+        raise ValueError(
+            f"La session se termine le {stage.get('date_fin')} — l'attestation ne peut être envoyée que "
+            "24h après (le lendemain minuit)."
+        )
+    if not insc.get("student_email"):
+        raise ValueError("Aucun email connu pour cet apprenant")
+    formation = await db.formations.find_one({"id": stage["formation_id"]}, {"_id": 0}) or {}
+    settings_doc = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
+    await _send_attestation_for_inscription(insc, stage, formation, settings_doc)
+    return {"sent": True, "stage_titre": stage.get("formation_titre"), "date_fin": stage.get("date_fin")}
 
 
 def _survey_link(insc_id: str, survey_type: str) -> str:

@@ -21,6 +21,8 @@ from services.email_template import render_branded_email
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS, check_dossier_milestone
 from services.meta_capi import send_capi_event
 from services.password_reset import create_reset_token
+from services import identity_extraction
+from services.candidate_automation import _hours_since_end
 
 router = APIRouter(tags=["inscriptions"])
 
@@ -218,11 +220,23 @@ async def list_students(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))
     for d in dossiers:
         dossiers_by_student.setdefault(d["student_id"], []).append(d)
 
+    # Sessions liées aux dernières inscriptions — pour savoir, par apprenant,
+    # si sa session est terminée depuis 24h (bouton "Envoyer l'attestation"
+    # côté page Apprenants, voir send_attestation_manual ci-dessous).
+    stage_ids = {i[0]["stage_id"] for i in inscriptions_by_student.values() if i and i[0].get("stage_id")}
+    stages_by_id = {}
+    if stage_ids:
+        for st in await db.stages.find({"id": {"$in": list(stage_ids)}}, {"_id": 0, "id": 1, "date_fin": 1}).to_list(1000):
+            stages_by_id[st["id"]] = st
+
     result = []
     for s in students:
         my_inscriptions = inscriptions_by_student.get(s["id"], [])
         my_dossiers = dossiers_by_student.get(s["id"], [])
         latest_dossier = my_dossiers[0] if my_dossiers else None
+        latest_insc = my_inscriptions[0] if my_inscriptions else None
+        latest_stage = stages_by_id.get(latest_insc.get("stage_id")) if latest_insc else None
+        hours_since_end = _hours_since_end(latest_stage) if latest_stage else None
         result.append({
             **s,
             "inscriptions_count": len(my_inscriptions),
@@ -233,6 +247,14 @@ async def list_students(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))
             "dossier_id": latest_dossier["id"] if latest_dossier else None,
             "dossier_status": latest_dossier["status"] if latest_dossier else None,
             "last_inscription_at": my_inscriptions[0]["created_at"] if my_inscriptions else None,
+            "last_inscription_id": latest_insc["id"] if latest_insc else None,
+            "last_stage_date_fin": latest_stage.get("date_fin") if latest_stage else None,
+            "attestation_already_sent": bool(latest_insc and latest_insc.get("attestation_auto_sent_at")),
+            # 24h après la fin de la dernière session (voir incident du
+            # 18/09/2026, services/candidate_automation.py) — le bouton
+            # d'envoi manuel n'est activable côté écran que si True, et
+            # l'API refait la même vérification de toute façon.
+            "attestation_sendable": hours_since_end is not None and hours_since_end >= 24,
         })
     return result
 
@@ -316,6 +338,23 @@ async def bulk_notify_attestation(payload: BulkAttestationIn, user: dict = Depen
         except HTTPException as e:
             skipped.append({"dossier_id": dossier_id, "reason": e.detail})
     return {"notified": notified, "skipped": skipped}
+
+
+@router.post("/students/{inscription_id}/send-attestation")
+async def send_attestation_manual(inscription_id: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Envoi manuel de l'attestation de fin de formation (toutes formations,
+    pas seulement "récupération de points" — voir bulk_notify_attestation
+    ci-dessus pour ce cas-là, distinct). Bouton disponible depuis la page
+    Apprenants — voir services/candidate_automation.send_attestation_manual
+    pour la règle des 24h après la fin de session, appliquée ici aussi (le
+    bouton désactivé côté écran n'est qu'un confort, jamais la seule
+    protection)."""
+    from services.candidate_automation import send_attestation_manual as _send
+
+    try:
+        return await _send(inscription_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/students/bulk-attestations-zip")
@@ -600,6 +639,12 @@ async def get_dossier_full(did: str, user: dict = Depends(require_role(*ROLES_DO
     emails = await db.email_logs.find(
         {"to": d.get("student_email")}, {"_id": 0, "body": 0}
     ).sort("created_at", -1).to_list(30) if d.get("student_email") else []
+    # Champs d'identité (numéro de permis, dates d'état civil...) déjà connus
+    # sur le profil de l'apprenant — remplis par OCR au dépôt d'une pièce ou
+    # par une saisie humaine (voir services/identity_extraction.py). Exposés
+    # ici pour TOUT dossier, pas seulement ceux de l'attestation "récupération
+    # de points" (routers/stage_attestations.py, plus restrictif par nature).
+    identity = await identity_extraction.get_profile_defaults(d["student_id"]) if d.get("student_id") else {}
 
     return {
         "dossier": d,
@@ -610,6 +655,7 @@ async def get_dossier_full(did: str, user: dict = Depends(require_role(*ROLES_DO
         "emargements": emargements,
         "satisfaction": satisfaction,
         "emails": emails,
+        "identity": identity,
     }
 
 

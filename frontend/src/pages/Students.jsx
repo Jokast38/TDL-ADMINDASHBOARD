@@ -272,6 +272,26 @@ export default function Students() {
     }
   };
 
+  // Attestation de fin de formation (toutes formations — distinct de
+  // notifyAttestation ci-dessus, réservé à la catégorie "récupération de
+  // points"). Le bouton n'est disponible QUE si la dernière session est
+  // terminée depuis 24h (s.attestation_sendable, calculé côté serveur —
+  // voir GET /students dans routers/inscriptions.py) : après l'incident du
+  // 18/09/2026 où 21 apprenants VTC ont reçu leur attestation dès le début
+  // de leur session (date_fin provisoire jamais corrigée après l'import
+  // Excel), on ne réactive un envoi qu'avec cette garantie, vérifiée aussi
+  // côté API (jamais seulement ce bouton désactivé).
+  const sendAttestation = async (s) => {
+    if (!s.last_inscription_id) return;
+    try {
+      await api.post(`/students/${s.last_inscription_id}/send-attestation`);
+      toast.success("Attestation de fin de formation envoyée !");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
   const toggleChecked = (id) => setCheckedIds((prev) => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -516,6 +536,25 @@ export default function Students() {
                           data-testid={`notify-attestation-${s.id}`}
                         >
                           <Signature size={14} />
+                        </button>
+                      )}
+                      {s.last_inscription_id && (
+                        <button
+                          onClick={() => s.attestation_sendable && sendAttestation(s)}
+                          disabled={!s.attestation_sendable || s.attestation_already_sent}
+                          className="p-1.5 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                          title={
+                            s.attestation_already_sent
+                              ? "Attestation de fin de formation déjà envoyée"
+                              : s.attestation_sendable
+                                ? "Envoyer l'attestation de fin de formation"
+                                : s.last_stage_date_fin
+                                  ? `Disponible 24h après la fin de la session (${new Date(s.last_stage_date_fin).toLocaleDateString("fr-FR")})`
+                                  : "Aucune session assignée"
+                          }
+                          data-testid={`send-attestation-${s.id}`}
+                        >
+                          <GraduationCap size={14} />
                         </button>
                       )}
                       {s.email && (
