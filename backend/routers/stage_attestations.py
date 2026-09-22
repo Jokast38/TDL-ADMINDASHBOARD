@@ -15,6 +15,7 @@ from services.email import send_email
 from services.push import send_push_to_user
 from services.pdf import generate_stage_recup_points_attestation
 from services.staff_notify import notify_new_contact
+from services import identity_extraction
 from routers.stages import _stage_days, _stage_animateur_ids
 
 router = APIRouter(prefix="/dossiers", tags=["attestations"])
@@ -89,19 +90,25 @@ async def get_attestation_status(dossier_id: str, user: dict = Depends(get_curre
 
     eligible = dossier.get("category") == ATTESTATION_CATEGORY
     stage = await _find_completed_stage(dossier) if eligible else None
+    # Valeurs déjà connues sur le profil apprenant (issues d'une pièce
+    # déposée sur CE dossier ou un autre, ou d'une confirmation humaine
+    # antérieure — voir services/identity_extraction.py) : servent de repli
+    # si ce dossier-ci n'a pas encore ses propres champs "attestation_*", pour
+    # ne jamais faire resaisir une information déjà connue de l'apprenant.
+    profile_defaults = await identity_extraction.get_profile_defaults(dossier["student_id"]) if eligible else {}
     return {
         "eligible": eligible,
         "stage_completed": bool(stage),
         "disponible": bool(dossier.get("attestation_disponible")),
         "signed": bool(dossier.get("attestation_signed_at")),
         "identity": {
-            "adresse": dossier.get("attestation_adresse", ""),
-            "ville": dossier.get("attestation_ville", ""),
-            "date_naissance": dossier.get("attestation_date_naissance", ""),
-            "lieu_naissance": dossier.get("attestation_lieu_naissance", ""),
-            "numero_permis": dossier.get("attestation_numero_permis", ""),
-            "date_delivrance_permis": dossier.get("attestation_date_delivrance_permis", ""),
-            "prefecture_delivrance": dossier.get("attestation_prefecture_delivrance", ""),
+            "adresse": dossier.get("attestation_adresse") or profile_defaults.get("adresse", ""),
+            "ville": dossier.get("attestation_ville") or profile_defaults.get("ville", ""),
+            "date_naissance": dossier.get("attestation_date_naissance") or profile_defaults.get("date_naissance", ""),
+            "lieu_naissance": dossier.get("attestation_lieu_naissance") or profile_defaults.get("lieu_naissance", ""),
+            "numero_permis": dossier.get("attestation_numero_permis") or profile_defaults.get("numero_permis", ""),
+            "date_delivrance_permis": dossier.get("attestation_date_delivrance_permis") or profile_defaults.get("date_delivrance_permis", ""),
+            "prefecture_delivrance": dossier.get("attestation_prefecture_delivrance") or profile_defaults.get("prefecture_delivrance", ""),
         },
         "stage": {
             "date_debut": stage.get("date_debut"), "date_fin": stage.get("date_fin"),
@@ -126,6 +133,17 @@ async def save_attestation_identity(dossier_id: str, payload: AttestationIdentit
         "updated_at": now_iso(),
     }
     await db.dossiers.update_one({"id": dossier_id}, {"$set": update})
+    # Confirmation humaine explicite (l'apprenant vient de valider/corriger
+    # ce formulaire) : contrairement à un préremplissage OCR automatique, on
+    # écrase sans condition la valeur du profil — voir
+    # services/identity_extraction.py pour la différence entre les deux.
+    await identity_extraction.save_confirmed_fields(dossier["student_id"], {
+        "adresse": payload.adresse, "ville": payload.ville,
+        "date_naissance": payload.date_naissance, "lieu_naissance": payload.lieu_naissance,
+        "numero_permis": payload.numero_permis,
+        "date_delivrance_permis": payload.date_delivrance_permis,
+        "prefecture_delivrance": payload.prefecture_delivrance,
+    })
     return {"ok": True}
 
 

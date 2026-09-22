@@ -12,6 +12,7 @@ from core.config import APP_NAME, JWT_SECRET, JWT_ALGORITHM, ROLES_DOSSIERS_MGMT
 from services.email import send_email
 from services.push import send_push_to_user
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS
+from services import identity_extraction
 
 router = APIRouter(tags=["documents"])
 
@@ -52,6 +53,27 @@ async def upload_document(
         {"id": did},
         {"$push": {"documents": doc["id"]}, "$set": {"updated_at": now_iso()}}
     )
+
+    # Préremplit le profil de l'apprenant (numéro de permis, dates d'état
+    # civil...) à partir de cette pièce si elle s'y prête — qu'elle soit
+    # déposée par l'apprenant ou par un agent. N'écrase jamais une valeur
+    # déjà connue (voir services/identity_extraction.py) et n'échoue jamais
+    # l'upload : un souci d'OCR ne doit pas bloquer le dépôt du document.
+    ocr_result = await identity_extraction.extract_and_prefill_profile(
+        d["student_id"], doc_type, data, file.content_type or "", doc["id"]
+    )
+    legibility = ocr_result["legibility"]
+
+    # Pré-validation de lisibilité, apprenants uniquement : le staff sait
+    # déjà juger une pièce lui-même et peut avoir une bonne raison de
+    # déposer une photo imparfaite en attendant mieux. On AVERTIT sans
+    # jamais bloquer le dépôt — un faux négatif OCR (document en réalité
+    # correct) ne doit jamais empêcher quelqu'un de constituer son dossier
+    # d'admission. Le verdict est aussi gardé sur le document pour que le
+    # staff le voie en le vérifiant, même si l'apprenant a ignoré l'alerte.
+    if user["role"] == "etudiant" and legibility["checked"] and not legibility["likely_legible"]:
+        doc["legibility_warning"] = True
+        await db.documents.update_one({"id": doc["id"]}, {"$set": {"legibility_warning": True}})
 
     if user["role"] == "etudiant":
         # L'apprenant vient de déposer une pièce — l'équipe assignée à la

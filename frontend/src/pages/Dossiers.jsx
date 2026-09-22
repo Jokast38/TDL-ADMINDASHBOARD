@@ -348,7 +348,17 @@ export default function Dossiers() {
                       <div className="flex items-center gap-3 min-w-0">
                         <FolderOpen size={18} className="text-gray-500 flex-shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{d.original_filename}</p>
+                          <p className="text-sm font-medium truncate flex items-center gap-1.5">
+                            {d.original_filename}
+                            {d.legibility_warning && (
+                              <Warning
+                                size={14}
+                                weight="fill"
+                                className="text-amber-500 flex-shrink-0"
+                                title="Analyse automatique : cette pièce semble difficile à lire (flou, mal cadrée...) — à vérifier avant validation."
+                              />
+                            )}
+                          </p>
                           <p className="text-xs text-gray-500">{d.doc_type} · {(d.size / 1024).toFixed(0)} KB</p>
                         </div>
                       </div>

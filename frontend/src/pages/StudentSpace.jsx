@@ -568,10 +568,18 @@ export default function StudentSpace() {
     fd.append("file", file);
     fd.append("doc_type", docType || "autre");
     try {
-      await api.post(`/dossiers/${dossierId}/documents`, fd, {
+      const { data: uploaded } = await api.post(`/dossiers/${dossierId}/documents`, fd, {
         headers: { "Content-Type": "multipart/form-data" }
       });
-      toast.success("Document envoyé !");
+      // Le document est TOUJOURS accepté — cette alerte n'est qu'un avertissement
+      // (l'analyse automatique n'y a pas retrouvé grand-chose de lisible), jamais
+      // un blocage : un document illisible à tort ne doit pas empêcher un dossier
+      // d'admission d'avancer. Voir routers/documents.py (legibility_warning).
+      if (uploaded?.legibility_warning) {
+        toast.warning("Document envoyé, mais il semble difficile à lire (flou, mal cadré...). Vous pouvez le redéposer si vous en avez une meilleure version.", { duration: 8000 });
+      } else {
+        toast.success("Document envoyé !");
+      }
       loadDocs(dossierId);
       fetchDossiers(); // recalcule le compteur de documents manquants et le statut affiché à l'Accueil
     } catch (e) {

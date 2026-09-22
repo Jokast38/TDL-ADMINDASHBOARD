@@ -73,6 +73,9 @@ const Mailbox = lazy(() => import("@/pages/Mailbox"));
 const Leads = lazy(() => import("@/pages/Leads"));
 const HelpCenter = lazy(() => import("@/pages/HelpCenter"));
 const Documentation = lazy(() => import("@/pages/Documentation"));
+// Page de test, temporaire — voir OcrTest.jsx. À retirer une fois le choix
+// du moteur OCR tranché (garder ou enlever cette route selon la décision).
+const OcrTest = lazy(() => import("@/pages/OcrTest"));
 const PolitiqueConfidentialite = lazy(() => import("@/pages/PolitiqueConfidentialite"));
 
 import Layout, { navAll } from "@/components/Layout";
@@ -263,6 +266,9 @@ function App() {
             } />
             <Route path="/admin/documentation" element={
               <ProtectedRoute roles={["admin"]}><AdminLayout><Documentation /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/ocr-test" element={
+              <ProtectedRoute roles={["admin"]}><AdminLayout><OcrTest /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/marketing" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Marketing /></AdminLayout></ProtectedRoute>
