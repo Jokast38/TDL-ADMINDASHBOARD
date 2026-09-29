@@ -710,6 +710,8 @@ function MetaEventsTab() {
   );
 }
 
+const BACKLINKS_PAGE_SIZE = 25;
+
 function BacklinksTab() {
   const [items, setItems] = useState([]);
   const [statusOptions, setStatusOptions] = useState({});
@@ -723,6 +725,7 @@ function BacklinksTab() {
   const [formationFilter, setFormationFilter] = useState("");
   const [importing, setImporting] = useState(false);
   const [requestFor, setRequestFor] = useState(null);
+  const [page, setPage] = useState(1);
 
   const load = () => {
     setLoading(true);
@@ -742,6 +745,9 @@ function BacklinksTab() {
       .finally(() => setLoading(false));
   };
   useEffect(load, [search, statusFilter, categoryFilter, linkTypeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Retour en page 1 à chaque changement de filtre — sinon on peut se
+  // retrouver sur une page qui n'existe plus pour le nouveau résultat filtré.
+  useEffect(() => { setPage(1); }, [search, statusFilter, categoryFilter, linkTypeFilter, formationFilter]);
 
   // Filtre par formation ciblée : calculé côté client à partir de la catégorie/
   // niche du site (voir suggestFormationKey), pas une colonne en base — pas
@@ -756,6 +762,8 @@ function BacklinksTab() {
         return key === formationFilter || key === "GENERALISTE";
       })
     : items;
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / BACKLINKS_PAGE_SIZE));
+  const pagedItems = filteredItems.slice((page - 1) * BACKLINKS_PAGE_SIZE, page * BACKLINKS_PAGE_SIZE);
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
@@ -871,7 +879,7 @@ function BacklinksTab() {
                   {items.length ? "Aucun backlink pour ce filtre." : "Aucun backlink — importez votre liste Excel pour commencer."}
                 </td></tr>
               )}
-              {filteredItems.map((b) => (
+              {pagedItems.map((b) => (
                 <tr key={b.id} className="border-b border-gray-100 align-top">
                   <td className="py-2.5 px-4 max-w-[220px]">
                     <p className="font-medium truncate">{b.site_name}</p>
@@ -928,6 +936,31 @@ function BacklinksTab() {
           </table>
         </div>
       </Card>
+
+      {filteredItems.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-gray-500">
+          <p>
+            {(page - 1) * BACKLINKS_PAGE_SIZE + 1}–{Math.min(page * BACKLINKS_PAGE_SIZE, filteredItems.length)} sur {filteredItems.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline" size="sm" disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              data-testid="backlinks-prev-page"
+            >
+              Précédent
+            </Button>
+            <span className="text-xs">Page {page} / {totalPages}</span>
+            <Button
+              variant="outline" size="sm" disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              data-testid="backlinks-next-page"
+            >
+              Suivant
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Dialog open={!!requestFor} onOpenChange={(open) => !open && setRequestFor(null)}>
         <DialogContent className="max-w-lg">
