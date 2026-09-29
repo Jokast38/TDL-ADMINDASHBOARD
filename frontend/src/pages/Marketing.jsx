@@ -726,6 +726,8 @@ function BacklinksTab() {
   const [importing, setImporting] = useState(false);
   const [requestFor, setRequestFor] = useState(null);
   const [page, setPage] = useState(1);
+  const [emailSearch, setEmailSearch] = useState({ running: false, total: 0, done: 0, found: 0 });
+  const [findingEmailFor, setFindingEmailFor] = useState(null); // id du backlink en recherche ponctuelle
 
   const load = () => {
     setLoading(true);
@@ -745,6 +747,10 @@ function BacklinksTab() {
       .finally(() => setLoading(false));
   };
   useEffect(load, [search, statusFilter, categoryFilter, linkTypeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Une recherche par lot peut avoir été lancée par quelqu'un d'autre (ou par
+  // vous, sur un précédent chargement de la page) — on reprend son suivi
+  // plutôt que de la perdre de vue.
+  useEffect(() => { api.get("/backlinks/find-emails/status").then(({ data }) => setEmailSearch(data)).catch(() => {}); }, []);
   // Retour en page 1 à chaque changement de filtre — sinon on peut se
   // retrouver sur une page qui n'existe plus pour le nouveau résultat filtré.
   useEffect(() => { setPage(1); }, [search, statusFilter, categoryFilter, linkTypeFilter, formationFilter]);
@@ -797,6 +803,50 @@ function BacklinksTab() {
     setRequestFor(null);
   };
 
+  // Recherche d'emails en masse — tourne en tâche de fond côté serveur
+  // (des centaines de sites à visiter), on interroge périodiquement son
+  // statut pendant qu'elle tourne, jusqu'à ce qu'elle se termine.
+  useEffect(() => {
+    if (!emailSearch.running) return;
+    const t = setInterval(async () => {
+      try {
+        const { data } = await api.get("/backlinks/find-emails/status");
+        setEmailSearch(data);
+        if (!data.running) load(); // rafraîchit la liste pour voir les emails trouvés
+      } catch {
+        // ignore une erreur de polling isolée, réessaie au prochain tick
+      }
+    }, 3000);
+    return () => clearInterval(t);
+  }, [emailSearch.running]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startEmailSearch = async () => {
+    try {
+      const { data } = await api.post("/backlinks/find-emails");
+      if (!data.started) {
+        toast.info(data.reason || "Rien à chercher");
+        return;
+      }
+      setEmailSearch({ running: true, total: data.total, done: 0, found: 0 });
+      toast.success(`Recherche lancée sur ${data.total} site(s) — ça tourne en fond, vous pouvez continuer à travailler.`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur au lancement");
+    }
+  };
+
+  const findEmailForOne = async (b) => {
+    setFindingEmailFor(b.id);
+    try {
+      const { data } = await api.post(`/backlinks/${b.id}/find-email`);
+      setItems((prev) => prev.map((x) => (x.id === data.id ? data : x)));
+      toast.success(`Email trouvé : ${data.contact_email}`);
+    } catch (err) {
+      toast.error(err.response?.status === 404 ? "Aucun email trouvé sur ce site" : (err.response?.data?.detail || "Erreur"));
+    } finally {
+      setFindingEmailFor(null);
+    }
+  };
+
   return (
     <div className="space-y-4 mt-2">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -811,10 +861,19 @@ function BacklinksTab() {
             email — le statut de chaque démarche est suivi ici.
           </p>
         </div>
-        <label className="inline-flex items-center gap-2 text-sm cursor-pointer px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 shrink-0">
-          <UploadSimple size={14} /> {importing ? "Import..." : "Importer / actualiser la liste (Excel)"}
-          <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} disabled={importing} data-testid="backlinks-import-input" />
-        </label>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline" size="sm" onClick={startEmailSearch} disabled={emailSearch.running}
+            data-testid="backlinks-find-emails-btn"
+          >
+            <MagnifyingGlass size={14} className="mr-1" />
+            {emailSearch.running ? `Recherche en cours (${emailSearch.done}/${emailSearch.total}, ${emailSearch.found} trouvé${emailSearch.found > 1 ? "s" : ""})` : "Chercher les emails manquants"}
+          </Button>
+          <label className="inline-flex items-center gap-2 text-sm cursor-pointer px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
+            <UploadSimple size={14} /> {importing ? "Import..." : "Importer / actualiser la liste (Excel)"}
+            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} disabled={importing} data-testid="backlinks-import-input" />
+          </label>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
@@ -926,9 +985,20 @@ function BacklinksTab() {
                     {b.last_request?.price != null ? `${b.last_request.price} €` : "—"}
                   </td>
                   <td className="py-2.5 px-4 text-right">
-                    <Button size="sm" variant="outline" onClick={() => setRequestFor({ ...b, _filterHint: formationFilter })} data-testid={`backlink-request-btn-${b.id}`}>
-                      <EnvelopeSimple size={13} className="mr-1" /> {b.request_count > 0 ? "Relancer" : "Demander"}
-                    </Button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      {!b.contact_email && (
+                        <Button
+                          size="sm" variant="ghost" onClick={() => findEmailForOne(b)}
+                          disabled={findingEmailFor === b.id} title="Chercher l'email de contact de ce site"
+                          data-testid={`backlink-find-email-btn-${b.id}`}
+                        >
+                          <MagnifyingGlass size={13} className={findingEmailFor === b.id ? "animate-pulse" : ""} />
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => setRequestFor({ ...b, _filterHint: formationFilter })} data-testid={`backlink-request-btn-${b.id}`}>
+                        <EnvelopeSimple size={13} className="mr-1" /> {b.request_count > 0 ? "Relancer" : "Demander"}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

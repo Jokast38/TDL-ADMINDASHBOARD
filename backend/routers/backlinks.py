@@ -1,7 +1,10 @@
+import asyncio
 import io
+import logging
 import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+import httpx
 import openpyxl
 
 from core.database import db
@@ -11,8 +14,17 @@ from core.utils import now_iso
 from models.backlink import BacklinkUpdate, BacklinkRequestIn
 from services.email import send_email
 from services.email_template import render_branded_email
+from services.backlink_email_finder import find_email
 
 router = APIRouter(prefix="/backlinks", tags=["backlinks"])
+log = logging.getLogger(__name__)
+
+# État de la recherche d'emails par lot — en mémoire (process unique, comme
+# le reste des boucles de fond de ce projet, voir server.py). Le bouton
+# "Chercher les emails manquants" lance une tâche de fond (des centaines de
+# sites externes à visiter, largement plus long qu'un aller-retour HTTP) et
+# le front vient interroger /find-emails/status pour suivre la progression.
+_email_search_state = {"running": False, "total": 0, "done": 0, "found": 0}
 
 STATUS_LABELS = {
     "a_contacter": "À contacter",
@@ -138,6 +150,83 @@ async def import_backlinks_excel(
             imported += 1
 
     return {"ok": True, "imported": imported, "updated": updated}
+
+
+async def _run_email_search():
+    """Tâche de fond : cherche un email pour chaque backlink qui n'en a pas,
+    en visitant son site. Ne touche que `contact_email` — jamais le statut
+    ni le compteur de demandes. Best-effort : une erreur sur un site ne
+    bloque jamais les suivants."""
+    docs = await db.backlinks.find(
+        {"$or": [{"contact_email": None}, {"contact_email": ""}]},
+        {"_id": 0, "id": 1, "site_name": 1},
+    ).to_list(5000)
+    _email_search_state.update({"total": len(docs), "done": 0, "found": 0})
+    try:
+        async with httpx.AsyncClient() as client:
+            semaphore = asyncio.Semaphore(5)
+
+            async def handle(doc):
+                async with semaphore:
+                    try:
+                        email = await find_email(client, doc["site_name"])
+                    except Exception as e:
+                        log.warning(f"Recherche email backlink {doc['site_name']} : {e}")
+                        email = None
+                    if email:
+                        await db.backlinks.update_one(
+                            {"id": doc["id"]},
+                            {"$set": {"contact_email": email, "updated_at": now_iso()}},
+                        )
+                        _email_search_state["found"] += 1
+                    _email_search_state["done"] += 1
+
+            await asyncio.gather(*(handle(d) for d in docs))
+    finally:
+        _email_search_state["running"] = False
+
+
+@router.post("/find-emails")
+async def start_email_search(user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Lance en tâche de fond la recherche d'email pour tous les backlinks
+    qui n'en ont pas encore (voir services/backlink_email_finder.py) — les
+    demandes elles-mêmes restent un envoi manuel via /{backlink_id}/request,
+    ceci ne fait que préremplir le champ contact_email."""
+    if _email_search_state["running"]:
+        raise HTTPException(status_code=409, detail="Une recherche est déjà en cours")
+    to_search = await db.backlinks.count_documents({"$or": [{"contact_email": None}, {"contact_email": ""}]})
+    if not to_search:
+        return {"started": False, "reason": "Tous les backlinks ont déjà un email"}
+    # Verrou posé ici, avant de lancer la tâche — pas dans _run_email_search,
+    # qui ne s'exécute pas immédiatement (create_task se contente de la
+    # planifier) : un second clic pouvait sinon passer ce garde-fou avant que
+    # la première tâche n'ait eu la main pour se marquer "en cours" (observé
+    # en test : deux lancements de suite acceptés tous les deux).
+    _email_search_state["running"] = True
+    asyncio.create_task(_run_email_search())
+    return {"started": True, "total": to_search}
+
+
+@router.get("/find-emails/status")
+async def email_search_status(user: dict = Depends(require_role(*ROLES_LEADS))):
+    return dict(_email_search_state)
+
+
+@router.post("/{backlink_id}/find-email")
+async def find_email_for_one(backlink_id: str, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Recherche ponctuelle pour un seul site (bouton par ligne) — synchrone,
+    contrairement à la recherche par lot ci-dessus : un seul site se visite
+    en quelques secondes."""
+    doc = await db.backlinks.find_one({"id": backlink_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Backlink introuvable")
+    async with httpx.AsyncClient() as client:
+        email = await find_email(client, doc["site_name"])
+    if not email:
+        raise HTTPException(status_code=404, detail="Aucun email trouvé sur ce site")
+    await db.backlinks.update_one({"id": backlink_id}, {"$set": {"contact_email": email, "updated_at": now_iso()}})
+    doc = await db.backlinks.find_one({"id": backlink_id})
+    return _serialize(doc)
 
 
 @router.patch("/{backlink_id}")
