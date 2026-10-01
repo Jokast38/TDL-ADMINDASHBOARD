@@ -387,7 +387,7 @@ export default function AnimateurSpace() {
           </h1>
           <p className="text-gray-500 mt-2">Bienvenue {user?.name}. {stages.length} session(s) attribuée(s).</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant={tab === "sessions" ? "default" : "outline"} size="sm" onClick={() => setTab("sessions")} className={tab === "sessions" ? "bg-[#0a0a0a] text-white" : ""}>
             <Calendar size={14} className="mr-1" /> Sessions
           </Button>

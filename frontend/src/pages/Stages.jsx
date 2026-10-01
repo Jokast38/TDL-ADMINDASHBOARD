@@ -275,7 +275,7 @@ export default function Stages() {
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Sessions de stage</h1>
           <p className="text-gray-500 mt-2">{items.length} session(s) planifiée(s).</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <label className="inline-block">
             <input type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} data-testid="stages-import-excel" />
             <Button variant="outline" disabled={importing} className="cursor-pointer" title="Importe les sessions VTC/Taxi/Passerelle depuis un fichier Excel (1 onglet par mois)">

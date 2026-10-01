@@ -476,7 +476,7 @@ export default function DocumentsLibrary() {
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Documents générés</h1>
           <p className="text-gray-500 mt-2">{items.length} PDF — attestations signées, factures, devis, conventions.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
         <Dialog open={sigOpen} onOpenChange={setSigOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" data-testid="my-signature-btn">

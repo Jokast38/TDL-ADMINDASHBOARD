@@ -1802,7 +1802,7 @@ function PhoneAgentCard({ status, onToggle }) {
           ))}
         </div>
       )}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Dialog open={campaignOpen} onOpenChange={setCampaignOpen}>
           <DialogTrigger asChild>
             <Button size="sm" disabled={!configured || !enabled} className="bg-[#0a0a0a] text-white">

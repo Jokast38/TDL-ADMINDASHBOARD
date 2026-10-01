@@ -103,7 +103,7 @@ export default function Mailbox() {
           <p className="overline">Messagerie</p>
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">contact@tdl-formation.fr</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setSignatureOpen(true)} data-testid="mailbox-signature-btn">
             <PencilSimple size={16} className="mr-1" /> Ma signature
           </Button>

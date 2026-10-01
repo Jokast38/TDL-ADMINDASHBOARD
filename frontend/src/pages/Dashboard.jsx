@@ -950,33 +950,35 @@ export default function Dashboard() {
               Voir tout <ArrowUpRight size={14} />
             </Link>
           </div>
-          <table className="w-full text-sm">
-            <thead className="text-left border-b border-gray-200">
-              <tr>
-                <th className="py-2 overline">Étudiant</th>
-                <th className="py-2 overline">Formation</th>
-                <th className="py-2 overline text-right">Prix</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(stats?.recent_inscriptions || []).map(i => (
-                <tr key={i.id} className="border-b border-gray-100">
-                  <td className="py-3">
-                    <p className="font-medium">{i.student_name}</p>
-                    <p className="text-xs text-gray-500">{i.student_email}</p>
-                  </td>
-                  <td className="py-3">
-                    <p>{i.formation_title}</p>
-                    <Badge variant="outline" className="text-xs">{i.category}</Badge>
-                  </td>
-                  <td className="py-3 text-right font-mono">{fmtMoney(i.price)}</td>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left border-b border-gray-200">
+                <tr>
+                  <th className="py-2 overline">Étudiant</th>
+                  <th className="py-2 overline">Formation</th>
+                  <th className="py-2 overline text-right">Prix</th>
                 </tr>
-              ))}
-              {!stats?.recent_inscriptions?.length && (
-                <tr><td colSpan="3" className="py-6 text-center text-gray-400">Aucune inscription récente.</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(stats?.recent_inscriptions || []).map(i => (
+                  <tr key={i.id} className="border-b border-gray-100">
+                    <td className="py-3">
+                      <p className="font-medium">{i.student_name}</p>
+                      <p className="text-xs text-gray-500">{i.student_email}</p>
+                    </td>
+                    <td className="py-3">
+                      <p>{i.formation_title}</p>
+                      <Badge variant="outline" className="text-xs">{i.category}</Badge>
+                    </td>
+                    <td className="py-3 text-right font-mono">{fmtMoney(i.price)}</td>
+                  </tr>
+                ))}
+                {!stats?.recent_inscriptions?.length && (
+                  <tr><td colSpan="3" className="py-6 text-center text-gray-400">Aucune inscription récente.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
 
         <Card className="p-6 border border-gray-200 rounded-md shadow-none" data-testid="integrations-card">
@@ -1024,7 +1026,7 @@ function WpSiteBlock({ data, label, showGA, showJetpack }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatMini label="Articles publiés" value={data.content?.total_published_posts ?? 0} />
         <StatMini label="Pages"             value={data.content?.total_pages ?? 0} />
         <StatMini label="Médias"            value={data.content?.total_media ?? 0} />

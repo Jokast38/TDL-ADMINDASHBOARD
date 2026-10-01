@@ -129,7 +129,7 @@ export default function Appointments() {
       <Card className="p-5 border border-gray-200 rounded-md shadow-none">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h2 className="font-display font-bold flex items-center gap-2"><Clock size={18} /> Créneaux</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={filterType} onValueChange={setFilterType}>
               <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
               <SelectContent>{TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
