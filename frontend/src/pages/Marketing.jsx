@@ -77,6 +77,7 @@ export default function Marketing() {
           <TabsTrigger value="landing" data-testid="tab-landing"><Browser size={14} className="mr-1" /> Landing pages</TabsTrigger>
           <TabsTrigger value="backlinks" data-testid="tab-backlinks"><LinkSimple size={14} className="mr-1" /> Backlinks</TabsTrigger>
           <TabsTrigger value="meta-events" data-testid="tab-meta-events"><Megaphone size={14} className="mr-1" /> Prospects Meta</TabsTrigger>
+          <TabsTrigger value="cosmosia" data-testid="tab-cosmosia"><UploadSimple size={14} className="mr-1" /> Prospects Cosmosia</TabsTrigger>
           {canSeeAgentsTab && (
             <TabsTrigger value="agents" data-testid="tab-agents"><Robot size={14} className="mr-1" /> Agents IA</TabsTrigger>
           )}
@@ -125,6 +126,10 @@ export default function Marketing() {
 
         <TabsContent value="meta-events">
           <MetaEventsTab />
+        </TabsContent>
+
+        <TabsContent value="cosmosia">
+          <CosmosiaTab />
         </TabsContent>
 
         {canSeeAgentsTab && (
@@ -604,6 +609,7 @@ const META_LEAD_QUALIF_COLORS = {
   a_contacter: "bg-gray-100 text-gray-600 hover:bg-gray-100",
   interesse: "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10",
   pas_de_reponse: "bg-amber-100 text-amber-700 hover:bg-amber-100",
+  injoignable: "bg-gray-200 text-gray-700 hover:bg-gray-200",
   a_relancer: "bg-blue-100 text-blue-700 hover:bg-blue-100",
   plus_interesse: "bg-red-100 text-red-700 hover:bg-red-100",
   inscrit: "bg-[#d4af37]/20 text-[#8a6d00] hover:bg-[#d4af37]/20",
@@ -616,14 +622,184 @@ const META_LEADS_PAGE_SIZE = 25;
 // d'une liste séparée de Prospects). On qualifie chaque lead, puis on
 // l'inscrit à une session choisie à la main — ce qui crée l'inscription
 // tout de suite et prévient le prospect par email de la session retenue.
+const COSMOSIA_PAGE_SIZE = 25;
+
+function CosmosiaTab() {
+  const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [campaignFilter, setCampaignFilter] = useState("");
+  const [campaignOptions, setCampaignOptions] = useState([]);
+  const [qualifOptions, setQualifOptions] = useState({});
+  const [page, setPage] = useState(1);
+  const [importing, setImporting] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    const params = { source: "cosmosia", page, page_size: COSMOSIA_PAGE_SIZE };
+    if (search.trim()) params.q = search.trim();
+    if (campaignFilter) params.campaign = campaignFilter;
+    api.get("/leads", { params })
+      .then(({ data }) => { setItems(data.items); setTotal(data.total); })
+      .catch(() => toast.error("Erreur de chargement des leads Cosmosia"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, [search, campaignFilter, page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(1); }, [search, campaignFilter]);
+  useEffect(() => {
+    api.get("/leads/campaigns", { params: { source: "cosmosia" } }).then(({ data }) => setCampaignOptions(data)).catch(() => {});
+    // Mêmes libellés de qualification que l'onglet Meta, pour rester cohérent
+    // entre les deux tableaux de prospects publicitaires.
+    api.get("/meta-lead-import/qualification-options").then(({ data }) => setQualifOptions(data)).catch(() => {});
+  }, []);
+
+  const totalPages = Math.max(1, Math.ceil(total / COSMOSIA_PAGE_SIZE));
+
+  const pickImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await api.post("/cosmosia/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success(
+        `${data.inserted} nouveau(x) prospect(s)` +
+        (data.skipped_duplicates ? ` · ${data.skipped_duplicates} déjà dans Prospects (ignoré)` : "") +
+        (data.skipped_duplicate_meta_lead ? ` · ${data.skipped_duplicate_meta_lead} déjà dans Prospects Meta (ignoré)` : "")
+      );
+      setPage(1);
+      load();
+      api.get("/leads/campaigns", { params: { source: "cosmosia" } }).then(({ data }) => setCampaignOptions(data)).catch(() => {});
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur lors de l'import");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const updateQualification = async (id, qualification) => {
+    try {
+      const { data } = await api.put(`/leads/${id}`, { qualification });
+      setItems((prev) => prev.map((l) => (l.id === data.id ? data : l)));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur");
+    }
+  };
+
+  if (loading && !items.length) {
+    return <p className="text-sm text-gray-400 py-8 text-center">Chargement...</p>;
+  }
+
+  return (
+    <div className="space-y-4 mt-2">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <UploadSimple size={16} className="text-[#d4af37]" />
+            <p className="overline">Partenaire Cosmosia</p>
+          </div>
+          <h2 className="font-display text-2xl font-bold -mt-1">Prospects Cosmosia</h2>
+          <p className="text-sm text-gray-500 max-w-2xl mt-1">
+            Exportez les opportunités depuis votre espace Cosmosia (tunnel de vente GoFunnel) en CSV et
+            importez-les ici — elles rejoignent directement Prospects et la file d'appel de l'espace commercial,
+            doublons automatiquement écartés.
+          </p>
+        </div>
+        <label className="inline-flex items-center gap-2 text-sm cursor-pointer px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 shrink-0">
+          <UploadSimple size={14} /> {importing ? "Import..." : "Importer un export CSV"}
+          <input type="file" accept=".csv" className="hidden" onChange={pickImportFile} disabled={importing} data-testid="cosmosia-import-input" />
+        </label>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <Input
+          value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher un nom, un email, un téléphone..." className="max-w-xs"
+          data-testid="cosmosia-search"
+        />
+        <Select value={campaignFilter || "all"} onValueChange={(v) => setCampaignFilter(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-56" data-testid="cosmosia-campaign-filter"><SelectValue placeholder="Toutes les campagnes" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les campagnes</SelectItem>
+            {campaignOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" data-testid="cosmosia-table">
+            <thead className="bg-gray-50 text-left border-y border-gray-200">
+              <tr>
+                <th className="py-2.5 px-4 overline">Prospect</th>
+                <th className="py-2.5 px-4 overline">Campagne</th>
+                <th className="py-2.5 px-4 overline">Intérêt</th>
+                <th className="py-2.5 px-4 overline">Qualification</th>
+                <th className="py-2.5 px-4 overline">Importé le</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!items.length && (
+                <tr><td colSpan="5" className="py-10 text-center text-gray-400">
+                  {total ? "Aucun lead pour ce filtre." : "Aucun lead Cosmosia importé — utilisez le bouton ci-dessus."}
+                </td></tr>
+              )}
+              {items.map((l) => (
+                <tr key={l.id} className="border-b border-gray-100 align-top">
+                  <td className="py-2.5 px-4 max-w-[200px]">
+                    <p className="font-medium truncate">{l.name || "—"}</p>
+                    {l.email && <p className="text-xs text-gray-500 truncate">{l.email}</p>}
+                    {l.phone && <p className="text-xs text-gray-400 truncate">{l.phone}</p>}
+                  </td>
+                  <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[160px] truncate">{l.campaign || "—"}</td>
+                  <td className="py-2.5 px-4 text-xs text-gray-600">{l.interest || "—"}</td>
+                  <td className="py-2.5 px-4">
+                    <Select value={l.qualification || "a_contacter"} onValueChange={(v) => updateQualification(l.id, v)}>
+                      <SelectTrigger className={`h-7 text-xs border-0 ${META_LEAD_QUALIF_COLORS[l.qualification] || "bg-gray-100"}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(qualifOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
+                    {l.created_at ? new Date(l.created_at).toLocaleDateString("fr-FR") : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {total > 0 && (
+        <div className="flex items-center justify-between text-sm text-gray-500">
+          <p>{(page - 1) * COSMOSIA_PAGE_SIZE + 1}–{Math.min(page * COSMOSIA_PAGE_SIZE, total)} sur {total}</p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} data-testid="cosmosia-prev-page">Précédent</Button>
+            <span className="text-xs">Page {page} / {totalPages}</span>
+            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} data-testid="cosmosia-next-page">Suivant</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MetaEventsTab() {
   const [items, setItems] = useState([]);
   const [qualifOptions, setQualifOptions] = useState({});
   const [accountOptions, setAccountOptions] = useState([]);
+  const [campaignOptions, setCampaignOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [qualifFilter, setQualifFilter] = useState("");
   const [accountFilter, setAccountFilter] = useState("");
+  const [campaignFilter, setCampaignFilter] = useState("");
   const [page, setPage] = useState(1);
   const [importing, setImporting] = useState(false);
   const [importAccount, setImportAccount] = useState("");
@@ -636,17 +812,19 @@ function MetaEventsTab() {
     if (search.trim()) params.search = search.trim();
     if (qualifFilter) params.qualification = qualifFilter;
     if (accountFilter) params.meta_account = accountFilter;
+    if (campaignFilter) params.campaign_name = campaignFilter;
     api.get("/meta-lead-import", { params })
       .then(({ data }) => {
         setItems(data.items);
         setQualifOptions(data.qualification_options);
         setAccountOptions(data.account_options || []);
+        setCampaignOptions(data.campaign_options || []);
       })
       .catch(() => toast.error("Erreur de chargement des leads Meta"))
       .finally(() => setLoading(false));
   };
-  useEffect(load, [search, qualifFilter, accountFilter]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setPage(1); }, [search, qualifFilter, accountFilter]);
+  useEffect(load, [search, qualifFilter, accountFilter, campaignFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(1); }, [search, qualifFilter, accountFilter, campaignFilter]);
 
   const totalPages = Math.max(1, Math.ceil(items.length / META_LEADS_PAGE_SIZE));
   const pagedItems = items.slice((page - 1) * META_LEADS_PAGE_SIZE, page * META_LEADS_PAGE_SIZE);
@@ -760,6 +938,13 @@ function MetaEventsTab() {
           <SelectContent>
             <SelectItem value="all">Tous les comptes Meta</SelectItem>
             {accountOptions.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={campaignFilter || "all"} onValueChange={(v) => setCampaignFilter(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-56" data-testid="meta-leads-campaign-filter"><SelectValue placeholder="Toutes les campagnes" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les campagnes</SelectItem>
+            {campaignOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
       </div>
@@ -976,8 +1161,15 @@ function BacklinksTab() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const { data } = await api.post("/backlinks/import-excel", fd, { headers: { "Content-Type": "multipart/form-data" } });
-      toast.success(`Import terminé — ${data.imported} nouveau(x), ${data.updated} mis à jour`);
+      const isCsv = file.name.toLowerCase().endsWith(".csv");
+      const { data } = await api.post(
+        isCsv ? "/backlinks/import-csv" : "/backlinks/import-excel",
+        fd, { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      toast.success(
+        `Import terminé — ${data.imported} nouveau(x), ${data.updated} mis à jour` +
+        (data.skipped ? ` · ${data.skipped} ligne(s) ignorée(s) (sans lien ni domaine)` : "")
+      );
       load();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erreur lors de l'import");
@@ -1067,8 +1259,8 @@ function BacklinksTab() {
             {emailSearch.running ? `Recherche en cours (${emailSearch.done}/${emailSearch.total}, ${emailSearch.found} trouvé${emailSearch.found > 1 ? "s" : ""})` : "Chercher les emails manquants"}
           </Button>
           <label className="inline-flex items-center gap-2 text-sm cursor-pointer px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
-            <UploadSimple size={14} /> {importing ? "Import..." : "Importer / actualiser la liste (Excel)"}
-            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImport} disabled={importing} data-testid="backlinks-import-input" />
+            <UploadSimple size={14} /> {importing ? "Import..." : "Importer / actualiser la liste (Excel ou CSV)"}
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImport} disabled={importing} data-testid="backlinks-import-input" />
           </label>
         </div>
       </div>
@@ -1143,10 +1335,12 @@ function BacklinksTab() {
                       {b.url}
                     </a>
                     {b.contact_email && <p className="text-[11px] text-gray-400 mt-0.5 truncate">{b.contact_email}</p>}
+                    {b.competitor && <p className="text-[11px] text-gray-400 mt-0.5 truncate">Lien du concurrent : {b.competitor}</p>}
                   </td>
-                  <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[160px]">
+                  <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[200px]">
                     <p>{b.category}</p>
                     <p className="text-gray-400 truncate">{b.niche}</p>
+                    {b.notes && <p className="text-gray-400 text-[11px] mt-1 line-clamp-2">{b.notes}</p>}
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[160px]">{b.link_type}</td>
                   <td className="py-2.5 px-4 max-w-[200px]">

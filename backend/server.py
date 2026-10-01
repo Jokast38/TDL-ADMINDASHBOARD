@@ -23,6 +23,7 @@ from routers import (
     company_documents, positioning_tests, backlinks, docs, places,
     exams, appointments, stage_attestations, modules, satisfaction, french_tests,
     mailbox, meta_leads, flash_offer, ocr_test, meta_lead_import,
+    call_center, cosmosia_import,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import (
@@ -101,6 +102,8 @@ app.include_router(flash_offer.router,    prefix=_PREFIX)
 app.include_router(ocr_test.router,       prefix=_PREFIX)
 app.include_router(meta_leads.router, prefix=_PREFIX)
 app.include_router(meta_lead_import.router, prefix=_PREFIX)
+app.include_router(call_center.router,    prefix=_PREFIX)
+app.include_router(cosmosia_import.router, prefix=_PREFIX)
 app.include_router(positioning_tests.router, prefix=_PREFIX)
 app.include_router(backlinks.router,      prefix=_PREFIX)
 app.include_router(docs.router,           prefix=_PREFIX)
@@ -156,6 +159,16 @@ async def _background_init():
         await db.push_subscriptions.create_index("endpoint", unique=True)
         await db.push_subscriptions.create_index("user_id")
         await db.leads.create_index("category")
+        await db.leads.create_index("campaign")
+        await db.commercial_calls.create_index("id", unique=True)
+        await db.commercial_calls.create_index([("agent_id", 1), ("at", -1)])
+        await db.commercial_calls.create_index("lead_id")
+        await db.call_scripts.create_index("id", unique=True)
+        await db.activity_log.create_index("id", unique=True)
+        await db.activity_log.create_index([("user_id", 1), ("at", -1)])
+        await db.activity_log.create_index("at")
+        await db.user_sessions.create_index([("user_id", 1), ("date", 1)], unique=True)
+        await db.user_sessions.create_index("date")
     except Exception as e:
         log.warning(f"Index creation: {e}")
 

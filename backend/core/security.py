@@ -1,3 +1,4 @@
+import asyncio
 import bcrypt
 import jwt
 import uuid
@@ -41,6 +42,10 @@ async def get_current_user(request: Request) -> dict:
         user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
         if not user:
             raise HTTPException(status_code=401, detail="Utilisateur introuvable")
+        # Heartbeat de connexion (throttlé en interne) pour le suivi RH du temps
+        # de connexion — en tâche de fond pour ne jamais ralentir la requête.
+        from services.activity import ping_session
+        asyncio.create_task(ping_session(user["id"]))
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expiré")

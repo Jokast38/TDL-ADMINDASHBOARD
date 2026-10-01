@@ -35,6 +35,7 @@ QUALIFICATION_LABELS = {
     "a_contacter": "À contacter",
     "interesse": "Intéressé",
     "pas_de_reponse": "Pas de réponse",
+    "injoignable": "Injoignable",
     "a_relancer": "À relancer",
     "plus_interesse": "Plus intéressé",
     "inscrit": "Inscrit",
@@ -178,6 +179,7 @@ async def import_meta_leads_csv(
 async def list_meta_leads(
     qualification: Optional[str] = None,
     meta_account: Optional[str] = None,
+    campaign_name: Optional[str] = None,
     search: Optional[str] = None,
     user: dict = Depends(require_role(*ROLES_LEADS)),
 ):
@@ -186,6 +188,8 @@ async def list_meta_leads(
         query["qualification"] = qualification
     if meta_account:
         query["meta_account"] = meta_account
+    if campaign_name:
+        query["campaign_name"] = campaign_name
     if search:
         query["$or"] = [
             {"name": {"$regex": search, "$options": "i"}},
@@ -194,10 +198,12 @@ async def list_meta_leads(
         ]
     docs = await db.meta_lead_imports.find(query, {"_id": 0}).sort("created_time", -1).to_list(5000)
     accounts = sorted([a for a in await db.meta_lead_imports.distinct("meta_account") if a])
+    campaigns = sorted([c for c in await db.meta_lead_imports.distinct("campaign_name") if c])
     return {
         "items": docs, "total": len(docs),
         "qualification_options": QUALIFICATION_LABELS,
         "account_options": accounts,
+        "campaign_options": campaigns,
     }
 
 

@@ -1,8 +1,10 @@
 import asyncio
+import csv
 import io
 import logging
 import uuid
 from typing import Optional
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 import httpx
 import openpyxl
@@ -150,6 +152,97 @@ async def import_backlinks_excel(
             imported += 1
 
     return {"ok": True, "imported": imported, "updated": updated}
+
+
+def _match_col(headers: list, *keywords: str) -> Optional[str]:
+    for h in headers:
+        hl = (h or "").strip().lower()
+        if any(k in hl for k in keywords):
+            return h
+    return None
+
+
+@router.post("/import-csv")
+async def import_backlinks_csv(
+    file: UploadFile = File(...),
+    user: dict = Depends(require_role(*ROLES_LEADS)),
+):
+    """Importe une liste de backlinks à demander depuis un CSV de prospection
+    (ex : export "Concurrent / Lien du backlink / Domaine / Titre de la page /
+    Ce que fait le site / Pourquoi c'est utile") — format différent de
+    l'Excel "Nom du site / URL / Catégorie..." ci-dessus (colonnes détectées
+    par mot-clé, pas par position, pour s'adapter aux variantes d'export).
+    Chaque ligne décrit une page qui fait déjà un lien vers un concurrent :
+    l'idée est de demander le même lien vers TDL."""
+    data = await file.read()
+    try:
+        text = data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Encodage du fichier illisible (attendu : UTF-8)")
+    reader = csv.DictReader(io.StringIO(text))
+    headers = reader.fieldnames or []
+    if not headers:
+        raise HTTPException(status_code=400, detail="CSV vide ou en-têtes introuvables")
+
+    competitor_col = _match_col(headers, "concurrent")
+    url_col = _match_col(headers, "lien du backlink", "lien ", "url")
+    domain_col = _match_col(headers, "domaine", "domain")
+    title_col = _match_col(headers, "titre")
+    desc_col = _match_col(headers, "ce que fait le site", "description")
+    reason_col = _match_col(headers, "pourquoi", "utile", "interet", "intérêt")
+
+    if not url_col and not domain_col:
+        raise HTTPException(
+            status_code=400,
+            detail="Colonnes non reconnues — attendu au moins une colonne 'Lien du backlink' ou 'Domaine'",
+        )
+
+    priority_rank = {"haute": 0, "moyenne": 1, "basse": 2}
+    imported = updated = skipped = 0
+    for row in reader:
+        url = (row.get(url_col) or "").strip() if url_col else ""
+        domain = (row.get(domain_col) or "").strip() if domain_col else ""
+        if not url and not domain:
+            skipped += 1
+            continue
+        if not domain and url:
+            domain = urlparse(url).netloc or url
+        if not url and domain:
+            url = f"https://{domain}"
+
+        notes_parts = []
+        if title_col and (row.get(title_col) or "").strip():
+            notes_parts.append(row[title_col].strip())
+        if desc_col and (row.get(desc_col) or "").strip():
+            notes_parts.append(row[desc_col].strip())
+        if reason_col and (row.get(reason_col) or "").strip():
+            notes_parts.append(row[reason_col].strip())
+        notes = "\n".join(notes_parts)
+        competitor = (row.get(competitor_col) or "").strip() if competitor_col else ""
+
+        existing = await db.backlinks.find_one({"url": url})
+        fields = {
+            "site_name": domain, "url": url,
+            "competitor": competitor, "notes": notes,
+            "updated_at": now_iso(),
+        }
+        if existing:
+            # Ne touche pas au statut/email de contact/historique de demande
+            # déjà en place — seul le descriptif (notes, concurrent d'origine)
+            # est actualisé à chaque réimport.
+            await db.backlinks.update_one({"id": existing["id"]}, {"$set": fields})
+            updated += 1
+        else:
+            fields.update({
+                "id": str(uuid.uuid4()), "category": "", "niche": "", "link_type": "",
+                "priority": "Moyenne", "priority_rank": priority_rank["moyenne"],
+                "status": "a_contacter", "contact_email": None,
+                "request_count": 0, "last_request": None, "created_at": now_iso(),
+            })
+            await db.backlinks.insert_one(fields)
+            imported += 1
+
+    return {"ok": True, "imported": imported, "updated": updated, "skipped": skipped}
 
 
 async def _run_email_search():

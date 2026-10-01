@@ -357,6 +357,8 @@ export default function Dashboard() {
         </button>
       </div>
 
+      <MyStatsWidget />
+
       {/* KPI cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6" data-testid="kpi-grid">
         <KpiCard label="Inscriptions"       value={stats?.total_inscriptions ?? "—"} icon={GraduationCap} accent="#0a0a0a"   testid="kpi-inscriptions" />
@@ -1137,6 +1139,60 @@ function WpSiteBlock({ data, label, showGA, showJetpack }) {
 /* ─────────────────────────────────────────────
    Sub-components
 ───────────────────────────────────────────── */
+function formatConnectionMinutes(min) {
+  if (!min) return "0 min";
+  const h = Math.floor(min / 60), m = min % 60;
+  return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m} min`;
+}
+
+function formatConnectionSeconds(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return h > 0
+    ? `${h}h${String(m).padStart(2, "0")}m${String(s).padStart(2, "0")}s`
+    : `${m}m${String(s).padStart(2, "0")}s`;
+}
+
+function MyStatsWidget() {
+  const [stats, setStats] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    api.get("/employees/my-stats").then((r) => setStats(r.data)).catch(() => setStats(null));
+  }, []);
+
+  // Temps de connexion en temps réel : on est forcément "en ligne" en
+  // regardant cette page (elle déclenche elle-même le heartbeat), donc on
+  // calcule l'écoulé depuis first_seen et on le fait défiler à la seconde,
+  // plutôt que d'afficher le total figé reçu au chargement.
+  useEffect(() => {
+    if (!stats?.first_seen) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [stats?.first_seen]);
+
+  if (!stats) return null;
+  const liveSeconds = stats.first_seen ? Math.max(0, Math.round((now - new Date(stats.first_seen).getTime()) / 1000)) : null;
+
+  return (
+    <Card className="p-5 border border-gray-200 rounded-md shadow-none" data-testid="my-stats-widget">
+      <p className="overline mb-3">Mon activité aujourd'hui</p>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <StatMini
+          label="Connexion (temps réel)"
+          value={liveSeconds !== null ? formatConnectionSeconds(liveSeconds) : formatConnectionMinutes(stats.connection_minutes_today)}
+          small
+        />
+        <StatMini label="Appels aujourd'hui" value={stats.calls_today} small />
+        <StatMini label="Leads traités (total)" value={stats.leads_contacted} small />
+        <StatMini label="Dossiers traités (total)" value={stats.inscriptions_traitees} small />
+        <StatMini label="Charge en attente" value={stats.pending_workload ?? "—"} small />
+      </div>
+    </Card>
+  );
+}
+
 function KpiCard({ label, value, icon: Icon, accent, testid }) {
   return (
     <Card className="p-6 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all duration-200" data-testid={testid}>

@@ -19,6 +19,7 @@ from services.n8n import trigger_n8n
 from services.email import send_email
 from services.email_template import render_branded_email
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS, check_dossier_milestone
+from services.activity import log_action
 from services.meta_capi import send_capi_event
 from services.password_reset import create_reset_token
 from services import identity_extraction
@@ -438,6 +439,9 @@ async def update_inscription(iid: str, payload: InscriptionUpdate, user: dict = 
     # (voir services/staff_notify.py::check_dossier_milestone).
     if "contact_status" in update:
         update["processed_by"] = user["id"]
+        await log_action(user, "dossier_traite", "inscription", iid, {
+            "contact_status": update.get("contact_status"), "student_name": existing.get("student_name"),
+        })
     await db.inscriptions.update_one({"id": iid}, {"$set": update})
     if "contact_status" in update:
         try:

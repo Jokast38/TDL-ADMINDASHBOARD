@@ -20,6 +20,12 @@ class LeadUpdate(BaseModel):
     tags: Optional[List[str]] = None
     contacted: Optional[bool] = None
     status: Optional[str] = None
+    # Qualification fine (à contacter / intéressé / pas de réponse / injoignable /
+    # à relancer / plus intéressé / inscrit) — distincte de `status` qui pilote
+    # la logique d'appel (voir routers/call_center.py) ; sert à l'affichage et au
+    # filtrage dans les tableaux Meta/Cosmosia (mêmes libellés, voir
+    # routers.meta_lead_import.QUALIFICATION_LABELS).
+    qualification: Optional[str] = None
 
 
 class LeadImportJsonIn(BaseModel):

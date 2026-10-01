@@ -10,6 +10,7 @@ from core.utils import now_iso
 from core.config import ROLES_LEADS
 from models.lead import LeadIn, LeadUpdate, LeadImportJsonIn, LeadRelanceIn, LeadRelanceSingleIn, LeadBroadcastIn
 from services.email import send_email
+from services.activity import log_action
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -434,6 +435,8 @@ async def list_leads(
     interest_in: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    source: Optional[str] = None,
+    campaign: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
     user: dict = Depends(require_role(*ROLES_LEADS))
@@ -444,6 +447,8 @@ async def list_leads(
     query: Dict[str, Any] = {}
     if tag: query["tags"] = tag
     if status: query["status"] = status
+    if source: query["source"] = source
+    if campaign: query["campaign"] = campaign
     if contacted is not None: query["contacted"] = contacted
     if has_email is not None:
         query["email"] = {"$ne": None} if has_email else None
@@ -484,7 +489,7 @@ async def list_leads(
             {"$or": [{"category": {"$in": assigned}}, {"category": None}, {"category": {"$exists": False}}]}
         ]
 
-    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, page, page_size,
+    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, source, campaign, page, page_size,
                  tuple(sorted(assigned)) if scoped else None)
     cached = _leads_cache_get(cache_key)
     if cached is not None:
@@ -513,6 +518,17 @@ async def list_distinct_interests(user: dict = Depends(require_role(*ROLES_LEADS
     values = await db.leads.distinct("interest", {"interest": {"$nin": [None, ""]}})
     _leads_cache_set(cache_key, values)
     return values
+
+
+@router.get("/campaigns")
+async def list_distinct_campaigns(source: Optional[str] = None, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Valeurs de campagne distinctes (champ `campaign`, renseigné pour les
+    leads Cosmosia) — alimente le filtre par campagne du tableau Prospects
+    Cosmosia, optionnellement restreint à une source donnée."""
+    query: Dict[str, Any] = {"campaign": {"$nin": [None, ""]}}
+    if source:
+        query["source"] = source
+    return await db.leads.distinct("campaign", query)
 
 
 @router.get("/broadcast-targets")
@@ -558,6 +574,7 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
     if update.get("contacted") or update.get("status") in ("contacte", "interesse", "pas_interesse"):
         update["last_contacted_by"] = user["id"]
         update.setdefault("last_contacted_at", now_iso())
+        await log_action(user, "lead_contacte", "lead", lid, {"status": update.get("status"), "name": existing.get("name")})
     update["updated_at"] = now_iso()
     await db.leads.update_one({"id": lid}, {"$set": update})
     _leads_cache_clear()

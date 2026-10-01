@@ -8,6 +8,7 @@ from core.config import ROLES_DOSSIERS_MGMT
 from models.callback import CallbackRequestIn, CallbackRequestUpdate
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS, check_dossier_milestone
 from services.meta_capi import send_capi_event
+from services.activity import log_action
 from routers.leads import create_lead_from_contact
 
 router = APIRouter(prefix="/callback-requests", tags=["callback-requests"])
@@ -146,6 +147,7 @@ async def update_callback_request(cid: str, payload: CallbackRequestUpdate, user
         raise HTTPException(status_code=400, detail="Aucune modification fournie")
     if update.get("handled"):
         update["handled_by"] = user["id"]
+        await log_action(user, "rappel_traite", "callback_request", cid, {"name": existing.get("name")})
     update["updated_at"] = now_iso()
     await db.callback_requests.update_one({"id": cid}, {"$set": update})
     if update.get("handled"):

@@ -512,6 +512,10 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
          "assigned_training_assignments": 1, "active": 1, "manual_dossier_adjustment": 1, "manual_dossier_adjustment_note": 1},
     ).to_list(500)
 
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    sessions_today = await db.user_sessions.find({"date": today}, {"_id": 0}).to_list(500)
+    sessions_by_user = {s["user_id"]: s for s in sessions_today}
+
     result = []
     for s in staff:
         uid = s["id"]
@@ -520,6 +524,8 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
         leads_pas_interesse = await db.leads.count_documents({"last_contacted_by": uid, "status": "pas_interesse"})
         callbacks_handled = await db.callback_requests.count_documents({"handled_by": uid})
         inscriptions_traitees = await db.inscriptions.count_documents({"processed_by": uid})
+        calls_today = await db.commercial_calls.count_documents({"agent_id": uid, "at": {"$regex": f"^{today}"}})
+        calls_total = await db.commercial_calls.count_documents({"agent_id": uid})
 
         assigned = s.get("assigned_categories") or []
         pending_workload = None
@@ -531,6 +537,17 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
 
         adjustment = s.get("manual_dossier_adjustment") or 0
         total_dossiers = leads_contacted + inscriptions_traitees + callbacks_handled + adjustment
+
+        connection_minutes_today = 0
+        sess = sessions_by_user.get(uid)
+        if sess and sess.get("first_seen") and sess.get("last_seen"):
+            try:
+                fs = datetime.fromisoformat(sess["first_seen"].replace("Z", "+00:00"))
+                ls = datetime.fromisoformat(sess["last_seen"].replace("Z", "+00:00"))
+                connection_minutes_today = max(0, round((ls - fs).total_seconds() / 60))
+            except Exception:
+                pass
+
         result.append({
             **s,
             "leads_contacted": leads_contacted,
@@ -538,13 +555,137 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
             "leads_pas_interesse": leads_pas_interesse,
             "callbacks_handled": callbacks_handled,
             "inscriptions_traitees": inscriptions_traitees,
+            "calls_today": calls_today,
+            "calls_total": calls_total,
             "manual_dossier_adjustment": adjustment,
             "total_dossiers_traites": total_dossiers,
             "pending_workload": pending_workload,
+            "connection_minutes_today": connection_minutes_today,
+            "last_seen": sess.get("last_seen") if sess else None,
+            "first_seen": sess.get("first_seen") if sess else None,
         })
 
     result.sort(key=lambda x: x["total_dossiers_traites"], reverse=True)
     return result
+
+
+@router.get("/employees/activity-timeseries")
+async def employees_activity_timeseries(days: int = 7, user: dict = Depends(require_role("admin", *ROLES_TEAM_MGMT))):
+    """Temps de connexion cumulé de toute l'équipe, par jour, sur les N derniers
+    jours — alimente le graphique d'activité de la page Activité."""
+    days = min(max(days, 1), 31)
+    today = datetime.now(timezone.utc).date()
+    date_keys = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days - 1, -1, -1)]
+    sessions = await db.user_sessions.find(
+        {"date": {"$in": date_keys}}, {"_id": 0, "date": 1, "first_seen": 1, "last_seen": 1}
+    ).to_list(5000)
+    minutes_by_date = {k: 0 for k in date_keys}
+    for s in sessions:
+        try:
+            fs = datetime.fromisoformat(s["first_seen"].replace("Z", "+00:00"))
+            ls = datetime.fromisoformat(s["last_seen"].replace("Z", "+00:00"))
+            minutes_by_date[s["date"]] += max(0, round((ls - fs).total_seconds() / 60))
+        except Exception:
+            pass
+    return [{"date": k, "minutes": minutes_by_date[k]} for k in date_keys]
+
+
+@router.get("/employees/activity-log")
+async def employees_activity_log(
+    user_id: str = None, action: str = None, date_from: str = None, date_to: str = None,
+    page: int = 1, page_size: int = 50,
+    user: dict = Depends(require_role("admin", *ROLES_TEAM_MGMT)),
+):
+    """Journal chronologique réel ("qui a fait quoi, quand") — distinct des
+    compteurs agrégés de GET /employees/activity. Alimenté par
+    services.activity.log_action, appelé aux points de mutation clés (lead
+    contacté, appel loggé, dossier traité, rappel traité)."""
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 200)
+    query = {}
+    if user_id:
+        query["user_id"] = user_id
+    if action:
+        query["action"] = action
+    if date_from or date_to:
+        date_range = {}
+        if date_from:
+            date_range["$gte"] = date_from
+        if date_to:
+            date_range["$lte"] = f"{date_to}T23:59:59.999999"
+        query["at"] = date_range
+    total = await db.activity_log.count_documents(query)
+    items = await db.activity_log.find(query, {"_id": 0}).sort("at", -1) \
+        .skip((page - 1) * page_size).limit(page_size).to_list(page_size)
+    return {"items": items, "total": total, "page": page, "page_size": page_size,
+            "pages": max((total + page_size - 1) // page_size, 1)}
+
+
+@router.get("/employees/connection-stats")
+async def employees_connection_stats(date: str = None, user: dict = Depends(require_role("admin", *ROLES_TEAM_MGMT))):
+    """Temps de connexion estimé par employé pour un jour donné (aujourd'hui
+    par défaut) — voir services.activity.ping_session pour la méthode de calcul."""
+    day = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    sessions = await db.user_sessions.find({"date": day}, {"_id": 0}).to_list(500)
+    users = await db.users.find(
+        {"id": {"$in": [s["user_id"] for s in sessions]}}, {"_id": 0, "id": 1, "name": 1, "role": 1}
+    ).to_list(500)
+    names = {u["id"]: u for u in users}
+    result = []
+    for s in sessions:
+        minutes = 0
+        try:
+            fs = datetime.fromisoformat(s["first_seen"].replace("Z", "+00:00"))
+            ls = datetime.fromisoformat(s["last_seen"].replace("Z", "+00:00"))
+            minutes = max(0, round((ls - fs).total_seconds() / 60))
+        except Exception:
+            pass
+        u = names.get(s["user_id"], {})
+        result.append({
+            "user_id": s["user_id"], "name": u.get("name", ""), "role": u.get("role", ""),
+            "first_seen": s.get("first_seen"), "last_seen": s.get("last_seen"),
+            "connection_minutes": minutes, "ping_count": s.get("ping_count", 0),
+        })
+    result.sort(key=lambda r: r["connection_minutes"], reverse=True)
+    return {"date": day, "items": result}
+
+
+@router.get("/employees/my-stats")
+async def my_stats(user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+    """Stats personnelles de l'employé connecté, pour la page d'accueil :
+    dossiers traités (compteurs cumulés), charge en attente, appels du jour,
+    temps de connexion du jour."""
+    uid = user["id"]
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    leads_contacted = await db.leads.count_documents({"last_contacted_by": uid})
+    inscriptions_traitees = await db.inscriptions.count_documents({"processed_by": uid})
+    callbacks_handled = await db.callback_requests.count_documents({"handled_by": uid})
+    calls_today = await db.commercial_calls.count_documents({"agent_id": uid, "at": {"$regex": f"^{today}"}})
+
+    assigned = user.get("assigned_categories") or []
+    pending_workload = None
+    if assigned:
+        pending_workload = await db.leads.count_documents({"category": {"$in": assigned}, "contacted": {"$ne": True}})
+
+    sess = await db.user_sessions.find_one({"user_id": uid, "date": today}, {"_id": 0})
+    connection_minutes_today = 0
+    if sess and sess.get("first_seen") and sess.get("last_seen"):
+        try:
+            fs = datetime.fromisoformat(sess["first_seen"].replace("Z", "+00:00"))
+            ls = datetime.fromisoformat(sess["last_seen"].replace("Z", "+00:00"))
+            connection_minutes_today = max(0, round((ls - fs).total_seconds() / 60))
+        except Exception:
+            pass
+
+    recent = await db.activity_log.find({"user_id": uid}, {"_id": 0}).sort("at", -1).limit(10).to_list(10)
+
+    return {
+        "leads_contacted": leads_contacted, "inscriptions_traitees": inscriptions_traitees,
+        "callbacks_handled": callbacks_handled, "calls_today": calls_today,
+        "pending_workload": pending_workload, "connection_minutes_today": connection_minutes_today,
+        "first_seen": sess.get("first_seen") if sess else None, "last_seen": sess.get("last_seen") if sess else None,
+        "recent_activity": recent,
+    }
 
 
 @router.put("/employees/{uid}/dossier-adjustment")

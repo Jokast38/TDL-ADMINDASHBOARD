@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import NotificationBell from "@/components/NotificationBell";
@@ -6,7 +6,7 @@ import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
   CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive, Question, Student,
-  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple
+  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLineLeft, CaretLineRight,
 } from "@phosphor-icons/react";
 
 // Exporté pour être réutilisé par le sélecteur de pages autorisées sur la
@@ -71,6 +71,12 @@ export default function Layout({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  // Réduction de la sidebar (desktop uniquement) — persistée pour que le
+  // choix survive au rechargement/à la navigation entre pages.
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar_collapsed") === "1");
+  useEffect(() => {
+    localStorage.setItem("sidebar_collapsed", collapsed ? "1" : "0");
+  }, [collapsed]);
 
   // allowed_pages non vide = restriction supplémentaire posée par un admin
   // depuis la page Employés (voir PUT /employees/{uid}/pages) — en plus du
@@ -87,20 +93,31 @@ export default function Layout({ children }) {
   return (
     <div className="min-h-screen flex bg-[#f8f9fa]" data-testid="admin-layout">
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-gray-200 transform transition-transform duration-200 ${
+        className={`fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-200 transform transition-all duration-200 ${
           open ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0 overflow-y-auto`}
+        } md:translate-x-0 overflow-y-auto overflow-x-hidden ${collapsed ? "w-20" : "w-72"}`}
         data-testid="sidebar"
       >
-        <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200 sticky top-0 bg-white z-10">
-          <Link to="/admin" className="flex items-center gap-2" data-testid="sidebar-logo">
-            <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-9 h-9 rounded object-contain bg-black" />
-            <span className="font-display font-bold text-lg tracking-tight">TDL Formation</span>
+        <div className={`h-16 flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-6"} border-b border-gray-200 sticky top-0 bg-white z-10`}>
+          <Link to="/admin" className="flex items-center gap-2 min-w-0" data-testid="sidebar-logo">
+            <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-9 h-9 rounded object-contain bg-black shrink-0" />
+            {!collapsed && <span className="font-display font-bold text-lg tracking-tight truncate">TDL Formation</span>}
           </Link>
           <button onClick={() => setOpen(false)} className="md:hidden p-2" aria-label="Fermer menu" data-testid="sidebar-close">
             <X size={20} />
           </button>
         </div>
+
+        {/* Bascule plier/déplier — desktop uniquement, caché sur mobile où le menu est en overlay */}
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="hidden md:flex items-center justify-center w-full py-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 border-b border-gray-100"
+          aria-label={collapsed ? "Déplier le menu" : "Replier le menu"}
+          title={collapsed ? "Déplier le menu" : "Replier le menu"}
+          data-testid="sidebar-collapse-toggle"
+        >
+          {collapsed ? <CaretLineRight size={16} /> : <CaretLineLeft size={16} />}
+        </button>
 
         <nav className="px-3 py-4 space-y-1">
           {nav.map((item) => (
@@ -109,42 +126,47 @@ export default function Layout({ children }) {
               to={item.to}
               end={item.end}
               onClick={() => setOpen(false)}
+              title={collapsed ? item.label : undefined}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${collapsed ? "justify-center" : ""} ${
                   isActive ? "bg-[#0a0a0a] text-white hover:bg-[#1a1a1a]" : "text-gray-700 hover:bg-gray-100"
                 }`
               }
               data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
             >
               <item.icon size={18} weight={location.pathname === item.to ? "fill" : "regular"} />
-              <span>{item.label}</span>
+              {!collapsed && <span>{item.label}</span>}
             </NavLink>
           ))}
         </nav>
 
         <div className="border-t border-gray-200 p-4 mt-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-9 h-9 rounded-full bg-[#d4af37] flex items-center justify-center font-semibold text-sm text-black">
+          <div className={`flex items-center gap-3 mb-3 ${collapsed ? "justify-center" : ""}`}>
+            <div className="w-9 h-9 rounded-full bg-[#d4af37] flex items-center justify-center font-semibold text-sm text-black shrink-0" title={collapsed ? user?.name : undefined}>
               {user?.name?.[0] || "U"}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate" data-testid="sidebar-user-name">{user?.name}</p>
-              <p className="text-xs text-gray-500 truncate">{ROLE_LABELS[user?.role] || user?.role}</p>
-            </div>
+            {!collapsed && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate" data-testid="sidebar-user-name">{user?.name}</p>
+                <p className="text-xs text-gray-500 truncate">{ROLE_LABELS[user?.role] || user?.role}</p>
+              </div>
+            )}
           </div>
           <Link
             to="/change-password"
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-gray-300 hover:bg-gray-100 text-gray-700 transition-colors mb-2"
+            className={`w-full flex items-center ${collapsed ? "justify-center" : "justify-center gap-2"} px-3 py-2 rounded-md text-sm font-medium border border-gray-300 hover:bg-gray-100 text-gray-700 transition-colors mb-2`}
             data-testid="change-password-link"
+            title={collapsed ? "Changer mon mot de passe" : undefined}
           >
-            <Key size={16} /> Changer mon mot de passe
+            <Key size={16} /> {!collapsed && "Changer mon mot de passe"}
           </Link>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium border border-gray-300 hover:bg-gray-100 text-gray-700 transition-colors"
+            className={`w-full flex items-center ${collapsed ? "justify-center" : "justify-center gap-2"} px-3 py-2 rounded-md text-sm font-medium border border-gray-300 hover:bg-gray-100 text-gray-700 transition-colors`}
             data-testid="logout-button"
+            title={collapsed ? "Déconnexion" : undefined}
           >
-            <SignOut size={16} /> Déconnexion
+            <SignOut size={16} /> {!collapsed && "Déconnexion"}
           </button>
         </div>
       </aside>
@@ -153,7 +175,7 @@ export default function Layout({ children }) {
         <div onClick={() => setOpen(false)} className="fixed inset-0 bg-black/40 z-30 md:hidden" />
       )}
 
-      <div className="flex-1 md:ml-72 flex flex-col min-w-0">
+      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ${collapsed ? "md:ml-20" : "md:ml-72"}`}>
         <header className="h-16 bg-white border-b border-gray-200 flex items-center px-4 md:px-8 sticky top-0 z-20">
           <button onClick={() => setOpen(true)} className="md:hidden p-2 mr-2" aria-label="Ouvrir menu" data-testid="sidebar-open">
             <List size={22} />
