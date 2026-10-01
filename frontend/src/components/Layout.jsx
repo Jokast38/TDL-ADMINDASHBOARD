@@ -6,7 +6,7 @@ import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
   CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive, Question, Student,
-  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLineLeft, CaretLineRight,
+  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLeft, CaretRight, Headset,
 } from "@phosphor-icons/react";
 
 // Exporté pour être réutilisé par le sélecteur de pages autorisées sur la
@@ -30,6 +30,7 @@ export const navAll = [
   { to: "/admin/formations", label: "Formations", icon: GraduationCap, roles: ["admin", "employe", "responsable_admission"] },
   { to: "/admin/stages", label: "Sessions de stage", icon: CalendarCheck, roles: ["admin", "responsable_admission"] },
   { to: "/admin/agenda", label: "Agenda", icon: CalendarBlank, roles: ["admin", "responsable_admission", "animateur"] },
+  { to: "/admin/agenda-appel", label: "Agenda d'appel", icon: Headset, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
   { to: "/admin/modules", label: "Modules de formation", icon: Books, roles: ["admin", "responsable_admission"] },
   { to: "/admin/formateurs", label: "Formateurs", icon: PenNib, roles: ["admin", "responsable_admission", "agent_admin"] },
   { to: "/admin/inscriptions", label: "Inscriptions", icon: IdentificationCard, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
@@ -108,17 +109,6 @@ export default function Layout({ children }) {
           </button>
         </div>
 
-        {/* Bascule plier/déplier — desktop uniquement, caché sur mobile où le menu est en overlay */}
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          className="hidden md:flex items-center justify-center w-full py-2 text-gray-400 hover:text-gray-700 hover:bg-gray-50 border-b border-gray-100"
-          aria-label={collapsed ? "Déplier le menu" : "Replier le menu"}
-          title={collapsed ? "Déplier le menu" : "Replier le menu"}
-          data-testid="sidebar-collapse-toggle"
-        >
-          {collapsed ? <CaretLineRight size={16} /> : <CaretLineLeft size={16} />}
-        </button>
-
         <nav className="px-3 py-4 space-y-1">
           {nav.map((item) => (
             <NavLink
@@ -170,6 +160,22 @@ export default function Layout({ children }) {
           </button>
         </div>
       </aside>
+
+      {/* Bascule plier/déplier — bouton flottant fixé au milieu de la hauteur
+          d'écran, à cheval sur le bord de la sidebar : reste visible sur
+          n'importe quelle page et à n'importe quelle position de défilement,
+          contrairement à un bouton logé en haut de la sidebar qu'il fallait
+          remonter pour voir. Desktop uniquement (mobile = menu en overlay). */}
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className={`hidden md:flex items-center justify-center fixed top-1/2 z-50 h-9 w-9 rounded-full bg-white border border-gray-300 shadow-md text-gray-500 hover:text-gray-900 hover:border-gray-400 hover:shadow-lg transition-all duration-200 ${collapsed ? "left-20" : "left-72"}`}
+        style={{ transform: "translate(-50%, -50%)" }}
+        aria-label={collapsed ? "Déplier le menu" : "Replier le menu"}
+        title={collapsed ? "Déplier le menu" : "Replier le menu"}
+        data-testid="sidebar-collapse-toggle"
+      >
+        {collapsed ? <CaretRight size={16} weight="bold" /> : <CaretLeft size={16} weight="bold" />}
+      </button>
 
       {open && (
         <div onClick={() => setOpen(false)} className="fixed inset-0 bg-black/40 z-30 md:hidden" />

@@ -405,6 +405,13 @@ async def create_lead_from_contact(
 
 async def _insert_leads_dedup(leads: list) -> dict:
     inserted, skipped = 0, 0
+    # Légère liste des leads effectivement créés (id/nom/intérêt/notes) — pas
+    # le document complet, juste de quoi permettre à un appelant (ex :
+    # routers/cosmosia_import.py) de créer un créneau d'agenda d'appel pour
+    # chaque nouveau lead sans refaire une requête. Les autres appelants de
+    # cette fonction (import JSON/Excel/inscriptions dans ce même fichier)
+    # ignorent simplement cette clé en plus dans leur réponse.
+    inserted_leads = []
     for lead in leads:
         existing = None
         if lead.get("email"):
@@ -417,9 +424,14 @@ async def _insert_leads_dedup(leads: list) -> dict:
         lead.setdefault("category", _category_for_interest(lead.get("interest")))
         await db.leads.insert_one(lead)
         inserted += 1
+        inserted_leads.append({
+            "id": lead["id"], "name": lead.get("name"), "phone": lead.get("phone"),
+            "email": lead.get("email"), "interest": lead.get("interest"),
+            "notes": lead.get("notes"), "cosmosia_created_at": lead.get("cosmosia_created_at"),
+        })
     if inserted:
         _leads_cache_clear()
-    return {"inserted": inserted, "skipped_duplicates": skipped}
+    return {"inserted": inserted, "skipped_duplicates": skipped, "inserted_leads": inserted_leads}
 
 
 # ---- Routes ----

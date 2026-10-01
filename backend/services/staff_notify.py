@@ -758,3 +758,37 @@ async def send_appointment_reminders() -> int:
             {"$set": {f"bookings.{i}.reminder_sent": True for i, b in enumerate(bookings) if not b.get("reminder_sent")}},
         )
     return notified
+
+
+async def send_call_appointment_reminders() -> int:
+    """Rappelle par email l'agent commercial peu avant un RDV d'appel qu'il a
+    programmé (voir routers/call_center.py et db.call_appointments) — fenêtre
+    courte (dans l'heure qui vient) contrairement au rappel de RDV candidat
+    (la veille) car un appel programmé est généralement pris le jour même."""
+    now = datetime.now(timezone.utc)
+    window_end = (now + timedelta(hours=1)).isoformat()
+    appts = await db.call_appointments.find(
+        {"status": "planifie", "reminder_sent": {"$ne": True},
+         "scheduled_at": {"$gte": now.isoformat(), "$lte": window_end}},
+        {"_id": 0},
+    ).to_list(500)
+    notified = 0
+    for appt in appts:
+        commercial = await db.users.find_one({"id": appt.get("commercial_id")}, {"_id": 0, "id": 1, "email": 1, "name": 1})
+        if not commercial or not commercial.get("email"):
+            continue
+        body = (
+            f"<p>Bonjour {commercial.get('name', '')},</p>"
+            f"<p>Rappel : appel programmé à <b>{appt.get('scheduled_at', '')}</b> avec "
+            f"<b>{appt.get('lead_name', '')}</b>"
+            f"{' (' + appt['lead_phone'] + ')' if appt.get('lead_phone') else ''}.</p>"
+            f"{'<p>Intérêt : ' + appt['lead_interest'] + '</p>' if appt.get('lead_interest') else ''}"
+            f"{'<p>Notes : ' + appt['notes'] + '</p>' if appt.get('notes') else ''}"
+            "<p>TDL Formation</p>"
+        )
+        log = await send_email(commercial["email"], "📞 Rappel — appel programmé bientôt", render_branded_email(body))
+        if log["status"] in ("sent", "mocked"):
+            await send_push_to_users([commercial["id"]], "Appel programmé", f"Avec {appt.get('lead_name', '')} à {appt.get('scheduled_at', '')}", "/admin/marketing")
+            await db.call_appointments.update_one({"id": appt["id"]}, {"$set": {"reminder_sent": True}})
+            notified += 1
+    return notified

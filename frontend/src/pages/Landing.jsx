@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -252,11 +253,24 @@ const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 
+// Mêmes codes que backend/services/staff_notify.py::CATEGORY_LABELS — envoyés
+// tels quels comme `interest` (routers/callback.py les utilise directement
+// comme catégorie de routage vers le bon commercial/chargé d'admission).
+const INTEREST_OPTIONS = [
+  { value: "VTC_TAXI", label: "VTC / Taxi" },
+  { value: "CACES", label: "CACES" },
+  { value: "PERMIS", label: "Récupération de points" },
+  { value: "AUTO_ECOLE", label: "Auto-école" },
+  { value: "SSIAP", label: "SSIAP" },
+  { value: "ECSR", label: "ECSR" },
+  { value: "VENTE", label: "Conseiller de Vente" },
+];
+
 export default function Landing() {
   const [formations, setFormations] = useState([]);
   const [catalogueFilter, setCatalogueFilter] = useState(null);
 
-  const [contactForm, setContactForm] = useState({ prenom: "", nom: "", email: "", telephone: "", message: "" });
+  const [contactForm, setContactForm] = useState({ prenom: "", nom: "", email: "", telephone: "", message: "", interet: "" });
   const [contactPrivacyConsent, setContactPrivacyConsent] = useState(false);
   const [contactSending, setContactSending] = useState(false);
   const [contactSent, setContactSent] = useState(false);
@@ -312,10 +326,14 @@ export default function Landing() {
     if (contactForm.email.trim() && !EMAIL_RE.test(contactForm.email.trim())) {
       return toast.error("Merci de vérifier le format de votre email");
     }
+    if (!contactForm.interet) {
+      return toast.error("Merci de préciser la formation qui vous intéresse");
+    }
     setContactSending(true);
     try {
       const eventId = newEventId();
-      await api.post("/callback-requests", { ...contactForm, source: "contact_form", page_url: window.location.href, event_id: eventId, ...getFbCookies() });
+      const { interet, ...rest } = contactForm;
+      await api.post("/callback-requests", { ...rest, interest: interet, source: "contact_form", page_url: window.location.href, event_id: eventId, ...getFbCookies() });
       setContactSent(true);
       trackLead({ content_name: "contact_form" }, eventId);
     } catch {
@@ -850,6 +868,15 @@ export default function Landing() {
                     <label className="text-xs font-mono uppercase tracking-wider text-gray-500 mb-1.5 block">Email</label>
                     <Input type="email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} />
                   </div>
+                </div>
+                <div>
+                  <label className="text-xs font-mono uppercase tracking-wider text-gray-500 mb-1.5 block">Formation qui vous intéresse</label>
+                  <Select value={contactForm.interet} onValueChange={(v) => setContactForm({ ...contactForm, interet: v })}>
+                    <SelectTrigger data-testid="home-contact-interest"><SelectValue placeholder="Choisissez une formation" /></SelectTrigger>
+                    <SelectContent>
+                      {INTEREST_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="text-xs font-mono uppercase tracking-wider text-gray-500 mb-1.5 block">Message</label>

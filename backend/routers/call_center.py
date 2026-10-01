@@ -19,6 +19,7 @@ from core.security import require_role
 from core.config import ROLES_LEADS, ROLES_TEAM_MGMT
 from core.utils import now_iso
 from models.commercial_call import CallLogIn, CallScriptIn, CallScriptUpdate
+from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate
 from services.activity import log_action
 
 router = APIRouter(prefix="/call-center", tags=["call-center"])
@@ -221,4 +222,149 @@ async def delete_script(script_id: str, user: dict = Depends(require_role(*ROLES
     result = await db.call_scripts.delete_one({"id": script_id})
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Script introuvable")
+    return {"ok": True}
+
+
+# ---- Agenda d'appel (créneaux à appeler, logique de call-center) ----
+# Collection dédiée (db.call_appointments), distincte de db.appointment_slots
+# (créneaux multi-places en self-service pour les candidats). Deux façons
+# d'y arriver :
+#  - en masse, depuis un import Cosmosia (routers/cosmosia_import.py) : le
+#    créneau est créé "disponible", sans agent, daté depuis le CSV — visible
+#    de toute l'équipe commerciale, pris par le premier qui clique dessus
+#    (logique de centre d'appel : "je me l'attribue").
+#  - manuellement (POST ci-dessous) : un agent (ou un responsable pour un
+#    tiers) programme directement un appel daté/assigné — déjà "planifié"
+#    sans étape d'attribution, avec rappel par email avant l'heure (voir
+#    services/staff_notify.py et la boucle de fond dans server.py).
+APPOINTMENT_STATUS_LABELS = {
+    "disponible": "Disponible",
+    "planifie": "Planifié",
+    "traite": "Traité",
+    "annule": "Annulé",
+}
+# Statuts "actifs" du point de vue de qui a la main sur le créneau — un
+# agent voit toujours ses propres créneaux (peu importe le statut) + le pool
+# partagé non encore pris, pour pouvoir se l'attribuer.
+_POOL_STATUS = "disponible"
+
+
+@router.get("/appointments")
+async def list_call_appointments(
+    date_from: Optional[str] = None, date_to: Optional[str] = None,
+    commercial_id: Optional[str] = None, status: Optional[str] = None,
+    user: dict = Depends(require_role(*ROLES_LEADS)),
+):
+    query: Dict = {}
+    if commercial_id:
+        query["commercial_id"] = commercial_id
+    elif user["role"] in ("commercial", "responsable_commercial"):
+        # Un commercial voit ses propres créneaux (tous statuts) + le pool
+        # partagé pas encore attribué — jamais les créneaux déjà pris par
+        # un collègue, qui disparaissent de sa vue dès l'attribution.
+        query["$or"] = [{"commercial_id": user["id"]}, {"status": _POOL_STATUS}]
+    if status:
+        query["status"] = status
+    if date_from or date_to:
+        range_q = {}
+        if date_from:
+            range_q["$gte"] = date_from
+        if date_to:
+            range_q["$lte"] = f"{date_to}T23:59:59.999999"
+        query["scheduled_at"] = range_q
+    items = await db.call_appointments.find(query, {"_id": 0}).sort("scheduled_at", 1).to_list(2000)
+    return {"items": items, "status_options": APPOINTMENT_STATUS_LABELS}
+
+
+@router.post("/appointments")
+async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Création manuelle — contrairement aux créneaux générés en masse par
+    l'import Cosmosia (toujours "disponible", sans agent), un créneau créé
+    ici a un agent dès le départ (soi-même par défaut) et est donc déjà
+    "planifié", sans étape d'attribution à franchir."""
+    lead = await db.leads.find_one({"id": payload.lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead introuvable")
+
+    commercial_id = payload.commercial_id or user["id"]
+    commercial = await db.users.find_one({"id": commercial_id}, {"_id": 0, "id": 1, "name": 1, "email": 1})
+    if not commercial:
+        raise HTTPException(status_code=404, detail="Agent introuvable")
+
+    appt = {
+        "id": str(uuid.uuid4()), "lead_id": payload.lead_id,
+        "lead_name": lead.get("name"), "lead_phone": lead.get("phone"), "lead_email": lead.get("email"),
+        "lead_interest": lead.get("interest"),
+        "commercial_id": commercial_id, "commercial_name": commercial.get("name", ""),
+        "scheduled_at": payload.scheduled_at, "notes": payload.notes or "",
+        "status": "planifie", "reminder_sent": False, "source": "manuel",
+        "created_by": user["id"], "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    await db.call_appointments.insert_one(appt)
+    await log_action(user, "rdv_appel_cree", "lead", payload.lead_id, {
+        "lead_name": lead.get("name"), "scheduled_at": payload.scheduled_at, "commercial_name": commercial.get("name", ""),
+    })
+    appt.pop("_id", None)
+    return appt
+
+
+@router.post("/appointments/{appointment_id}/claim")
+async def claim_call_appointment(appointment_id: str, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Un agent s'attribue un créneau du pool partagé (issu de l'import
+    Cosmosia) : l'attribution ET le traitement n'est qu'une seule action
+    (pas d'étape "en cours" intermédiaire) — le créneau passe "traité",
+    porte le nom de l'agent, et disparaît immédiatement de la liste des
+    autres commerciaux. Le filtre `status: _POOL_STATUS` dans la requête
+    d'update est ce qui rend l'opération atomique : si deux agents cliquent
+    au même moment, un seul des deux `update_one` trouve encore le document
+    à l'état "disponible" et le modifie — l'autre récupère matched_count=0
+    et reçoit un 409, sans jamais écraser la première attribution."""
+    appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+    if not appt:
+        raise HTTPException(status_code=404, detail="Créneau introuvable")
+    result = await db.call_appointments.update_one(
+        {"id": appointment_id, "status": _POOL_STATUS},
+        {"$set": {
+            "status": "traite", "commercial_id": user["id"], "commercial_name": user.get("name", ""),
+            "claimed_at": now_iso(), "updated_at": now_iso(),
+        }},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=409, detail="Ce créneau vient d'être pris par un autre agent")
+    await log_action(user, "appel_attribue", "lead", appt.get("lead_id"), {
+        "lead_name": appt.get("lead_name"), "scheduled_at": appt.get("scheduled_at"),
+    })
+    return await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+
+
+@router.patch("/appointments/{appointment_id}")
+async def update_call_appointment(
+    appointment_id: str, payload: CallAppointmentUpdate, user: dict = Depends(require_role(*ROLES_LEADS)),
+):
+    existing = await db.call_appointments.find_one({"id": appointment_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Rendez-vous introuvable")
+    updates = {k: v for k, v in payload.model_dump(exclude_unset=True).items()}
+    if not updates:
+        return {**existing, "_id": None}
+    if updates.get("status") and updates["status"] not in APPOINTMENT_STATUS_LABELS:
+        raise HTTPException(status_code=400, detail="Statut inconnu")
+    if updates.get("commercial_id"):
+        commercial = await db.users.find_one({"id": updates["commercial_id"]}, {"_id": 0, "id": 1, "name": 1})
+        if not commercial:
+            raise HTTPException(status_code=404, detail="Agent introuvable")
+        updates["commercial_name"] = commercial.get("name", "")
+    if "scheduled_at" in updates:
+        # Reporté à une autre heure/date -> le rappel doit repartir.
+        updates["reminder_sent"] = False
+    updates["updated_at"] = now_iso()
+    await db.call_appointments.update_one({"id": appointment_id}, {"$set": updates})
+    return await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+
+
+@router.delete("/appointments/{appointment_id}")
+async def delete_call_appointment(appointment_id: str, user: dict = Depends(require_role(*ROLES_LEADS))):
+    result = await db.call_appointments.delete_one({"id": appointment_id})
+    if not result.deleted_count:
+        raise HTTPException(status_code=404, detail="Rendez-vous introuvable")
     return {"ok": True}

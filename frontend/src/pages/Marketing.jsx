@@ -18,7 +18,7 @@ import {
   ChartLineUp, MagnifyingGlass, Megaphone, EnvelopeSimple, ShareNetwork, Sparkle,
   EnvelopeOpen, Cursor, PaperPlaneTilt, WarningCircle, Paperclip, X as XIcon, PencilSimple,
   Browser, ArrowSquareOut, Robot, PhoneCall, LinkedinLogo, Phone, Headset,
-  LinkSimple, UploadSimple, Tag,
+  LinkSimple, UploadSimple, Tag, CalendarPlus,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import {

@@ -9,6 +9,20 @@ import { EnvelopeSimple, X, Phone, Check } from "@phosphor-icons/react";
 const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
 const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 
+// Mêmes codes que backend/services/staff_notify.py::CATEGORY_LABELS — envoyés
+// tels quels comme `interest` (voir routers/callback.py, qui les utilise
+// directement comme catégorie de routage vers le bon commercial/chargé
+// d'admission assigné), sans quoi la demande reste non attribuée.
+const INTEREST_OPTIONS = [
+  { value: "VTC_TAXI", label: "VTC / Taxi" },
+  { value: "CACES", label: "CACES" },
+  { value: "PERMIS", label: "Récupération de points" },
+  { value: "AUTO_ECOLE", label: "Auto-école" },
+  { value: "SSIAP", label: "SSIAP" },
+  { value: "ECSR", label: "ECSR" },
+  { value: "VENTE", label: "Conseiller de Vente" },
+];
+
 // Bulle de contact flottante, indépendante de la page — remplace le lien
 // "Contact" retiré de la navbar. Disponible partout où le widget est monté,
 // contrairement à une simple ancre #contact qui n'existe que sur l'accueil.
@@ -17,7 +31,7 @@ export default function ContactBubble() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [privacyConsent, setPrivacyConsent] = useState(false);
-  const [form, setForm] = useState({ prenom: "", telephone: "", message: "" });
+  const [form, setForm] = useState({ prenom: "", telephone: "", message: "", interet: "" });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const submit = async (e) => {
@@ -31,11 +45,14 @@ export default function ContactBubble() {
     if (!isValidPhone(form.telephone)) {
       return toast.error("Merci de vérifier votre numéro de téléphone (ex : 06 12 34 56 78)");
     }
+    if (!form.interet) {
+      return toast.error("Merci de préciser la formation qui vous intéresse");
+    }
     setSending(true);
     try {
       await api.post("/callback-requests", {
         prenom: form.prenom, nom: "", telephone: form.telephone, message: form.message,
-        source: "contact_bubble",
+        interest: form.interet, source: "contact_bubble",
       });
       setSent(true);
       trackLead({ content_name: "contact_bubble" });
@@ -89,6 +106,15 @@ export default function ContactBubble() {
                   placeholder="Téléphone"
                   className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
                 />
+                <select
+                  value={form.interet}
+                  onChange={(e) => set("interet", e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 bg-white"
+                  data-testid="contact-bubble-interest"
+                >
+                  <option value="">Quelle formation vous intéresse ?</option>
+                  {INTEREST_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
                 <textarea
                   value={form.message}
                   onChange={(e) => set("message", e.target.value)}

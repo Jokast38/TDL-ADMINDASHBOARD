@@ -56,7 +56,24 @@ export default function PublicInscription() {
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } }).then((r) => {
       setFormations(r.data);
-      if (formationId && r.data.find((f) => f.id === formationId)) setStep(2);
+      const preselected = formationId && r.data.find((f) => f.id === formationId);
+      if (preselected) {
+        // Arrivée directe depuis la fiche formation (lien "S'inscrire" avec
+        // ?formation=... déjà renseigné) : sans ce bascule, on sautait tout
+        // droit à l'étape 2 (infos perso) en court-circuitant le choix de
+        // session — reproduit ici la même logique que pickFormation(), qui ne
+        // s'exécute normalement que lors d'un choix fait DANS cette page.
+        if (SESSION_STEP_CATEGORIES.includes(preselected.category)) {
+          setLoadingSessions(true);
+          setStep(1.5);
+          api.get("/stages/public/available", { params: { formation_id: preselected.id } })
+            .then((res) => setSessions(res.data))
+            .catch(() => setSessions([]))
+            .finally(() => setLoadingSessions(false));
+        } else {
+          setStep(2);
+        }
+      }
     });
     api.get("/payments/public-status").then((r) => setPaymentsEnabled(r.data.enabled)).catch(() => setPaymentsEnabled(false));
     setPageMeta({ title: "Inscription — TDL Formation", description: "Inscrivez-vous en ligne à votre formation TDL Formation en 3 étapes simples.", path: "/inscription" });

@@ -11,6 +11,7 @@ catégorie/agent (voir routers/call_center.py)."""
 import csv
 import io
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
@@ -75,6 +76,21 @@ def _parse_csv(data: bytes) -> list[dict]:
     return leads
 
 
+def _parse_cosmosia_date(raw: str) -> str:
+    """Convertit la date d'export Cosmosia (ex : "2026-10-01T11:53:33.593Z")
+    en ISO exploitable par l'agenda d'appel — à défaut de vraie date de
+    rendez-vous dans le CSV (absente de l'export), c'est la date de création
+    de l'opportunité côté Cosmosia qui sert de date d'appel : le créneau
+    apparaît sur l'agenda au jour où le prospect est entré dans leur pipeline,
+    à charge pour l'équipe de rattraper le retard sur les créneaux anciens."""
+    if not raw:
+        return now_iso()
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        return now_iso()
+
+
 async def _already_in_meta_leads(email: Optional[str], phone: Optional[str]) -> bool:
     """Un contact déjà présent dans les leads Meta importés (db.meta_lead_imports,
     voir routers/meta_lead_import.py) ne doit pas être recréé comme Prospect
@@ -112,4 +128,24 @@ async def import_cosmosia_csv(file: UploadFile = File(...), user: dict = Depends
     result = await _insert_leads_dedup(to_insert)
     result["skipped_duplicate_meta_lead"] = skipped_duplicate_meta_lead
     result["total_rows"] = len(leads)
+
+    # Chaque nouveau lead crée un créneau d'agenda d'appel "disponible" (pas
+    # encore attribué) — daté depuis le CSV, pas de commercial assigné : le
+    # premier agent qui clique dessus se l'attribue (voir POST
+    # /call-center/appointments/{id}/claim). Pas de doublon à la réimportation
+    # du même export : seuls les leads réellement NOUVEAUX (inserted_leads,
+    # pas les mises à jour) génèrent un créneau.
+    appointments_created = 0
+    for lead in result.pop("inserted_leads", []):
+        await db.call_appointments.insert_one({
+            "id": str(uuid.uuid4()), "lead_id": lead["id"],
+            "lead_name": lead.get("name"), "lead_phone": lead.get("phone"), "lead_email": lead.get("email"),
+            "lead_interest": lead.get("interest"),
+            "commercial_id": None, "commercial_name": "",
+            "scheduled_at": _parse_cosmosia_date(lead.get("cosmosia_created_at")),
+            "notes": lead.get("notes") or "", "status": "disponible", "reminder_sent": False,
+            "source": "cosmosia_import", "created_by": user["id"], "created_at": now_iso(), "updated_at": now_iso(),
+        })
+        appointments_created += 1
+    result["appointments_created"] = appointments_created
     return result

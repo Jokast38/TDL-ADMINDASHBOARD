@@ -29,6 +29,7 @@ from routers.lead_automations import run_due_automations
 from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
+    send_call_appointment_reminders,
     send_convention_session_reminders,
     send_emargement_reminders,
 )
@@ -164,6 +165,9 @@ async def _background_init():
         await db.commercial_calls.create_index([("agent_id", 1), ("at", -1)])
         await db.commercial_calls.create_index("lead_id")
         await db.call_scripts.create_index("id", unique=True)
+        await db.call_appointments.create_index("id", unique=True)
+        await db.call_appointments.create_index([("commercial_id", 1), ("scheduled_at", 1)])
+        await db.call_appointments.create_index("scheduled_at")
         await db.activity_log.create_index("id", unique=True)
         await db.activity_log.create_index([("user_id", 1), ("at", -1)])
         await db.activity_log.create_index("at")
@@ -419,6 +423,22 @@ async def _appointment_reminders_loop():
         await asyncio.sleep(24 * 3600)
 
 
+async def _call_appointment_reminders_loop():
+    """Toutes les 15 min, rappelle par email l'agent d'un appel programmé qui
+    arrive dans l'heure (voir services/staff_notify.py) — fenêtre courte,
+    contrairement aux RDV candidats rappelés la veille, car un appel
+    commercial programmé est généralement pris le jour même."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_call_appointment_reminders()
+            if notified:
+                log.info(f"Rappels d'appels programmés : {notified} notification(s) envoyée(s)")
+        except Exception as e:
+            log.warning(f"Rappels d'appels programmés : erreur — {e}")
+        await asyncio.sleep(15 * 60)
+
+
 async def _formateur_dossier_reminders_loop():
     """Toutes les 6h, relance les formateurs dont le dossier (documents +
     convention) approche ou dépasse le délai de 24h (voir
@@ -481,6 +501,7 @@ async def startup():
     asyncio.create_task(_session_reminders_loop())
     asyncio.create_task(_emargement_reminders_loop())
     asyncio.create_task(_appointment_reminders_loop())
+    asyncio.create_task(_call_appointment_reminders_loop())
     asyncio.create_task(_formateur_dossier_reminders_loop())
     asyncio.create_task(_convention_session_reminders_loop())
     asyncio.create_task(_convocations_loop())
