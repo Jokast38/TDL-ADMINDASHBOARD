@@ -14,10 +14,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  Tooltip as UiTooltip, TooltipTrigger as UiTooltipTrigger, TooltipContent as UiTooltipContent, TooltipProvider as UiTooltipProvider,
+} from "@/components/ui/tooltip";
 import {
   ChartLineUp, MagnifyingGlass, Megaphone, EnvelopeSimple, ShareNetwork, Sparkle,
   EnvelopeOpen, Cursor, PaperPlaneTilt, WarningCircle, Paperclip, X as XIcon, PencilSimple,
-  Browser, ArrowSquareOut, Robot, PhoneCall, LinkedinLogo, Phone, Headset,
+  Browser, ArrowSquareOut, Robot, PhoneCall, LinkedinLogo, Phone, Headset, NotePencil,
   LinkSimple, UploadSimple, Tag, CalendarPlus,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -869,6 +873,16 @@ function MetaEventsTab() {
     }
   };
 
+  const updateNotes = async (id, notes) => {
+    try {
+      const { data } = await api.patch(`/meta-lead-import/${id}`, { notes });
+      setItems((prev) => prev.map((l) => (l.id === data.id ? data : l)));
+      toast.success("Note enregistrée");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur");
+    }
+  };
+
   const onEnrolled = (updated) => {
     setItems((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
     setEnrollFor(null);
@@ -959,12 +973,13 @@ function MetaEventsTab() {
                 <th className="py-2.5 px-4 overline">Campagne</th>
                 <th className="py-2.5 px-4 overline">Inscrit le</th>
                 <th className="py-2.5 px-4 overline">Qualification</th>
+                <th className="py-2.5 px-4 overline">Notes</th>
                 <th className="py-2.5 px-4 overline text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {!pagedItems.length && (
-                <tr><td colSpan="6" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="7" className="py-10 text-center text-gray-400">
                   {items.length ? "Aucun lead pour ce filtre." : "Aucun lead — importez un export CSV pour commencer."}
                 </td></tr>
               )}
@@ -992,6 +1007,9 @@ function MetaEventsTab() {
                         {Object.entries(qualifOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                  </td>
+                  <td className="py-2.5 px-4 max-w-[220px]">
+                    <MetaLeadNotesCell lead={l} onSave={updateNotes} />
                   </td>
                   <td className="py-2.5 px-4 text-right">
                     {l.inscription_id ? (
@@ -1027,6 +1045,89 @@ function MetaEventsTab() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+// Cellule Notes de la table Prospects Meta — toujours visible (fond ambre
+// dès qu'une note existe, pas juste une icône discrète) pour qu'un agent ne
+// passe pas à côté d'une note laissée par un collègue. Survol -> tooltip
+// avec le texte complet (les notes longues sont tronquées dans la cellule).
+// Clic -> popover d'édition avec Textarea + bouton Enregistrer.
+function MetaLeadNotesCell({ lead, onSave }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(lead.notes || "");
+  const [saving, setSaving] = useState(false);
+  const hasNotes = !!(lead.notes || "").trim();
+
+  const handleOpenChange = (v) => {
+    setOpen(v);
+    if (v) setDraft(lead.notes || "");
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave(lead.id, draft);
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const trigger = (
+    <button
+      type="button"
+      className={`w-full text-left text-xs rounded-md border px-2.5 py-1.5 transition-colors ${
+        hasNotes
+          ? "bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100"
+          : "border-dashed border-gray-300 text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+      }`}
+      data-testid={`meta-lead-notes-btn-${lead.id}`}
+    >
+      {hasNotes ? (
+        <span className="flex items-start gap-1.5">
+          <NotePencil size={13} weight="fill" className="mt-0.5 shrink-0" />
+          <span className="line-clamp-2 break-words">{lead.notes}</span>
+        </span>
+      ) : (
+        <span className="flex items-center gap-1.5"><NotePencil size={13} /> Ajouter une note</span>
+      )}
+    </button>
+  );
+
+  return (
+    <UiTooltipProvider delayDuration={200}>
+      <Popover open={open} onOpenChange={handleOpenChange}>
+        {hasNotes ? (
+          <UiTooltip>
+            <UiTooltipTrigger asChild>
+              <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+            </UiTooltipTrigger>
+            <UiTooltipContent side="top" className="max-w-xs whitespace-pre-wrap text-left">
+              {lead.notes}
+            </UiTooltipContent>
+          </UiTooltip>
+        ) : (
+          <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+        )}
+        <PopoverContent className="w-80" align="start">
+          <p className="text-xs font-medium text-gray-600 mb-2">Note sur {lead.name || lead.email || "ce prospect"}</p>
+          <Textarea
+            rows={4}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Laisser une note sur ce prospect..."
+            data-testid={`meta-lead-notes-textarea-${lead.id}`}
+          />
+          <div className="flex justify-end gap-2 mt-2">
+            <Button size="sm" variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
+            <Button size="sm" onClick={save} disabled={saving} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid={`meta-lead-notes-save-${lead.id}`}>
+              {saving ? "..." : "Enregistrer"}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </UiTooltipProvider>
   );
 }
 
