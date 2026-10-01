@@ -600,112 +600,309 @@ function suggestKeywords(backlink) {
   return FORMATION_KEYWORDS[suggestFormationKey(backlink)];
 }
 
-const META_EVENT_STATUS_LABEL = {
-  sent: "Envoyé", failed: "Échec", error: "Erreur", not_configured: "Pixel non configuré",
+const META_LEAD_QUALIF_COLORS = {
+  a_contacter: "bg-gray-100 text-gray-600 hover:bg-gray-100",
+  interesse: "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10",
+  pas_de_reponse: "bg-amber-100 text-amber-700 hover:bg-amber-100",
+  a_relancer: "bg-blue-100 text-blue-700 hover:bg-blue-100",
+  plus_interesse: "bg-red-100 text-red-700 hover:bg-red-100",
+  inscrit: "bg-[#d4af37]/20 text-[#8a6d00] hover:bg-[#d4af37]/20",
 };
-const META_EVENT_STATUS_COLOR = {
-  sent: "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10",
-  failed: "bg-red-100 text-red-700 hover:bg-red-100",
-  error: "bg-red-100 text-red-700 hover:bg-red-100",
-  not_configured: "bg-gray-100 text-gray-600 hover:bg-gray-100",
-};
+const META_LEADS_PAGE_SIZE = 25;
 
-// Journal des événements Meta Pixel/CAPI réellement envoyés côté serveur
-// (voir backend/services/meta_capi.py) — pour vérifier directement ici,
-// sans dépendre du Gestionnaire d'événements Meta (parfois déroutant, ex:
-// des événements "Subscribe" détectés automatiquement par Meta n'ont rien à
-// voir avec nos événements "Lead" explicites), que chaque prospect
-// déclenche bien un envoi.
+// Tableau de qualification des leads Meta Lead Ads, importés manuellement
+// depuis un export CSV du Gestionnaire d'événements Meta (pas de webhook
+// temps réel ici, voir backend/routers/meta_lead_import.py pour le pourquoi
+// d'une liste séparée de Prospects). On qualifie chaque lead, puis on
+// l'inscrit à une session choisie à la main — ce qui crée l'inscription
+// tout de suite et prévient le prospect par email de la session retenue.
 function MetaEventsTab() {
-  const [events, setEvents] = useState([]);
-  const [summary, setSummary] = useState(null);
+  const [items, setItems] = useState([]);
+  const [qualifOptions, setQualifOptions] = useState({});
+  const [accountOptions, setAccountOptions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [qualifFilter, setQualifFilter] = useState("");
+  const [accountFilter, setAccountFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [importing, setImporting] = useState(false);
+  const [importAccount, setImportAccount] = useState("");
+  const [pendingImportFile, setPendingImportFile] = useState(null);
+  const [enrollFor, setEnrollFor] = useState(null);
 
   const load = () => {
     setLoading(true);
-    Promise.all([
-      api.get("/track/meta-events", { params: { status: statusFilter || undefined, limit: 100 } }),
-      api.get("/track/meta-events/summary", { params: { days: 7 } }),
-    ])
-      .then(([evRes, sumRes]) => { setEvents(evRes.data.events); setSummary(sumRes.data.by_event); })
-      .catch(() => toast.error("Erreur de chargement des événements Meta"))
+    const params = {};
+    if (search.trim()) params.search = search.trim();
+    if (qualifFilter) params.qualification = qualifFilter;
+    if (accountFilter) params.meta_account = accountFilter;
+    api.get("/meta-lead-import", { params })
+      .then(({ data }) => {
+        setItems(data.items);
+        setQualifOptions(data.qualification_options);
+        setAccountOptions(data.account_options || []);
+      })
+      .catch(() => toast.error("Erreur de chargement des leads Meta"))
       .finally(() => setLoading(false));
   };
+  useEffect(load, [search, qualifFilter, accountFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(1); }, [search, qualifFilter, accountFilter]);
 
-  useEffect(() => { load(); }, [statusFilter]);
+  const totalPages = Math.max(1, Math.ceil(items.length / META_LEADS_PAGE_SIZE));
+  const pagedItems = items.slice((page - 1) * META_LEADS_PAGE_SIZE, page * META_LEADS_PAGE_SIZE);
 
-  if (loading && !events.length) {
+  const pickImportFile = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) setPendingImportFile(file);
+  };
+
+  const confirmImport = async () => {
+    if (!pendingImportFile || !importAccount.trim()) {
+      toast.error("Indiquez le compte Meta d'origine de cet export");
+      return;
+    }
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", pendingImportFile);
+      fd.append("meta_account", importAccount.trim());
+      const { data } = await api.post("/meta-lead-import/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      toast.success(
+        `${data.imported} nouveau(x), ${data.updated} mis à jour` +
+        (data.skipped_duplicate_prospect ? ` · ${data.skipped_duplicate_prospect} déjà dans Prospects (ignoré)` : "") +
+        (data.skipped_no_contact ? ` · ${data.skipped_no_contact} sans email/téléphone (ignoré)` : "")
+      );
+      setPendingImportFile(null);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur lors de l'import");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const updateQualification = async (id, qualification) => {
+    try {
+      const { data } = await api.patch(`/meta-lead-import/${id}`, { qualification });
+      setItems((prev) => prev.map((l) => (l.id === data.id ? data : l)));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur");
+    }
+  };
+
+  const onEnrolled = (updated) => {
+    setItems((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+    setEnrollFor(null);
+    toast.success("Inscription créée — email de confirmation envoyé");
+  };
+
+  if (loading && !items.length) {
     return <p className="text-sm text-gray-400 py-8 text-center">Chargement...</p>;
   }
 
   return (
-    <div className="space-y-6 mt-2">
-      {summary && Object.keys(summary).length > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {Object.entries(summary).map(([name, counts]) => (
-            <Card key={name} className="p-4 border border-gray-200 rounded-md shadow-none">
-              <p className="text-xs text-gray-500">{name} (7j)</p>
-              <p className="font-display text-2xl font-bold mt-1">{counts.sent || 0}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                envoyé(s){counts.failed || counts.error ? ` · ${(counts.failed || 0) + (counts.error || 0)} échec(s)` : ""}
-              </p>
-            </Card>
-          ))}
+    <div className="space-y-4 mt-2">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <Megaphone size={16} className="text-[#d4af37]" />
+            <p className="overline">Publicités Meta</p>
+          </div>
+          <h2 className="font-display text-2xl font-bold -mt-1">Prospects Meta</h2>
+          <p className="text-sm text-gray-500 max-w-2xl mt-1">
+            Importez l'export CSV du Gestionnaire d'événements Meta, qualifiez chaque lead, puis inscrivez-le
+            directement à la session de votre choix — l'email de confirmation part automatiquement.
+          </p>
         </div>
-      )}
 
-      <div className="flex justify-end">
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="text-sm border border-gray-300 rounded-md px-3 py-1.5"
-          data-testid="meta-events-status-filter"
-        >
-          <option value="">Statut : tous</option>
-          {Object.entries(META_EVENT_STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        <Dialog open={!!pendingImportFile} onOpenChange={(open) => !open && setPendingImportFile(null)}>
+          <DialogTrigger asChild>
+            <label className="inline-flex items-center gap-2 text-sm cursor-pointer px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 shrink-0">
+              <UploadSimple size={14} /> Importer un export CSV
+              <input type="file" accept=".csv" className="hidden" onChange={pickImportFile} data-testid="meta-leads-import-input" />
+            </label>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Importer {pendingImportFile?.name}</DialogTitle></DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium block mb-1">Compte Meta d'origine</label>
+                <Input
+                  value={importAccount} onChange={(e) => setImportAccount(e.target.value)}
+                  placeholder="ex : TDL Formation" data-testid="meta-leads-import-account"
+                />
+                <p className="text-xs text-gray-400 mt-1">Le CSV ne précise pas de quel compte publicitaire il vient — à indiquer à la main.</p>
+              </div>
+              <Button onClick={confirmImport} disabled={importing} className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="meta-leads-import-confirm">
+                {importing ? "Import..." : "Importer"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <Input
+          value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Rechercher un nom, un email, un téléphone..." className="max-w-xs"
+          data-testid="meta-leads-search"
+        />
+        <Select value={qualifFilter || "all"} onValueChange={(v) => setQualifFilter(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-56" data-testid="meta-leads-qualif-filter"><SelectValue placeholder="Toutes les qualifications" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les qualifications</SelectItem>
+            {Object.entries(qualifOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={accountFilter || "all"} onValueChange={(v) => setAccountFilter(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-56" data-testid="meta-leads-account-filter"><SelectValue placeholder="Tous les comptes Meta" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les comptes Meta</SelectItem>
+            {accountOptions.map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left border-b border-gray-200">
+          <table className="w-full text-sm" data-testid="meta-leads-table">
+            <thead className="bg-gray-50 text-left border-y border-gray-200">
               <tr>
-                <th className="py-3 px-4 overline">Événement</th>
-                <th className="py-3 px-4 overline">Prospect</th>
-                <th className="py-3 px-4 overline">Contexte</th>
-                <th className="py-3 px-4 overline">Statut</th>
-                <th className="py-3 px-4 overline">Date</th>
+                <th className="py-2.5 px-4 overline">Prospect</th>
+                <th className="py-2.5 px-4 overline">Compte Meta</th>
+                <th className="py-2.5 px-4 overline">Campagne</th>
+                <th className="py-2.5 px-4 overline">Inscrit le</th>
+                <th className="py-2.5 px-4 overline">Qualification</th>
+                <th className="py-2.5 px-4 overline text-right">Action</th>
               </tr>
             </thead>
             <tbody>
-              {events.map((ev) => (
-                <tr key={ev.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-3 px-4 font-medium">{ev.event_name}</td>
-                  <td className="py-3 px-4">
-                    {ev.email && <p className="text-xs">{ev.email}</p>}
-                    {ev.phone && <p className="text-xs text-gray-400">{ev.phone}</p>}
-                    {!ev.email && !ev.phone && <span className="text-xs text-gray-300">—</span>}
+              {!pagedItems.length && (
+                <tr><td colSpan="6" className="py-10 text-center text-gray-400">
+                  {items.length ? "Aucun lead pour ce filtre." : "Aucun lead — importez un export CSV pour commencer."}
+                </td></tr>
+              )}
+              {pagedItems.map((l) => (
+                <tr key={l.id} className="border-b border-gray-100 align-top">
+                  <td className="py-2.5 px-4 max-w-[200px]">
+                    <p className="font-medium truncate">{l.name || "—"}</p>
+                    {l.email && <p className="text-xs text-gray-500 truncate">{l.email}</p>}
+                    {l.phone && <p className="text-xs text-gray-400 truncate">{l.phone}</p>}
                   </td>
-                  <td className="py-3 px-4 text-xs text-gray-500">{ev.custom_data?.content_name || "—"}</td>
-                  <td className="py-3 px-4">
-                    <Badge className={META_EVENT_STATUS_COLOR[ev.status] || "bg-gray-100 text-gray-600"}>
-                      {META_EVENT_STATUS_LABEL[ev.status] || ev.status}
-                    </Badge>
+                  <td className="py-2.5 px-4 text-xs text-gray-600">{l.meta_account}</td>
+                  <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[180px]">
+                    <p className="truncate">{l.campaign_name}</p>
+                    <p className="text-gray-400 truncate">{l.form_name}{l.platform ? ` · ${l.platform}` : ""}</p>
                   </td>
-                  <td className="py-3 px-4 text-xs text-gray-500 font-mono">
-                    {new Date(ev.created_at).toLocaleString("fr-FR")}
+                  <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
+                    {l.created_time ? new Date(l.created_time).toLocaleDateString("fr-FR") : "—"}
+                  </td>
+                  <td className="py-2.5 px-4">
+                    <Select value={l.qualification} onValueChange={(v) => updateQualification(l.id, v)}>
+                      <SelectTrigger className={`h-7 text-xs border-0 ${META_LEAD_QUALIF_COLORS[l.qualification] || "bg-gray-100"}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(qualifOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2.5 px-4 text-right">
+                    {l.inscription_id ? (
+                      <span className="text-xs text-gray-400">Déjà inscrit</span>
+                    ) : (
+                      <Button size="sm" variant="outline" onClick={() => setEnrollFor(l)} disabled={!l.email} data-testid={`meta-lead-enroll-btn-${l.id}`}>
+                        Inscrire
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
-              {!events.length && (
-                <tr><td colSpan="5" className="py-12 text-center text-gray-400">Aucun événement pour l'instant.</td></tr>
-              )}
             </tbody>
           </table>
         </div>
       </Card>
+
+      {items.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-gray-500">
+          <p>{(page - 1) * META_LEADS_PAGE_SIZE + 1}–{Math.min(page * META_LEADS_PAGE_SIZE, items.length)} sur {items.length}</p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} data-testid="meta-leads-prev-page">Précédent</Button>
+            <span className="text-xs">Page {page} / {totalPages}</span>
+            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} data-testid="meta-leads-next-page">Suivant</Button>
+          </div>
+        </div>
+      )}
+
+      <Dialog open={!!enrollFor} onOpenChange={(open) => !open && setEnrollFor(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Inscrire {enrollFor?.name || enrollFor?.email}</DialogTitle></DialogHeader>
+          {enrollFor && <MetaLeadEnrollForm lead={enrollFor} onEnrolled={onEnrolled} onCancel={() => setEnrollFor(null)} />}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function MetaLeadEnrollForm({ lead, onEnrolled, onCancel }) {
+  const [formations, setFormations] = useState([]);
+  const [stages, setStages] = useState([]);
+  const [formationId, setFormationId] = useState("");
+  const [stageId, setStageId] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { api.get("/formations").then(({ data }) => setFormations(data)).catch(() => {}); }, []);
+  useEffect(() => {
+    setStageId("");
+    if (!formationId) { setStages([]); return; }
+    api.get("/stages", { params: { formation_id: formationId } }).then(({ data }) => setStages(data)).catch(() => setStages([]));
+  }, [formationId]);
+
+  const save = async () => {
+    if (!formationId) return toast.error("Choisissez une formation");
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/meta-lead-import/${lead.id}/enroll`, { formation_id: formationId, stage_id: stageId || null });
+      onEnrolled(data);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur lors de l'inscription");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="text-sm font-medium block mb-1">Formation</label>
+        <Select value={formationId} onValueChange={setFormationId}>
+          <SelectTrigger data-testid="meta-lead-enroll-formation"><SelectValue placeholder="Choisir une formation" /></SelectTrigger>
+          <SelectContent>
+            {formations.map((f) => <SelectItem key={f.id} value={f.id}>{f.title}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <label className="text-sm font-medium block mb-1">Session (optionnel)</label>
+        <Select value={stageId || "none"} onValueChange={(v) => setStageId(v === "none" ? "" : v)} disabled={!formationId}>
+          <SelectTrigger data-testid="meta-lead-enroll-stage"><SelectValue placeholder="Aucune session précise" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Aucune session précise</SelectItem>
+            {stages.map((s) => (
+              <SelectItem key={s.id} value={s.id}>
+                Du {s.date_debut} au {s.date_fin}{s.lieu_ville ? ` — ${s.lieu_ville}` : ""} ({s.nb_inscrits} inscrit{s.nb_inscrits > 1 ? "s" : ""})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex gap-2 pt-2">
+        <Button variant="outline" onClick={onCancel} className="flex-1">Annuler</Button>
+        <Button onClick={save} disabled={saving} className="flex-1 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="meta-lead-enroll-confirm">
+          {saving ? "..." : "Inscrire"}
+        </Button>
+      </div>
     </div>
   );
 }
