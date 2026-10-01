@@ -693,6 +693,16 @@ function CosmosiaTab() {
     }
   };
 
+  const updateNotes = async (id, notes) => {
+    try {
+      const { data } = await api.put(`/leads/${id}`, { notes });
+      setItems((prev) => prev.map((l) => (l.id === data.id ? data : l)));
+      toast.success("Note enregistrée");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur");
+    }
+  };
+
   if (loading && !items.length) {
     return <p className="text-sm text-gray-400 py-8 text-center">Chargement...</p>;
   }
@@ -742,12 +752,13 @@ function CosmosiaTab() {
                 <th className="py-2.5 px-4 overline">Campagne</th>
                 <th className="py-2.5 px-4 overline">Intérêt</th>
                 <th className="py-2.5 px-4 overline">Qualification</th>
+                <th className="py-2.5 px-4 overline">Notes</th>
                 <th className="py-2.5 px-4 overline">Importé le</th>
               </tr>
             </thead>
             <tbody>
               {!items.length && (
-                <tr><td colSpan="5" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="6" className="py-10 text-center text-gray-400">
                   {total ? "Aucun lead pour ce filtre." : "Aucun lead Cosmosia importé — utilisez le bouton ci-dessus."}
                 </td></tr>
               )}
@@ -769,6 +780,9 @@ function CosmosiaTab() {
                         {Object.entries(qualifOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                  </td>
+                  <td className="py-2.5 px-4 max-w-[220px]">
+                    <MetaLeadNotesCell lead={l} onSave={updateNotes} />
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
                     {l.created_at ? new Date(l.created_at).toLocaleDateString("fr-FR") : "—"}
