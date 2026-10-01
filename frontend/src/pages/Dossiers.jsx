@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Kanban, FolderOpen, ArrowSquareOut, FileArrowUp, CheckCircle, XCircle, PaperPlaneTilt, Warning, Trash, MagnifyingGlass,
-  Calendar, EnvelopeSimple, ClipboardText, PenNib, Books, Smiley, Clock,
+  Calendar, EnvelopeSimple, ClipboardText, PenNib, Books, Smiley, Clock, Funnel,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -47,16 +47,30 @@ export default function Dossiers() {
   const [notes, setNotes] = useState("");
   const [dragging, setDragging] = useState(null);
   const [q, setQ] = useState("");
+  const [filterFormation, setFilterFormation] = useState("all");
+  const [filterCategory, setFilterCategory] = useState("all");
   const [visibleCounts, setVisibleCounts] = useState({});
 
   const load = () => api.get("/dossiers").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
 
+  const formationOptions = useMemo(
+    () => Array.from(new Set(items.map((d) => d.formation_title).filter(Boolean))).sort(),
+    [items]
+  );
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(items.map((d) => d.category).filter(Boolean))).sort(),
+    [items]
+  );
+
   const filteredItems = useMemo(() => {
     const query = q.trim().toLowerCase();
-    if (!query) return items;
-    return items.filter((d) => (d.student_name || "").toLowerCase().includes(query));
-  }, [items, q]);
+    return items.filter((d) =>
+      (!query || (d.student_name || "").toLowerCase().includes(query)) &&
+      (filterFormation === "all" || d.formation_title === filterFormation) &&
+      (filterCategory === "all" || d.category === filterCategory)
+    );
+  }, [items, q, filterFormation, filterCategory]);
 
   const showMore = (colKey) => {
     setVisibleCounts((prev) => ({ ...prev, [colKey]: (prev[colKey] || PAGE_SIZE) + PAGE_SIZE }));
@@ -141,15 +155,39 @@ export default function Dossiers() {
         <p className="text-gray-500 mt-2">Glissez-déposez pour faire avancer chaque dossier dans le pipeline ANTS. Les changements de statut notifient l'étudiant par email.</p>
       </div>
 
-      <div className="relative max-w-md">
-        <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />
-        <Input
-          placeholder="Rechercher un apprenant..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className="pl-9"
-          data-testid="dossiers-search"
-        />
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-full max-w-md sm:w-72">
+          <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />
+          <Input
+            placeholder="Rechercher un apprenant..."
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className="pl-9"
+            data-testid="dossiers-search"
+          />
+        </div>
+        <span className="text-xs text-gray-400 flex items-center gap-1"><Funnel size={13} /> Filtrer :</span>
+        <Select value={filterFormation} onValueChange={setFilterFormation}>
+          <SelectTrigger className="w-full sm:w-56 h-9 text-xs" data-testid="dossiers-filter-formation"><SelectValue placeholder="Formation" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les formations</SelectItem>
+            {formationOptions.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterCategory} onValueChange={setFilterCategory}>
+          <SelectTrigger className="w-full sm:w-44 h-9 text-xs" data-testid="dossiers-filter-category"><SelectValue placeholder="Catégorie" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les catégories</SelectItem>
+            {categoryOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {(filterFormation !== "all" || filterCategory !== "all" || q) && (
+          <button
+            className="text-xs text-gray-400 hover:text-red-600 underline"
+            onClick={() => { setFilterFormation("all"); setFilterCategory("all"); setQ(""); }}
+            data-testid="dossiers-filter-reset"
+          >Réinitialiser</button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4" data-testid="kanban-board">
