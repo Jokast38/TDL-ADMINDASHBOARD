@@ -15,6 +15,7 @@ from core.config import ROLES_ALL_STAFF
 from models.stage import StageIn, StageUpdate
 from services.email import send_email
 from services.push import send_push_to_user, send_push_to_users
+from services.convention import regenerate_convention_pdf
 
 router = APIRouter(prefix="/stages", tags=["stages"])
 
@@ -151,6 +152,14 @@ async def create_stage(payload: StageIn, user: dict = Depends(require_role("admi
         if formateurs:
             await send_push_to_users([f["id"] for f in formateurs], "Nouvelle session assignée", formation.get("title", ""), "/espace-animateur")
 
+        # Un formateur qui a déjà signé sa convention voit son annexe "Dates
+        # et lieux de stages" régénérée automatiquement — pas besoin de
+        # re-signer, la signature manuscrite déjà capturée est réutilisée
+        # (voir services/convention.py).
+        if formation.get("category") == "PERMIS":
+            for fid in ids:
+                await regenerate_convention_pdf(fid)
+
     doc.pop("_id", None)
     return doc
 
@@ -176,6 +185,18 @@ async def update_stage(sid: str, payload: StageUpdate, user: dict = Depends(requ
     update["updated_at"] = now_iso()
     await db.stages.update_one({"id": sid}, {"$set": update})
     updated = await db.stages.find_one({"id": sid}, {"_id": 0})
+
+    # Mêmes dates/lieu ou mêmes formateurs touchés -> on régénère l'annexe de
+    # tous les formateurs concernés (anciens + nouveaux) dont la convention
+    # est déjà signée, pour une session de récupération de points (voir
+    # create_stage pour le détail du mécanisme).
+    date_or_team_changed = bool({"animateur_ids", "animateur_id", "date_debut", "date_fin", "lieu_ville", "lieu_adresse"} & update.keys())
+    if date_or_team_changed:
+        formation = await db.formations.find_one({"id": existing.get("formation_id")}, {"_id": 0, "category": 1})
+        if formation and formation.get("category") == "PERMIS":
+            affected_ids = set(_stage_animateur_ids(existing)) | set(_stage_animateur_ids(updated))
+            for fid in affected_ids:
+                await regenerate_convention_pdf(fid)
 
     if update.get("statut") == "annule" and existing.get("statut") != "annule":
         inscriptions = await db.inscriptions.find(

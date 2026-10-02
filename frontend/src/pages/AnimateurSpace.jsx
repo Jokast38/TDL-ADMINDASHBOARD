@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Calendar, MapPin, Users, PenNib, CheckCircle, XCircle, Eraser, FilePdf, UserCircle, FileArrowUp, Signature, PaperPlaneTilt } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { useTour } from "@/contexts/TourContext";
+import { HELP_CATEGORIES } from "@/constants/helpTours";
 
 // Pièces justifiant le droit d'exercer — doit rester synchronisé avec
 // FORMATEUR_DOC_TYPES côté backend (routers/employees.py). Dossier à
@@ -163,6 +165,16 @@ function DossierTab() {
     window.open(URL.createObjectURL(blob), "_blank");
   };
 
+  // Lecture du document complet (texte d'engagement + annexe des sessions)
+  // avant signature — sans ça, le formateur ne voyait qu'un résumé d'une
+  // phrase au-dessus de la zone de signature.
+  const previewConvention = async () => {
+    const token = localStorage.getItem("tdl_token");
+    const res = await fetch(`${API}/me/convention/preview`, { headers: { Authorization: `Bearer ${token}` } });
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), "_blank");
+  };
+
   if (!dossier) return null;
   const byType = {};
   (dossier.documents_details || []).forEach((d) => { byType[d.doc_type] = d; });
@@ -232,7 +244,11 @@ function DossierTab() {
           <>
             <p className="text-sm text-gray-500 mb-3">
               En signant, vous vous engagez à assurer les sessions qui vous seront assignées via le dashboard.
+              Merci de lire le document complet avant de signer.
             </p>
+            <Button variant="outline" size="sm" onClick={previewConvention} className="mb-4" data-testid="preview-convention-btn">
+              <FilePdf size={14} className="mr-1" /> Lire la convention avant de signer
+            </Button>
             <div className="border-2 border-dashed border-gray-300 rounded-md bg-white mb-2">
               <SignatureCanvas ref={convPadRef} canvasProps={{ width: 460, height: 160, className: "w-full rounded-md" }} penColor="#0a0a0a" />
             </div>
@@ -251,6 +267,7 @@ function DossierTab() {
 
 export default function AnimateurSpace() {
   const { user } = useAuth();
+  const { startTour } = useTour();
   const [tab, setTab] = useState("sessions"); // sessions | dossier | signature
   const [stages, setStages] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -267,6 +284,21 @@ export default function AnimateurSpace() {
 
   const load = () => api.get("/stages").then((r) => setStages(r.data));
   useEffect(() => { load(); }, []);
+
+  // Visite guidée automatique au premier passage d'un formateur dans son
+  // espace — pour qu'il ne découvre pas seul comment ça marche. Ne se
+  // relance pas aux connexions suivantes (flag par compte en localStorage) ;
+  // il peut toujours la relancer manuellement depuis le Centre d'aide.
+  useEffect(() => {
+    if (!user?.id) return;
+    const flagKey = `tour_seen_animateur_${user.id}`;
+    if (localStorage.getItem(flagKey)) return;
+    const category = HELP_CATEGORIES.find((c) => c.key === "animateur");
+    if (!category) return;
+    localStorage.setItem(flagKey, "1");
+    startTour(category);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const openStage = async (s) => {
     setSelected(s);

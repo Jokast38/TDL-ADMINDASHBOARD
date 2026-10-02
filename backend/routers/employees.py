@@ -13,6 +13,7 @@ from services.password_reset import create_reset_token, send_reset_link_email, s
 from services.pdf import generate_formateur_convention_pdf
 from services.email import send_email
 from services.push import send_push_to_users
+from services.convention import upcoming_permis_sessions_for, generate_preview_pdf
 
 router = APIRouter(tags=["employees"])
 
@@ -360,52 +361,6 @@ async def _next_upcoming_stage_for_animateur(uid: str) -> dict | None:
     return {**stage, "days_until": days_until}
 
 
-async def _upcoming_permis_sessions_for(uid: str) -> list:
-    """Sessions de récupération de points (catégorie PERMIS) à venir que ce
-    formateur animera — utilisées pour l'annexe « Dates et lieux de stages »
-    de la convention (voir generate_formateur_convention_pdf), qui doit
-    lister le planning réel plutôt qu'un calendrier générique."""
-    formations = await db.formations.find({"category": "PERMIS"}, {"_id": 0, "id": 1}).to_list(200)
-    permis_ids = [f["id"] for f in formations]
-    if not permis_ids:
-        return []
-    today = now_iso()[:10]
-    stages = await db.stages.find(
-        {
-            "formation_id": {"$in": permis_ids}, "date_debut": {"$gte": today}, "statut": {"$ne": "annule"},
-            "$or": [{"animateur_ids": uid}, {"animateur_id": uid}],
-        },
-        {"_id": 0},
-    ).sort("date_debut", 1).to_list(50)
-    if not stages:
-        return []
-    other_ids = set()
-    for s in stages:
-        for aid in _stage_animateur_ids_local(s):
-            if aid != uid:
-                other_ids.add(aid)
-    others_by_id = {}
-    if other_ids:
-        others = await db.users.find({"id": {"$in": list(other_ids)}}, {"_id": 0, "id": 1, "name": 1}).to_list(50)
-        others_by_id = {o["id"]: o.get("name", "") for o in others}
-    sessions = []
-    for s in stages:
-        co_names = [others_by_id[aid] for aid in _stage_animateur_ids_local(s) if aid != uid and aid in others_by_id]
-        sessions.append({
-            "date_debut": s.get("date_debut"), "date_fin": s.get("date_fin"),
-            "lieu_adresse": s.get("lieu_adresse", ""), "lieu_ville": s.get("lieu_ville", ""),
-            "co_animateur": ", ".join(co_names),
-        })
-    return sessions
-
-
-def _stage_animateur_ids_local(stage: dict) -> list:
-    ids = list(stage.get("animateur_ids") or [])
-    if stage.get("animateur_id") and stage["animateur_id"] not in ids:
-        ids.append(stage["animateur_id"])
-    return ids
-
-
 @router.get("/me/formateur-dossier")
 async def get_my_formateur_dossier(user: dict = Depends(require_role("animateur"))):
     """État du dossier d'habilitation du formateur connecté (documents +
@@ -422,6 +377,16 @@ async def get_my_formateur_dossier(user: dict = Depends(require_role("animateur"
         **status, "documents_details": docs, "document_types": FORMATEUR_DOC_TYPES,
         "convention_pdf_available": bool(u.get("convention_pdf_path")), "next_upcoming_stage": next_stage,
     }
+
+
+@router.get("/me/convention/preview")
+async def preview_my_convention(user: dict = Depends(require_role("animateur"))):
+    """Convention non signée, en lecture seule — permet au formateur de lire
+    le document complet (texte d'engagement, annexe des sessions) avant de
+    poser sa signature manuscrite via POST /me/convention/sign."""
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    pdf_bytes = await generate_preview_pdf(u)
+    return Response(content=pdf_bytes, media_type="application/pdf")
 
 
 @router.post("/me/convention/sign")
@@ -461,7 +426,7 @@ async def sign_my_convention(payload: ConventionSignIn, user: dict = Depends(req
         except Exception:
             cachet_data_url = None
 
-    sessions = await _upcoming_permis_sessions_for(user["id"])
+    sessions = await upcoming_permis_sessions_for(user["id"])
     pdf_bytes = generate_formateur_convention_pdf(u, payload.signature_data_url, centre, cachet_data_url, sessions)
     path = f"{APP_NAME}/conventions/{user['id']}.pdf"
     result = await put_object(path, pdf_bytes, "application/pdf")
