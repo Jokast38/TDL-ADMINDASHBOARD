@@ -105,6 +105,8 @@ export default function Activity() {
   const [timeseries, setTimeseries] = useState([]);
   const [revenueTimeseries, setRevenueTimeseries] = useState([]);
   const [now, setNow] = useState(() => Date.now());
+  const [employeesPage, setEmployeesPage] = useState(1);
+  const EMPLOYEES_PAGE_SIZE = 5;
 
   const load = () => api.get("/employees/activity").then((r) => setItems(r.data)).catch(() => setItems([]));
   const loadLog = () => api.get("/employees/activity-log", { params: { page_size: 8 } })
@@ -168,9 +170,28 @@ export default function Activity() {
   const weekMinutes = useMemo(() => timeseries.reduce((s, d) => s + d.minutes, 0), [timeseries]);
   const dossierBuckets = useMemo(() => bucketDossierStatus(stats?.by_status), [stats]);
 
+  // "Actif" ici = connecté en ce moment (même calcul que le badge
+  // Actif/Hors ligne de la ligne : dernier ping < ONLINE_THRESHOLD_MS), pas
+  // le statut de compte activé/désactivé. On exclut aussi les comptes
+  // désactivés (account_status suspendu/archivé, ou active === false en
+  // base) qui ne devraient de toute façon jamais apparaître "en ligne".
+  // Recalculé à chaque tick de `now` pour qu'un employé qui se déconnecte
+  // disparaisse de la liste sans attendre un rechargement de page.
   const topEmployees = useMemo(() =>
-    [...(items || [])].sort((a, b) => (b.total_dossiers_traites || 0) - (a.total_dossiers_traites || 0)).slice(0, 8),
-    [items]);
+    [...(items || [])]
+      .filter((i) => i.active !== false && i.account_status !== "suspendu" && i.account_status !== "archive")
+      .filter((i) => i.last_seen && (now - new Date(i.last_seen).getTime()) < ONLINE_THRESHOLD_MS)
+      .sort((a, b) => (b.total_dossiers_traites || 0) - (a.total_dossiers_traites || 0)),
+    [items, now]);
+
+  const employeesTotalPages = Math.max(1, Math.ceil(topEmployees.length / EMPLOYEES_PAGE_SIZE));
+  const pagedEmployees = useMemo(
+    () => topEmployees.slice((employeesPage - 1) * EMPLOYEES_PAGE_SIZE, employeesPage * EMPLOYEES_PAGE_SIZE),
+    [topEmployees, employeesPage]
+  );
+  useEffect(() => {
+    if (employeesPage > employeesTotalPages) setEmployeesPage(1);
+  }, [employeesTotalPages, employeesPage]);
 
   if (items === null) {
     return <p className="text-sm text-gray-400 py-12 text-center">Chargement...</p>;
@@ -275,7 +296,10 @@ export default function Activity() {
         {/* Performance des employés */}
         <Card className="lg:col-span-2 p-0 border border-gray-200 rounded-md shadow-none overflow-hidden">
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <p className="font-display text-lg font-bold flex items-center gap-2"><Users size={16} className="text-[#d4af37]" /> Performance des employés</p>
+            <p className="font-display text-lg font-bold flex items-center gap-2"><Users size={16} className="text-[#d4af37]" /> Employés en ligne</p>
+            <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10">
+              <span className="h-1.5 w-1.5 rounded-full mr-1.5 bg-[#0B7238]" /> {topEmployees.length} connecté(s)
+            </Badge>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -291,7 +315,7 @@ export default function Activity() {
                 </tr>
               </thead>
               <tbody>
-                {topEmployees.map((i) => {
+                {pagedEmployees.map((i) => {
                   const online = i.last_seen && (now - new Date(i.last_seen).getTime()) < ONLINE_THRESHOLD_MS;
                   // Pour un employé en ligne, on affiche le temps écoulé depuis
                   // first_seen recalculé à la seconde (temps réel) plutôt que
@@ -300,7 +324,7 @@ export default function Activity() {
                     ? Math.max(0, Math.round((now - new Date(i.first_seen).getTime()) / 1000))
                     : null;
                   return (
-                    <tr key={i.id} className={`border-b border-gray-50 hover:bg-gray-50 ${i.active === false ? "opacity-50" : ""}`} data-testid={`activity-row-${i.id}`}>
+                    <tr key={i.id} className="border-b border-gray-50 hover:bg-gray-50" data-testid={`activity-row-${i.id}`}>
                       <td className="py-2.5 px-5">
                         <div className="flex items-center gap-2.5">
                           <Avatar className="h-8 w-8">
@@ -351,11 +375,27 @@ export default function Activity() {
                   );
                 })}
                 {!topEmployees.length && (
-                  <tr><td colSpan="7" className="py-10 text-center text-gray-400">Aucun employé.</td></tr>
+                  <tr><td colSpan="7" className="py-10 text-center text-gray-400">Aucun employé en ligne actuellement.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
+          {topEmployees.length > EMPLOYEES_PAGE_SIZE && (
+            <div className="flex items-center justify-between text-sm text-gray-500 px-5 py-3 border-t border-gray-100">
+              <p className="text-xs">
+                {(employeesPage - 1) * EMPLOYEES_PAGE_SIZE + 1}–{Math.min(employeesPage * EMPLOYEES_PAGE_SIZE, topEmployees.length)} sur {topEmployees.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={employeesPage <= 1} onClick={() => setEmployeesPage((p) => Math.max(1, p - 1))} data-testid="employees-prev-page">
+                  Précédent
+                </Button>
+                <span className="text-xs">Page {employeesPage} / {employeesTotalPages}</span>
+                <Button variant="outline" size="sm" disabled={employeesPage >= employeesTotalPages} onClick={() => setEmployeesPage((p) => Math.min(employeesTotalPages, p + 1))} data-testid="employees-next-page">
+                  Suivant
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* Dossiers panel — état d'avancement ANTS détaillé */}
