@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, FileText, UploadSimple, Trash, Calendar, PencilSimple, Signature, CheckCircle, Clock, WarningCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-const emptyForm = { name: "", email: "", phone: "", password: "", titre: "" };
+const emptyForm = { name: "", email: "", phone: "", password: "", titre: "", matricule: "" };
 
 // Doit rester synchronisé avec FORMATEUR_DOC_TYPES côté backend
 // (routers/employees.py) et STAFF_DOC_TYPE_LABELS dans AnimateurSpace.jsx.
@@ -57,6 +57,8 @@ export default function Formateurs() {
   const [uploading, setUploading] = useState(false);
   const [titreDraft, setTitreDraft] = useState("");
   const [savingTitre, setSavingTitre] = useState(false);
+  const [matriculeDraft, setMatriculeDraft] = useState("");
+  const [savingMatricule, setSavingMatricule] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [uploadDocType, setUploadDocType] = useState(Object.keys(DOC_TYPE_LABELS)[0]);
 
@@ -83,6 +85,7 @@ export default function Formateurs() {
   const openDetail = async (u) => {
     setDetail(u);
     setTitreDraft(u.titre || "");
+    setMatriculeDraft(u.matricule || "");
     setProfile(null);
     setSessions([]);
     try {
@@ -109,6 +112,21 @@ export default function Formateurs() {
       toast.error(e.response?.data?.detail || "Erreur");
     } finally {
       setSavingTitre(false);
+    }
+  };
+
+  const saveMatricule = async () => {
+    if (!detail) return;
+    setSavingMatricule(true);
+    try {
+      const { data } = await api.put(`/employees/${detail.id}/matricule`, { matricule: matriculeDraft || null });
+      toast.success("Matricule enregistré");
+      setDetail(data);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSavingMatricule(false);
     }
   };
 
@@ -192,6 +210,11 @@ export default function Formateurs() {
                 <Input value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} placeholder="Ex: Formateur BAFM, Moniteur auto-école" data-testid="formateur-titre" />
               </div>
               <div>
+                <label className="text-sm font-medium">Matricule</label>
+                <Input value={form.matricule} onChange={(e) => setForm({ ...form, matricule: e.target.value })} placeholder="Ex: F-0042" data-testid="formateur-matricule" />
+                <p className="text-xs text-gray-400 mt-1">Affiché à la place du nom sur la feuille d'émargement.</p>
+              </div>
+              <div>
                 <label className="text-sm font-medium">Mot de passe initial</label>
                 <PasswordInput value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} data-testid="formateur-password" />
               </div>
@@ -220,6 +243,7 @@ export default function Formateurs() {
             </div>
             <p className="text-xs text-gray-500">{u.titre || "Formateur"}</p>
             <p className="text-xs text-gray-400 font-mono mt-1">{u.email}</p>
+            {u.matricule && <p className="text-xs text-gray-400 font-mono mt-0.5">Matricule : {u.matricule}</p>}
             {u.agrement_bafm_numero && <p className="text-xs text-gray-400 mt-1">BAFM : {u.agrement_bafm_numero}</p>}
             <div className="mt-2"><DossierBadge u={u} /></div>
           </Card>
@@ -249,6 +273,16 @@ export default function Formateurs() {
                     Agrément BAFM et signature manuscrite sont gérés par le formateur lui-même depuis son espace ("Ma signature").
                     {detail.agrement_bafm_numero ? ` Actuellement : ${detail.agrement_bafm_numero}.` : " Aucun numéro renseigné pour l'instant."}
                   </p>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Matricule (affiché sur la feuille d'émargement, à la place du nom)</label>
+                  <div className="flex gap-2 mt-1">
+                    <Input value={matriculeDraft} onChange={(e) => setMatriculeDraft(e.target.value)} placeholder="Ex: F-0042" data-testid="formateur-matricule-edit" />
+                    <Button onClick={saveMatricule} disabled={savingMatricule} variant="outline">
+                      <PencilSimple size={14} className="mr-1" /> {savingMatricule ? "..." : "Enregistrer"}
+                    </Button>
+                  </div>
                 </div>
 
                 <div>

@@ -19,7 +19,13 @@ from routers.stages import _stage_days, _stage_animateur_ids
 
 router = APIRouter(tags=["emargements"])
 
-_PERIODES = ("matin", "apres_midi", "journee")
+# 4 signatures par jour (remplace l'ancien matin/après-midi/journée à 2-3
+# créneaux) — "journee" reste accepté en LECTURE seule pour les émargements
+# historiques déjà enregistrés avec cette valeur, mais n'est plus proposé à
+# la signature : tout nouvel émargement doit choisir l'un des 4 créneaux ci-
+# dessous.
+_PERIODES = ("matin", "midi", "apres_midi", "fin_apres_midi")
+_PERIODE_LABELS = {"matin": "Matin", "midi": "Midi", "apres_midi": "Après-midi", "fin_apres_midi": "Fin d'après-midi", "journee": "Journée"}
 
 
 async def _path_to_data_url(path: str) -> str:
@@ -55,7 +61,7 @@ async def _finalize_emargement(stage: dict, payload: EmargementIn, signed_by_ani
         except Exception:
             pass
 
-    periode = payload.periode or "journee"
+    periode = payload.periode or "matin"
     em_doc = {
         "id": str(uuid.uuid4()), "stage_id": payload.stage_id,
         "inscription_id": payload.inscription_id, "student_id": payload.student_id,
@@ -133,7 +139,7 @@ async def _notify_if_all_signed(stage: dict, session_date: str, periode: str):
     if not animateur_ids:
         return
     formateurs = await db.users.find({"id": {"$in": animateur_ids}}, {"_id": 0, "id": 1, "email": 1, "name": 1}).to_list(20)
-    periode_label = {"matin": "matin", "apres_midi": "après-midi", "journee": "journée"}.get(periode, periode)
+    periode_label = _PERIODE_LABELS.get(periode, periode).lower()
     message = (
         f"Bonjour,\n\n"
         f"Tous les apprenants ({len(inscrits)}) de la session du {session_date} ({periode_label}) — "
@@ -164,7 +170,7 @@ async def create_emargement(payload: EmargementIn, user: dict = Depends(require_
     valid_days = _stage_days(stage)
     if payload.session_date not in valid_days:
         raise HTTPException(status_code=400, detail=f"session_date doit être l'un de : {', '.join(valid_days)}")
-    periode = payload.periode or "journee"
+    periode = payload.periode or "matin"
     if periode not in _PERIODES:
         raise HTTPException(status_code=400, detail=f"periode doit être l'un de : {', '.join(_PERIODES)}")
 
@@ -193,7 +199,7 @@ async def request_emargements(sid: str, payload: EmargementRequestIn, user: dict
     valid_days = _stage_days(stage)
     if payload.session_date not in valid_days:
         raise HTTPException(status_code=400, detail=f"session_date doit être l'un de : {', '.join(valid_days)}")
-    periode = payload.periode or "journee"
+    periode = payload.periode or "matin"
     if periode not in _PERIODES:
         raise HTTPException(status_code=400, detail=f"periode doit être l'un de : {', '.join(_PERIODES)}")
 
@@ -209,7 +215,7 @@ async def request_emargements(sid: str, payload: EmargementRequestIn, user: dict
         ).to_list(500)
     }
     formation = await db.formations.find_one({"id": stage["formation_id"]}, {"_id": 0}) or {}
-    periode_label = {"matin": "matin", "apres_midi": "après-midi", "journee": "journée"}.get(periode, periode)
+    periode_label = _PERIODE_LABELS.get(periode, periode).lower()
     notified = 0
     for insc in inscrits:
         if insc["id"] in already_signed or insc["id"] in already_requested:
@@ -314,10 +320,10 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
     session_date = session_date or valid_days[0]
     if session_date not in valid_days:
         raise HTTPException(status_code=400, detail=f"session_date doit être l'un de : {', '.join(valid_days)}")
-    periode = periode or "journee"
+    periode = periode or "matin"
     if periode not in _PERIODES:
         raise HTTPException(status_code=400, detail=f"periode doit être l'un de : {', '.join(_PERIODES)}")
-    periode_label = {"matin": "Matin", "apres_midi": "Après-midi", "journee": "Journée"}[periode]
+    periode_label = _PERIODE_LABELS.get(periode, periode)
 
     formation = await db.formations.find_one({"id": stage["formation_id"]}, {"_id": 0}) or {}
     inscrits = await db.inscriptions.find({"formation_id": stage["formation_id"]}, {"_id": 0}).to_list(500)
@@ -335,8 +341,11 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
         rows = '<tr><td colspan="2" style="padding:6px;text-align:center;color:#999;">Aucun inscrit</td></tr>'
 
     if animateurs_docs:
+        # Le nom du formateur n'apparaît plus sur la feuille d'émargement —
+        # seul son matricule (saisi par un agent, voir PUT
+        # /employees/{uid}/matricule) y figure désormais.
         intervenant_row = "".join(
-            f'<tr><td style="padding:6px;">{a.get("name", "")}</td><td style="padding:6px;text-align:right;">_____________</td></tr>'
+            f'<tr><td style="padding:6px;">{a.get("matricule") or "—"}</td><td style="padding:6px;text-align:right;">_____________</td></tr>'
             for a in animateurs_docs
         )
     else:

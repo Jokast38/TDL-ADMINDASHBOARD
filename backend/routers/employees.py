@@ -8,7 +8,7 @@ from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
-from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn, AllowedPagesIn
+from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn, AllowedPagesIn, MatriculeIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 from services.pdf import generate_formateur_convention_pdf
 from services.email import send_email
@@ -126,6 +126,7 @@ async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role
         "assigned_centers": payload.assigned_centers,
         "assigned_training_assignments": payload.assigned_training_assignments,
         "titre": payload.titre,
+        "matricule": payload.matricule,
         "allowed_pages": payload.allowed_pages,
         "password_hash": hash_password(payload.password),
         "created_at": now_iso(), "active": True, "account_status": "actif",
@@ -235,6 +236,19 @@ async def update_employee_titre(uid: str, payload: EmployeeTitreIn, user: dict =
     if user["role"] != "admin" and target.get("role") not in _manageable_roles(user["role"]):
         raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes de votre périmètre")
     await db.users.update_one({"id": uid}, {"$set": {"titre": payload.titre, "updated_at": now_iso()}})
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+
+
+@router.put("/employees/{uid}/matricule")
+async def update_employee_matricule(uid: str, payload: MatriculeIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin", "responsable_admission"))):
+    """Matricule saisi manuellement par un agent — affiché à la place du nom
+    sur la feuille d'émargement (voir generate_emargement_sheet_pdf)."""
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user["role"] != "admin" and target.get("role") not in _manageable_roles(user["role"]):
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes de votre périmètre")
+    await db.users.update_one({"id": uid}, {"$set": {"matricule": payload.matricule, "updated_at": now_iso()}})
     return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
 
 

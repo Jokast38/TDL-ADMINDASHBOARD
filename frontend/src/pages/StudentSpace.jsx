@@ -22,6 +22,10 @@ import ContactBubble from "@/components/ContactBubble";
 // ATTESTATION_CATEGORY côté backend (routers/stage_attestations.py).
 const ATTESTATION_CATEGORY = "PERMIS";
 
+// 4 signatures par jour — doit rester synchronisé avec _PERIODES côté
+// backend (routers/emargements.py).
+const PERIODE_LABELS = { matin: "matin", midi: "midi", apres_midi: "après-midi", fin_apres_midi: "fin d'après-midi" };
+
 const STATUS_LABEL = {
   nouveau: "Nouveau", en_verification: "En vérification", complet: "Complet",
   soumis_ants: "Soumis à l'ANTS", termine: "Terminé", rejete: "Rejeté"
@@ -663,7 +667,7 @@ export default function StudentSpace() {
                         </p>
                         <p className="text-xs text-amber-700">
                           Session du {new Date(r.session_date).toLocaleDateString("fr-FR")}
-                          {r.periode !== "journee" ? ` · ${r.periode === "matin" ? "matin" : "après-midi"}` : ""}
+                          {r.periode ? ` · ${PERIODE_LABELS[r.periode] || r.periode}` : ""}
                           {r.lieu_ville ? ` · ${r.lieu_ville}` : ""}
                         </p>
                       </div>
@@ -851,7 +855,7 @@ export default function StudentSpace() {
               </DialogHeader>
               <p className="text-sm text-gray-500 -mt-2 mb-2">
                 {signEmargementTarget.formation_titre} — session du {new Date(signEmargementTarget.session_date).toLocaleDateString("fr-FR")}
-                {signEmargementTarget.periode !== "journee" ? ` (${signEmargementTarget.periode === "matin" ? "matin" : "après-midi"})` : ""}
+                {signEmargementTarget.periode ? ` (${PERIODE_LABELS[signEmargementTarget.periode] || signEmargementTarget.periode})` : ""}
               </p>
               <div className="border-2 border-dashed border-gray-300 rounded-md bg-white">
                 <SignatureCanvas

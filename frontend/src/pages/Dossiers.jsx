@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, API } from "@/lib/api";
+import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,22 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Kanban, FolderOpen, ArrowSquareOut, FileArrowUp, CheckCircle, XCircle, PaperPlaneTilt, Warning, Trash, MagnifyingGlass,
-  Calendar, EnvelopeSimple, ClipboardText, PenNib, Books, Smiley, Clock, Funnel,
+  Calendar, EnvelopeSimple, ClipboardText, PenNib, Books, Smiley, Clock, Funnel, Eye, X as XIcon, DownloadSimple,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const NIVEAU_LABEL = { bases_fragiles: "Bases fragiles", intermediaire: "Intermédiaire", satisfaisant: "Satisfaisant" };
+
+// Doit rester synchronisé avec DOC_TYPE_LABELS côté backend
+// (routers/documents.py) — sert à afficher un nom de pièce clair ("Pièce
+// d'identité") au lieu du nom de fichier brut (souvent une photo de
+// téléphone illisible type IMG_20240512.jpg) dans la liste des documents
+// d'un dossier.
+const DOC_TYPE_LABELS = {
+  identite: "Pièce d'identité", photo: "Photo d'identité", permis: "Permis de conduire",
+  justificatif_domicile: "Justificatif de domicile", casier_judiciaire: "Casier judiciaire (B3)",
+  cv: "CV", diplome: "Diplôme", rib: "RIB", autre: "Autre document",
+};
 
 // Champs d'identité du profil apprenant (voir GET /dossiers/{id}/full,
 // backend/services/identity_extraction.py) — remplis par OCR au dépôt d'une
@@ -43,6 +54,8 @@ export default function Dossiers() {
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(null);
   const [docs, setDocs] = useState([]);
+  const [preview, setPreview] = useState(null); // { url, contentType, label }
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [full, setFull] = useState(null);
   const [notes, setNotes] = useState("");
   const [dragging, setDragging] = useState(null);
@@ -145,6 +158,29 @@ export default function Dossiers() {
     toast.success("Document " + (status === "approved" ? "approuvé" : "rejeté"));
     const r = await api.get(`/dossiers/${selected.id}/documents`);
     setDocs(r.data);
+  };
+
+  // Aperçu en petite pop-up (au lieu d'un nouvel onglet) — récupère le
+  // document authentifié en blob et l'affiche directement dans un Dialog,
+  // fermable par la croix standard ou un clic en dehors.
+  const openPreview = async (d) => {
+    setPreviewLoading(true);
+    setPreview({ url: null, contentType: d.content_type, label: DOC_TYPE_LABELS[d.doc_type] || d.doc_type, docId: d.id });
+    try {
+      const res = await api.get(`/documents/${d.id}/download`, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      setPreview({ url, contentType: res.data.type || d.content_type, label: DOC_TYPE_LABELS[d.doc_type] || d.doc_type, docId: d.id });
+    } catch (e) {
+      toast.error("Impossible de charger le document");
+      setPreview(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
   };
 
   return (
@@ -416,7 +452,7 @@ export default function Dossiers() {
                         <FolderOpen size={18} className="text-gray-500 flex-shrink-0" />
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate flex items-center gap-1.5">
-                            {d.original_filename}
+                            {DOC_TYPE_LABELS[d.doc_type] || d.doc_type}
                             {d.legibility_warning && (
                               <Warning
                                 size={14}
@@ -426,7 +462,7 @@ export default function Dossiers() {
                               />
                             )}
                           </p>
-                          <p className="text-xs text-gray-500">{d.doc_type} · {(d.size / 1024).toFixed(0)} KB</p>
+                          <p className="text-xs text-gray-500 truncate">{d.original_filename} · {(d.size / 1024).toFixed(0)} KB</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -435,12 +471,12 @@ export default function Dossiers() {
                           d.verification_status === "rejected" ? "border-red-500 text-red-600" : ""
                         }>{d.verification_status}</Badge>
                         <button
-                          onClick={() => window.open(`${API}/documents/${d.id}/download?auth=${localStorage.getItem("tdl_token")}`, "_blank")}
+                          onClick={() => openPreview(d)}
                           className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"
                           title="Consulter le document"
                           data-testid={`view-doc-${d.id}`}
                         >
-                          <ArrowSquareOut size={16} />
+                          <Eye size={16} />
                         </button>
                         <button onClick={() => verifyDoc(d.id, "approved")} className="p-1.5 text-green-600 hover:bg-green-50 rounded" title="Approuver">
                           <CheckCircle size={16} weight="fill" />
@@ -532,6 +568,42 @@ export default function Dossiers() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!preview} onOpenChange={(v) => !v && closePreview()}>
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col" data-testid="document-preview-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 pr-6">
+              <Eye size={16} /> {preview?.label || "Document"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-auto flex items-center justify-center bg-gray-50 rounded-md border border-gray-200">
+            {previewLoading || !preview?.url ? (
+              <p className="text-sm text-gray-400 py-16">Chargement du document...</p>
+            ) : (preview.contentType || "").startsWith("image/") ? (
+              <img src={preview.url} alt={preview.label} className="max-w-full max-h-[65vh] object-contain" />
+            ) : (preview.contentType || "").includes("pdf") ? (
+              <iframe src={preview.url} title={preview.label} className="w-full h-[65vh] rounded-md" />
+            ) : (
+              <div className="text-center py-16 px-6">
+                <p className="text-sm text-gray-500 mb-3">Aperçu non disponible pour ce type de fichier.</p>
+                <a href={preview.url} download className="inline-flex items-center gap-1.5 text-sm text-[#0a0a0a] hover:underline">
+                  <DownloadSimple size={14} /> Télécharger le fichier
+                </a>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            {preview?.url && (
+              <a href={preview.url} download className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-300 rounded-md hover:bg-gray-50">
+                <DownloadSimple size={14} /> Télécharger
+              </a>
+            )}
+            <Button variant="outline" size="sm" onClick={closePreview} data-testid="close-document-preview">
+              <XIcon size={14} className="mr-1" /> Fermer
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

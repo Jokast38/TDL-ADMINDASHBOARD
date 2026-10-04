@@ -1,3 +1,4 @@
+import re
 import uuid
 import jwt
 from typing import Optional
@@ -21,6 +22,20 @@ DOC_TYPE_LABELS = {
     "justificatif_domicile": "Justificatif de domicile", "casier_judiciaire": "Casier judiciaire (B3)",
     "cv": "CV", "diplome": "Diplôme", "rib": "RIB", "autre": "Autre document",
 }
+
+
+def _clean_download_filename(doc: dict, student_name: str = "") -> str:
+    """Nom de fichier proposé au téléchargement/aperçu — remplace le nom brut
+    du fichier tel qu'uploadé (souvent un nom de photo de téléphone illisible,
+    type IMG_20240512_143022.jpg) par quelque chose d'exploitable d'un coup
+    d'œil dans la liste des documents d'un dossier : type de pièce + nom de
+    l'apprenant, extension d'origine conservée."""
+    orig = doc.get("original_filename") or ""
+    ext = f".{orig.rsplit('.', 1)[-1].lower()}" if "." in orig else ""
+    label = DOC_TYPE_LABELS.get(doc.get("doc_type"), doc.get("doc_type") or "document")
+    base = f"{label}_{student_name}".strip("_") if student_name else label
+    slug = re.sub(r"_+", "_", re.sub(r"[^\w\-]+", "_", base, flags=re.UNICODE)).strip("_")
+    return f"{slug or 'document'}{ext}"
 
 
 @router.post("/dossiers/{did}/documents")
@@ -122,13 +137,17 @@ async def download_document(doc_id: str, auth: Optional[str] = None, request: Re
     if not doc:
         raise HTTPException(status_code=404, detail="Document introuvable")
     data, ct = await get_object(doc["storage_path"])
+    student_name = ""
+    if doc.get("student_id"):
+        student = await db.users.find_one({"id": doc["student_id"]}, {"_id": 0, "name": 1})
+        student_name = (student or {}).get("name", "")
     return Response(
         content=data,
         media_type=doc.get("content_type") or ct,
         # "inline" (pas "attachment") : l'équipe doit pouvoir consulter le
         # document (image, PDF) directement dans un nouvel onglet avant de
         # l'approuver/rejeter, plutôt que de forcer un téléchargement.
-        headers={"Content-Disposition": f'inline; filename="{doc.get("original_filename") or "document"}"'},
+        headers={"Content-Disposition": f'inline; filename="{_clean_download_filename(doc, student_name)}"'},
     )
 
 

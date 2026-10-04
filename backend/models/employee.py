@@ -23,10 +23,20 @@ class EmployeeIn(BaseModel):
     # renseignée). Voir PUT /employees/{uid}/pages pour la modifier après
     # création.
     allowed_pages: List[str] = []
+    # Matricule saisi manuellement par l'agent à la création du compte (pas
+    # de génération automatique — reprend souvent un identifiant déjà
+    # existant côté RH/Digiforma). Affiché à la place du nom sur la feuille
+    # d'émargement (voir routers/emargements.py), notamment pour les
+    # formateurs/psychologues.
+    matricule: Optional[str] = None
 
 
 class EmployeeTitreIn(BaseModel):
     titre: Optional[str] = None
+
+
+class MatriculeIn(BaseModel):
+    matricule: Optional[str] = None
 
 
 class AllowedPagesIn(BaseModel):
