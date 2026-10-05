@@ -585,10 +585,6 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
     if "interest" in update:
         update["category"] = _category_for_interest(update["interest"])
-    if update.get("contacted") or update.get("status") in ("contacte", "interesse", "pas_interesse"):
-        update["last_contacted_by"] = user["id"]
-        update.setdefault("last_contacted_at", now_iso())
-        await log_action(user, "lead_contacte", "lead", lid, {"status": update.get("status"), "name": existing.get("name")})
     # Qui a traité ce lead en dernier — colonne "Traité par" côté dashboard
     # (Marketing.jsx, onglet Cosmosia) + traçage dans le journal d'activité.
     qualification_changed = "qualification" in update and update["qualification"] != existing.get("qualification")
@@ -596,6 +592,17 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
         update["qualified_by"] = user["id"]
         update["qualified_by_name"] = user.get("name", "")
         update["qualified_at"] = now_iso()
+        # Qualifier un lead Cosmosia est un contact réel (l'agent vient de
+        # l'évaluer) — sans ça, GET /employees/activity (colonne "Leads
+        # contactés") ne comptait jamais ces leads, puisque seul le flux de
+        # Prospects classique ("status"/"contacted") y était pris en compte.
+        update.setdefault("contacted", True)
+        update.setdefault("last_contacted_by", user["id"])
+        update.setdefault("last_contacted_at", now_iso())
+    if update.get("contacted") or update.get("status") in ("contacte", "interesse", "pas_interesse"):
+        update["last_contacted_by"] = user["id"]
+        update.setdefault("last_contacted_at", now_iso())
+        await log_action(user, "lead_contacte", "lead", lid, {"status": update.get("status"), "name": existing.get("name")})
     update["updated_at"] = now_iso()
     await db.leads.update_one({"id": lid}, {"$set": update})
     _leads_cache_clear()

@@ -518,6 +518,14 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
         leads_contacted = await db.leads.count_documents({"last_contacted_by": uid})
         leads_interesse = await db.leads.count_documents({"last_contacted_by": uid, "status": "interesse"})
         leads_pas_interesse = await db.leads.count_documents({"last_contacted_by": uid, "status": "pas_interesse"})
+        # Prospects Meta (db.meta_lead_imports) — collection séparée de
+        # Prospects/Cosmosia (db.leads), jamais comptée ci-dessus sinon : un
+        # agent qui ne traite que des leads Meta ressortait à 0 contact alors
+        # qu'il travaille activement (qualified_by posé dans
+        # routers/meta_lead_import.py à chaque changement de qualification).
+        meta_leads_qualified = await db.meta_lead_imports.count_documents({"qualified_by": uid})
+        meta_leads_inscrits = await db.meta_lead_imports.count_documents({"qualified_by": uid, "qualification": "inscrit"})
+        leads_contacted += meta_leads_qualified
         callbacks_handled = await db.callback_requests.count_documents({"handled_by": uid})
         inscriptions_traitees = await db.inscriptions.count_documents({"processed_by": uid})
         calls_today = await db.commercial_calls.count_documents({"agent_id": uid, "at": {"$regex": f"^{today}"}})
@@ -549,6 +557,7 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
             "leads_contacted": leads_contacted,
             "leads_interesse": leads_interesse,
             "leads_pas_interesse": leads_pas_interesse,
+            "leads_meta_inscrits": meta_leads_inscrits,
             "callbacks_handled": callbacks_handled,
             "inscriptions_traitees": inscriptions_traitees,
             "calls_today": calls_today,
