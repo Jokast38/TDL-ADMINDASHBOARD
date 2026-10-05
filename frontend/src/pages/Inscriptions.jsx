@@ -27,6 +27,75 @@ const PAYMENT_LABEL = {
 };
 const PAYMENT_PAID_LIKE = ["paid", "cpf_valide"];
 
+// Mode de règlement réel — distinct de payment_status (payé/en attente),
+// saisi manuellement par l'équipe comme CMA/CPF.
+const PAYMENT_METHOD_LABEL = {
+  carte: "Carte bancaire", especes: "Espèces", virement: "Virement",
+  cheque: "Chèque", cpf: "CPF", cma: "CMA", klarna: "Klarna",
+};
+
+// Options CMA/CPF — reprises des valeurs réellement utilisées sur le fichier
+// de suivi Excel existant ("OUI", "NON", "EVALBOX" pour un dossier en
+// vérification sur la plateforme Evalbox). "Autre" bascule sur un champ
+// texte libre pour les cas particuliers (montant, note...).
+const FUNDING_OPTIONS = ["OUI", "NON", "EVALBOX"];
+
+function FundingCell({ value, onSave, disabled, testId }) {
+  const isPreset = FUNDING_OPTIONS.includes(value);
+  const isCustom = !!value && !isPreset;
+  const [mode, setMode] = useState(isCustom ? "autre" : "preset");
+  const [customValue, setCustomValue] = useState(isCustom ? value : "");
+
+  const handleSelect = (v) => {
+    if (v === "autre") {
+      setMode("autre");
+      return;
+    }
+    setMode("preset");
+    onSave(v === "vide" ? "" : v);
+  };
+
+  const saveCustom = () => {
+    if (customValue !== (isCustom ? value : "")) onSave(customValue);
+  };
+
+  if (mode === "autre") {
+    return (
+      <div className="flex items-center gap-1">
+        <input
+          autoFocus
+          value={customValue}
+          onChange={(e) => setCustomValue(e.target.value)}
+          onBlur={saveCustom}
+          placeholder="Note libre"
+          className="w-24 text-xs border border-gray-200 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#d4af37]"
+          disabled={disabled}
+          data-testid={testId}
+        />
+        <button
+          type="button"
+          onClick={() => { setMode("preset"); setCustomValue(""); if (value) onSave(""); }}
+          className="text-[10px] text-gray-400 hover:text-red-600"
+          title="Revenir aux options"
+        >×</button>
+      </div>
+    );
+  }
+
+  return (
+    <Select value={isPreset ? value : (value ? "autre" : "vide")} onValueChange={handleSelect} disabled={disabled}>
+      <SelectTrigger className="h-7 text-xs w-24 border-gray-200" data-testid={testId}>
+        <SelectValue placeholder="—" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="vide">—</SelectItem>
+        {FUNDING_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+        <SelectItem value="autre">Autre...</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
 // Tag de suivi commercial manuel — distinct du statut du dossier (traitement
 // administratif) et du statut de l'inscription (active/annulée) : c'est le
 // suivi "où en est le contact avec cette personne" (voir backend/models/
@@ -283,6 +352,19 @@ export default function Inscriptions() {
     finally { setEnrolling(false); }
   };
 
+  // Nombre d'inscriptions traitées par agent (processed_by_name, posé côté
+  // serveur dès qu'un agent change le tag de suivi — voir update_inscription)
+  // — pour voir d'un coup d'œil qui fait avancer quoi, pas seulement les
+  // stats globales déjà visibles sur la page Activité.
+  const byAgent = useMemo(() => {
+    const counts = new Map();
+    for (const i of items) {
+      if (!i.processed_by_name) continue;
+      counts.set(i.processed_by_name, (counts.get(i.processed_by_name) || 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  }, [items]);
+
   const formationOptions = useMemo(() => {
     const map = new Map();
     items.forEach((i) => { if (i.formation_id && !map.has(i.formation_id)) map.set(i.formation_id, i.formation_title); });
@@ -332,6 +414,18 @@ export default function Inscriptions() {
     } finally {
       setSyncingId(null);
     }
+  };
+
+  // Financement CMA/CPF — édition en ligne (texte libre : "OUI"/"NON", un
+  // montant, ou une note, comme sur le fichier de suivi Excel existant).
+  const updateFunding = async (id, field, value) => {
+    try { await api.put(`/inscriptions/${id}`, { [field]: value }); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
+  };
+
+  const updatePaymentMethod = async (id, payment_method) => {
+    try { await api.put(`/inscriptions/${id}`, { payment_method }); load(); }
+    catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
   };
 
   const updatePaymentStatus = async (id, payment_status) => {
@@ -531,6 +625,15 @@ export default function Inscriptions() {
         </Select>
       </div>
 
+      {byAgent.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap" data-testid="inscriptions-by-agent">
+          <span className="text-xs text-gray-400">Inscriptions traitées par agent :</span>
+          {byAgent.map(([name, count]) => (
+            <Badge key={name} variant="outline" className="text-xs">{name} · {count}</Badge>
+          ))}
+        </div>
+      )}
+
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -542,9 +645,13 @@ export default function Inscriptions() {
                 <th className="py-3 px-4 overline">Catégorie</th>
                 <th className="py-3 px-4 overline">Origine</th>
                 <th className="py-3 px-4 overline">Paiement</th>
+                <th className="py-3 px-4 overline">Mode de paiement</th>
                 <th className="py-3 px-4 overline">Statut</th>
                 <th className="py-3 px-4 overline">Traitement</th>
+                <th className="py-3 px-4 overline">Traité par</th>
                 <th className="py-3 px-4 overline">Tag</th>
+                <th className="py-3 px-4 overline">CMA</th>
+                <th className="py-3 px-4 overline">CPF</th>
                 <th className="py-3 px-4 overline">Session</th>
                 <th className="py-3 px-4 overline">Notes</th>
                 <th className="py-3 px-4 overline text-right">Prix</th>
@@ -610,6 +717,17 @@ export default function Inscriptions() {
                       </div>
                     </td>
                     <td className="py-3 px-4">
+                      <Select value={i.payment_method || "vide"} onValueChange={(v) => updatePaymentMethod(i.id, v === "vide" ? "" : v)} disabled={cancelled}>
+                        <SelectTrigger className="h-7 text-xs w-32 border-gray-200" data-testid={`payment-method-${i.id}`}>
+                          <SelectValue placeholder="—" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="vide">—</SelectItem>
+                          {Object.entries(PAYMENT_METHOD_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-3 px-4">
                       <Badge className={cancelled ? "bg-red-100 text-red-700 hover:bg-red-100" : "bg-green-100 text-green-700 hover:bg-green-100"}>
                         {cancelled ? "Annulée" : "Active"}
                       </Badge>
@@ -631,6 +749,7 @@ export default function Inscriptions() {
                         <span className="text-xs text-gray-300">—</span>
                       )}
                     </td>
+                    <td className="py-3 px-4 text-xs text-gray-600">{i.processed_by_name || <span className="text-gray-300">—</span>}</td>
                     <td className="py-3 px-4">
                       <Select value={i.contact_status || "en_cours"} onValueChange={(v) => updateContactStatus(i.id, v)} disabled={cancelled}>
                         <SelectTrigger className={`h-7 text-xs w-44 border-0 ${CONTACT_STATUS_COLOR[i.contact_status || "en_cours"]}`} data-testid={`contact-status-${i.id}`}>
@@ -640,6 +759,12 @@ export default function Inscriptions() {
                           {Object.entries(CONTACT_STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                         </SelectContent>
                       </Select>
+                    </td>
+                    <td className="py-3 px-4">
+                      <FundingCell value={i.cma} onSave={(v) => updateFunding(i.id, "cma", v)} disabled={cancelled} testId={`cma-${i.id}`} />
+                    </td>
+                    <td className="py-3 px-4">
+                      <FundingCell value={i.cpf} onSave={(v) => updateFunding(i.id, "cpf", v)} disabled={cancelled} testId={`cpf-${i.id}`} />
                     </td>
                     <td className="py-3 px-4">
                       <button
@@ -723,7 +848,7 @@ export default function Inscriptions() {
                 );
               })}
               {!paged.length && (
-                <tr><td colSpan="13" className="py-12 text-center text-gray-400">Aucune inscription.</td></tr>
+                <tr><td colSpan="17" className="py-12 text-center text-gray-400">Aucune inscription.</td></tr>
               )}
             </tbody>
           </table>

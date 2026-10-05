@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import PasswordInput from "@/components/PasswordInput";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
@@ -14,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, FileText, UploadSimple, Trash, Calendar, PencilSimple, Signature, CheckCircle, Clock, WarningCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-const emptyForm = { name: "", email: "", phone: "", password: "", titre: "", matricule: "" };
+const emptyForm = { name: "", email: "", phone: "", titre: "", matricule: "" };
 
 // Doit rester synchronisé avec FORMATEUR_DOC_TYPES côté backend
 // (routers/employees.py) et STAFF_DOC_TYPE_LABELS dans AnimateurSpace.jsx.
@@ -66,13 +65,14 @@ export default function Formateurs() {
   useEffect(() => { load(); }, []);
 
   const save = async () => {
-    if (!form.name.trim() || !form.email.trim() || !form.password) {
-      return toast.error("Nom, email et mot de passe sont requis");
+    if (!form.name.trim() || !form.email.trim()) {
+      return toast.error("Nom et email sont requis");
     }
     setSaving(true);
     try {
-      await api.post("/employees", { ...form, role: "animateur" });
-      toast.success("Formateur créé");
+      const { password, ...rest } = form;
+      await api.post("/employees", { ...rest, role: "animateur" });
+      toast.success("Formateur créé — ses identifiants (mot de passe généré automatiquement) lui ont été envoyés par email");
       setOpen(false); setForm(emptyForm);
       load();
     } catch (e) {
@@ -214,10 +214,9 @@ export default function Formateurs() {
                 <Input value={form.matricule} onChange={(e) => setForm({ ...form, matricule: e.target.value })} placeholder="Ex: F-0042" data-testid="formateur-matricule" />
                 <p className="text-xs text-gray-400 mt-1">Affiché à la place du nom sur la feuille d'émargement.</p>
               </div>
-              <div>
-                <label className="text-sm font-medium">Mot de passe initial</label>
-                <PasswordInput value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} data-testid="formateur-password" />
-              </div>
+              <p className="text-xs text-gray-400">
+                Un mot de passe temporaire sera généré automatiquement et envoyé par email au formateur, avec un lien de connexion.
+              </p>
             </div>
             <div className="flex justify-end gap-2 mt-4">
               <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>Annuler</Button>

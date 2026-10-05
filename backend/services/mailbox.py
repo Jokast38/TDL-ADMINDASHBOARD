@@ -95,11 +95,18 @@ def _parse_summary(uid: bytes, raw_header: bytes, flags: bytes) -> dict:
     }
 
 
-def _list_messages_sync(folder: str, limit: int, offset: int) -> dict:
+def _list_messages_sync(folder: str, limit: int, offset: int, subject: str = None) -> dict:
     m = _imap_connect()
     try:
         m.select(folder, readonly=True)
-        typ, data = m.uid("search", None, "ALL")
+        # Recherche IMAP côté serveur sur l'objet (SUBJECT fait un "contains",
+        # insensible à la casse côté serveur) — couvre à la fois la recherche
+        # libre et les filtres prédéfinis par catégorie (le frontend envoie
+        # simplement le mot-clé de la catégorie comme `subject`).
+        if subject and subject.strip():
+            typ, data = m.uid("search", None, "SUBJECT", f'"{subject.strip()}"')
+        else:
+            typ, data = m.uid("search", None, "ALL")
         if typ != "OK" or not data or not data[0]:
             return {"messages": [], "total": 0}
         uids = data[0].split()
@@ -246,8 +253,25 @@ def _send_and_save_sync(to: str, subject: str, body_html: str, attachments: list
     return {"status": "sent"}
 
 
-async def list_messages(folder: str, limit: int = 30, offset: int = 0) -> dict:
-    return await asyncio.to_thread(_list_messages_sync, folder, limit, offset)
+async def list_messages(folder: str, limit: int = 30, offset: int = 0, subject: str = None) -> dict:
+    return await asyncio.to_thread(_list_messages_sync, folder, limit, offset, subject)
+
+
+def _delete_message_sync(folder: str, uid: str) -> bool:
+    m = _imap_connect()
+    try:
+        m.select(folder, readonly=False)
+        typ, _ = m.uid("store", uid.encode(), "+FLAGS", "\\Deleted")
+        if typ != "OK":
+            return False
+        m.expunge()
+        return True
+    finally:
+        m.logout()
+
+
+async def delete_message(folder: str, uid: str) -> bool:
+    return await asyncio.to_thread(_delete_message_sync, folder, uid)
 
 
 async def get_message(folder: str, uid: str, mark_read: bool = True) -> dict:

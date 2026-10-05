@@ -10,11 +10,21 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   EnvelopeSimple, EnvelopeOpen, PaperPlaneTilt, Paperclip, DownloadSimple,
-  Plus, ArrowClockwise, ArrowLeft, ArrowRight, X, PencilSimple,
+  Plus, ArrowClockwise, ArrowLeft, ArrowRight, X, PencilSimple, MagnifyingGlass, Trash,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 const PAGE_SIZE = 25;
+
+// Filtres rapides par objet — simples raccourcis qui préremplissent la
+// recherche libre (même mécanisme côté serveur : SUBJECT contains, voir
+// services/mailbox.py), pas une taxonomie distincte à maintenir.
+const SUBJECT_QUICK_FILTERS = [
+  { label: "Paiement", keyword: "paiement" },
+  { label: "Inscription", keyword: "inscription" },
+  { label: "Facture", keyword: "facture" },
+  { label: "Convocation", keyword: "convocation" },
+];
 
 // Boîte de messagerie interne (contact@tdl-formation.fr) — réception et
 // envoi via services/mailbox.py (IMAP + SMTP o2switch), distincte des
@@ -32,6 +42,8 @@ export default function Mailbox() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   const [signatureOpen, setSignatureOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [deletingUid, setDeletingUid] = useState(null);
 
   useEffect(() => {
     api.get("/mailbox/status").then((r) => setConfigured(r.data.configured)).catch(() => setConfigured(false));
@@ -39,13 +51,32 @@ export default function Mailbox() {
 
   const load = useCallback(() => {
     setLoading(true);
-    api.get(`/mailbox/${folder}`, { params: { limit: PAGE_SIZE, offset } })
+    api.get(`/mailbox/${folder}`, { params: { limit: PAGE_SIZE, offset, subject: search.trim() || undefined } })
       .then((r) => { setMessages(r.data.messages); setTotal(r.data.total); })
       .catch((e) => toast.error(e.response?.data?.detail || "Erreur de chargement de la messagerie"))
       .finally(() => setLoading(false));
-  }, [folder, offset]);
+  }, [folder, offset, search]);
 
   useEffect(() => { if (configured) load(); }, [configured, load]);
+
+  // Repart en page 1 à chaque changement de recherche (sinon l'offset courant
+  // peut dépasser le total filtré et renvoyer une page vide).
+  useEffect(() => { setOffset(0); }, [search]);
+
+  const deleteMessage = async (uid) => {
+    if (!window.confirm("Supprimer définitivement ce message ?")) return;
+    setDeletingUid(uid);
+    try {
+      await api.delete(`/mailbox/${folder}/${uid}`);
+      toast.success("Message supprimé");
+      if (selected?.uid === uid) { setSelected(null); setDetail(null); }
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la suppression");
+    } finally {
+      setDeletingUid(null);
+    }
+  };
 
   useEffect(() => {
     // Ouvre directement le compositeur pré-rempli si on arrive depuis une
@@ -123,27 +154,64 @@ export default function Mailbox() {
         </TabsList>
       </Tabs>
 
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative w-full max-w-xs">
+          <MagnifyingGlass size={14} className="absolute left-3 top-2.5 text-gray-400" />
+          <Input
+            placeholder="Rechercher dans l'objet..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-9 text-sm"
+            data-testid="mailbox-search"
+          />
+        </div>
+        {SUBJECT_QUICK_FILTERS.map((f) => (
+          <button
+            key={f.keyword}
+            onClick={() => setSearch((s) => (s === f.keyword ? "" : f.keyword))}
+            className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${search === f.keyword ? "bg-[#0a0a0a] text-white border-[#0a0a0a]" : "border-gray-200 text-gray-600 hover:border-[#d4af37] hover:text-[#d4af37]"}`}
+            data-testid={`mailbox-filter-${f.keyword}`}
+          >
+            {f.label}
+          </button>
+        ))}
+        {search && (
+          <button className="text-xs text-gray-400 hover:text-red-600 underline" onClick={() => setSearch("")}>
+            Réinitialiser
+          </button>
+        )}
+      </div>
+
       <div className="grid lg:grid-cols-[380px_1fr] gap-4 items-start">
         <Card className="border border-gray-200 rounded-md shadow-none overflow-hidden">
           <div className="divide-y divide-gray-100 max-h-[70vh] overflow-y-auto">
             {loading && !messages.length && <div className="p-6 text-center text-gray-400 text-sm">Chargement...</div>}
             {!loading && !messages.length && <div className="p-6 text-center text-gray-400 text-sm">Aucun message.</div>}
             {messages.map((m) => (
-              <button
+              <div
                 key={m.uid}
-                onClick={() => openMessage(m)}
-                data-testid={`mailbox-msg-${m.uid}`}
-                className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${selected?.uid === m.uid ? "bg-gray-50" : ""}`}
+                className={`group relative w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${selected?.uid === m.uid ? "bg-gray-50" : ""}`}
               >
-                <div className="flex items-center gap-2">
-                  {m.seen ? <EnvelopeOpen size={14} className="text-gray-300 shrink-0" /> : <EnvelopeSimple size={14} className="text-[#d4af37] shrink-0" />}
-                  <span className={`text-sm truncate ${!m.seen ? "font-bold" : "font-medium"}`}>
-                    {folder === "inbox" ? m.from : m.to}
-                  </span>
-                </div>
-                <p className={`text-sm mt-0.5 truncate ${!m.seen ? "font-semibold text-gray-900" : "text-gray-600"}`}>{m.subject}</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">{m.date ? new Date(m.date).toLocaleString("fr-FR") : ""}</p>
-              </button>
+                <button onClick={() => openMessage(m)} className="w-full text-left pr-6" data-testid={`mailbox-msg-${m.uid}`}>
+                  <div className="flex items-center gap-2">
+                    {m.seen ? <EnvelopeOpen size={14} className="text-gray-300 shrink-0" /> : <EnvelopeSimple size={14} className="text-[#d4af37] shrink-0" />}
+                    <span className={`text-sm truncate ${!m.seen ? "font-bold" : "font-medium"}`}>
+                      {folder === "inbox" ? m.from : m.to}
+                    </span>
+                  </div>
+                  <p className={`text-sm mt-0.5 truncate ${!m.seen ? "font-semibold text-gray-900" : "text-gray-600"}`}>{m.subject}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{m.date ? new Date(m.date).toLocaleString("fr-FR") : ""}</p>
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); deleteMessage(m.uid); }}
+                  disabled={deletingUid === m.uid}
+                  className="absolute top-3 right-3 p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Supprimer"
+                  data-testid={`mailbox-delete-${m.uid}`}
+                >
+                  <Trash size={14} />
+                </button>
+              </div>
             ))}
           </div>
           {total > PAGE_SIZE && (

@@ -84,6 +84,38 @@ async def create_checkout_session(
     return await asyncio.to_thread(_create)
 
 
+async def create_custom_checkout_session(
+    title: str, amount_cents: int, email: str, custom_payment_id: str, success_url: str, cancel_url: str,
+) -> "stripe.checkout.Session":
+    """Session Stripe à prix libre, pour la page "Paiement personnalisé" —
+    pas d'inscription associée (metadata.custom_payment_id plutôt que
+    inscription_id, lu par le même webhook, voir routers/payments.py)."""
+    key = await secret_key()
+    if amount_cents <= 0:
+        raise ValueError("Le prix doit être supérieur à 0")
+
+    def _create():
+        return stripe.checkout.Session.create(
+            api_key=key,
+            mode="payment",
+            payment_method_types=["card"],
+            customer_email=email,
+            line_items=[{
+                "price_data": {
+                    "currency": "eur",
+                    "product_data": {"name": title},
+                    "unit_amount": amount_cents,
+                },
+                "quantity": 1,
+            }],
+            metadata={"custom_payment_id": custom_payment_id},
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+
+    return await asyncio.to_thread(_create)
+
+
 async def retrieve_checkout_session(session_id: str) -> "stripe.checkout.Session":
     """Relit l'état réel d'une session Stripe Checkout — filet de sécurité si
     le webhook n'a pas (encore, ou jamais) mis à jour l'inscription (ex:

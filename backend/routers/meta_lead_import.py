@@ -31,11 +31,15 @@ from models.inscription import InscriptionIn
 from routers.inscriptions import create_inscription
 from services.email import send_email
 from services.email_template import render_branded_email
+from services.lead_followup import send_no_response_followup, NO_RESPONSE_QUALIFICATION
+from services.activity import log_action
+from services.push import send_push_to_users
 
 router = APIRouter(prefix="/meta-lead-import", tags=["meta-lead-import"])
 
 QUALIFICATION_LABELS = {
     "a_contacter": "À contacter",
+    "non_qualifie": "Prospect non qualifié",
     "interesse": "Intéressé",
     "pas_de_reponse": "Pas de réponse",
     "injoignable": "Injoignable",
@@ -233,8 +237,27 @@ async def update_meta_lead(lead_id: str, payload: MetaLeadUpdate, user: dict = D
         return {**doc, "_id": None}
     if updates.get("qualification") and updates["qualification"] not in QUALIFICATION_LABELS:
         raise HTTPException(status_code=400, detail="Qualification inconnue")
+    # Qui a traité ce lead en dernier — affiché en colonne "Traité par" côté
+    # dashboard (Marketing.jsx), et tracé dans le journal d'activité pour
+    # pouvoir reconstituer qui a fait avancer quoi.
+    qualification_changed = "qualification" in updates and updates["qualification"] != doc.get("qualification")
+    if qualification_changed:
+        updates["qualified_by"] = user["id"]
+        updates["qualified_by_name"] = user.get("name", "")
+        updates["qualified_at"] = now_iso()
     updates["updated_at"] = now_iso()
     await db.meta_lead_imports.update_one({"id": lead_id}, {"$set": updates})
+    if updates.get("qualification") == NO_RESPONSE_QUALIFICATION and doc.get("qualification") != NO_RESPONSE_QUALIFICATION:
+        await send_no_response_followup(doc.get("name"), doc.get("email"))
+    if qualification_changed:
+        await log_action(user, "lead_qualifie", "meta_lead", lead_id, {
+            "name": doc.get("name"), "qualification": updates["qualification"],
+        })
+        if updates["qualification"] == "inscrit":
+            await send_push_to_users(
+                [user["id"]], "🎉 Lead converti !",
+                f"{doc.get('name') or 'Un prospect'} vient d'être marqué Inscrit — bravo !", "/admin/marketing",
+            )
     doc = await db.meta_lead_imports.find_one({"id": lead_id}, {"_id": 0})
     return doc
 

@@ -611,12 +611,15 @@ function suggestKeywords(backlink) {
 
 const META_LEAD_QUALIF_COLORS = {
   a_contacter: "bg-gray-100 text-gray-600 hover:bg-gray-100",
+  non_qualifie: "bg-gray-200 text-gray-500 hover:bg-gray-200",
   interesse: "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10",
   pas_de_reponse: "bg-amber-100 text-amber-700 hover:bg-amber-100",
   injoignable: "bg-gray-200 text-gray-700 hover:bg-gray-200",
   a_relancer: "bg-blue-100 text-blue-700 hover:bg-blue-100",
   plus_interesse: "bg-red-100 text-red-700 hover:bg-red-100",
-  inscrit: "bg-[#d4af37]/20 text-[#8a6d00] hover:bg-[#d4af37]/20",
+  // Vert franc (distinct de "interesse", vert plus clair) — pour que le
+  // passage en "Inscrit" (lead converti) saute aux yeux dans le tableau.
+  inscrit: "bg-green-600 text-white hover:bg-green-600",
 };
 const META_LEADS_PAGE_SIZE = 25;
 
@@ -752,13 +755,14 @@ function CosmosiaTab() {
                 <th className="py-2.5 px-4 overline">Campagne</th>
                 <th className="py-2.5 px-4 overline">Intérêt</th>
                 <th className="py-2.5 px-4 overline">Qualification</th>
+                <th className="py-2.5 px-4 overline">Traité par</th>
                 <th className="py-2.5 px-4 overline">Notes</th>
                 <th className="py-2.5 px-4 overline">Importé le</th>
               </tr>
             </thead>
             <tbody>
               {!items.length && (
-                <tr><td colSpan="6" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="7" className="py-10 text-center text-gray-400">
                   {total ? "Aucun lead pour ce filtre." : "Aucun lead Cosmosia importé — utilisez le bouton ci-dessus."}
                 </td></tr>
               )}
@@ -781,6 +785,7 @@ function CosmosiaTab() {
                       </SelectContent>
                     </Select>
                   </td>
+                  <td className="py-2.5 px-4 text-xs text-gray-600">{l.qualified_by_name || <span className="text-gray-300">—</span>}</td>
                   <td className="py-2.5 px-4 max-w-[220px]">
                     <MetaLeadNotesCell lead={l} onSave={updateNotes} />
                   </td>
@@ -988,13 +993,14 @@ function MetaEventsTab() {
                 <th className="py-2.5 px-4 overline">Campagne</th>
                 <th className="py-2.5 px-4 overline">Inscrit le</th>
                 <th className="py-2.5 px-4 overline">Qualification</th>
+                <th className="py-2.5 px-4 overline">Traité par</th>
                 <th className="py-2.5 px-4 overline">Notes</th>
                 <th className="py-2.5 px-4 overline text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {!pagedItems.length && (
-                <tr><td colSpan="7" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="8" className="py-10 text-center text-gray-400">
                   {items.length ? "Aucun lead pour ce filtre." : "Aucun lead — importez un export CSV pour commencer."}
                 </td></tr>
               )}
@@ -1023,6 +1029,7 @@ function MetaEventsTab() {
                       </SelectContent>
                     </Select>
                   </td>
+                  <td className="py-2.5 px-4 text-xs text-gray-600">{l.qualified_by_name || <span className="text-gray-300">—</span>}</td>
                   <td className="py-2.5 px-4 max-w-[220px]">
                     <MetaLeadNotesCell lead={l} onSave={updateNotes} />
                   </td>

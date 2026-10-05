@@ -23,7 +23,7 @@ from routers import (
     company_documents, positioning_tests, backlinks, docs, places,
     exams, appointments, stage_attestations, modules, satisfaction, french_tests,
     mailbox, meta_leads, flash_offer, ocr_test, meta_lead_import,
-    call_center, cosmosia_import,
+    call_center, cosmosia_import, custom_payments,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import (
@@ -103,6 +103,7 @@ app.include_router(flash_offer.router,    prefix=_PREFIX)
 # Page de test OCR (expérimentale, admin uniquement) — voir routers/ocr_test.py
 app.include_router(ocr_test.router,       prefix=_PREFIX)
 app.include_router(meta_leads.router, prefix=_PREFIX)
+app.include_router(custom_payments.router, prefix=_PREFIX)
 app.include_router(meta_lead_import.router, prefix=_PREFIX)
 app.include_router(call_center.router,    prefix=_PREFIX)
 app.include_router(cosmosia_import.router, prefix=_PREFIX)

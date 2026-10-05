@@ -6,7 +6,7 @@ import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
   CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive, Question, Student,
-  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLeft, CaretRight, Headset,
+  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLeft, CaretRight, Headset, CreditCard,
 } from "@phosphor-icons/react";
 
 // Exporté pour être réutilisé par le sélecteur de pages autorisées sur la
@@ -31,6 +31,7 @@ export const navAll = [
   { to: "/admin/stages", label: "Sessions de stage", icon: CalendarCheck, roles: ["admin", "responsable_admission"] },
   { to: "/admin/agenda", label: "Agenda", icon: CalendarBlank, roles: ["admin", "responsable_admission", "animateur"] },
   { to: "/admin/agenda-appel", label: "Agenda d'appel", icon: Headset, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
+  { to: "/admin/paiement-personnalise", label: "Paiement personnalisé", icon: CreditCard, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
   { to: "/admin/modules", label: "Modules de formation", icon: Books, roles: ["admin", "responsable_admission"] },
   { to: "/admin/formateurs", label: "Formateurs", icon: PenNib, roles: ["admin", "responsable_admission", "agent_admin"] },
   { to: "/admin/inscriptions", label: "Inscriptions", icon: IdentificationCard, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },

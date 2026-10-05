@@ -11,6 +11,8 @@ from core.config import ROLES_LEADS
 from models.lead import LeadIn, LeadUpdate, LeadImportJsonIn, LeadRelanceIn, LeadRelanceSingleIn, LeadBroadcastIn
 from services.email import send_email
 from services.activity import log_action
+from services.lead_followup import send_no_response_followup, NO_RESPONSE_QUALIFICATION
+from services.push import send_push_to_users
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -587,9 +589,27 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
         update["last_contacted_by"] = user["id"]
         update.setdefault("last_contacted_at", now_iso())
         await log_action(user, "lead_contacte", "lead", lid, {"status": update.get("status"), "name": existing.get("name")})
+    # Qui a traité ce lead en dernier — colonne "Traité par" côté dashboard
+    # (Marketing.jsx, onglet Cosmosia) + traçage dans le journal d'activité.
+    qualification_changed = "qualification" in update and update["qualification"] != existing.get("qualification")
+    if qualification_changed:
+        update["qualified_by"] = user["id"]
+        update["qualified_by_name"] = user.get("name", "")
+        update["qualified_at"] = now_iso()
     update["updated_at"] = now_iso()
     await db.leads.update_one({"id": lid}, {"$set": update})
     _leads_cache_clear()
+    if update.get("qualification") == NO_RESPONSE_QUALIFICATION and existing.get("qualification") != NO_RESPONSE_QUALIFICATION:
+        await send_no_response_followup(existing.get("name"), existing.get("email"))
+    if qualification_changed:
+        await log_action(user, "lead_qualifie", "lead", lid, {
+            "name": existing.get("name"), "qualification": update["qualification"],
+        })
+        if update["qualification"] == "inscrit":
+            await send_push_to_users(
+                [user["id"]], "🎉 Lead converti !",
+                f"{existing.get('name') or 'Un prospect'} vient d'être marqué Inscrit — bravo !", "/admin/marketing",
+            )
     return await db.leads.find_one({"id": lid}, {"_id": 0})
 
 

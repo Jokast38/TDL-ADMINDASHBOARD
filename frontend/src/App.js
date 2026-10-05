@@ -65,6 +65,7 @@ const AdminBlog = lazy(() => import("@/pages/AdminBlog"));
 const Stages = lazy(() => import("@/pages/Stages"));
 const Agenda = lazy(() => import("@/pages/Agenda"));
 const CallAgenda = lazy(() => import("@/pages/CallAgenda"));
+const CustomPayment = lazy(() => import("@/pages/CustomPayment"));
 const Modules = lazy(() => import("@/pages/Modules"));
 const AnimateurSpace = lazy(() => import("@/pages/AnimateurSpace"));
 const DocumentsLibrary = lazy(() => import("@/pages/DocumentsLibrary"));
@@ -204,6 +205,9 @@ function App() {
             } />
             <Route path="/admin/agenda-appel" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><CallAgenda /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/paiement-personnalise" element={
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><CustomPayment /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/modules" element={
               <ProtectedRoute roles={["admin", "responsable_admission"]}><AdminLayout><Modules /></AdminLayout></ProtectedRoute>

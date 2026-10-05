@@ -471,6 +471,8 @@ export default function Students() {
                 <th className="py-3 px-4 overline">Apprenant</th>
                 <th className="py-3 px-4 overline">Formation(s)</th>
                 <th className="py-3 px-4 overline">Paiement</th>
+                <th className="py-3 px-4 overline">CMA</th>
+                <th className="py-3 px-4 overline">CPF</th>
                 <th className="py-3 px-4 overline">Dossier</th>
                 <th className="py-3 px-4 overline">Inscrit(e) le</th>
                 <th className="py-3 px-4 overline text-right">Contact</th>
@@ -511,6 +513,8 @@ export default function Students() {
                       }>{PAYMENT_LABEL[s.payment_status] || s.payment_status}</Badge>
                     ) : <span className="text-xs text-gray-300">—</span>}
                   </td>
+                  <td className="py-3 px-4 text-xs">{s.cma || <span className="text-gray-300">—</span>}</td>
+                  <td className="py-3 px-4 text-xs">{s.cpf || <span className="text-gray-300">—</span>}</td>
                   <td className="py-3 px-4">
                     {s.dossier_status ? (
                       <Badge className={`${DOSSIER_STATUS_COLOR[s.dossier_status] || "bg-gray-100 text-gray-700"} hover:opacity-90`}>
@@ -598,7 +602,7 @@ export default function Students() {
               ))}
               {!paged.length && (
                 <tr>
-                  <td colSpan="7" className="py-12 text-center text-gray-400">
+                  <td colSpan="9" className="py-12 text-center text-gray-400">
                     {loading ? "Chargement..." : "Aucun apprenant."}
                   </td>
                 </tr>

@@ -17,6 +17,18 @@ from services.convention import upcoming_permis_sessions_for, generate_preview_p
 
 router = APIRouter(tags=["employees"])
 
+def _generate_simple_password() -> str:
+    """Mot de passe temporaire simple (lisible, à recopier facilement depuis
+    l'email) — pas destiné à durer : must_change_password force son
+    changement dès la première connexion."""
+    import random
+    import string
+    # Pas de caractères ambigus (0/O, 1/l/I) pour limiter les erreurs de
+    # recopie depuis l'email reçu sur mobile.
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+    return "".join(random.choice(alphabet) for _ in range(8))
+
+
 VALID_STAFF_ROLES = (
     "admin", "employe", "animateur", "responsable_admission", "agent_admin",
     "commercial", "responsable_commercial",
@@ -119,6 +131,10 @@ async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role
     if user["role"] != "admin" and payload.role not in _manageable_roles(user["role"]):
         raise HTTPException(status_code=403, detail="Vous ne pouvez créer que des comptes de votre périmètre")
     role = payload.role if payload.role in VALID_STAFF_ROLES else "employe"
+    # Mot de passe auto-généré si non fourni (cas du formateur, créé sans
+    # qu'un agent n'ait à en inventer un) — envoyé en clair par email ci-
+    # dessous, à changer dès la première connexion (must_change_password).
+    password = payload.password or _generate_simple_password()
     doc = {
         "id": str(uuid.uuid4()), "email": payload.email.lower(), "name": payload.name,
         "role": role, "phone": payload.phone, "department": payload.department,
@@ -128,12 +144,12 @@ async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role
         "titre": payload.titre,
         "matricule": payload.matricule,
         "allowed_pages": payload.allowed_pages,
-        "password_hash": hash_password(payload.password),
+        "password_hash": hash_password(password),
         "created_at": now_iso(), "active": True, "account_status": "actif",
         "must_change_password": True,
     }
     await db.users.insert_one(doc)
-    await send_password_setup_email(doc, payload.password)
+    await send_password_setup_email(doc, password)
     doc.pop("password_hash")
     doc.pop("_id", None)
     return doc

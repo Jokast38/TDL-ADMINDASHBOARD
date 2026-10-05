@@ -271,7 +271,15 @@ async def stripe_webhook(request: Request):
     if event_type in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         session = event["data"]["object"]
         inscription_id = (session.get("metadata") or {}).get("inscription_id")
-        if not inscription_id:
+        custom_payment_id = (session.get("metadata") or {}).get("custom_payment_id")
+        if custom_payment_id:
+            if event_type == "checkout.session.completed" and session.get("payment_status") != "paid":
+                pass  # paiement différé, attend l'évènement async
+            else:
+                await db.custom_payments.update_one(
+                    {"id": custom_payment_id}, {"$set": {"status": "paid", "paid_at": now_iso()}},
+                )
+        elif not inscription_id:
             log.warning(f"Stripe webhook {event_type} : metadata.inscription_id absent (session {session.get('id')}) — aucune mise à jour possible")
         elif event_type == "checkout.session.completed" and session.get("payment_status") != "paid":
             log.info(f"Stripe webhook completed : paiement différé (payment_status={session.get('payment_status')}) pour {inscription_id}, en attente de la confirmation async")

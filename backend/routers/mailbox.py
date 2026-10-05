@@ -85,6 +85,7 @@ async def list_messages(
     folder: str,
     limit: int = 30,
     offset: int = 0,
+    subject: Optional[str] = None,
     user: dict = Depends(require_role(*ROLES_MAILBOX)),
 ):
     _require_configured()
@@ -92,9 +93,26 @@ async def list_messages(
     if limit > 100:
         limit = 100
     try:
-        return await mailbox.list_messages(real_folder, limit, offset)
+        return await mailbox.list_messages(real_folder, limit, offset, subject)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Erreur IMAP : {e}")
+
+
+@router.delete("/{folder}/{uid}")
+async def delete_message(
+    folder: str,
+    uid: str,
+    user: dict = Depends(require_role(*ROLES_MAILBOX)),
+):
+    _require_configured()
+    real_folder = _resolve_folder(folder)
+    try:
+        ok = await mailbox.delete_message(real_folder, uid)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erreur IMAP : {e}")
+    if not ok:
+        raise HTTPException(status_code=404, detail="Message introuvable")
+    return {"ok": True}
 
 
 @router.get("/{folder}/{uid}")

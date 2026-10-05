@@ -13,17 +13,27 @@ const MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet
 const JOURS_FR = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 const JOURS_COURT = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
-// Même palette/logique de couleur que l'Agenda pédagogique (Agenda.jsx) —
-// ici dérivée du statut du créneau plutôt que du module, pour un code
-// couleur cohérent : disponible / planifié / traité / annulé.
-const STATUS_COLORS = {
-  disponible: { bg: "#fef7e0", border: "#fbbc04", text: "#8a6d00" },
-  planifie: { bg: "#e8f0fe", border: "#4285f4", text: "#1a4bab" },
-  traite: { bg: "#e6f4ea", border: "#34a853", text: "#1a7a35" },
-  annule: { bg: "#f1f1f1", border: "#9aa0a6", text: "#5f6368" },
-};
-function colorFor(status) {
-  return STATUS_COLORS[status] || STATUS_COLORS.disponible;
+// Code couleur par type de formation (lead_interest), pas par statut — même
+// palette/logique de hash que l'Agenda pédagogique (Agenda.jsx), pour repérer
+// d'un coup d'œil quelle formation concerne chaque créneau. Le statut
+// (disponible/traité/annulé...) reste visible via le label/badge et le
+// barré appliqué séparément sur les créneaux "traité".
+const PALETTE = [
+  { bg: "#e8f0fe", border: "#4285f4", text: "#1a4bab" },
+  { bg: "#fce8e6", border: "#ea4335", text: "#a52714" },
+  { bg: "#e6f4ea", border: "#34a853", text: "#1a7a35" },
+  { bg: "#fef7e0", border: "#fbbc04", text: "#8a6d00" },
+  { bg: "#f3e8fd", border: "#a142f4", text: "#6b21a8" },
+  { bg: "#e4f7f9", border: "#00acc1", text: "#00697a" },
+  { bg: "#fde7f3", border: "#e91e8c", text: "#a30f61" },
+];
+const NO_INTEREST_COLOR = { bg: "#f1f1f1", border: "#9aa0a6", text: "#5f6368" };
+
+function colorFor(interest) {
+  if (!interest) return NO_INTEREST_COLOR;
+  let h = 0;
+  for (let i = 0; i < interest.length; i++) h = (h * 31 + interest.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
 }
 
 function toISO(d) {
@@ -223,7 +233,7 @@ export default function CallAgenda() {
                   </span>
                   <div className="space-y-1">
                     {visible.map((a) => {
-                      const c = colorFor(a.status);
+                      const c = colorFor(a.lead_interest);
                       return (
                         <div
                           key={a.id}
@@ -278,7 +288,7 @@ export default function CallAgenda() {
                     const endMin = startMin + 30;
                     const top = ((startMin - HOUR_START * 60) / 60) * HOUR_HEIGHT;
                     const height = ((endMin - startMin) / 60) * HOUR_HEIGHT;
-                    const c = colorFor(a.status);
+                    const c = colorFor(a.lead_interest);
                     return (
                       <div
                         key={a.id}
@@ -309,7 +319,7 @@ export default function CallAgenda() {
           </DialogHeader>
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {dayDialog?.events.map((a) => {
-              const c = colorFor(a.status);
+              const c = colorFor(a.lead_interest);
               const isDisponible = a.status === "disponible";
               const isMine = a.commercial_id === user?.id;
               return (

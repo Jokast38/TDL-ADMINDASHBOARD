@@ -32,6 +32,7 @@ const ROLE_LABELS = {
 
 const ACTIVITY_ACTION_LABELS = {
   lead_contacte: "Lead contacté", appel: "Appel", dossier_traite: "Dossier", rappel_traite: "Rappel",
+  lead_qualifie: "Qualification",
 };
 
 const AVATAR_COLORS = ["#0052CC", "#d4af37", "#0B7238", "#6b21a8", "#c2410c", "#be123c", "#0e7490"];
@@ -436,7 +437,7 @@ export default function Activity() {
                     <td className="py-2.5 px-4">{e.meta?.lead_name || e.meta?.student_name || e.meta?.name || "—"}</td>
                     <td className="py-2.5 px-4 text-gray-600">{e.user_name}</td>
                     <td className="py-2.5 px-4 text-xs text-gray-400">
-                      {e.meta?.outcome || e.meta?.status || e.meta?.contact_status || ""}
+                      {e.meta?.outcome || e.meta?.status || e.meta?.contact_status || e.meta?.qualification || ""}
                     </td>
                     <td className="py-2.5 px-4 text-right pr-5 text-xs text-gray-400 font-mono whitespace-nowrap">
                       {new Date(e.at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}

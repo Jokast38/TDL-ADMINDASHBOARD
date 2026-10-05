@@ -31,7 +31,7 @@ export default function ContactBubble() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [privacyConsent, setPrivacyConsent] = useState(false);
-  const [form, setForm] = useState({ prenom: "", telephone: "", message: "", interet: "" });
+  const [form, setForm] = useState({ prenom: "", nom: "", telephone: "", message: "", interet: "" });
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   const submit = async (e) => {
@@ -39,8 +39,8 @@ export default function ContactBubble() {
     if (!privacyConsent) {
       return toast.error("Merci d'accepter l'utilisation de vos données pour continuer");
     }
-    if (!form.prenom.trim() || !form.telephone.trim()) {
-      return toast.error("Merci de renseigner votre prénom et votre téléphone");
+    if (!form.prenom.trim() || !form.nom.trim() || !form.telephone.trim()) {
+      return toast.error("Merci de renseigner votre nom, prénom et téléphone");
     }
     if (!isValidPhone(form.telephone)) {
       return toast.error("Merci de vérifier votre numéro de téléphone (ex : 06 12 34 56 78)");
@@ -51,7 +51,7 @@ export default function ContactBubble() {
     setSending(true);
     try {
       await api.post("/callback-requests", {
-        prenom: form.prenom, nom: "", telephone: form.telephone, message: form.message,
+        prenom: form.prenom, nom: form.nom, telephone: form.telephone, message: form.message,
         interest: form.interet, source: "contact_bubble",
       });
       setSent(true);
@@ -94,12 +94,20 @@ export default function ContactBubble() {
               </div>
             ) : (
               <form onSubmit={submit} className="space-y-2.5" data-testid="contact-bubble-form">
-                <input
-                  value={form.prenom}
-                  onChange={(e) => set("prenom", e.target.value)}
-                  placeholder="Prénom"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={form.prenom}
+                    onChange={(e) => set("prenom", e.target.value)}
+                    placeholder="Prénom"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={form.nom}
+                    onChange={(e) => set("nom", e.target.value)}
+                    placeholder="Nom"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                  />
+                </div>
                 <input
                   value={form.telephone}
                   onChange={(e) => set("telephone", e.target.value)}

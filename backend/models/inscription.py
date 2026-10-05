@@ -46,6 +46,18 @@ class InscriptionUpdate(BaseModel):
     # frontend) : "en_cours", "a_contacter", "sans_reponse", "finalisee".
     # Distinct de `status` (active/annulee) et du statut du dossier.
     contact_status: Optional[str] = None
+    # Financement CMA (Chambre de Métiers et de l'Artisanat) / CPF (Compte
+    # Personnel de Formation) — repris du suivi papier/Excel existant
+    # (ex: "OUI", "NON", un montant, ou une note libre type "EVALBOX ?") :
+    # champ texte libre plutôt qu'un statut strict, pour ne pas perdre la
+    # nuance déjà utilisée par l'équipe sur le fichier de suivi.
+    cma: Optional[str] = None
+    cpf: Optional[str] = None
+    # Mode de règlement réel (carte, espèces, virement, chèque, CPF, CMA,
+    # Klarna...) — distinct de `payment_status` (payé/en attente/remboursé)
+    # qui ne dit pas COMMENT la personne a payé, saisi manuellement par
+    # l'équipe comme cma/cpf.
+    payment_method: Optional[str] = None
 
 
 class StageAssignIn(BaseModel):

@@ -32,7 +32,7 @@ export default function PublicInscription() {
   const [formations, setFormations] = useState([]);
   const [step, setStep] = useState(1);
   const [formationId, setFormationId] = useState(params.get("formation") || "");
-  const [form, setForm] = useState({ student_name: "", student_email: "", student_phone: "", notes: "" });
+  const [form, setForm] = useState({ prenom: "", nom: "", student_email: "", student_phone: "", notes: "" });
   const [success, setSuccess] = useState(null);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   const [allowKlarna, setAllowKlarna] = useState(false);
@@ -106,6 +106,9 @@ export default function PublicInscription() {
     if (!privacyConsent) {
       return toast.error("Merci d'accepter l'utilisation de vos données pour continuer");
     }
+    if (!form.prenom.trim() || !form.nom.trim()) {
+      return toast.error("Merci de renseigner votre nom et votre prénom");
+    }
     if (!EMAIL_RE.test(form.student_email.trim())) {
       return toast.error("Merci de vérifier le format de votre email");
     }
@@ -115,8 +118,10 @@ export default function PublicInscription() {
     setSubmitting(true);
     try {
       const leadEventId = newEventId();
+      const { prenom, nom, ...restForm } = form;
       const { data } = await api.post("/inscriptions", {
-        formation_id: formationId, ...form,
+        formation_id: formationId, ...restForm,
+        student_name: `${prenom.trim()} ${nom.trim()}`,
         stage_id: selectedStageId || undefined,
         source: "inscription_publique", landing_url: window.location.href,
         event_id: leadEventId, ...getFbCookies(),
@@ -296,9 +301,13 @@ export default function PublicInscription() {
             <p className="text-gray-500 mb-6">Formation choisie : <strong>{selected.title}</strong> — {selected.price}€</p>
             <Card className="p-6 border border-gray-200 rounded-md shadow-none">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="text-sm font-medium">Nom complet *</label>
-                  <Input value={form.student_name} onChange={(e) => setForm({ ...form, student_name: e.target.value })} data-testid="inscr-name" />
+                <div>
+                  <label className="text-sm font-medium">Prénom *</label>
+                  <Input value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} data-testid="inscr-prenom" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Nom *</label>
+                  <Input value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} data-testid="inscr-nom" />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Email *</label>
@@ -357,7 +366,7 @@ export default function PublicInscription() {
                 <Button variant="outline" onClick={() => setStep(needsSessionStep ? 1.5 : 1)} className="w-full sm:w-auto">← {needsSessionStep ? "Modifier la session" : "Modifier la formation"}</Button>
                 <Button
                   onClick={submit}
-                  disabled={!form.student_name || !form.student_email || !privacyConsent || submitting || (selected?.cpf_eligible && !financingMode)}
+                  disabled={!form.prenom.trim() || !form.nom.trim() || !form.student_email || !privacyConsent || submitting || (selected?.cpf_eligible && !financingMode)}
                   className="w-full sm:w-auto bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
                   data-testid="inscr-submit"
                 >

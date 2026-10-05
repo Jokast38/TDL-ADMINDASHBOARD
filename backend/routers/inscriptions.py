@@ -244,6 +244,8 @@ async def list_students(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))
             "formations": [i["formation_title"] for i in my_inscriptions],
             "categories": sorted({i["category"] for i in my_inscriptions if i.get("category")}),
             "payment_status": my_inscriptions[0]["payment_status"] if my_inscriptions else None,
+            "cma": latest_insc.get("cma") if latest_insc else None,
+            "cpf": latest_insc.get("cpf") if latest_insc else None,
             "inscription_status": my_inscriptions[0]["status"] if my_inscriptions else None,
             "dossier_id": latest_dossier["id"] if latest_dossier else None,
             "dossier_status": latest_dossier["status"] if latest_dossier else None,
@@ -406,10 +408,19 @@ async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MG
         {"_id": 0, "id": 1, "inscription_id": 1, "status": 1},
     ).to_list(1000)
     by_inscription = {d["inscription_id"]: d for d in dossiers}
+    # Qui a traité chaque inscription (voir `processed_by` posé dans
+    # update_inscription ci-dessous) — pour la colonne "Traité par" et le
+    # récap du nombre d'inscriptions traitées par agent côté frontend.
+    processed_by_ids = {i["processed_by"] for i in items if i.get("processed_by")}
+    staff_by_id = {}
+    if processed_by_ids:
+        staff = await db.users.find({"id": {"$in": list(processed_by_ids)}}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
+        staff_by_id = {s["id"]: s.get("name", "") for s in staff}
     for i in items:
         d = by_inscription.get(i["id"])
         i["dossier_id"] = d["id"] if d else None
         i["dossier_status"] = d["status"] if d else None
+        i["processed_by_name"] = staff_by_id.get(i.get("processed_by"))
     return items
 
 

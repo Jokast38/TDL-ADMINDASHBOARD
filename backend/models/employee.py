@@ -8,7 +8,10 @@ class EmployeeIn(BaseModel):
     role: str = "employe"
     phone: Optional[str] = None
     department: Optional[str] = None
-    password: str = Field(min_length=6)
+    # Optionnel pour un formateur : un mot de passe simple est alors généré
+    # automatiquement côté serveur et envoyé par email (voir create_employee)
+    # — l'agent n'a pas besoin d'en inventer un.
+    password: Optional[str] = Field(default=None, min_length=6)
     assigned_categories: List[str] = []
     assigned_centers: List[str] = []
     assigned_training_assignments: List[dict] = []
