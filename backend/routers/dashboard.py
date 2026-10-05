@@ -144,6 +144,83 @@ async def revenue_timeseries(
     ]
 
 
+ORIGIN_LABELS = {
+    "website": "Site internet", "meta_ads": "Pub Meta",
+    "walkin": "Sur place (agent)", "imported": "Import Excel",
+}
+
+
+def _origin_for(ins: dict) -> str:
+    """Même logique que getOrigin() côté frontend (Inscriptions.jsx) — gardée
+    synchronisée pour que la répartition par origine corresponde à ce que
+    montre déjà la colonne "Origine" de la page Inscriptions."""
+    source = ins.get("source") or ""
+    if source.startswith("excel_import"):
+        return "imported"
+    if source == "admin_walkin":
+        return "walkin"
+    if ins.get("from_meta_ads"):
+        return "meta_ads"
+    return "website"
+
+
+@router.get("/dashboard/revenue-breakdown")
+async def revenue_breakdown(
+    months: int = 6,
+    user: dict = Depends(require_role("admin", "employe", "responsable_commercial")),
+):
+    """CA (réalisé/prévisionnel) ventilé par formation et par origine du lead,
+    sur la même fenêtre de mois que /dashboard/revenue-timeseries — pour ne
+    pas se limiter à un seul chiffre global agrégé sur la page Activité."""
+    months = min(max(months, 1), 24)
+    month_keys = set(_last_n_months(months))
+
+    inscriptions = await db.inscriptions.find(
+        {}, {"_id": 0, "price": 1, "payment_status": 1, "created_at": 1,
+             "formation_id": 1, "formation_title": 1, "source": 1, "from_meta_ads": 1}
+    ).to_list(50000)
+    formations_price = {
+        f["id"]: f.get("price", 0)
+        for f in await db.formations.find({}, {"_id": 0, "id": 1, "price": 1}).to_list(1000)
+    }
+
+    by_formation: dict = {}
+    by_origin: dict = {}
+    for ins in inscriptions:
+        dt = _parse_dt(ins.get("created_at"))
+        if not dt:
+            continue
+        key = f"{dt.year}-{dt.month:02d}"
+        if key not in month_keys:
+            continue
+        price = ins.get("price", 0) or 0
+        previsionnel = formations_price.get(ins.get("formation_id"), price)
+        realise = price if ins.get("payment_status") in _PAID_STATUSES else 0
+
+        title = ins.get("formation_title") or "Autre"
+        f = by_formation.setdefault(title, {"formation": title, "count": 0, "realise": 0.0, "previsionnel": 0.0})
+        f["count"] += 1
+        f["previsionnel"] += previsionnel
+        f["realise"] += realise
+
+        origin = _origin_for(ins)
+        o = by_origin.setdefault(origin, {"origin": origin, "label": ORIGIN_LABELS.get(origin, origin), "count": 0, "realise": 0.0, "previsionnel": 0.0})
+        o["count"] += 1
+        o["previsionnel"] += previsionnel
+        o["realise"] += realise
+
+    return {
+        "by_formation": sorted(
+            [{**f, "realise": round(f["realise"], 2), "previsionnel": round(f["previsionnel"], 2)} for f in by_formation.values()],
+            key=lambda x: -x["realise"],
+        ),
+        "by_origin": sorted(
+            [{**o, "realise": round(o["realise"], 2), "previsionnel": round(o["previsionnel"], 2)} for o in by_origin.values()],
+            key=lambda x: -x["realise"],
+        ),
+    }
+
+
 @router.get("/dashboard")
 async def dashboard_redirect(user: dict = Depends(require_role("admin", "employe", "responsable_commercial"))):
     return await dashboard_stats(user)

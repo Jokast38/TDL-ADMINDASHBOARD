@@ -105,6 +105,7 @@ export default function Activity() {
   const [callStats, setCallStats] = useState(null);
   const [timeseries, setTimeseries] = useState([]);
   const [revenueTimeseries, setRevenueTimeseries] = useState([]);
+  const [revenueBreakdown, setRevenueBreakdown] = useState(null);
   const [now, setNow] = useState(() => Date.now());
   const [employeesPage, setEmployeesPage] = useState(1);
   const EMPLOYEES_PAGE_SIZE = 5;
@@ -121,6 +122,7 @@ export default function Activity() {
     api.get("/call-center/stats", { params: { period: "month" } }).then((r) => setCallStats(r.data)).catch(() => {});
     api.get("/employees/activity-timeseries", { params: { days: 7 } }).then((r) => setTimeseries(r.data)).catch(() => {});
     api.get("/dashboard/revenue-timeseries", { params: { months: 6 } }).then((r) => setRevenueTimeseries(r.data)).catch(() => {});
+    api.get("/dashboard/revenue-breakdown", { params: { months: 6 } }).then((r) => setRevenueBreakdown(r.data)).catch(() => {});
   }, []);
 
   // Horloge pour le temps de connexion en temps réel des employés en ligne
@@ -290,6 +292,58 @@ export default function Activity() {
               ))}
             </div>
           </div>
+        </Card>
+      </div>
+
+      {/* CA par formation / par origine du lead — pas que le total global,
+          sur la même fenêtre de 6 mois que le graphique ci-dessus. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="p-5 border border-gray-200 rounded-md shadow-none">
+          <p className="font-display text-lg font-bold mb-1">CA par formation</p>
+          <p className="text-xs text-gray-500 mb-4">Réalisé (payé) — 6 derniers mois</p>
+          {!revenueBreakdown ? (
+            <p className="text-sm text-gray-400">Chargement...</p>
+          ) : !revenueBreakdown.by_formation.length ? (
+            <p className="text-sm text-gray-400">Aucune donnée.</p>
+          ) : (
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {revenueBreakdown.by_formation.slice(0, 10).map((f, idx) => (
+                <div key={f.formation} className="flex items-center justify-between text-sm gap-3">
+                  <span className="truncate flex-1" title={f.formation}>{f.formation}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{f.count} insc.</span>
+                  <span className="font-mono font-semibold text-[#0B7238] shrink-0 w-20 text-right">{fmtMoney(f.realise)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-5 border border-gray-200 rounded-md shadow-none">
+          <p className="font-display text-lg font-bold mb-1">CA par origine du lead</p>
+          <p className="text-xs text-gray-500 mb-4">Réalisé (payé) — 6 derniers mois</p>
+          {!revenueBreakdown ? (
+            <p className="text-sm text-gray-400">Chargement...</p>
+          ) : !revenueBreakdown.by_origin.length ? (
+            <p className="text-sm text-gray-400">Aucune donnée.</p>
+          ) : (
+            <div className="space-y-3">
+              {revenueBreakdown.by_origin.map((o) => {
+                const maxRealise = Math.max(...revenueBreakdown.by_origin.map((x) => x.realise), 1);
+                const pctWidth = Math.round((o.realise / maxRealise) * 100);
+                return (
+                  <div key={o.origin}>
+                    <div className="flex items-center justify-between text-sm mb-1">
+                      <span>{o.label}</span>
+                      <span className="font-mono font-semibold">{fmtMoney(o.realise)} <span className="text-gray-400 font-normal">({o.count})</span></span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-[#0052CC]" style={{ width: `${pctWidth}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Card>
       </div>
 
