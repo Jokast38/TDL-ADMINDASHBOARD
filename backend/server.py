@@ -32,6 +32,7 @@ from services.staff_notify import (
     send_call_appointment_reminders,
     send_convention_session_reminders,
     send_emargement_reminders,
+    send_understaffed_session_alerts,
 )
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
@@ -394,6 +395,21 @@ async def _session_reminders_loop():
         await asyncio.sleep(24 * 3600)
 
 
+async def _understaffed_session_alerts_loop():
+    """Toutes les 24h, alerte TOUT le personnel pour chaque session qui
+    commence dans 10 jours et compte moins de 10 inscrits (voir
+    services/staff_notify.py::send_understaffed_session_alerts)."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_understaffed_session_alerts()
+            if notified:
+                log.info(f"Alertes de sous-effectif : {notified} notification(s) envoyée(s)")
+        except Exception as e:
+            log.warning(f"Alertes de sous-effectif : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
+
+
 async def _emargement_reminders_loop():
     """Toutes les 24h, relance le(s) formateur(s) d'une session dont aucun
     émargement n'a encore été enregistré pour la veille (voir
@@ -499,6 +515,7 @@ async def startup():
     asyncio.create_task(_wordpress_auto_sync_loop())
     asyncio.create_task(_weekly_admin_report_loop())
     asyncio.create_task(_session_reminders_loop())
+    asyncio.create_task(_understaffed_session_alerts_loop())
     asyncio.create_task(_emargement_reminders_loop())
     asyncio.create_task(_appointment_reminders_loop())
     asyncio.create_task(_call_appointment_reminders_loop())

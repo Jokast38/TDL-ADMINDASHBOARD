@@ -5,6 +5,7 @@ from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
     send_emargement_reminders, send_convention_session_reminders,
+    send_understaffed_session_alerts,
 )
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
@@ -47,6 +48,16 @@ async def run_weekly_admin_report(user: dict = Depends(require_role("admin"))):
     externe) — la boucle de fond (voir server.py) l'envoie automatiquement les
     samedis 18h et lundis 8h."""
     notified = await send_weekly_admin_report()
+    return {"notified": notified}
+
+
+@router.post("/understaffed-sessions/run")
+async def run_understaffed_session_alerts(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel de l'alerte de sous-effectif (test, ou cron
+    externe) — la boucle de fond (voir server.py) l'envoie automatiquement
+    chaque jour, pour les sessions démarrant dans 10 jours avec moins de 10
+    inscrits actifs. Notifie tout le personnel actif."""
+    notified = await send_understaffed_session_alerts()
     return {"notified": notified}
 
 

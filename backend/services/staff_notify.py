@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 
-from core.config import ROLES_DOSSIERS_MGMT
+from core.config import ROLES_DOSSIERS_MGMT, ROLES_ALL_STAFF
 from core.database import db
 from core.utils import now_iso
 from services.email import send_email
@@ -564,6 +564,63 @@ async def send_session_reminders() -> int:
             )
             notified += 1
         await db.stages.update_one({"id": stage["id"]}, {"$set": {"reminder_sent_at": now_iso()}})
+    return notified
+
+
+UNDERSTAFFED_ALERT_DAYS_BEFORE = 10
+UNDERSTAFFED_ALERT_MIN_INSCRITS = 10
+
+
+async def send_understaffed_session_alerts() -> int:
+    """Alerte de sous-effectif — pour chaque session de stage qui commence
+    dans UNDERSTAFFED_ALERT_DAYS_BEFORE jours (10) avec moins de
+    UNDERSTAFFED_ALERT_MIN_INSCRITS (10) inscrits actifs, prévient TOUT le
+    personnel (voir _understaffed_session_alerts_loop dans server.py) pour
+    qu'une relance commerciale puisse encore être tentée avant la date.
+    Un seul envoi par session (`understaffed_alert_sent_at` posé sur le
+    stage), pas de relance en boucle même si le sous-effectif persiste."""
+    target_date = (datetime.now(timezone.utc) + timedelta(days=UNDERSTAFFED_ALERT_DAYS_BEFORE)).date().isoformat()
+    stages = await db.stages.find(
+        {"date_debut": target_date, "understaffed_alert_sent_at": {"$exists": False}, "statut": {"$ne": "annule"}},
+        {"_id": 0},
+    ).to_list(200)
+    if not stages:
+        return 0
+
+    staff = await db.users.find(
+        {"active": True, "role": {"$in": list(ROLES_ALL_STAFF)}}, {"_id": 0, "id": 1, "email": 1, "name": 1}
+    ).to_list(500)
+    if not staff:
+        return 0
+
+    notified = 0
+    for stage in stages:
+        nb_inscrits = await db.inscriptions.count_documents({"stage_id": stage["id"], "status": "active"})
+        # Toujours marquer la session comme vérifiée, même si elle est pleine
+        # — sans ça, une session qui franchit le seuil des 10 jours sans être
+        # sous-effectif serait réévaluée indéfiniment à chaque passage de la
+        # boucle (24h) jusqu'à ce qu'elle finisse, par hasard, sous le seuil.
+        await db.stages.update_one({"id": stage["id"]}, {"$set": {"understaffed_alert_sent_at": now_iso()}})
+        if nb_inscrits >= UNDERSTAFFED_ALERT_MIN_INSCRITS:
+            continue
+
+        lieu = f"{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}".strip(", ")
+        subject = f"⚠️ Sous-effectif — session du {stage['date_debut']} ({nb_inscrits}/{UNDERSTAFFED_ALERT_MIN_INSCRITS})"
+        body = render_branded_email(
+            f"La session <b>{stage.get('formation_titre', '')}</b> débute le <b>{stage['date_debut']}</b> "
+            f"(dans {UNDERSTAFFED_ALERT_DAYS_BEFORE} jours), à <b>{lieu}</b>, avec seulement "
+            f"<b>{nb_inscrits} inscrit(s)</b> sur un minimum visé de {UNDERSTAFFED_ALERT_MIN_INSCRITS}.\n\n"
+            "Une relance commerciale ciblée peut encore permettre de compléter le groupe avant la date."
+        )
+        for s in staff:
+            if s.get("email"):
+                await send_email(s["email"], subject, body)
+        await send_push_to_users(
+            [s["id"] for s in staff], "⚠️ Sous-effectif de session",
+            f"{stage.get('formation_titre', '')} le {stage['date_debut']} — {nb_inscrits}/{UNDERSTAFFED_ALERT_MIN_INSCRITS} inscrit(s)",
+            "/admin/stages",
+        )
+        notified += len(staff)
     return notified
 
 

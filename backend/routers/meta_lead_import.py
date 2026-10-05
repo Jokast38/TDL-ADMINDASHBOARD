@@ -6,10 +6,13 @@ liste tenue à part (db.meta_lead_imports) pour ne pas mélanger deux sources
 qui n'ont pas le même usage : qualifier puis inscrire manuellement un lead
 publicitaire plutôt que le traiter comme un contact générique.
 
-Dédoublonnage : un lead déjà connu dans Prospects (db.leads, même email ou
-même téléphone — potentiellement arrivé via le webhook temps réel ou saisi
-à la main) n'est pas réimporté ici, pour ne jamais gérer la même personne à
-deux endroits différents."""
+Dédoublonnage, dans cet ordre :
+1. Déjà une inscription ACTIVE (même email ou téléphone) ? -> ignoré, c'est
+   déjà un apprenant chez nous, pas un prospect à démarcher.
+2. Déjà un lead connu dans Prospects (db.leads, même email ou téléphone —
+   potentiellement arrivé via le webhook temps réel ou saisi à la main) ?
+   -> ignoré, pour ne jamais gérer la même personne à deux endroits
+   différents."""
 import csv
 import io
 import re
@@ -122,18 +125,30 @@ async def import_meta_leads_csv(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"CSV illisible : {e}")
 
-    imported, updated, skipped_duplicate_prospect, skipped_no_contact = 0, 0, 0, 0
+    imported, updated, skipped_duplicate_prospect, skipped_no_contact, skipped_already_enrolled = 0, 0, 0, 0, 0
     for row in rows:
         if not row["email"] and not row["phone"]:
             skipped_no_contact += 1
             continue
 
-        # Déjà un prospect connu (Prospects/db.leads) ? On ne le réimporte
-        # pas ici — une seule personne, un seul endroit où la gérer.
         contact_filter = {"$or": [
             *([{"email": row["email"]}] if row["email"] else []),
             *([{"phone": row["phone"]}] if row["phone"] else []),
         ]}
+
+        # Déjà inscrit (inscription active, même email ou téléphone) ? On ne
+        # le réimporte pas comme prospect à recontacter — c'est déjà un
+        # apprenant chez nous, pas quelqu'un à qualifier/démarcher.
+        inscription_filter = {"$or": [
+            *([{"student_email": row["email"]}] if row["email"] else []),
+            *([{"student_phone": row["phone"]}] if row["phone"] else []),
+        ]}
+        if await db.inscriptions.find_one({**inscription_filter, "status": "active"}):
+            skipped_already_enrolled += 1
+            continue
+
+        # Déjà un prospect connu (Prospects/db.leads) ? On ne le réimporte
+        # pas ici — une seule personne, un seul endroit où la gérer.
         if await db.leads.find_one(contact_filter):
             skipped_duplicate_prospect += 1
             continue
@@ -170,6 +185,7 @@ async def import_meta_leads_csv(
     return {
         "imported": imported, "updated": updated,
         "skipped_duplicate_prospect": skipped_duplicate_prospect,
+        "skipped_already_enrolled": skipped_already_enrolled,
         "skipped_no_contact": skipped_no_contact,
         "total_rows": len(rows),
     }

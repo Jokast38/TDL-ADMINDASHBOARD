@@ -866,6 +866,7 @@ function MetaEventsTab() {
       const { data } = await api.post("/meta-lead-import/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
       toast.success(
         `${data.imported} nouveau(x), ${data.updated} mis à jour` +
+        (data.skipped_already_enrolled ? ` · ${data.skipped_already_enrolled} déjà inscrit(s) (ignoré)` : "") +
         (data.skipped_duplicate_prospect ? ` · ${data.skipped_duplicate_prospect} déjà dans Prospects (ignoré)` : "") +
         (data.skipped_no_contact ? ` · ${data.skipped_no_contact} sans email/téléphone (ignoré)` : "")
       );
