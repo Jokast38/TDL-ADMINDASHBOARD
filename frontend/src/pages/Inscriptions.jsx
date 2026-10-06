@@ -968,7 +968,7 @@ export default function Inscriptions() {
               </SelectContent>
             </Select>
             {assignTarget && !stages.some((s) => s.formation_id === assignTarget.formation_id) && (
-              <p className="text-xs text-amber-600">Aucune session planifiée pour cette formation — créez-en une depuis la page Sessions de stage.</p>
+              <p className="text-xs text-amber-600">Aucune session planifiée pour cette formation — créez-en une depuis la page Sessions de formation.</p>
             )}
           </div>
           <div className="flex justify-end gap-2 mt-4">

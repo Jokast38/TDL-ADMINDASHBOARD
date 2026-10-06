@@ -73,10 +73,10 @@ export const HELP_CATEGORIES = [
         route: "/admin/apprenants",
         targetSelector: '[data-testid="students-page"]',
         description:
-          "Pour un dossier « Récupération de points » validé, session terminée et attestation signée par toutes les parties : ouvrez le dossier de l'apprenant, un bouton « Télécharger le dossier ANTS » apparaît — un zip nommé à son nom avec l'attestation signée et toutes ses pièces, prêt à envoyer. Idem au niveau d'une session entière depuis la page Sessions de stage (feuilles d'émargement signées de tous les participants).",
+          "Pour un dossier « Récupération de points » validé, session terminée et attestation signée par toutes les parties : ouvrez le dossier de l'apprenant, un bouton « Télécharger le dossier ANTS » apparaît — un zip nommé à son nom avec l'attestation signée et toutes ses pièces, prêt à envoyer. Idem au niveau d'une session entière depuis la page Sessions de formation (feuilles d'émargement signées de tous les participants).",
       },
       {
-        title: "Sessions de stage",
+        title: "Sessions de formation",
         question: "Comment planifier une session de stage ?",
         icon: CalendarCheck,
         route: "/admin/stages",

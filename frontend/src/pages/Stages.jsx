@@ -272,7 +272,7 @@ export default function Stages() {
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <p className="overline">Planification</p>
-          <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Sessions de stage</h1>
+          <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Sessions de formation</h1>
           <p className="text-gray-500 mt-2">{items.length} session(s) planifiée(s).</p>
         </div>
         <div className="flex flex-wrap gap-2">

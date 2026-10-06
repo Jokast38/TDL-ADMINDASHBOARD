@@ -104,7 +104,7 @@ export default function Modules() {
       <div>
         <p className="overline">Paramétrage</p>
         <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Modules de formation</h1>
-        <p className="text-gray-500 mt-2">Bibliothèque de modules et modèles de session pré-enregistrés, réutilisables à la création d'une session (voir page Sessions de stage).</p>
+        <p className="text-gray-500 mt-2">Bibliothèque de modules et modèles de session pré-enregistrés, réutilisables à la création d'une session (voir page Sessions de formation).</p>
       </div>
 
       <Tabs defaultValue="modules">

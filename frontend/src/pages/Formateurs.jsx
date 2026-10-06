@@ -337,7 +337,7 @@ export default function Formateurs() {
                         <span className="text-xs text-gray-500 font-mono">{s.date_debut} → {s.date_fin}</span>
                       </div>
                     ))}
-                    {!sessions.length && <p className="text-xs text-gray-400">Aucune session assignée pour l'instant — assignez-le depuis la page Sessions de stage.</p>}
+                    {!sessions.length && <p className="text-xs text-gray-400">Aucune session assignée pour l'instant — assignez-le depuis la page Sessions de formation.</p>}
                   </div>
                 </div>
 
