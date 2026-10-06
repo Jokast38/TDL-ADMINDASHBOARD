@@ -284,6 +284,12 @@ async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depen
     "planifié", sans étape d'attribution à franchir."""
     lead = await db.leads.find_one({"id": payload.lead_id}, {"_id": 0})
     if not lead:
+        # Prospects Meta (db.meta_lead_imports) — collection séparée de
+        # Prospects/Cosmosia (db.leads), voir routers/meta_lead_import.py.
+        # Un rendez-vous pris depuis la page Prospects Meta doit fonctionner
+        # exactement comme depuis la page Prospects, donc on y cherche aussi.
+        lead = await db.meta_lead_imports.find_one({"id": payload.lead_id}, {"_id": 0})
+    if not lead:
         raise HTTPException(status_code=404, detail="Lead introuvable")
 
     commercial_id = payload.commercial_id or user["id"]

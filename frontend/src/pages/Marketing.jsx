@@ -26,6 +26,7 @@ import {
   LinkSimple, UploadSimple, Tag, CalendarPlus,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import BookAppointmentDialog from "@/components/BookAppointmentDialog";
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler,
 } from "chart.js";
@@ -642,6 +643,7 @@ function CosmosiaTab() {
   const [qualifOptions, setQualifOptions] = useState({});
   const [page, setPage] = useState(1);
   const [importing, setImporting] = useState(false);
+  const [bookTarget, setBookTarget] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -759,11 +761,12 @@ function CosmosiaTab() {
                 <th className="py-2.5 px-4 overline">Traité par</th>
                 <th className="py-2.5 px-4 overline">Notes</th>
                 <th className="py-2.5 px-4 overline">Importé le</th>
+                <th className="py-2.5 px-4 overline text-right">Rendez-vous</th>
               </tr>
             </thead>
             <tbody>
               {!items.length && (
-                <tr><td colSpan="7" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="8" className="py-10 text-center text-gray-400">
                   {total ? "Aucun lead pour ce filtre." : "Aucun lead Cosmosia importé — utilisez le bouton ci-dessus."}
                 </td></tr>
               )}
@@ -793,6 +796,16 @@ function CosmosiaTab() {
                   <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
                     {l.created_at ? formatDateFR(l.created_at) : "—"}
                   </td>
+                  <td className="py-2.5 px-4 text-right">
+                    <button
+                      onClick={() => setBookTarget(l)}
+                      className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded"
+                      title="Planifier un rendez-vous"
+                      data-testid={`cosmosia-book-btn-${l.id}`}
+                    >
+                      <CalendarPlus size={14} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -810,6 +823,12 @@ function CosmosiaTab() {
           </div>
         </div>
       )}
+
+      <BookAppointmentDialog
+        open={!!bookTarget}
+        onOpenChange={(v) => !v && setBookTarget(null)}
+        lead={bookTarget}
+      />
     </div>
   );
 }
@@ -829,6 +848,7 @@ function MetaEventsTab() {
   const [importAccount, setImportAccount] = useState("");
   const [pendingImportFile, setPendingImportFile] = useState(null);
   const [enrollFor, setEnrollFor] = useState(null);
+  const [bookTarget, setBookTarget] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -1035,13 +1055,23 @@ function MetaEventsTab() {
                     <MetaLeadNotesCell lead={l} onSave={updateNotes} />
                   </td>
                   <td className="py-2.5 px-4 text-right">
-                    {l.inscription_id ? (
-                      <span className="text-xs text-gray-400">Déjà inscrit</span>
-                    ) : (
-                      <Button size="sm" variant="outline" onClick={() => setEnrollFor(l)} disabled={!l.email} data-testid={`meta-lead-enroll-btn-${l.id}`}>
-                        Inscrire
-                      </Button>
-                    )}
+                    <div className="flex justify-end items-center gap-1">
+                      <button
+                        onClick={() => setBookTarget(l)}
+                        className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded"
+                        title="Planifier un rendez-vous"
+                        data-testid={`meta-lead-book-btn-${l.id}`}
+                      >
+                        <CalendarPlus size={14} />
+                      </button>
+                      {l.inscription_id ? (
+                        <span className="text-xs text-gray-400">Déjà inscrit</span>
+                      ) : (
+                        <Button size="sm" variant="outline" onClick={() => setEnrollFor(l)} disabled={!l.email} data-testid={`meta-lead-enroll-btn-${l.id}`}>
+                          Inscrire
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1067,6 +1097,12 @@ function MetaEventsTab() {
           {enrollFor && <MetaLeadEnrollForm lead={enrollFor} onEnrolled={onEnrolled} onCancel={() => setEnrollFor(null)} />}
         </DialogContent>
       </Dialog>
+
+      <BookAppointmentDialog
+        open={!!bookTarget}
+        onOpenChange={(v) => !v && setBookTarget(null)}
+        lead={bookTarget}
+      />
     </div>
   );
 }
