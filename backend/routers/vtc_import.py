@@ -182,6 +182,7 @@ async def import_vtc_taxi_excel(file: UploadFile = File(...), user: dict = Depen
                         "date_debut": date_debut, "date_fin": date_fin,
                         "lieu_adresse": _CENTRE_ADRESSE.get(centre_key, ""), "lieu_ville": _CENTRE_VILLE[centre_key],
                         "capacite_max": 25, "animateur_id": None, "statut": "planifie", "nb_inscrits": 0,
+                        "creneau": creneau,
                         "notes": f"Créneau : {creneau}. {label} — importé depuis le fichier Excel VTC_TAXI 2026 ({ws.title}). Formateur à assigner.",
                         "import_key": marker, "created_at": now_iso(),
                     })

@@ -13,6 +13,7 @@ import {
   Package, PencilSimple, Trash, Plus, X, Check, Lightning,
   CaretDown, CaretUp,
 } from "@phosphor-icons/react";
+import { formatDateFR } from "@/lib/dateFormat";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -700,11 +701,7 @@ export default function Dashboard() {
                       </Badge>
                     </td>
                     <td className="py-3 text-center text-xs text-gray-500">
-                      {o.date_created ? new Date(o.date_created).toLocaleDateString('fr-FR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                      }) : '—'}
+                      {o.date_created ? formatDateFR(o.date_created) : '—'}
                     </td>
                     <td className="py-3 text-right">
                       <select
@@ -1040,7 +1037,7 @@ function WpSiteBlock({ data, label, showGA, showJetpack }) {
               <li key={p.id} className="flex items-center justify-between text-sm">
                 <a href={p.link} target="_blank" rel="noreferrer" className="hover:underline truncate max-w-xs">{p.title}</a>
                 <span className="text-gray-400 text-xs ml-2 shrink-0">
-                  {p.date ? new Date(p.date).toLocaleDateString("fr-FR") : ""}
+                  {p.date ? formatDateFR(p.date) : ""}
                 </span>
               </li>
             ))}

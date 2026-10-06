@@ -3,7 +3,7 @@ from typing import Iterable, Optional
 
 from core.config import ROLES_DOSSIERS_MGMT, ROLES_ALL_STAFF
 from core.database import db
-from core.utils import now_iso
+from core.utils import now_iso, format_date_long_fr, format_date_fr
 from services.email import send_email
 from services.email_template import render_branded_email
 from services.push import send_push_to_users
@@ -276,7 +276,7 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
                 f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{d.get('formation_title','')}</td>"
                 f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{CATEGORY_LABELS.get(d.get('category'), d.get('category') or '')}</td>"
                 f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{d.get('status','')}</td>"
-                f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{(d.get('created_at') or '')[:10]}</td></tr>"
+                f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{format_date_fr(d.get('created_at'))}</td></tr>"
                 for d in items
             )
 
@@ -466,7 +466,7 @@ async def send_weekly_admin_report() -> int:
     if not admins:
         return 0
 
-    period_label = f"{week_ago.strftime('%d/%m')} — {now.strftime('%d/%m/%Y')}"
+    period_label = f"{week_ago.strftime('%d-%m')} — {now.strftime('%d-%m-%Y')}"
     subject = f"📊 Compte-rendu hebdomadaire ({period_label})"
     body = (
         f"<p>Bonjour,</p>"
@@ -526,16 +526,18 @@ async def send_session_reminders() -> int:
         animateurs = await db.users.find({"id": {"$in": animateur_ids}}, {"_id": 0, "id": 1, "email": 1, "name": 1}).to_list(20)
 
         lieu = f"{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}".strip(", ")
+        date_debut_fr = format_date_long_fr(stage['date_debut'])
+        date_fin_fr = format_date_long_fr(stage.get('date_fin', ''))
         for insc in inscriptions:
             if not insc.get("student_email"):
                 continue
             await send_email(
                 insc["student_email"],
-                f"📅 Rappel — votre session commence le {stage['date_debut']}",
+                f"📅 Rappel — votre session commence le {date_debut_fr}",
                 (
                     f"<p>Bonjour {insc.get('student_name', '')},</p>"
                     f"<p>Rappel : votre session <b>{stage.get('formation_titre', '')}</b> débute le "
-                    f"<b>{stage['date_debut']}</b> (fin le {stage.get('date_fin', '')}), à <b>{lieu}</b>.</p>"
+                    f"<b>{date_debut_fr}</b> (fin le {date_fin_fr}), à <b>{lieu}</b>.</p>"
                     f"<p>À bientôt !<br>TDL Formation</p>"
                 ),
             )
@@ -550,11 +552,11 @@ async def send_session_reminders() -> int:
                 continue
             await send_email(
                 a["email"],
-                f"📅 Rappel — session à animer le {stage['date_debut']}",
+                f"📅 Rappel — session à animer le {date_debut_fr}",
                 (
                     f"<p>Bonjour {a.get('name', '')},</p>"
                     f"<p>Rappel : la session <b>{stage.get('formation_titre', '')}</b> que vous animez débute le "
-                    f"<b>{stage['date_debut']}</b> (fin le {stage.get('date_fin', '')}), à <b>{lieu}</b>, "
+                    f"<b>{date_debut_fr}</b> (fin le {date_fin_fr}), à <b>{lieu}</b>, "
                     f"avec {len(inscriptions)} inscrit(s).</p><p>TDL Formation</p>"
                 ),
             )
@@ -605,9 +607,10 @@ async def send_understaffed_session_alerts() -> int:
             continue
 
         lieu = f"{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}".strip(", ")
-        subject = f"⚠️ Sous-effectif — session du {stage['date_debut']} ({nb_inscrits}/{UNDERSTAFFED_ALERT_MIN_INSCRITS})"
+        date_debut_fr = format_date_long_fr(stage['date_debut'])
+        subject = f"⚠️ Sous-effectif — session du {date_debut_fr} ({nb_inscrits}/{UNDERSTAFFED_ALERT_MIN_INSCRITS})"
         body = render_branded_email(
-            f"La session <b>{stage.get('formation_titre', '')}</b> débute le <b>{stage['date_debut']}</b> "
+            f"La session <b>{stage.get('formation_titre', '')}</b> débute le <b>{date_debut_fr}</b> "
             f"(dans {UNDERSTAFFED_ALERT_DAYS_BEFORE} jours), à <b>{lieu}</b>, avec seulement "
             f"<b>{nb_inscrits} inscrit(s)</b> sur un minimum visé de {UNDERSTAFFED_ALERT_MIN_INSCRITS}.\n\n"
             "Une relance commerciale ciblée peut encore permettre de compléter le groupe avant la date."
@@ -729,7 +732,7 @@ async def send_formateur_dossier_reminders() -> int:
                 if agent.get("email"):
                     await send_email(
                         agent["email"], f"🔴 Dossier formateur en retard — {a.get('name', '')}",
-                        f"<p>Le dossier de <b>{a.get('name', '')}</b> (créé le {a.get('created_at', '')[:10]}) "
+                        f"<p>Le dossier de <b>{a.get('name', '')}</b> (créé le {format_date_long_fr(a.get('created_at'))}) "
                         f"dépasse le délai de 24h et reste incomplet.</p>"
                         f"<p style='margin-top:16px;'>Rendez-vous sur la page Formateurs du dashboard.</p>",
                     )
@@ -766,7 +769,7 @@ async def send_convention_session_reminders() -> int:
         if a.get("email"):
             message = (
                 f"Bonjour {a.get('name', '')},\n\n"
-                f"Vous animez la session {stage.get('formation_titre', '')} du {stage['date_debut']} "
+                f"Vous animez la session {stage.get('formation_titre', '')} du {format_date_long_fr(stage['date_debut'])} "
                 f"(dans {stage['days_until']} jour{plural}), mais votre convention de collaboration n'est pas "
                 "encore signée.\n\n"
                 "Merci de la signer avant le début de la session, depuis votre espace formateur (onglet « Mon dossier »)."

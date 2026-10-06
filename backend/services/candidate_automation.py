@@ -10,7 +10,7 @@ from typing import Optional
 
 from core.database import db
 from core.storage import put_object
-from core.utils import now_iso
+from core.utils import now_iso, format_date_long_fr, format_date_fr
 from core.config import PUBLIC_FRONTEND_URL, GOOGLE_PLACE_ID
 from services.email import send_email
 from services.email_template import render_branded_email
@@ -40,7 +40,7 @@ async def send_convocations() -> int:
             message = (
                 f"Bonjour {insc.get('student_name', '')},\n\n"
                 f"Nous vous confirmons votre convocation à la formation {stage.get('formation_titre', '')}.\n\n"
-                f"Dates : du {stage.get('date_debut', '')} au {stage.get('date_fin', '')}\n"
+                f"Dates : du {format_date_long_fr(stage.get('date_debut', ''))} au {format_date_long_fr(stage.get('date_fin', ''))}\n"
                 f"Lieu : {stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}\n\n"
                 "Merci de vous présenter avec une pièce d'identité valide et les documents demandés dans votre dossier.\n\n"
                 f"Pour toute question, contactez-nous : {CONTACT_EMAIL}."
@@ -97,7 +97,7 @@ async def _send_attestation_for_inscription(insc: dict, stage: dict, formation: 
     body = (
         f"<p>Bonjour {insc.get('student_name', '')},</p>"
         f"<p>Félicitations pour avoir suivi la formation <b>{stage.get('formation_titre', '')}</b> "
-        f"du {stage.get('date_debut', '')} au {stage.get('date_fin', '')}.</p>"
+        f"du {format_date_long_fr(stage.get('date_debut', ''))} au {format_date_long_fr(stage.get('date_fin', ''))}.</p>"
         "<p>Vous trouverez votre attestation de fin de formation en pièce jointe.</p>"
         "<p>TDL Formation</p>"
     )
@@ -168,7 +168,7 @@ async def send_attestation_manual(inscription_id: str) -> dict:
         raise ValueError("Date de fin de session absente ou invalide — à corriger avant l'envoi")
     if hours < 24:
         raise ValueError(
-            f"La session se termine le {stage.get('date_fin')} — l'attestation ne peut être envoyée que "
+            f"La session se termine le {format_date_fr(stage.get('date_fin'))} — l'attestation ne peut être envoyée que "
             "24h après (le lendemain minuit)."
         )
     if not insc.get("student_email"):

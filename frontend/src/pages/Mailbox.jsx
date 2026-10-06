@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { formatDateTimeFR } from "@/lib/dateFormat";
 import {
   EnvelopeSimple, EnvelopeOpen, PaperPlaneTilt, Paperclip, DownloadSimple,
   Plus, ArrowClockwise, ArrowLeft, ArrowRight, X, PencilSimple, MagnifyingGlass, Trash,
@@ -200,7 +201,7 @@ export default function Mailbox() {
                     </span>
                   </div>
                   <p className={`text-sm mt-0.5 truncate ${!m.seen ? "font-semibold text-gray-900" : "text-gray-600"}`}>{m.subject}</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{m.date ? new Date(m.date).toLocaleString("fr-FR") : ""}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{m.date ? formatDateTimeFR(m.date) : ""}</p>
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteMessage(m.uid); }}
@@ -239,7 +240,7 @@ export default function Mailbox() {
                 <p><strong>De :</strong> {detail.from}</p>
                 <p><strong>À :</strong> {detail.to}</p>
                 {detail.cc && <p><strong>Cc :</strong> {detail.cc}</p>}
-                <p>{detail.date ? new Date(detail.date).toLocaleString("fr-FR") : ""}</p>
+                <p>{detail.date ? formatDateTimeFR(detail.date) : ""}</p>
               </div>
               {detail.body_html ? (
                 <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: detail.body_html }} />

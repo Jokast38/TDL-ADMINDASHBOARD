@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Clock, MapPin, GraduationCap, PenNib, CaretLeft, CaretRight, Funnel } from "@phosphor-icons/react";
+import { formatDateFR } from "@/lib/dateFormat";
 
 const MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 const JOURS_FR = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
@@ -314,7 +315,7 @@ export default function Agenda() {
         <DialogContent data-testid="agenda-day-dialog">
           <DialogHeader>
             <DialogTitle>
-              {dayDialog && new Date(dayDialog.iso).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              {dayDialog && formatDateFR(dayDialog.iso)}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-2 max-h-96 overflow-y-auto">

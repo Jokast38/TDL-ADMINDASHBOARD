@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarPlus, Clock, LockKey, Trash, UserPlus } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { formatDateFR } from "@/lib/dateFormat";
 
 const TYPES = [
   { value: "formation_pratique", label: "Formation pratique" },
@@ -148,7 +149,7 @@ export default function Appointments() {
         <div className="space-y-4 max-h-[60vh] overflow-y-auto">
           {byDate.map(([date, daySlots]) => (
             <div key={date}>
-              <p className="text-sm font-medium mb-2">{new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</p>
+              <p className="text-sm font-medium mb-2">{formatDateFR(date)}</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
                 {daySlots.map((s) => {
                   const full = s.places_disponibles <= 0;

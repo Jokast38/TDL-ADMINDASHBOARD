@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Calendar, MapPin, Users, PenNib, CheckCircle, XCircle, Eraser, FilePdf, UserCircle, FileArrowUp, Signature, PaperPlaneTilt } from "@phosphor-icons/react";
+import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import { toast } from "sonner";
 import { useTour } from "@/contexts/TourContext";
 import { HELP_CATEGORIES } from "@/constants/helpTours";
@@ -193,13 +194,13 @@ function DossierTab() {
       )}
       {!dossier.convention_signed && dossier.next_upcoming_stage && (
         <div className={`border rounded-md p-3 text-sm ${dossier.next_upcoming_stage.days_until <= 10 ? "border-red-300 bg-red-50 text-red-700" : "border-amber-300 bg-amber-50 text-amber-800"}`} data-testid="convention-session-alert">
-          ✏️ Vous animez <b>{dossier.next_upcoming_stage.formation_titre}</b> le {new Date(dossier.next_upcoming_stage.date_debut).toLocaleDateString("fr-FR")}
+          ✏️ Vous animez <b>{dossier.next_upcoming_stage.formation_titre}</b> le {formatDateFR(dossier.next_upcoming_stage.date_debut)}
           {" "}(dans {dossier.next_upcoming_stage.days_until} jour{dossier.next_upcoming_stage.days_until > 1 ? "s" : ""}) — merci de signer votre convention avant le début de la session.
         </div>
       )}
       {!dossier.dossier_complete && !dossier.dossier_overdue && dossier.dossier_deadline && (
         <div className="border border-amber-300 bg-amber-50 text-amber-800 rounded-md p-3 text-sm">
-          À compléter avant le {new Date(dossier.dossier_deadline).toLocaleString("fr-FR")} (documents + convention).
+          À compléter avant le {formatDateTimeFR(dossier.dossier_deadline)} (documents + convention).
         </div>
       )}
       {dossier.dossier_complete && (
@@ -506,7 +507,7 @@ export default function AnimateurSpace() {
 
             <div className="mt-6">
               <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-                <p className="overline flex items-center gap-2"><Users size={12} /> Liste d'émargement {sessionDate ? `— ${new Date(sessionDate).toLocaleDateString("fr-FR")}` : ""}</p>
+                <p className="overline flex items-center gap-2"><Users size={12} /> Liste d'émargement {sessionDate ? `— ${formatDateFR(sessionDate)}` : ""}</p>
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" onClick={requestSignatures} disabled={requestingSignatures} data-testid="request-emargements">
                     <PaperPlaneTilt size={14} className="mr-1" /> {requestingSignatures ? "Envoi..." : "Demander les émargements"}
@@ -551,7 +552,7 @@ export default function AnimateurSpace() {
             <>
               <DialogHeader>
                 <DialogTitle>
-                  Émargement — {signTarget.student_name} ({sessionDate ? new Date(sessionDate).toLocaleDateString("fr-FR") : ""}
+                  Émargement — {signTarget.student_name} ({sessionDate ? formatDateFR(sessionDate) : ""}
                   · {PERIODE_LABELS[periode] || periode})
                 </DialogTitle>
               </DialogHeader>

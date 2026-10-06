@@ -8,7 +8,7 @@ from fastapi.responses import Response
 from core.database import db
 from core.security import require_role, get_current_user
 from core.storage import put_object, get_object
-from core.utils import now_iso
+from core.utils import now_iso, format_date_long_fr
 from core.config import APP_NAME, ROLES_ALL_STAFF, PUBLIC_FRONTEND_URL
 from models.stage import EmargementIn, EmargementRequestIn, EmargementSelfSignIn
 from services.email import send_email
@@ -99,7 +99,7 @@ async def _finalize_emargement(stage: dict, payload: EmargementIn, signed_by_ani
                 f"Votre attestation de présence — {formation.get('title', '')}",
                 render_branded_email(
                     f"Bonjour {student.get('name', '')},\n\n"
-                    f"Votre présence à la session du {payload.session_date} a été enregistrée.\n\n"
+                    f"Votre présence à la session du {format_date_long_fr(payload.session_date)} a été enregistrée.\n\n"
                     "Vous trouverez votre attestation signée dans votre espace TDL Formation."
                 ),
             )
@@ -142,14 +142,14 @@ async def _notify_if_all_signed(stage: dict, session_date: str, periode: str):
     periode_label = _PERIODE_LABELS.get(periode, periode).lower()
     message = (
         f"Bonjour,\n\n"
-        f"Tous les apprenants ({len(inscrits)}) de la session du {session_date} ({periode_label}) — "
+        f"Tous les apprenants ({len(inscrits)}) de la session du {format_date_long_fr(session_date)} ({periode_label}) — "
         f"{stage.get('formation_titre', '')} — ont désormais signé leur émargement.\n\n"
         "Vous pouvez générer la feuille d'émargement complète depuis votre espace formateur."
     )
     for f in formateurs:
         if f.get("email"):
             try:
-                await send_email(f["email"], f"✅ Émargements complets — {session_date}", render_branded_email(message))
+                await send_email(f["email"], f"✅ Émargements complets — {format_date_long_fr(session_date)}", render_branded_email(message))
             except Exception:
                 pass
     await send_push_to_users(
@@ -233,7 +233,7 @@ async def request_emargements(sid: str, payload: EmargementRequestIn, user: dict
                     f"Signature de votre émargement — {formation.get('title', '')}",
                     render_branded_email(
                         f"Bonjour {insc.get('student_name', '')},\n\n"
-                        f"Merci de confirmer votre présence à la session du {payload.session_date} ({periode_label}) "
+                        f"Merci de confirmer votre présence à la session du {format_date_long_fr(payload.session_date)} ({periode_label}) "
                         f"— {formation.get('title', '')} — en signant votre émargement depuis votre espace apprenant.",
                         "Signer mon émargement", f"{PUBLIC_FRONTEND_URL}/espace-eleve",
                     ),

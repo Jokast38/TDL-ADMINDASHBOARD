@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatDateTimeFR } from "@/lib/dateFormat";
 import { Switch } from "@/components/ui/switch";
 import { Plus, PencilSimple, Trash, ShoppingCart, Lightning } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -407,7 +408,7 @@ export default function KamiStreet() {
       {!loading && items.length > 0 && (
         <div className="border-t border-gray-200 pt-4 flex justify-between text-sm text-gray-500">
           <p>Total: {items.length} produit{items.length > 1 ? 's' : ''}</p>
-          <p>Dernière mise à jour: {new Date().toLocaleString('fr-FR')}</p>
+          <p>Dernière mise à jour: {formatDateTimeFR(new Date())}</p>
         </div>
       )}
     </div>

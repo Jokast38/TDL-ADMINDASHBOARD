@@ -63,8 +63,10 @@ function groupByMonth(sessions) {
 const empty = {
   formation_id: "", date_debut: "", date_fin: "",
   lieu_adresse: "", lieu_ville: "", capacite_max: 20,
-  animateur_ids: [], statut: "planifie", notes: ""
+  animateur_ids: [], statut: "planifie", notes: "", creneau: ""
 };
+
+const CRENEAU_LABEL = { JOUR: "Jour", SOIR: "Soir" };
 
 const STATUTS = ["planifie", "en_cours", "termine", "annule"];
 
@@ -122,7 +124,7 @@ export default function Stages() {
     setForm({
       formation_id: s.formation_id || "", date_debut: s.date_debut || "", date_fin: s.date_fin || "",
       lieu_adresse: s.lieu_adresse || "", lieu_ville: s.lieu_ville || "", capacite_max: s.capacite_max ?? 20,
-      animateur_ids: ids, statut: s.statut || "planifie", notes: s.notes || "",
+      animateur_ids: ids, statut: s.statut || "planifie", notes: s.notes || "", creneau: s.creneau || "",
     });
     setStageModules(s.modules || []);
     setSelectedTemplateId("");
@@ -179,7 +181,7 @@ export default function Stages() {
 
   const save = async () => {
     try {
-      const payload = { ...form, capacite_max: +form.capacite_max };
+      const payload = { ...form, capacite_max: +form.capacite_max, creneau: form.creneau || null };
       if (editingId) {
         await api.put(`/stages/${editingId}`, payload);
         toast.success("Session mise à jour");
@@ -339,6 +341,17 @@ export default function Stages() {
               <div>
                 <label className="text-sm font-medium">Capacité max</label>
                 <Input type="number" value={form.capacite_max} onChange={(e) => setForm({ ...form, capacite_max: e.target.value })} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Rythme</label>
+                <Select value={form.creneau || "aucun"} onValueChange={(v) => setForm({ ...form, creneau: v === "aucun" ? "" : v })}>
+                  <SelectTrigger data-testid="stage-creneau"><SelectValue placeholder="Aucun rythme précis" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="aucun">Aucun rythme précis</SelectItem>
+                    <SelectItem value="JOUR">Jour</SelectItem>
+                    <SelectItem value="SOIR">Soir</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               {editingId && (
                 <div>
@@ -502,7 +515,7 @@ export default function Stages() {
               {rosterTarget && (
                 <span className="block text-xs font-normal text-gray-400 mt-1">
                   {rosterTarget.date_debut} → {rosterTarget.date_fin}
-                  {extractCreneau(rosterTarget.notes) ? ` · ${extractCreneau(rosterTarget.notes)}` : ""}
+                  {(rosterTarget.creneau || extractCreneau(rosterTarget.notes)) ? ` · ${rosterTarget.creneau || extractCreneau(rosterTarget.notes)}` : ""}
                   {" · "}{rosterTarget.nb_inscrits || 0}/{rosterTarget.capacite_max} places
                 </span>
               )}
@@ -532,7 +545,7 @@ export default function Stages() {
 }
 
 function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete, onViewRoster, muted }) {
-  const creneau = extractCreneau(s.notes);
+  const creneau = s.creneau || extractCreneau(s.notes);
   const full = (s.nb_inscrits || 0) >= s.capacite_max;
   return (
     <Card

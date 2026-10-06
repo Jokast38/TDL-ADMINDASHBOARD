@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FilePdf, DownloadSimple, MagnifyingGlass, Plus, FileText, Trash, Warning, PenNib, Eraser, Eye, Link as LinkIcon, Copy, ClipboardText, EnvelopeSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { formatDateFR } from "@/lib/dateFormat";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import SignatureCanvas from "react-signature-canvas";
 
@@ -52,7 +53,7 @@ const COMPANY_DEFAULTS = {
 const AUTO_DATE_FIELDS = ["date_emission", "date_signature"];
 
 function todayFR() {
-  return new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  return formatDateFR(new Date());
 }
 
 // Construit un contexte par défaut à partir des variables déclarées sur le modèle :
@@ -1069,7 +1070,7 @@ export default function DocumentsLibrary() {
                     {d.signed ? <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10 text-xs">Signé</Badge> : <span className="text-xs text-gray-400">—</span>}
                   </td>
                   <td className="py-3 px-4 text-xs">{d.generated_by_name || "—"}</td>
-                  <td className="py-3 px-4 text-xs text-gray-500 font-mono">{new Date(d.generated_at).toLocaleDateString("fr-FR")}</td>
+                  <td className="py-3 px-4 text-xs text-gray-500 font-mono">{formatDateFR(d.generated_at)}</td>
                   <td className="py-3 px-4 text-right">
                     <div className="inline-flex gap-1">
                       <button onClick={() => view(d.id)} className="p-1.5 hover:bg-gray-100 rounded" title="Voir"><FileText size={14} /></button>

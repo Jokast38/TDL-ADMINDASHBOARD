@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -282,7 +283,7 @@ export default function AdminBlog() {
             variant="outline"
             onClick={toggleAutoSync}
             disabled={autoSyncToggling || autoSync === null}
-            title={autoSync?.last_run_at ? `Dernière synchro : ${new Date(autoSync.last_run_at).toLocaleString("fr-FR")}` : "Importe automatiquement en brouillon les nouveaux articles WordPress toutes les 15 min"}
+            title={autoSync?.last_run_at ? `Dernière synchro : ${formatDateTimeFR(autoSync.last_run_at)}` : "Importe automatiquement en brouillon les nouveaux articles WordPress toutes les 15 min"}
             className={autoSync?.enabled ? "border-[#0B7238] text-[#0B7238] hover:bg-[#0B7238]/10 hover:text-[#0B7238]" : ""}
             data-testid="wp-autosync-toggle"
           >
@@ -326,7 +327,7 @@ export default function AdminBlog() {
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium truncate">{p.title}</p>
                           <p className="text-xs text-gray-400">
-                            {p.categories?.join(", ") || "Sans catégorie"} · {new Date(p.date).toLocaleDateString("fr-FR")}
+                            {p.categories?.join(", ") || "Sans catégorie"} · {formatDateFR(p.date)}
                           </p>
                         </div>
                         {p.already_imported && (
@@ -570,7 +571,7 @@ export default function AdminBlog() {
                   </td>
                   <td className="py-3 px-4 font-mono">{p.views || 0}</td>
                   <td className="py-3 px-4 text-xs text-gray-500 font-mono">
-                    {new Date(p.updated_at).toLocaleDateString("fr-FR")}
+                    {formatDateFR(p.updated_at)}
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="inline-flex gap-1">

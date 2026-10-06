@@ -12,6 +12,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import {
   Plus, UploadSimple, FileXls, FileCode, MagnifyingGlass, Trash, Phone,
   EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree, PencilSimple, GraduationCap,
@@ -1388,7 +1389,7 @@ export default function Leads() {
                               </p>
                               <p className="text-[11px] text-gray-400 mt-0.5">
                                 {rule.last_run_at
-                                  ? `Dernier passage : ${new Date(rule.last_run_at).toLocaleString("fr-FR")} — ${rule.last_run_sent || 0} envoyé(s)`
+                                  ? `Dernier passage : ${formatDateTimeFR(rule.last_run_at)} — ${rule.last_run_sent || 0} envoyé(s)`
                                   : "Jamais encore exécutée"}
                               </p>
                             </div>
@@ -1854,7 +1855,7 @@ export default function Leads() {
                     </Select>
                   </td>
                   <td className="py-3 px-4 text-xs text-gray-500 whitespace-nowrap">
-                    {l.created_at ? new Date(l.created_at).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }) : "—"}
+                    {l.created_at ? formatDateFR(l.created_at) : "—"}
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="flex justify-end items-center gap-1">
@@ -2033,7 +2034,7 @@ export default function Leads() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{e.subject}</p>
-                    <p className="text-xs text-gray-500">{new Date(e.created_at).toLocaleString("fr-FR")}</p>
+                    <p className="text-xs text-gray-500">{formatDateTimeFR(e.created_at)}</p>
                   </div>
                   {e.opened ? (
                     <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10 shrink-0 flex items-center gap-1">
@@ -2045,7 +2046,7 @@ export default function Leads() {
                 </div>
                 {e.opened && e.opened_at && (
                   <p className="text-[11px] text-gray-400 mt-1">
-                    Première ouverture : {new Date(e.opened_at).toLocaleString("fr-FR")}
+                    Première ouverture : {formatDateTimeFR(e.opened_at)}
                   </p>
                 )}
                 {e.status !== "sent" && e.status !== "mocked" && (

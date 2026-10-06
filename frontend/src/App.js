@@ -78,6 +78,10 @@ const Documentation = lazy(() => import("@/pages/Documentation"));
 // Page de test, temporaire — voir OcrTest.jsx. À retirer une fois le choix
 // du moteur OCR tranché (garder ou enlever cette route selon la décision).
 const OcrTest = lazy(() => import("@/pages/OcrTest"));
+// Page de test, temporaire — vérifie l'intégration Meta "Prospects
+// qualifiés" (voir services/meta_crm_events.py) avant de la brancher sur les
+// vrais changements de qualification des prospects.
+const MetaCrmTest = lazy(() => import("@/pages/MetaCrmTest"));
 const PolitiqueConfidentialite = lazy(() => import("@/pages/PolitiqueConfidentialite"));
 
 import Layout, { navAll } from "@/components/Layout";
@@ -277,6 +281,9 @@ function App() {
             } />
             <Route path="/admin/ocr-test" element={
               <ProtectedRoute roles={["admin"]}><AdminLayout><OcrTest /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/meta-crm-test" element={
+              <ProtectedRoute roles={["admin"]}><AdminLayout><MetaCrmTest /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/marketing" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Marketing /></AdminLayout></ProtectedRoute>

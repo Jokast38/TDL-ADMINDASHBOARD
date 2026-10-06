@@ -16,6 +16,11 @@ class StageIn(BaseModel):
     animateur_id: Optional[str] = None
     animateur_ids: Optional[List[str]] = None
     notes: Optional[str] = ""
+    # Rythme de la session — "JOUR" ou "SOIR" (ex: formations VTC/Taxi avec
+    # deux créneaux distincts sur les mêmes dates). None = pas de rythme
+    # précis pour cette formation (ex: récupération de points, une seule
+    # session par jour).
+    creneau: Optional[str] = None
 
 
 class StageUpdate(BaseModel):
@@ -28,6 +33,7 @@ class StageUpdate(BaseModel):
     animateur_ids: Optional[List[str]] = None
     statut: Optional[str] = None
     notes: Optional[str] = None
+    creneau: Optional[str] = None
 
 
 class EmargementIn(BaseModel):

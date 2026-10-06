@@ -73,6 +73,16 @@ META_APP_SECRET = os.getenv("META_APP_SECRET")
 META_WEBHOOK_VERIFY_TOKEN = os.getenv("META_WEBHOOK_VERIFY_TOKEN")
 META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
 
+# Intégration Meta "Prospects qualifiés" (CRM integration, API Conversions) —
+# distincte de tout ce qui précède : celle-ci ENVOIE à Meta les changements
+# de statut d'un prospect dans notre CRM (contacté, qualifié, inscrit...)
+# pour que Meta sache quels leads se sont réellement convertis et optimise
+# la diffusion des pubs en conséquence (Gestionnaire d'événements > Prospects
+# qualifiés). META_LEAD_LINK_ACCESS_TOKEN et META_CRM_DATASET_ID viennent de
+# l'écran "Configurer l'intégration" de ce dataset côté Meta.
+META_LEAD_LINK_ACCESS_TOKEN = os.getenv("META_LEAD_LINK_ACCESS_TOKEN")
+META_CRM_DATASET_ID = os.getenv("META_CRM_DATASET_ID", "1394070676160616")
+
 # Notifications push navigateur (Web Push / VAPID).
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")

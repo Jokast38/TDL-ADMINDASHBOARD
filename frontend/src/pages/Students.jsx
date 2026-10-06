@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { MagnifyingGlass, EnvelopeSimple, Phone, GraduationCap, FolderOpen, Sparkle, PaperPlaneTilt, Signature, Trash, DownloadSimple, UsersThree } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { formatDateFR, formatDateLongFR } from "@/lib/dateFormat";
 
 const PAGE_SIZE = 25;
 
@@ -57,7 +58,7 @@ const CENTER_OPTIONS = ["Épinay-sur-Seine (93)", "Creil (60)"];
 // l'intitulé de l'examen, la date de convocation et le centre — l'agent peut
 // ensuite modifier le texte généré avant l'envoi (voir insertConvocationTemplate).
 function convocationText({ studentName, intitule, date, centre }) {
-  const dateLabel = date ? new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "[date à préciser]";
+  const dateLabel = date ? formatDateLongFR(date) : "[date à préciser]";
   return {
     subject: `Convocation à l'examen — ${intitule || "[intitulé de l'examen]"}`,
     message:
@@ -523,7 +524,7 @@ export default function Students() {
                     ) : <span className="text-xs text-gray-300">—</span>}
                   </td>
                   <td className="py-3 px-4 text-xs text-gray-500 font-mono">
-                    {s.last_inscription_at ? new Date(s.last_inscription_at).toLocaleDateString("fr-FR") : "—"}
+                    {s.last_inscription_at ? formatDateFR(s.last_inscription_at) : "—"}
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="inline-flex items-center gap-1">
@@ -553,7 +554,7 @@ export default function Students() {
                               : s.attestation_sendable
                                 ? "Envoyer l'attestation de fin de formation"
                                 : s.last_stage_date_fin
-                                  ? `Disponible 24h après la fin de la session (${new Date(s.last_stage_date_fin).toLocaleDateString("fr-FR")})`
+                                  ? `Disponible 24h après la fin de la session (${formatDateFR(s.last_stage_date_fin)})`
                                   : "Aucune session assignée"
                           }
                           data-testid={`send-attestation-${s.id}`}

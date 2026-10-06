@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.database import db
 from core.security import require_role, get_current_user
-from core.utils import now_iso
+from core.utils import now_iso, format_date_long_fr
 from core.config import ROLES_DOSSIERS_MGMT
 from models.appointment import SlotGenerateIn, SlotUnlock4thIn, SlotBookIn
 from services.email import send_email
@@ -126,13 +126,14 @@ async def book_slot(slot_id: str, payload: SlotBookIn, user: dict = Depends(get_
     if result.modified_count == 0:
         raise HTTPException(status_code=409, detail="Ce créneau est complet")
 
+    slot_date_fr = format_date_long_fr(slot['date'])
     if user.get("email"):
         await send_email(
             user["email"],
-            f"Rendez-vous confirmé — {slot['date']} à {slot['heure_debut']}",
+            f"Rendez-vous confirmé — {slot_date_fr} à {slot['heure_debut']}",
             (
                 f"<p>Bonjour {dossier.get('student_name', '')},</p>"
-                f"<p>Votre rendez-vous est confirmé pour le <b>{slot['date']}</b> à <b>{slot['heure_debut']}</b> "
+                f"<p>Votre rendez-vous est confirmé pour le <b>{slot_date_fr}</b> à <b>{slot['heure_debut']}</b> "
                 f"({slot.get('department', '')}).</p><p>TDL Formation</p>"
             ),
         )
@@ -143,7 +144,7 @@ async def book_slot(slot_id: str, payload: SlotBookIn, user: dict = Depends(get_
         email_subject=f"📅 Nouveau rendez-vous réservé — {dossier.get('student_name', '')}",
         email_body_html=(
             f"<p><b>{dossier.get('student_name', '')}</b> a réservé le créneau du "
-            f"<b>{slot['date']}</b> à <b>{slot['heure_debut']}</b> ({slot.get('department', '')}).</p>"
+            f"<b>{slot_date_fr}</b> à <b>{slot['heure_debut']}</b> ({slot.get('department', '')}).</p>"
         ),
         push_title="Nouveau rendez-vous",
         push_body=f"{dossier.get('student_name', '')} — {slot['date']} {slot['heure_debut']}",
@@ -195,7 +196,7 @@ async def unlock_4th_slot(slot_id: str, payload: SlotUnlock4thIn, user: dict = D
             (
                 f"<p>Bonjour {dossier.get('student_name', '')},</p>"
                 f"<p>Bonne nouvelle : une place supplémentaire a été débloquée pour vous sur le "
-                f"créneau du <b>{slot['date']}</b> à <b>{slot['heure_debut']}</b>.</p>"
+                f"créneau du <b>{format_date_long_fr(slot['date'])}</b> à <b>{slot['heure_debut']}</b>.</p>"
                 f"<p>TDL Formation</p>"
             ),
         )

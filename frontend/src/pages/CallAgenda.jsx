@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Phone, EnvelopeSimple, User, CaretLeft, CaretRight, Funnel, CheckCircle, HandPointing } from "@phosphor-icons/react";
+import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 
 const MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 const JOURS_FR = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
@@ -314,7 +315,7 @@ export default function CallAgenda() {
         <DialogContent data-testid="call-agenda-day-dialog">
           <DialogHeader>
             <DialogTitle>
-              {dayDialog && new Date(dayDialog.iso).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+              {dayDialog && formatDateFR(dayDialog.iso)}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -341,7 +342,7 @@ export default function CallAgenda() {
                   {a.status === "traite" && (
                     <p className="text-xs mt-2 flex items-center gap-1.5 text-green-700">
                       <CheckCircle size={14} weight="fill" /> Appel traité par {a.commercial_name || "un agent"}
-                      {a.claimed_at ? ` le ${new Date(a.claimed_at).toLocaleString("fr-FR")}` : ""}
+                      {a.claimed_at ? ` le ${formatDateTimeFR(a.claimed_at)}` : ""}
                     </p>
                   )}
                   {a.status === "planifie" && !isDisponible && (

@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, ArrowRight, ArrowLeft, CreditCard, XCircle, CalendarCheck, MapPin, Users } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { formatDateFR } from "@/lib/dateFormat";
 import { trackCompleteRegistration, trackInitiateCheckout, trackPurchase, trackLead, newEventId, getFbCookies } from "@/lib/metaPixel";
 import { setPageMeta } from "@/lib/seo";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
@@ -271,7 +272,12 @@ export default function PublicInscription() {
                   >
                     <div className="flex items-center gap-2 text-sm font-semibold">
                       <CalendarCheck size={16} className="text-[#d4af37]" />
-                      {new Date(s.date_debut).toLocaleDateString("fr-FR")} → {new Date(s.date_fin).toLocaleDateString("fr-FR")}
+                      {formatDateFR(s.date_debut)} → {formatDateFR(s.date_fin)}
+                      {s.creneau && (
+                        <Badge variant="outline" className="text-[10px] font-normal">
+                          {s.creneau === "JOUR" ? "Jour" : "Soir"}
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 text-xs text-gray-500 mt-2">
                       <MapPin size={12} /> {s.lieu_ville}

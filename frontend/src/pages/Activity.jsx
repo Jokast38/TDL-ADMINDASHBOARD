@@ -11,6 +11,7 @@ import {
   Users, FolderOpen, Clock, CurrencyEur, PencilSimple, Trophy, ShoppingCart,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { formatDateTimeFR } from "@/lib/dateFormat";
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement,
   ArcElement, Tooltip, Legend, Filler,
@@ -494,7 +495,7 @@ export default function Activity() {
                       {e.meta?.outcome || e.meta?.status || e.meta?.contact_status || e.meta?.qualification || ""}
                     </td>
                     <td className="py-2.5 px-4 text-right pr-5 text-xs text-gray-400 font-mono whitespace-nowrap">
-                      {new Date(e.at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      {formatDateTimeFR(e.at)}
                     </td>
                   </tr>
                 ))}

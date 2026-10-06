@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatDateFR } from "@/lib/dateFormat";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
@@ -520,7 +521,7 @@ export default function Inscriptions() {
                   <p className="font-medium text-sm">{c.prenom} {c.nom}</p>
                   <p className="text-xs text-gray-500">
                     {c.telephone}{c.email && <span> · {c.email}</span>}
-                    <span className="ml-2 text-gray-400">{new Date(c.created_at).toLocaleDateString("fr-FR")}</span>
+                    <span className="ml-2 text-gray-400">{formatDateFR(c.created_at)}</span>
                   </p>
                   <p className="text-xs text-amber-700 mt-0.5">
                     Intérêt : {callbackInterest(c)}
@@ -664,7 +665,7 @@ export default function Inscriptions() {
                 return (
                   <tr key={i.id} className={`border-b border-gray-100 hover:bg-gray-50 ${cancelled ? "opacity-50" : ""}`} data-testid={`inscription-row-${i.id}`}>
                     <td className="py-3 px-4 text-xs text-gray-500 font-mono">
-                      {new Date(i.created_at).toLocaleDateString("fr-FR")}
+                      {formatDateFR(i.created_at)}
                     </td>
                     <td className="py-3 px-4">
                       <p className="font-medium">{i.student_name}</p>
@@ -963,7 +964,7 @@ export default function Inscriptions() {
               <SelectContent>
                 <SelectItem value="none">Aucune (retirer l'affectation)</SelectItem>
                 {stages.filter((s) => s.formation_id === assignTarget?.formation_id).map((s) => (
-                  <SelectItem key={s.id} value={s.id}>{s.date_debut} → {s.date_fin} — {s.lieu_ville}</SelectItem>
+                  <SelectItem key={s.id} value={s.id}>{s.date_debut} → {s.date_fin} — {s.lieu_ville}{s.creneau ? ` (${s.creneau === "JOUR" ? "Jour" : "Soir"})` : ""}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

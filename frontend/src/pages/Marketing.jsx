@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -239,10 +240,10 @@ function EmailStatsTab() {
               {stats.by_subject.filter((s) => s.sent > 0).map((s) => (
                 <tr key={s.subject} className="border-b border-gray-100">
                   <td className="py-2.5 px-5 text-xs text-gray-500 font-mono whitespace-nowrap">
-                    {s.first_sent ? new Date(s.first_sent).toLocaleDateString("fr-FR") : "—"}
+                    {s.first_sent ? formatDateFR(s.first_sent) : "—"}
                   </td>
                   <td className="py-2.5 px-5 text-xs text-gray-500 font-mono whitespace-nowrap">
-                    {s.last_sent ? new Date(s.last_sent).toLocaleDateString("fr-FR") : "—"}
+                    {s.last_sent ? formatDateFR(s.last_sent) : "—"}
                     {s.last_sent && s.first_sent && s.last_sent !== s.first_sent && (
                       <Badge className="ml-2 bg-[#0052CC]/10 text-[#0052CC] hover:bg-[#0052CC]/10 text-[10px]">Relancée</Badge>
                     )}
@@ -790,7 +791,7 @@ function CosmosiaTab() {
                     <MetaLeadNotesCell lead={l} onSave={updateNotes} />
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
-                    {l.created_at ? new Date(l.created_at).toLocaleDateString("fr-FR") : "—"}
+                    {l.created_at ? formatDateFR(l.created_at) : "—"}
                   </td>
                 </tr>
               ))}
@@ -1017,7 +1018,7 @@ function MetaEventsTab() {
                     <p className="text-gray-400 truncate">{l.form_name}{l.platform ? ` · ${l.platform}` : ""}</p>
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
-                    {l.created_time ? new Date(l.created_time).toLocaleDateString("fr-FR") : "—"}
+                    {l.created_time ? formatDateFR(l.created_time) : "—"}
                   </td>
                   <td className="py-2.5 px-4">
                     <Select value={l.qualification} onValueChange={(v) => updateQualification(l.id, v)}>
@@ -1199,7 +1200,7 @@ function MetaLeadEnrollForm({ lead, onEnrolled, onCancel }) {
             <SelectItem value="none">Aucune session précise</SelectItem>
             {stages.map((s) => (
               <SelectItem key={s.id} value={s.id}>
-                Du {s.date_debut} au {s.date_fin}{s.lieu_ville ? ` — ${s.lieu_ville}` : ""} ({s.nb_inscrits} inscrit{s.nb_inscrits > 1 ? "s" : ""})
+                Du {s.date_debut} au {s.date_fin}{s.lieu_ville ? ` — ${s.lieu_ville}` : ""}{s.creneau ? ` (${s.creneau === "JOUR" ? "Jour" : "Soir"})` : ""} ({s.nb_inscrits} inscrit{s.nb_inscrits > 1 ? "s" : ""})
               </SelectItem>
             ))}
           </SelectContent>
@@ -2062,7 +2063,7 @@ function PhoneCallsList() {
         <div key={c.id} className="border border-gray-200 rounded-md p-3 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-medium truncate">{c.prospectName || c.to || c.phoneNumber || "Appel"}</p>
-            <p className="text-xs text-gray-400">{c.createdAt ? new Date(c.createdAt).toLocaleString("fr-FR") : ""}</p>
+            <p className="text-xs text-gray-400">{c.createdAt ? formatDateTimeFR(c.createdAt) : ""}</p>
             {c.outcome && <Badge className={`mt-1 text-xs ${OUTCOME_COLORS[c.outcome] || ""}`}>{c.outcome_label}</Badge>}
           </div>
           <Select value={c.outcome || ""} onValueChange={(v) => setOutcome(c.id, v)}>

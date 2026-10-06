@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, R
 from core.database import db
 from core.security import require_role
 from core.config import ROLES_LEADS, ROLES_DOSSIERS_MGMT
-from core.utils import now_iso
+from core.utils import now_iso, format_date_long_fr
 from models.meta_lead_import import MetaLeadUpdate, MetaLeadEnrollIn
 from models.inscription import InscriptionIn
 from routers.inscriptions import create_inscription
@@ -303,7 +303,7 @@ async def enroll_meta_lead(lead_id: str, payload: MetaLeadEnrollIn, request: Req
         body = (
             f"<p>Bonjour {doc.get('name', '')},</p>"
             f"<p>Votre session est confirmée :</p>"
-            f"<p><b>Du {stage.get('date_debut', '')} au {stage.get('date_fin', '')}</b>"
+            f"<p><b>Du {format_date_long_fr(stage.get('date_debut', ''))} au {format_date_long_fr(stage.get('date_fin', ''))}</b>"
             f"{' — ' + stage['lieu_adresse'] if stage.get('lieu_adresse') else ''}"
             f"{' (' + stage['lieu_ville'] + ')' if stage.get('lieu_ville') else ''}</p>"
             "<p>TDL Formation</p>"

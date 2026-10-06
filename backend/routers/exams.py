@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.database import db
 from core.security import require_role, get_current_user
-from core.utils import now_iso
+from core.utils import now_iso, format_date_long_fr
 from core.config import ROLES_DOSSIERS_MGMT
 from models.exam import ExamTheoriqueNotifyIn, ExamJourIn, ExamPratiqueIn, ExamPratiqueResultIn
 from services.email import send_email
@@ -175,7 +175,7 @@ async def confirm_exam_jour(dossier_id: str, user: dict = Depends(require_role(*
             f"Confirmation de votre jour d'examen — {dossier.get('formation_title', '')}",
             (
                 f"<p>Bonjour {dossier.get('student_name', '')},</p>"
-                f"<p>Votre jour d'examen est confirmé : <b>{dossier['exam_jour_date']}</b>.</p>"
+                f"<p>Votre jour d'examen est confirmé : <b>{format_date_long_fr(dossier['exam_jour_date'])}</b>.</p>"
                 f"<p>Vous pourrez consulter votre résultat ici une fois disponible : "
                 f"<a href='{EXAMENT3P_URL}'>{EXAMENT3P_URL}</a></p>"
                 f"<p>TDL Formation</p>"
@@ -234,7 +234,7 @@ async def set_exam_pratique(dossier_id: str, payload: ExamPratiqueIn, user: dict
             f"Date de votre examen pratique — {dossier.get('formation_title', '')}",
             (
                 f"<p>Bonjour {dossier.get('student_name', '')},</p>"
-                f"<p>Votre examen pratique est prévu le <b>{payload.date}</b>"
+                f"<p>Votre examen pratique est prévu le <b>{format_date_long_fr(payload.date)}</b>"
                 + (f" (département {payload.department})" if payload.department else "")
                 + ".</p>"
                 f"<p>Informations pratiques à conserver : présentez-vous avec votre convocation, "
@@ -309,7 +309,7 @@ async def set_exam_pratique_result(dossier_id: str, payload: ExamPratiqueResultI
 
     if dossier.get("student_email"):
         next_date_html = (
-            f"<p>Votre prochaine date d'examen (CMA) : <b>{payload.next_exam_date}</b>.</p>"
+            f"<p>Votre prochaine date d'examen (CMA) : <b>{format_date_long_fr(payload.next_exam_date)}</b>.</p>"
             if payload.next_exam_date else
             "<p>La prochaine date d'examen vous sera communiquée dès qu'elle sera connue.</p>"
         )

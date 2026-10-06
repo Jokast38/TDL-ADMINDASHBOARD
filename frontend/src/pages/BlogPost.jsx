@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Calendar, Eye, ShareNetwork, Tag } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { formatDateFR } from "@/lib/dateFormat";
 import FAQSection from "@/components/FAQSection";
 import { faqsForCategory } from "@/constants/formationFaqs";
 import { heroForCategory } from "@/constants/formationAssets";
@@ -91,7 +92,7 @@ export default function BlogPost() {
           <p className="text-xl text-gray-600 leading-relaxed mb-6">{post.excerpt}</p>
         )}
         <div className="flex items-center gap-4 text-sm text-gray-500 border-y border-gray-200 py-4 mb-8">
-          <span className="inline-flex items-center gap-1"><Calendar size={14} /> {new Date(post.published_at || post.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</span>
+          <span className="inline-flex items-center gap-1"><Calendar size={14} /> {formatDateFR(post.published_at || post.created_at)}</span>
           <span className="inline-flex items-center gap-1"><Eye size={14} /> {post.views || 0} vues</span>
           <button onClick={share} className="ml-auto inline-flex items-center gap-1 hover:text-[#d4af37]" data-testid="share-btn">
             <ShareNetwork size={14} /> Partager

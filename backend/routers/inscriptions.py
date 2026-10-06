@@ -11,7 +11,7 @@ from fastapi.responses import Response
 
 from core.database import db
 from core.security import hash_password, get_current_user, require_role
-from core.utils import now_iso
+from core.utils import now_iso, format_date_long_fr
 from core.config import ROLES_DOSSIERS_MGMT, PUBLIC_FRONTEND_URL
 from models.inscription import InscriptionIn, InscriptionUpdate, DossierUpdate, StageAssignIn
 from services.trello import TrelloService
@@ -504,7 +504,7 @@ async def assign_inscription_stage(iid: str, payload: StageAssignIn, user: dict 
             message = (
                 f"Bonjour {inscription.get('student_name', '')},\n\n"
                 f"Nous vous confirmons votre convocation à la formation {stage.get('formation_titre', '')}.\n\n"
-                f"Dates : du {stage.get('date_debut', '')} au {stage.get('date_fin', '')}\n"
+                f"Dates : du {format_date_long_fr(stage.get('date_debut', ''))} au {format_date_long_fr(stage.get('date_fin', ''))}\n"
                 f"Lieu : {stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}\n\n"
                 "Merci de vous présenter avec une pièce d'identité valide et les documents demandés dans votre dossier.\n\n"
                 "Pour toute question, contactez-nous : contact@tdl-formation.fr."

@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, ArrowRight, Calendar, Tag, Eye } from "@phosphor-icons/react";
+import { formatDateFR } from "@/lib/dateFormat";
 import { useReveal } from "@/hooks/useReveal";
 import SiteFooter from "@/components/SiteFooter";
 import ChatWidget from "@/components/ChatWidget";
@@ -120,7 +121,7 @@ export default function Blog() {
                   <h2 className="font-display text-3xl font-bold tracking-tight mb-3 leading-tight">{featured.title}</h2>
                   <p className="text-gray-600 mb-4">{featured.excerpt}</p>
                   <div className="flex items-center gap-4 text-xs text-gray-500">
-                    <span className="inline-flex items-center gap-1"><Calendar size={12} /> {new Date(featured.published_at || featured.created_at).toLocaleDateString("fr-FR")}</span>
+                    <span className="inline-flex items-center gap-1"><Calendar size={12} /> {formatDateFR(featured.published_at || featured.created_at)}</span>
                     <span className="inline-flex items-center gap-1"><Eye size={12} /> {featured.views || 0}</span>
                   </div>
                   <span className="mt-6 text-sm font-semibold text-[#d4af37] inline-flex items-center gap-1">
@@ -152,7 +153,7 @@ export default function Blog() {
                     <h3 className="font-display font-bold text-lg leading-tight mb-2">{p.title}</h3>
                     <p className="text-sm text-gray-600 line-clamp-2">{p.excerpt}</p>
                     <div className="flex items-center gap-3 text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
-                      <span className="inline-flex items-center gap-1"><Calendar size={11} /> {new Date(p.published_at || p.created_at).toLocaleDateString("fr-FR")}</span>
+                      <span className="inline-flex items-center gap-1"><Calendar size={11} /> {formatDateFR(p.published_at || p.created_at)}</span>
                       <span className="inline-flex items-center gap-1"><Eye size={11} /> {p.views || 0}</span>
                     </div>
                   </div>

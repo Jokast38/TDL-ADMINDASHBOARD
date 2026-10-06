@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CreditCard, PaperPlaneTilt, LinkSimple, MagnifyingGlass } from "@phosphor-icons/react";
+import { formatDateFR } from "@/lib/dateFormat";
 
 const fmtSessionLabel = (s) => `${s.date_debut} → ${s.date_fin}${s.lieu_ville ? ` — ${s.lieu_ville}` : ""}`;
 
@@ -238,7 +239,7 @@ export default function CustomPayment() {
                     </Badge>
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
-                    {h.created_at ? new Date(h.created_at).toLocaleDateString("fr-FR") : "—"}
+                    {h.created_at ? formatDateFR(h.created_at) : "—"}
                   </td>
                   <td className="py-2.5 px-4 text-right">
                     <a href={h.stripe_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-[#0a0a0a] hover:underline">

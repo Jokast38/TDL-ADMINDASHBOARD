@@ -10,7 +10,7 @@ from fastapi.responses import Response
 from core.database import db
 from core.security import require_role
 from core.storage import get_object
-from core.utils import now_iso
+from core.utils import now_iso, format_date_long_fr
 from core.config import ROLES_ALL_STAFF
 from models.stage import StageIn, StageUpdate
 from services.email import send_email
@@ -66,7 +66,7 @@ async def list_public_available_stages(formation_id: str):
         result.append({
             "id": s["id"], "date_debut": s["date_debut"], "date_fin": s["date_fin"],
             "lieu_ville": s.get("lieu_ville", ""), "lieu_adresse": s.get("lieu_adresse", ""),
-            "places_restantes": remaining,
+            "places_restantes": remaining, "creneau": s.get("creneau"),
         })
     return result
 
@@ -145,7 +145,7 @@ async def create_stage(payload: StageIn, user: dict = Depends(require_role("admi
                     (
                         f"<p>Bonjour {f.get('name', '')},</p>"
                         f"<p>Une nouvelle session vous a été assignée : <b>{formation.get('title', '')}</b>, "
-                        f"du <b>{doc['date_debut']}</b> au <b>{doc['date_fin']}</b>, à {doc.get('lieu_ville', '')}.</p>"
+                        f"du <b>{format_date_long_fr(doc['date_debut'])}</b> au <b>{format_date_long_fr(doc['date_fin'])}</b>, à {doc.get('lieu_ville', '')}.</p>"
                         f"<p>TDL Formation</p>"
                     ),
                 )
@@ -209,7 +209,7 @@ async def update_stage(sid: str, payload: StageUpdate, user: dict = Depends(requ
                     (
                         f"<p>Bonjour {insc.get('student_name', '')},</p>"
                         f"<p>La session <b>{existing.get('formation_titre', '')}</b> du "
-                        f"<b>{existing.get('date_debut', '')}</b> a été annulée. Un membre de notre équipe va "
+                        f"<b>{format_date_long_fr(existing.get('date_debut', ''))}</b> a été annulée. Un membre de notre équipe va "
                         f"revenir vers vous pour vous proposer une nouvelle date.</p><p>TDL Formation</p>"
                     ),
                 )
@@ -223,7 +223,7 @@ async def update_stage(sid: str, payload: StageUpdate, user: dict = Depends(requ
                     await send_email(
                         f["email"], f"❌ Session annulée — {existing.get('formation_titre', '')}",
                         f"<p>Bonjour {f.get('name', '')},</p><p>La session <b>{existing.get('formation_titre', '')}</b> "
-                        f"du <b>{existing.get('date_debut', '')}</b> que vous deviez animer a été annulée.</p><p>TDL Formation</p>",
+                        f"du <b>{format_date_long_fr(existing.get('date_debut', ''))}</b> que vous deviez animer a été annulée.</p><p>TDL Formation</p>",
                     )
             if formateurs:
                 await send_push_to_users([f["id"] for f in formateurs], "Session annulée", existing.get("formation_titre", ""), "/espace-animateur")

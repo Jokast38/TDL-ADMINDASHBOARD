@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatDateFR } from "@/lib/dateFormat";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   SignOut, FileArrowUp, FolderOpen, Warning, CheckCircle, XCircle, ThumbsUp, ThumbsDown,
@@ -225,7 +226,7 @@ function SlotPicker({ dossierId, onBooked }) {
     <div className="space-y-3">
       {byDate.map(([date, daySlots]) => (
         <div key={date}>
-          <p className="text-xs font-medium text-gray-500 mb-1">{new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</p>
+          <p className="text-xs font-medium text-gray-500 mb-1">{formatDateFR(date)}</p>
           <div className="flex flex-wrap gap-2">
             {daySlots.map((s) => (
               <button
@@ -279,7 +280,7 @@ function ExamPratiqueSection({ dossier, refresh }) {
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4 text-sm text-blue-800 flex items-start gap-2">
           <CalendarCheck size={16} className="mt-0.5 flex-shrink-0" />
           <div>
-            <p className="font-medium">Examen pratique prévu le {new Date(dossier.exam_pratique_date).toLocaleDateString("fr-FR")}</p>
+            <p className="font-medium">Examen pratique prévu le {formatDateFR(dossier.exam_pratique_date)}</p>
             {dossier.exam_pratique_department && <p className="text-xs mt-0.5">Département : {dossier.exam_pratique_department}</p>}
           </div>
         </div>
@@ -288,7 +289,7 @@ function ExamPratiqueSection({ dossier, refresh }) {
       {dossier.exam_jour_date && (
         <div className="bg-gray-50 border border-gray-200 rounded-md p-4 text-sm flex items-center gap-2">
           <MapPin size={16} className="text-[#d4af37]" />
-          <span>Jour d'examen : <b>{new Date(dossier.exam_jour_date).toLocaleDateString("fr-FR")}</b>{dossier.exam_jour_confirmed && <Badge className="ml-2 bg-green-100 text-green-700 hover:bg-green-100">Confirmé</Badge>}</span>
+          <span>Jour d'examen : <b>{formatDateFR(dossier.exam_jour_date)}</b>{dossier.exam_jour_confirmed && <Badge className="ml-2 bg-green-100 text-green-700 hover:bg-green-100">Confirmé</Badge>}</span>
         </div>
       )}
 
@@ -297,7 +298,7 @@ function ExamPratiqueSection({ dossier, refresh }) {
           <p className="font-medium mb-1">Résultat : à repasser</p>
           <p className="mb-2">
             Pas d'inquiétude, le parcours est à refaire. Une réinscription de <b>{REINSCRIPTION_PRICE} €</b> est nécessaire pour reprendre.
-            {dossier.exam_cma_next_date && <> Prochaine date d'examen (CMA) : <b>{new Date(dossier.exam_cma_next_date).toLocaleDateString("fr-FR")}</b>.</>}
+            {dossier.exam_cma_next_date && <> Prochaine date d'examen (CMA) : <b>{formatDateFR(dossier.exam_cma_next_date)}</b>.</>}
           </p>
           {dossier.reinscription_inscription_id && !dossier.reinscription_paid && (
             <Button size="sm" disabled={paying} onClick={pay} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid={`pay-reinscription-${dossier.id}`}>
@@ -669,7 +670,7 @@ export default function StudentSpace() {
                           Émargement à signer — {r.formation_titre || "votre formation"}
                         </p>
                         <p className="text-xs text-amber-700">
-                          Session du {new Date(r.session_date).toLocaleDateString("fr-FR")}
+                          Session du {formatDateFR(r.session_date)}
                           {r.periode ? ` · ${PERIODE_LABELS[r.periode] || r.periode}` : ""}
                           {r.lieu_ville ? ` · ${r.lieu_ville}` : ""}
                         </p>
@@ -734,7 +735,7 @@ export default function StudentSpace() {
                 <p className="overline mb-1">Prochaine session</p>
                 {nextSession ? (
                   <>
-                    <p className="font-display font-bold text-lg">{new Date(nextSession.stage.date_debut).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</p>
+                    <p className="font-display font-bold text-lg">{formatDateFR(nextSession.stage.date_debut)}</p>
                     <p className="text-xs text-gray-500 mt-1">{nextSession.formation_title}</p>
                     {nextSession.stage.lieu_ville && <p className="text-xs text-gray-400 flex items-center gap-1 mt-1"><MapPin size={12} /> {nextSession.stage.lieu_ville}</p>}
                   </>
@@ -780,7 +781,7 @@ export default function StudentSpace() {
                   </div>
                   <Badge className={`${STATUS_COLOR[d.status] || ""} hover:${STATUS_COLOR[d.status] || ""}`}>{STATUS_LABEL[d.status] || d.status}</Badge>
                 </div>
-                <p className="text-sm text-gray-500 mb-4">Dossier #{d.id.slice(0, 8)} · créé le {new Date(d.created_at).toLocaleDateString("fr-FR")}</p>
+                <p className="text-sm text-gray-500 mb-4">Dossier #{d.id.slice(0, 8)} · créé le {formatDateFR(d.created_at)}</p>
                 {d.notes && <p className="text-sm bg-gray-50 p-3 rounded-md mb-4 border border-gray-200">{d.notes}</p>}
 
                 {manquants.length > 0 ? (
@@ -872,7 +873,7 @@ export default function StudentSpace() {
                 <DialogTitle className="font-display">Signer mon émargement</DialogTitle>
               </DialogHeader>
               <p className="text-sm text-gray-500 -mt-2 mb-2">
-                {signEmargementTarget.formation_titre} — session du {new Date(signEmargementTarget.session_date).toLocaleDateString("fr-FR")}
+                {signEmargementTarget.formation_titre} — session du {formatDateFR(signEmargementTarget.session_date)}
                 {signEmargementTarget.periode ? ` (${PERIODE_LABELS[signEmargementTarget.periode] || signEmargementTarget.periode})` : ""}
               </p>
               <div className="border-2 border-dashed border-gray-300 rounded-md bg-white">

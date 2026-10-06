@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { ShoppingCart, Lightning, ArrowsClockwise } from "@phosphor-icons/react";
+import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 
 const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { 
   style: "currency", 
@@ -231,13 +232,7 @@ export default function Orders() {
                         </p>
                       </td>
                       <td className="py-3 px-4 text-xs text-gray-500 font-mono">
-                        {o.date_created ? new Date(o.date_created).toLocaleDateString("fr-FR", {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        }) : '—'}
+                        {o.date_created ? formatDateTimeFR(o.date_created) : '—'}
                       </td>
                       <td className="py-3 px-4">
                         <p className="font-medium">
@@ -376,7 +371,7 @@ export default function Orders() {
       <div className="flex justify-between items-center text-xs text-gray-400">
         <div className="flex items-center gap-4">
           <span>Source: WooCommerce · kamistreet.fr</span>
-          <span>Dernière mise à jour: {new Date().toLocaleString('fr-FR')}</span>
+          <span>Dernière mise à jour: {formatDateTimeFR(new Date())}</span>
         </div>
         <div>
           {items.length} commande{items.length > 1 ? 's' : ''} affichée{items.length > 1 ? 's' : ''}
