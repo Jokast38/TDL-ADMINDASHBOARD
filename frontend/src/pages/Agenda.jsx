@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ function minutesFromMidnight(hhmm) {
 }
 
 export default function Agenda() {
+  const navigate = useNavigate();
   const [view, setView] = useState("month"); // "month" | "week"
   const [anchor, setAnchor] = useState(() => new Date());
   const [events, setEvents] = useState([]);
@@ -330,6 +332,16 @@ export default function Agenda() {
                     {ev.animateur_nom && <p className="flex items-center gap-1.5"><PenNib size={12} /> {ev.animateur_nom}</p>}
                     {ev.lieu_ville && <p className="flex items-center gap-1.5"><MapPin size={12} /> {ev.lieu_ville}</p>}
                   </div>
+                  {ev.stage_id && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/admin/stages?stage=${ev.stage_id}`)}
+                      className="inline-block mt-2 text-xs font-medium underline"
+                      style={{ color: c.text }}
+                    >
+                      Voir la session →
+                    </button>
+                  )}
                 </div>
               );
             })}

@@ -56,15 +56,6 @@ function formatMinutes(min) {
   return h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m} min`;
 }
 
-function formatSeconds(totalSeconds) {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = Math.floor(totalSeconds % 60);
-  return h > 0
-    ? `${h}h${String(m).padStart(2, "0")}m${String(s).padStart(2, "0")}s`
-    : `${m}m${String(s).padStart(2, "0")}s`;
-}
-
 const ONLINE_THRESHOLD_MS = 15 * 60 * 1000;
 
 function fmtMoney(v) {
@@ -373,12 +364,11 @@ export default function Activity() {
               <tbody>
                 {pagedEmployees.map((i) => {
                   const online = i.last_seen && (now - new Date(i.last_seen).getTime()) < ONLINE_THRESHOLD_MS;
-                  // Pour un employé en ligne, on affiche le temps écoulé depuis
-                  // first_seen recalculé à la seconde (temps réel) plutôt que
-                  // le total figé reçu au dernier chargement.
-                  const liveSeconds = online && i.first_seen
-                    ? Math.max(0, Math.round((now - new Date(i.first_seen).getTime()) / 1000))
-                    : null;
+                  // connection_minutes_today vient du temps d'interaction réel
+                  // (clics/frappe), pas du temps de connexion brut — on ne peut
+                  // donc plus l'extrapoler en direct comme avant (ça supposait
+                  // une activité continue depuis first_seen) : on affiche la
+                  // valeur reçue, rafraîchie à chaque rechargement de la page.
                   return (
                     <tr key={i.id} className="border-b border-gray-50 hover:bg-gray-50" data-testid={`activity-row-${i.id}`}>
                       <td className="py-2.5 px-5">
@@ -395,10 +385,10 @@ export default function Activity() {
                         </div>
                       </td>
                       <td className="py-2.5 px-4 font-mono text-xs">
-                        {liveSeconds !== null ? (
+                        {online ? (
                           <span className="text-[#0B7238] flex items-center gap-1">
                             <span className="h-1.5 w-1.5 rounded-full bg-[#0B7238] animate-pulse" />
-                            {formatSeconds(liveSeconds)}
+                            {formatMinutes(i.connection_minutes_today)}
                           </span>
                         ) : formatMinutes(i.connection_minutes_today)}
                       </td>

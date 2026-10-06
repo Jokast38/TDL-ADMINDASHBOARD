@@ -59,6 +59,10 @@ class InscriptionUpdate(BaseModel):
     # sinon le nom réel du titulaire (cas d'un proche finançant pour un
     # tiers), pour que les évidences EDOF correspondent au bon titulaire CPF.
     cpf_titulaire: Optional[str] = None
+    # Numéro de dossier CMA (Chambre de Métiers et de l'Artisanat) — renseigné
+    # quand `cma` = "OUI" ; repris de la colonne "N° DOSSIER" du fichier Excel
+    # VTC_TAXI à l'import, ou saisi manuellement par l'équipe.
+    cma_dossier_number: Optional[str] = None
     # Mode de règlement réel (carte, espèces, virement, chèque, CPF, CMA,
     # Klarna...) — distinct de `payment_status` (payé/en attente/remboursé)
     # qui ne dit pas COMMENT la personne a payé, saisi manuellement par

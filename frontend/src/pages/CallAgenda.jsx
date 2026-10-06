@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Phone, EnvelopeSimple, User, CaretLeft, CaretRight, Funnel, CheckCircle, HandPointing } from "@phosphor-icons/react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Phone, EnvelopeSimple, User, CaretLeft, CaretRight, Funnel, CheckCircle, HandPointing, Plus, MagnifyingGlass } from "@phosphor-icons/react";
 import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 
 const MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -85,6 +87,58 @@ export default function CallAgenda() {
   const [dayDialog, setDayDialog] = useState(null);
   const [filterStatus, setFilterStatus] = useState("all");
   const [claimingId, setClaimingId] = useState(null);
+
+  // Création manuelle d'un rendez-vous d'appel — un rendez-vous est toujours
+  // rattaché à un lead existant côté backend (CallAppointmentIn.lead_id est
+  // obligatoire), donc on fait chercher le lead par nom/téléphone/email avant
+  // de choisir la date/heure.
+  const [createOpen, setCreateOpen] = useState(false);
+  const [leadQuery, setLeadQuery] = useState("");
+  const [leadResults, setLeadResults] = useState([]);
+  const [searchingLead, setSearchingLead] = useState(false);
+  const [selectedLead, setSelectedLead] = useState(null);
+  const [createDate, setCreateDate] = useState("");
+  const [createTime, setCreateTime] = useState("");
+  const [createNotes, setCreateNotes] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (!createOpen || !leadQuery.trim()) { setLeadResults([]); return; }
+    setSearchingLead(true);
+    const t = setTimeout(() => {
+      api.get("/leads", { params: { q: leadQuery.trim(), page: 1, page_size: 8 } })
+        .then((r) => setLeadResults(r.data.items || r.data || []))
+        .catch(() => setLeadResults([]))
+        .finally(() => setSearchingLead(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [leadQuery, createOpen]);
+
+  const openCreate = () => {
+    setSelectedLead(null); setLeadQuery(""); setLeadResults([]);
+    setCreateDate(toISO(new Date())); setCreateTime("09:00"); setCreateNotes("");
+    setCreateOpen(true);
+  };
+
+  const submitCreate = async () => {
+    if (!selectedLead) return toast.error("Choisissez un lead");
+    if (!createDate || !createTime) return toast.error("Date et heure requises");
+    setCreating(true);
+    try {
+      await api.post("/call-center/appointments", {
+        lead_id: selectedLead.id,
+        scheduled_at: new Date(`${createDate}T${createTime}:00`).toISOString(),
+        notes: createNotes || undefined,
+      });
+      toast.success("Rendez-vous d'appel créé");
+      setCreateOpen(false);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la création");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const weekStart = useMemo(() => startOfWeek(anchor), [anchor]);
   const monthGridStart = useMemo(() => startOfMonthGrid(anchor), [anchor]);
@@ -182,6 +236,9 @@ export default function CallAgenda() {
           <span className="text-sm font-medium capitalize min-w-[200px] text-center">{headerLabel}</span>
           <Button variant="outline" size="icon" onClick={() => shiftBy(1)}><CaretRight size={16} /></Button>
           <Button variant="outline" size="sm" onClick={() => setAnchor(new Date())}>Aujourd'hui</Button>
+          <Button size="sm" className="gap-1.5 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" onClick={openCreate} data-testid="call-agenda-new">
+            <Plus size={14} /> Nouveau rendez-vous
+          </Button>
         </div>
       </div>
 
@@ -362,6 +419,73 @@ export default function CallAgenda() {
                 </div>
               );
             })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent data-testid="call-agenda-create-dialog">
+          <DialogHeader><DialogTitle>Nouveau rendez-vous d'appel</DialogTitle></DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div>
+              <label className="text-sm font-medium">Lead</label>
+              {selectedLead ? (
+                <div className="flex items-center justify-between border border-gray-200 rounded-md px-3 py-2 mt-1">
+                  <div className="text-sm">
+                    <p className="font-medium">{selectedLead.name || selectedLead.full_name}</p>
+                    <p className="text-xs text-gray-400">{selectedLead.email || selectedLead.phone}</p>
+                  </div>
+                  <button className="text-xs text-gray-400 hover:text-red-600 underline" onClick={() => setSelectedLead(null)}>Changer</button>
+                </div>
+              ) : (
+                <div className="relative mt-1">
+                  <MagnifyingGlass size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+                  <Input
+                    className="pl-8" placeholder="Rechercher un lead (nom, email, téléphone)..."
+                    value={leadQuery} onChange={(e) => setLeadQuery(e.target.value)}
+                    data-testid="call-agenda-lead-search"
+                  />
+                  {leadQuery.trim() && (
+                    <div className="mt-1 border border-gray-200 rounded-md max-h-48 overflow-y-auto">
+                      {searchingLead ? (
+                        <p className="text-xs text-gray-400 px-3 py-2">Recherche...</p>
+                      ) : leadResults.length === 0 ? (
+                        <p className="text-xs text-gray-400 px-3 py-2">Aucun lead trouvé</p>
+                      ) : leadResults.map((l) => (
+                        <button
+                          key={l.id} type="button"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
+                          onClick={() => { setSelectedLead(l); setLeadQuery(""); setLeadResults([]); }}
+                        >
+                          <p className="font-medium">{l.name || l.full_name}</p>
+                          <p className="text-xs text-gray-400">{l.email || l.phone}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Date</label>
+                <Input type="date" value={createDate} onChange={(e) => setCreateDate(e.target.value)} data-testid="call-agenda-create-date" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Heure</label>
+                <Input type="time" value={createTime} onChange={(e) => setCreateTime(e.target.value)} data-testid="call-agenda-create-time" />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Notes</label>
+              <Textarea rows={2} value={createNotes} onChange={(e) => setCreateNotes(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>Annuler</Button>
+            <Button onClick={submitCreate} disabled={creating} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="call-agenda-create-submit">
+              {creating ? "..." : "Créer le rendez-vous"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

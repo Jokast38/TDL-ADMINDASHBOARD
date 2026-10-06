@@ -43,8 +43,14 @@ async def log_action(user: dict, action: str, target_type: Optional[str] = None,
 
 
 async def ping_session(user_id: str) -> None:
-    """Heartbeat de connexion, appelé depuis get_current_user. Throttlé en
-    mémoire pour ne toucher Mongo qu'une fois par minute par utilisateur."""
+    """Heartbeat de connexion, appelé depuis get_current_user à chaque requête
+    API authentifiée. Throttlé en mémoire pour ne toucher Mongo qu'une fois
+    par minute par utilisateur. Sert UNIQUEMENT au point "en ligne maintenant"
+    (voir last_seen/ONLINE_THRESHOLD_MS côté frontend) — PAS au calcul du
+    temps de travail (voir ping_interaction ci-dessous), car ce ping se
+    déclenche aussi sur du simple polling en arrière-plan (ex: la cloche de
+    notifications toutes les 60s) même quand l'utilisateur a quitté l'onglet,
+    ce qui gonflait artificiellement le temps de connexion compté."""
     now = time.monotonic()
     last = _last_ping_at.get(user_id)
     if last is not None and (now - last) < _PING_THROTTLE_SECONDS:
@@ -57,6 +63,44 @@ async def ping_session(user_id: str) -> None:
             {"user_id": user_id, "date": today},
             {"$set": {"last_seen": ts}, "$setOnInsert": {"first_seen": ts, "id": str(uuid.uuid4())},
              "$inc": {"ping_count": 1}},
+            upsert=True,
+        )
+    except Exception:
+        pass
+
+
+# Au-delà de cet écart entre deux interactions réelles (clic, frappe...), on
+# considère que l'utilisateur s'est absenté (pause, réunion...) : le temps
+# écoulé n'est PAS ajouté au compteur, et une nouvelle "tranche active"
+# démarre à la prochaine interaction — plutôt que de compter tout l'intervalle
+# comme si la personne avait travaillé sans interruption.
+_INTERACTION_GAP_LIMIT_SECONDS = 10 * 60
+
+
+async def ping_interaction(user_id: str) -> None:
+    """Appelé par le frontend sur une vraie interaction utilisateur (clic,
+    frappe...), throttlé côté client — mesure le temps de travail réel plutôt
+    que la simple présence d'un onglet ouvert qui continue d'appeler l'API en
+    arrière-plan (voir ping_session). Accumule dans `active_seconds`, remis à
+    zéro chaque jour (document par utilisateur/jour comme `user_sessions`)."""
+    try:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        now_dt = datetime.now(timezone.utc)
+        ts = now_iso()
+        doc = await db.user_sessions.find_one({"user_id": user_id, "date": today}, {"_id": 0})
+        delta = 0
+        if doc and doc.get("last_interaction_at"):
+            try:
+                last_dt = datetime.fromisoformat(doc["last_interaction_at"].replace("Z", "+00:00"))
+                gap = (now_dt - last_dt).total_seconds()
+                if 0 < gap <= _INTERACTION_GAP_LIMIT_SECONDS:
+                    delta = gap
+            except Exception:
+                delta = 0
+        await db.user_sessions.update_one(
+            {"user_id": user_id, "date": today},
+            {"$set": {"last_interaction_at": ts}, "$setOnInsert": {"id": str(uuid.uuid4()), "active_seconds": 0},
+             "$inc": {"active_seconds": delta}},
             upsert=True,
         )
     except Exception:

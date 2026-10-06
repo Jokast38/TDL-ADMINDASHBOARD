@@ -45,6 +45,7 @@ const CPF_OPTIONS = ["OUI", "NON", "En attente"];
 // Catégories de formation pour lesquelles la CMA n'a pas de sens (ex:
 // récupération de points — pas de compte CMA à créer pour ce type de stage).
 const NO_CMA_CATEGORIES = ["PERMIS"];
+const VTC_TAXI_CATEGORY = "VTC_TAXI";
 
 function FundingCell({ value, onSave, disabled, testId, options }) {
   const isPreset = options.includes(value);
@@ -238,11 +239,11 @@ export default function Inscriptions() {
   // (Stripe) immédiat — distinct du flux "Inscrire" ci-dessus qui part d'une
   // demande de rappel existante et ne déclenche pas de paiement.
   const [walkinOpen, setWalkinOpen] = useState(false);
-  const [walkinForm, setWalkinForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "", pay_now: true });
+  const [walkinForm, setWalkinForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "", pay_now: true, cma: "", cma_dossier_number: "", cpf: "", cpf_titulaire: "" });
   const [walkinSubmitting, setWalkinSubmitting] = useState(false);
 
   const openWalkin = () => {
-    setWalkinForm({ formation_id: formations[0]?.id || "", name: "", email: "", phone: "", notes: "", pay_now: true });
+    setWalkinForm({ formation_id: formations[0]?.id || "", name: "", email: "", phone: "", notes: "", pay_now: true, cma: "", cma_dossier_number: "", cpf: "", cpf_titulaire: "" });
     setWalkinOpen(true);
   };
 
@@ -260,6 +261,18 @@ export default function Inscriptions() {
         notes: walkinForm.notes,
         source: "admin_walkin",
       });
+      // CMA/CPF ne font pas partie du formulaire de création (InscriptionIn)
+      // — saisis uniquement pour les formations VTC/Taxi (voir VTC_TAXI_CATEGORY
+      // plus bas), appliqués juste après via la même route PUT que la colonne
+      // CMA/CPF de la liste des inscriptions.
+      const fundingUpdate = {};
+      if (walkinForm.cma) fundingUpdate.cma = walkinForm.cma;
+      if (walkinForm.cma_dossier_number) fundingUpdate.cma_dossier_number = walkinForm.cma_dossier_number;
+      if (walkinForm.cpf) fundingUpdate.cpf = walkinForm.cpf;
+      if (walkinForm.cpf_titulaire) fundingUpdate.cpf_titulaire = walkinForm.cpf_titulaire;
+      if (Object.keys(fundingUpdate).length) {
+        try { await api.put(`/inscriptions/${data.inscription.id}`, fundingUpdate); } catch (e) { /* non bloquant */ }
+      }
       const formation = formations.find((f) => f.id === walkinForm.formation_id);
       if (walkinForm.pay_now && !formation?.cpf_eligible) {
         try {
@@ -792,7 +805,19 @@ export default function Inscriptions() {
                       {NO_CMA_CATEGORIES.includes(i.category) ? (
                         <span className="text-xs text-gray-300" title="Pas de compte CMA pour cette formation">N/A</span>
                       ) : (
-                        <FundingCell value={i.cma} onSave={(v) => updateFunding(i.id, "cma", v)} disabled={cancelled} testId={`cma-${i.id}`} options={CMA_OPTIONS} />
+                        <div className="flex flex-col gap-1">
+                          <FundingCell value={i.cma} onSave={(v) => updateFunding(i.id, "cma", v)} disabled={cancelled} testId={`cma-${i.id}`} options={CMA_OPTIONS} />
+                          {i.cma === "OUI" && (
+                            <input
+                              defaultValue={i.cma_dossier_number || ""}
+                              onBlur={(e) => { if (e.target.value !== (i.cma_dossier_number || "")) updateFunding(i.id, "cma_dossier_number", e.target.value); }}
+                              placeholder="N° dossier CMA"
+                              className="w-28 text-[11px] border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#d4af37]"
+                              disabled={cancelled}
+                              data-testid={`cma-dossier-${i.id}`}
+                            />
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="py-3 px-4">
@@ -1058,6 +1083,47 @@ export default function Inscriptions() {
               <label className="text-sm font-medium">Notes</label>
               <Textarea rows={2} value={walkinForm.notes} onChange={(e) => setWalkinForm({ ...walkinForm, notes: e.target.value })} data-testid="walkin-notes" />
             </div>
+            {formations.find((f) => f.id === walkinForm.formation_id)?.category === VTC_TAXI_CATEGORY && (
+              <div className="border border-gray-200 rounded-md p-3 space-y-2 bg-gray-50/50">
+                <p className="text-xs font-medium text-gray-500">Financement (VTC/Taxi)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium">CMA</label>
+                    <Select value={walkinForm.cma || "vide"} onValueChange={(v) => setWalkinForm({ ...walkinForm, cma: v === "vide" ? "" : v })}>
+                      <SelectTrigger data-testid="walkin-cma"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vide">—</SelectItem>
+                        {CMA_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">CPF</label>
+                    <Select value={walkinForm.cpf || "vide"} onValueChange={(v) => setWalkinForm({ ...walkinForm, cpf: v === "vide" ? "" : v })}>
+                      <SelectTrigger data-testid="walkin-cpf"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vide">—</SelectItem>
+                        {CPF_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                {walkinForm.cma === "OUI" && (
+                  <Input
+                    value={walkinForm.cma_dossier_number}
+                    onChange={(e) => setWalkinForm({ ...walkinForm, cma_dossier_number: e.target.value })}
+                    placeholder="N° dossier CMA" data-testid="walkin-cma-dossier"
+                  />
+                )}
+                {walkinForm.cpf === "OUI" && (
+                  <Input
+                    value={walkinForm.cpf_titulaire}
+                    onChange={(e) => setWalkinForm({ ...walkinForm, cpf_titulaire: e.target.value })}
+                    placeholder="Nom du titulaire CPF (si différent de l'inscrit)" data-testid="walkin-cpf-titulaire"
+                  />
+                )}
+              </div>
+            )}
             <label className="flex items-center gap-2 text-sm bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
               <input
                 type="checkbox" checked={walkinForm.pay_now}

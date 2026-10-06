@@ -254,6 +254,7 @@ async def list_students(finalized_only: bool = True, user: dict = Depends(requir
             "cma": latest_insc.get("cma") if latest_insc else None,
             "cpf": latest_insc.get("cpf") if latest_insc else None,
             "cpf_titulaire": latest_insc.get("cpf_titulaire") if latest_insc else None,
+            "cma_dossier_number": latest_insc.get("cma_dossier_number") if latest_insc else None,
             "contact_status": latest_insc.get("contact_status") if latest_insc else None,
             "category": latest_insc.get("category") if latest_insc else None,
             "session_month": (latest_stage.get("date_debut", "")[:7] if latest_stage and latest_stage.get("date_debut") else None),

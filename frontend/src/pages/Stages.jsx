@@ -117,6 +117,24 @@ export default function Stages() {
     api.get("/employees").then((r) => setAnimateurs(r.data.filter((u) => u.role === "animateur" || u.role === "admin"))).catch(() => {});
   }, []);
 
+  // Redirection depuis l'Agenda général ("Voir la session") — ?stage=<id>
+  // dans l'URL ouvre directement la liste des inscrits de cette session dès
+  // que les stages sont chargés, sans que l'utilisateur ait à la rechercher.
+  useEffect(() => {
+    if (!items.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const stageId = params.get("stage");
+    if (!stageId) return;
+    const target = items.find((s) => s.id === stageId);
+    if (target) {
+      openRoster(target);
+      params.delete("stage");
+      const qs = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
+
   const openCreate = () => { setEditingId(null); setForm(empty); setStageModules([]); setSelectedTemplateId(""); setOpen(true); };
   const openEdit = (s) => {
     setEditingId(s.id);

@@ -156,6 +156,7 @@ async def import_vtc_taxi_excel(file: UploadFile = File(...), user: dict = Depen
         idx_tel = col("TELEPHONE")
         idx_cma = next((i for i, h in enumerate(header) if h == "CMA"), None)
         idx_cpf = next((i for i, h in enumerate(header) if h == "CPF"), None)
+        idx_dossier = col("DOSSIER")
         idx_quand = col("QUAND")
         idx_notes = col("NOTES")
 
@@ -259,6 +260,13 @@ async def import_vtc_taxi_excel(file: UploadFile = File(...), user: dict = Depen
                 "source": "excel_import_vtc_taxi_2026", "session": stage_id, "stage_id": stage_id,
                 "center": _CENTRE_VILLE[centre_key],
             }
+            if get(idx_cma):
+                inscription["cma"] = get(idx_cma).upper()
+            if get(idx_dossier):
+                inscription["cma_dossier_number"] = get(idx_dossier)
+            if cpf_ok:
+                inscription["cpf"] = "OUI"
+                inscription["cpf_titulaire"] = name
             if processed_by:
                 inscription["processed_by"] = processed_by
             if cpf_ok:

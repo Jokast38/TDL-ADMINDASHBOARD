@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { api } from "@/lib/api";
 import NotificationBell from "@/components/NotificationBell";
 import {
   House, GraduationCap, Folders, Users, Storefront,
@@ -79,6 +80,26 @@ export default function Layout({ children }) {
   useEffect(() => {
     localStorage.setItem("sidebar_collapsed", collapsed ? "1" : "0");
   }, [collapsed]);
+
+  // Temps de travail réel (page Activité) : on signale une interaction
+  // concrète (clic, frappe, scroll) au backend, throttlé à un appel toutes
+  // les 30s max — pas à chaque appel API comme avant, ce qui comptait aussi
+  // le simple polling en arrière-plan (cloche de notifications...) comme du
+  // temps de présence même onglet laissé ouvert sans personne devant l'écran.
+  const lastInteractionPingRef = useRef(0);
+  useEffect(() => {
+    const INTERACTION_PING_THROTTLE_MS = 30_000;
+    const onInteraction = () => {
+      const now = Date.now();
+      if (now - lastInteractionPingRef.current < INTERACTION_PING_THROTTLE_MS) return;
+      lastInteractionPingRef.current = now;
+      api.post("/me/activity-ping").catch(() => {});
+    };
+    const events = ["click", "keydown", "scroll"];
+    events.forEach((ev) => window.addEventListener(ev, onInteraction, { passive: true }));
+    onInteraction();
+    return () => events.forEach((ev) => window.removeEventListener(ev, onInteraction));
+  }, []);
 
   // allowed_pages non vide = restriction supplémentaire posée par un admin
   // depuis la page Employés (voir PUT /employees/{uid}/pages) — en plus du

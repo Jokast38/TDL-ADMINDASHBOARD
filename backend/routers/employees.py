@@ -296,6 +296,16 @@ async def delete_employee(uid: str, user: dict = Depends(require_role("admin", "
     return {"ok": True}
 
 
+@router.post("/me/activity-ping")
+async def ping_my_activity(user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
+    """Appelé par le frontend sur une vraie interaction (clic, frappe...),
+    throttlé côté client — voir services/activity.py::ping_interaction pour
+    le calcul du temps de travail réel (pause auto après 10 min d'inactivité)."""
+    from services.activity import ping_interaction
+    await ping_interaction(user["id"])
+    return {"ok": True}
+
+
 @router.get("/me/profile")
 async def get_my_profile(user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
     profile = await _get_or_create_staff_profile(user["id"])
@@ -564,15 +574,12 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
         # ce qui gonflait artificiellement ce total.
         total_dossiers = inscriptions_traitees + callbacks_handled + adjustment
 
-        connection_minutes_today = 0
+        # Temps de travail = temps d'interaction réelle (clics/frappe, voir
+        # ping_interaction dans services/activity.py), PAS le temps de
+        # connexion brut (last_seen - first_seen) qui comptait aussi du
+        # polling en arrière-plan sans présence réelle devant l'écran.
         sess = sessions_by_user.get(uid)
-        if sess and sess.get("first_seen") and sess.get("last_seen"):
-            try:
-                fs = datetime.fromisoformat(sess["first_seen"].replace("Z", "+00:00"))
-                ls = datetime.fromisoformat(sess["last_seen"].replace("Z", "+00:00"))
-                connection_minutes_today = max(0, round((ls - fs).total_seconds() / 60))
-            except Exception:
-                pass
+        connection_minutes_today = round((sess.get("active_seconds") or 0) / 60) if sess else 0
 
         result.append({
             **s,
