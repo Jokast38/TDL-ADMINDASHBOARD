@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  SignOut, FileArrowUp, FolderOpen, Warning, CheckCircle, ThumbsUp, ThumbsDown,
+  SignOut, FileArrowUp, FolderOpen, Warning, CheckCircle, XCircle, ThumbsUp, ThumbsDown,
   CalendarCheck, ArrowSquareOut, CreditCard, Clock, Sparkle, MapPin, Eraser, FilePdf, Signature,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
@@ -500,7 +500,6 @@ export default function StudentSpace() {
   const navigate = useNavigate();
   const [dossiers, setDossiers] = useState([]);
   const [docsByDossier, setDocsByDossier] = useState({});
-  const [uploadType, setUploadType] = useState({});
   const [emargementRequests, setEmargementRequests] = useState([]);
   const [activeTab, setActiveTab] = useState("accueil"); // "accueil" | "dossiers"
   const [signEmargementTarget, setSignEmargementTarget] = useState(null);
@@ -591,9 +590,13 @@ export default function StudentSpace() {
     }
   };
 
-  const upload = async (e, dossierId) => {
+  // Liste visuelle des documents requis par la formation choisie — chaque
+  // pièce est directement cliquable (pas de menu déroulant à choisir avant
+  // d'ajouter le fichier), pour que l'apprenant sache immédiatement quoi
+  // déposer et où.
+  const uploadForType = async (e, dossierId, docType) => {
     const file = e.target.files?.[0];
-    const docType = uploadType[dossierId] || "autre";
+    if (!file) return;
     try {
       await uploadFile(file, dossierId, docType);
     } finally {
@@ -816,21 +819,36 @@ export default function StudentSpace() {
                   </div>
                 )}
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select value={uploadType[d.id] || (manquants[0] || "autre")} onValueChange={(v) => setUploadType((p) => ({ ...p, [d.id]: v }))}>
-                    <SelectTrigger className="w-full sm:w-56 h-9 text-sm" data-testid={`doctype-${d.id}`}>
-                      <SelectValue placeholder="Type de document" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(d.documents_requis?.length ? d.documents_requis : Object.keys(DOC_TYPE_LABELS)).map((t) => (
-                        <SelectItem key={t} value={t}>{DOC_TYPE_LABELS[t] || t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <label className="inline-flex items-center gap-2 text-sm cursor-pointer px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
-                    <FileArrowUp size={14} /> Ajouter ce document
-                    <input type="file" className="hidden" onChange={(e) => upload(e, d.id)} data-testid={`upload-${d.id}`} />
-                  </label>
+                <p className="overline mb-2">Documents à déposer pour cette formation</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {(d.documents_requis?.length ? d.documents_requis : Object.keys(DOC_TYPE_LABELS)).map((t) => {
+                    const existing = docs.find((doc) => doc.doc_type === t);
+                    const status = existing?.verification_status;
+                    return (
+                      <label
+                        key={t}
+                        className={`flex items-center justify-between gap-2 text-sm border rounded-md px-3 py-2.5 cursor-pointer transition-colors ${
+                          status === "approved" ? "border-green-300 bg-green-50" :
+                          status === "rejected" ? "border-red-300 bg-red-50" :
+                          existing ? "border-blue-200 bg-blue-50" :
+                          "border-dashed border-gray-300 hover:border-[#d4af37] hover:bg-gray-50"
+                        }`}
+                        data-testid={`doc-upload-${d.id}-${t}`}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          {status === "approved" ? <CheckCircle size={16} weight="fill" className="text-green-600 shrink-0" /> :
+                           status === "rejected" ? <XCircle size={16} weight="fill" className="text-red-500 shrink-0" /> :
+                           existing ? <Clock size={16} className="text-blue-500 shrink-0" /> :
+                           <FileArrowUp size={16} className="text-gray-400 shrink-0" />}
+                          <span className="truncate">{DOC_TYPE_LABELS[t] || t}</span>
+                        </span>
+                        <span className="text-xs text-gray-400 shrink-0">
+                          {status === "approved" ? "Approuvé" : status === "rejected" ? "Rejeté — à redéposer" : existing ? "Envoyé" : "Ajouter"}
+                        </span>
+                        <input type="file" className="hidden" onChange={(e) => uploadForType(e, d.id, t)} />
+                      </label>
+                    );
+                  })}
                 </div>
               </Card>
             );

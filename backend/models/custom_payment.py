@@ -13,3 +13,7 @@ class CustomPaymentIn(BaseModel):
     price: float
     recipient_name: Optional[str] = None
     recipient_email: EmailStr
+    # Session choisie (date/lieu), facultative — affichée dans l'email pour
+    # que le destinataire sache précisément à quelle session ce paiement se
+    # rapporte (voir GET /stages/public/available, réutilisé par la page).
+    session_label: Optional[str] = None

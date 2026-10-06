@@ -19,6 +19,12 @@ import { toast } from "sonner";
 
 const empty = { email: "", name: "", role: "employe", phone: "", department: "", password: "", assigned_categories: [], assigned_centers: [], assigned_training_assignments: [], allowed_pages: [] };
 
+const ROLE_LABEL = {
+  employe: "Employé", animateur: "Animateur / Formateur",
+  responsable_admission: "Responsable admission", agent_admin: "Agent administratif",
+  commercial: "Commercial", responsable_commercial: "Responsable commercial", admin: "Administrateur",
+};
+
 // Une seule ligne par page du menu (certains chemins comme /admin apparaissent
 // pour plusieurs rôles avec des libellés différents — "Dashboard"/"Accueil" —
 // on ne garde que la première occurrence pour ne pas dupliquer les cases).
@@ -116,6 +122,17 @@ export default function Employees() {
   };
 
   const accountStatus = (u) => u.account_status || (u.active === false ? "suspendu" : "actif");
+
+  const updateRole = async (u, role) => {
+    if (role === u.role) return;
+    try {
+      await api.put(`/employees/${u.id}/role`, { role });
+      toast.success(`Rôle changé en ${ROLE_LABEL[role] || role}`);
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
 
   // Pages qu'un rôle voit par défaut (sans restriction explicite) — sert à
   // pré-cocher l'accès réellement actif aujourd'hui plutôt que d'ouvrir sur
@@ -290,9 +307,23 @@ export default function Employees() {
                     <td className="py-3 px-4 font-medium">{u.name}</td>
                     <td className="py-3 px-4 font-mono text-xs">{u.email}</td>
                     <td className="py-3 px-4">
-                      <Badge className={u.role === "admin" ? "bg-[#0a0a0a] text-white hover:bg-[#0a0a0a]" : ""} variant={u.role === "admin" ? "default" : "outline"}>
-                        {u.role}
-                      </Badge>
+                      {isAdmin ? (
+                        <Select value={u.role} onValueChange={(v) => updateRole(u, v)} disabled={u.id === user?.id}>
+                          <SelectTrigger
+                            className={`h-7 text-xs w-44 border-0 ${u.role === "admin" ? "bg-[#0a0a0a] text-white" : "bg-gray-100"}`}
+                            data-testid={`emp-role-${u.id}`}
+                          >
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(ROLE_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge className={u.role === "admin" ? "bg-[#0a0a0a] text-white hover:bg-[#0a0a0a]" : ""} variant={u.role === "admin" ? "default" : "outline"}>
+                          {ROLE_LABEL[u.role] || u.role}
+                        </Badge>
+                      )}
                     </td>
                     <td className="py-3 px-4">
                       {ROLES_WITH_ASSIGNMENT.includes(u.role) ? (

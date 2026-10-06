@@ -42,6 +42,10 @@ class MatriculeIn(BaseModel):
     matricule: Optional[str] = None
 
 
+class RoleIn(BaseModel):
+    role: str
+
+
 class AllowedPagesIn(BaseModel):
     allowed_pages: List[str] = []
 

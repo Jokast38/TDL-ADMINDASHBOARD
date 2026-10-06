@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CreditCard, PaperPlaneTilt, LinkSimple } from "@phosphor-icons/react";
+import { CreditCard, PaperPlaneTilt, LinkSimple, MagnifyingGlass } from "@phosphor-icons/react";
+
+const fmtSessionLabel = (s) => `${s.date_debut} → ${s.date_fin}${s.lieu_ville ? ` — ${s.lieu_ville}` : ""}`;
 
 // Page dédiée (pas un onglet) : envoi d'un lien de paiement Stripe à prix
 // libre — distincte du tunnel d'inscription standard, toujours au tarif
@@ -22,11 +24,51 @@ export default function CustomPayment() {
   const [sending, setSending] = useState(false);
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [personQuery, setPersonQuery] = useState("");
+  const [personResults, setPersonResults] = useState([]);
+  const [searchingPerson, setSearchingPerson] = useState(false);
+  const [sessions, setSessions] = useState([]);
+  const [sessionId, setSessionId] = useState("");
 
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data)).catch(() => {});
     loadHistory();
   }, []);
+
+  // Recherche de personne déjà en base (Prospects ou apprenants) pour
+  // préremplir nom/email sans ressaisie — évite une faute de frappe sur
+  // l'email qui rendrait le lien de paiement injoignable.
+  useEffect(() => {
+    const q = personQuery.trim();
+    if (q.length < 2) { setPersonResults([]); return; }
+    setSearchingPerson(true);
+    const t = setTimeout(() => {
+      api.get("/custom-payments/search-person", { params: { q } })
+        .then((r) => setPersonResults(r.data))
+        .catch(() => setPersonResults([]))
+        .finally(() => setSearchingPerson(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [personQuery]);
+
+  const pickPerson = (p) => {
+    setRecipientName(p.name || "");
+    setRecipientEmail(p.email || "");
+    setPersonQuery("");
+    setPersonResults([]);
+  };
+
+  // Sessions disponibles pour la formation choisie — facultatif (beaucoup de
+  // paiements personnalisés ne concernent aucune session précise, ex: solde
+  // CMA), mais précise au destinataire par email de quelle date il s'agit
+  // quand c'en est une (voir GET /stages/public/available).
+  useEffect(() => {
+    setSessionId("");
+    if (titleMode !== "formation" || !formationId) { setSessions([]); return; }
+    api.get("/stages/public/available", { params: { formation_id: formationId } })
+      .then((r) => setSessions(r.data))
+      .catch(() => setSessions([]));
+  }, [titleMode, formationId]);
 
   const loadHistory = () => {
     setLoadingHistory(true);
@@ -43,11 +85,13 @@ export default function CustomPayment() {
     if (!recipientEmail.trim()) return toast.error("Email du destinataire requis");
     setSending(true);
     try {
+      const session = sessions.find((s) => s.id === sessionId);
       await api.post("/custom-payments", {
         title, price: Number(price), recipient_name: recipientName.trim() || null, recipient_email: recipientEmail.trim(),
+        session_label: session ? fmtSessionLabel(session) : null,
       });
       toast.success("Lien de paiement envoyé par email");
-      setPrice(""); setRecipientName(""); setRecipientEmail(""); setCustomTitle(""); setFormationId("");
+      setPrice(""); setRecipientName(""); setRecipientEmail(""); setCustomTitle(""); setFormationId(""); setSessionId("");
       loadHistory();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur lors de l'envoi");
@@ -89,9 +133,56 @@ export default function CustomPayment() {
           )}
         </div>
 
+        {titleMode === "formation" && formationId && sessions.length > 0 && (
+          <div>
+            <label className="text-sm font-medium block mb-1">Session concernée (facultatif)</label>
+            <Select value={sessionId || "aucune"} onValueChange={(v) => setSessionId(v === "aucune" ? "" : v)}>
+              <SelectTrigger data-testid="custom-payment-session"><SelectValue placeholder="Aucune session précise" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="aucune">Aucune session précise</SelectItem>
+                {sessions.map((s) => <SelectItem key={s.id} value={s.id}>{fmtSessionLabel(s)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-400 mt-1">Précisée dans l'email envoyé au destinataire.</p>
+          </div>
+        )}
+
         <div>
           <label className="text-sm font-medium block mb-1">Prix (€)</label>
           <Input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Ex: 150" data-testid="custom-payment-price" />
+        </div>
+
+        <div className="relative">
+          <label className="text-sm font-medium block mb-1">Rechercher une personne déjà en base</label>
+          <div className="relative">
+            <MagnifyingGlass size={14} className="absolute left-3 top-2.5 text-gray-400" />
+            <Input
+              value={personQuery}
+              onChange={(e) => setPersonQuery(e.target.value)}
+              placeholder="Nom, email ou téléphone..."
+              className="pl-8"
+              data-testid="custom-payment-person-search"
+            />
+          </div>
+          {(searchingPerson || personResults.length > 0) && personQuery.trim().length >= 2 && (
+            <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-md max-h-48 overflow-y-auto">
+              {searchingPerson && <p className="px-3 py-2 text-xs text-gray-400">Recherche...</p>}
+              {!searchingPerson && !personResults.length && (
+                <p className="px-3 py-2 text-xs text-gray-400">Aucun résultat.</p>
+              )}
+              {personResults.map((p, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => pickPerson(p)}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                >
+                  <p className="font-medium">{p.name || "—"}</p>
+                  <p className="text-xs text-gray-400">{p.email}{p.phone ? ` · ${p.phone}` : ""}</p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -132,7 +223,10 @@ export default function CustomPayment() {
               )}
               {history.map((h) => (
                 <tr key={h.id} className="border-b border-gray-100">
-                  <td className="py-2.5 px-4">{h.title}</td>
+                  <td className="py-2.5 px-4">
+                    <p>{h.title}</p>
+                    {h.session_label && <p className="text-xs text-gray-400">{h.session_label}</p>}
+                  </td>
                   <td className="py-2.5 px-4">
                     <p>{h.recipient_name || "—"}</p>
                     <p className="text-xs text-gray-400">{h.recipient_email}</p>

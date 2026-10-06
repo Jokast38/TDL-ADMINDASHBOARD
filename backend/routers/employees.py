@@ -8,7 +8,7 @@ from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
-from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn, AllowedPagesIn, MatriculeIn
+from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn, AllowedPagesIn, MatriculeIn, RoleIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 from services.pdf import generate_formateur_convention_pdf
 from services.email import send_email
@@ -186,6 +186,22 @@ async def update_employee_status(uid: str, payload: AccountStatusIn, user: dict 
         "active": payload.account_status == "actif",
         "updated_at": now_iso()
     }})
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+
+
+@router.put("/employees/{uid}/role")
+async def update_employee_role(uid: str, payload: RoleIn, user: dict = Depends(require_role("admin"))):
+    """Changement de rôle — réservé à l'admin (impact large : change les pages
+    accessibles, les leads visibles, les permissions...). Pas de vérification
+    de périmètre supplémentaire puisque seul un admin peut appeler ceci."""
+    if payload.role not in VALID_STAFF_ROLES:
+        raise HTTPException(status_code=400, detail=f"Rôle invalide — doit être l'un de : {', '.join(VALID_STAFF_ROLES)}")
+    if uid == user["id"] and payload.role != "admin":
+        raise HTTPException(status_code=400, detail="Impossible de changer son propre rôle d'admin vers un autre rôle")
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    await db.users.update_one({"id": uid}, {"$set": {"role": payload.role, "updated_at": now_iso()}})
     return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
 
 
