@@ -298,6 +298,8 @@ async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depen
         "commercial_id": commercial_id, "commercial_name": commercial.get("name", ""),
         "scheduled_at": payload.scheduled_at, "notes": payload.notes or "",
         "status": "planifie", "reminder_sent": False, "source": "manuel",
+        "kind": payload.kind or "appel", "location": payload.location,
+        "formation_id": payload.formation_id, "formation_titre": payload.formation_titre,
         "created_by": user["id"], "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.call_appointments.insert_one(appt)

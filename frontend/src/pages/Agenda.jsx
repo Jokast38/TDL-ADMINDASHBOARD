@@ -5,8 +5,9 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, MapPin, GraduationCap, PenNib, CaretLeft, CaretRight, Funnel } from "@phosphor-icons/react";
+import { Clock, MapPin, GraduationCap, PenNib, CaretLeft, CaretRight, Funnel, Plus } from "@phosphor-icons/react";
 import { formatDateFR } from "@/lib/dateFormat";
+import BookAppointmentDialog from "@/components/BookAppointmentDialog";
 
 const MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 const JOURS_FR = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
@@ -74,6 +75,7 @@ export default function Agenda() {
   const [filterStage, setFilterStage] = useState("all");
   const [filterAnimateur, setFilterAnimateur] = useState("all");
   const [filterModule, setFilterModule] = useState("all");
+  const [bookOpen, setBookOpen] = useState(false);
 
   const weekStart = useMemo(() => startOfWeek(anchor), [anchor]);
   const monthGridStart = useMemo(() => startOfMonthGrid(anchor), [anchor]);
@@ -85,6 +87,7 @@ export default function Agenda() {
     return Array.from({ length: 42 }, (_, i) => { const d = new Date(monthGridStart); d.setDate(d.getDate() + i); return d; });
   }, [view, weekStart, monthGridStart]);
 
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     setLoading(true);
     const dateFrom = toISO(rangeDays[0]);
@@ -93,7 +96,7 @@ export default function Agenda() {
       .then((r) => setEvents(r.data.events))
       .catch(() => setEvents([]))
       .finally(() => setLoading(false));
-  }, [rangeDays]);
+  }, [rangeDays, reloadKey]);
 
   const stageOptions = useMemo(() => {
     const byId = new Map();
@@ -172,6 +175,9 @@ export default function Agenda() {
           <span className="text-sm font-medium capitalize min-w-[200px] text-center">{headerLabel}</span>
           <Button variant="outline" size="icon" onClick={() => shiftBy(1)}><CaretRight size={16} /></Button>
           <Button variant="outline" size="sm" onClick={() => setAnchor(new Date())}>Aujourd'hui</Button>
+          <Button size="sm" className="gap-1.5 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" onClick={() => setBookOpen(true)} data-testid="agenda-new-appointment">
+            <Plus size={14} /> Nouveau rendez-vous
+          </Button>
         </div>
       </div>
 
@@ -348,6 +354,12 @@ export default function Agenda() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <BookAppointmentDialog
+        open={bookOpen}
+        onOpenChange={setBookOpen}
+        onCreated={() => setReloadKey((k) => k + 1)}
+      />
     </div>
   );
 }

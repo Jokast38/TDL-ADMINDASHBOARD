@@ -232,5 +232,35 @@ async def get_agenda(date_from: Optional[str] = None, date_to: Optional[str] = N
                     "is_session_fallback": True,
                 })
                 cur += timedelta(days=1)
+
+    # Rendez-vous physiques (voir models/call_appointment.py: kind="physique")
+    # — affichés sur l'Agenda général au même titre que les sessions, pour
+    # que l'équipe voie en un coup d'œil ses visites en présentiel du jour.
+    # Les animateurs n'ont pas de rendez-vous physiques à voir ici (réservé
+    # au suivi commercial/admissions), donc exclu pour ce rôle comme pour les
+    # sessions ci-dessus.
+    if user["role"] != "animateur":
+        rdv_q = {
+            "kind": "physique",
+            "status": {"$ne": "annule"},
+            "scheduled_at": {"$gte": date_from, "$lte": f"{date_to}T23:59:59.999999"},
+        }
+        rdvs = await db.call_appointments.find(rdv_q, {"_id": 0}).to_list(500)
+        for r in rdvs:
+            sched = r.get("scheduled_at") or ""
+            events.append({
+                "id": f"rdv_{r['id']}",
+                "date": sched[:10],
+                "heure_debut": sched[11:16] if len(sched) >= 16 else None,
+                "heure_fin": None,
+                "module_nom": f"RDV — {r.get('lead_name') or 'Prospect'}",
+                "formation_titre": r.get("formation_titre"),
+                "lieu_ville": r.get("location"),
+                "animateur_nom": r.get("commercial_name"),
+                "is_physical_appointment": True,
+                "appointment_id": r["id"],
+                "lead_id": r.get("lead_id"),
+            })
+
     events.sort(key=lambda e: (e["date"], e.get("heure_debut") or ""))
     return {"events": events, "date_from": date_from, "date_to": date_to}

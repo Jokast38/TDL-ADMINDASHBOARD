@@ -16,9 +16,10 @@ import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import {
   Plus, UploadSimple, FileXls, FileCode, MagnifyingGlass, Trash, Phone,
   EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree, PencilSimple, GraduationCap,
-  EnvelopeOpen, Eye, Megaphone, ArrowsClockwise,
+  EnvelopeOpen, Eye, Megaphone, ArrowsClockwise, CalendarPlus,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import BookAppointmentDialog from "@/components/BookAppointmentDialog";
 
 // ─── Regroupement des intérêts par mots-clés ─────────────────────────────────
 // Le texte libre saisi/importé varie beaucoup (casse, mots en plus, accents…) :
@@ -520,6 +521,7 @@ export default function Leads() {
   const [enrollLead, setEnrollLead] = useState(null);
   const [enrollForm, setEnrollForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "" });
   const [enrolling, setEnrolling] = useState(false);
+  const [bookTarget, setBookTarget] = useState(null);
 
   const [emailsOpen, setEmailsOpen] = useState(false);
   const [emailsLead, setEmailsLead] = useState(null);
@@ -1876,6 +1878,14 @@ export default function Leads() {
                         <GraduationCap size={14} />
                       </button>
                       <button
+                        onClick={() => setBookTarget(l)}
+                        className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded"
+                        title="Planifier un rendez-vous"
+                        data-testid={`book-appointment-${l.id}`}
+                      >
+                        <CalendarPlus size={14} />
+                      </button>
+                      <button
                         onClick={() => openEdit(l)}
                         className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
                         title="Modifier"
@@ -2065,6 +2075,12 @@ export default function Leads() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <BookAppointmentDialog
+        open={!!bookTarget}
+        onOpenChange={(v) => !v && setBookTarget(null)}
+        lead={bookTarget}
+      />
     </div>
   );
 }

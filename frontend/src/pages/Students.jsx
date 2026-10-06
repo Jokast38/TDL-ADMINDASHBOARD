@@ -54,6 +54,14 @@ const PAYMENT_LABEL = { pending: "En attente", paid: "Payé", refunded: "Rembour
 
 const CENTER_OPTIONS = ["Épinay-sur-Seine (93)", "Creil (60)"];
 
+// Même vocabulaire que la page Activité (CATEGORY_LABELS) — un onglet
+// vertical par catégorie de formation pour filtrer la liste d'un coup d'œil,
+// sans avoir à ouvrir un menu déroulant.
+const CATEGORY_LABELS = {
+  VTC_TAXI: "VTC / Taxi", PERMIS: "Récupération de points", CACES: "CACES",
+  AUTO_ECOLE: "Auto-école", SSIAP: "SSIAP", ECSR: "ECSR", VENTE: "Conseiller de Vente",
+};
+
 // Modèle "Convocation à un examen" : génère l'objet + le message à partir de
 // l'intitulé de l'examen, la date de convocation et le centre — l'agent peut
 // ensuite modifier le texte généré avant l'envoi (voir insertConvocationTemplate).
@@ -417,13 +425,6 @@ export default function Students() {
             className="pl-9" data-testid="students-search"
           />
         </div>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-          <SelectTrigger className="w-48" data-testid="students-filter-category"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Catégorie : toutes</SelectItem>
-            {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-          </SelectContent>
-        </Select>
         <Select value={dossierFilter} onValueChange={setDossierFilter}>
           <SelectTrigger className="w-48" data-testid="students-filter-dossier"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -483,6 +484,43 @@ export default function Students() {
         </Card>
       )}
 
+      <div className="flex gap-4 items-start">
+        <Card className="hidden md:block w-52 shrink-0 border border-gray-200 rounded-md shadow-none p-2 sticky top-4" data-testid="students-category-tabs">
+          <button
+            onClick={() => setCategoryFilter("all")}
+            className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${categoryFilter === "all" ? "bg-[#0a0a0a] text-white" : "hover:bg-gray-50 text-gray-700"}`}
+            data-testid="students-tab-all"
+          >
+            Toutes les formations
+            <span className={`ml-1.5 text-xs ${categoryFilter === "all" ? "text-gray-300" : "text-gray-400"}`}>({items.length})</span>
+          </button>
+          <div className="h-px bg-gray-100 my-1.5" />
+          {categories.map((c) => {
+            const count = items.filter((s) => (s.categories || []).includes(c)).length;
+            return (
+              <button
+                key={c}
+                onClick={() => setCategoryFilter(c)}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${categoryFilter === c ? "bg-[#0a0a0a] text-white" : "hover:bg-gray-50 text-gray-700"}`}
+                data-testid={`students-tab-${c}`}
+              >
+                {CATEGORY_LABELS[c] || c}
+                <span className={`ml-1.5 text-xs ${categoryFilter === c ? "text-gray-300" : "text-gray-400"}`}>({count})</span>
+              </button>
+            );
+          })}
+        </Card>
+
+        <div className="flex-1 min-w-0 space-y-4">
+          {/* Sélecteur de catégorie mobile (la sidebar verticale est cachée sous md) */}
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-full md:hidden" data-testid="students-filter-category-mobile"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Catégorie : toutes</SelectItem>
+              {categories.map((c) => <SelectItem key={c} value={c}>{CATEGORY_LABELS[c] || c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -509,7 +547,12 @@ export default function Students() {
             </thead>
             <tbody>
               {paged.map((s) => (
-                <tr key={s.id} className="border-b border-gray-100 hover:bg-gray-50" data-testid={`student-row-${s.id}`}>
+                <tr
+                  key={s.id}
+                  className={`border-b border-gray-100 hover:bg-gray-50 ${s.dossier_id ? "cursor-pointer" : ""}`}
+                  onClick={(e) => { if (s.dossier_id && !e.target.closest("button, input, a")) openDossier(s); }}
+                  data-testid={`student-row-${s.id}`}
+                >
                   <td className="py-3 px-4">
                     <input
                       type="checkbox" checked={checkedIds.has(s.id)} onChange={() => toggleChecked(s.id)}
@@ -665,6 +708,8 @@ export default function Students() {
           </div>
         </div>
       )}
+        </div>
+      </div>
 
       <Dialog open={!!selected} onOpenChange={(v) => !v && setSelected(null)}>
         <DialogContent className="max-w-lg" data-testid="student-dossier-dialog">
