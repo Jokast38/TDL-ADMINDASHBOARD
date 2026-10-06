@@ -28,7 +28,7 @@ from routers import (
 from routers.lead_automations import run_due_automations
 from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
-    send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
+    send_weekly_admin_report, send_daily_leads_digest, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
     send_call_appointment_reminders,
     send_convention_session_reminders,
     send_emargement_reminders,
@@ -383,6 +383,33 @@ async def _weekly_admin_report_loop():
             log.warning(f"Compte-rendu hebdomadaire : erreur — {e}")
 
 
+_LEADS_DIGEST_HOUR_UTC = 19  # 19h chaque jour (fin de journée, heure serveur UTC sur Render)
+
+
+def _seconds_until_next_leads_digest() -> float:
+    now = datetime.now(timezone.utc)
+    target = now.replace(hour=_LEADS_DIGEST_HOUR_UTC, minute=0, second=0, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return (target - now).total_seconds()
+
+
+async def _leads_digest_loop():
+    """Envoie chaque jour à 19h (heure serveur) aux comptes admin le récap des
+    prospects restant à traiter, par catégorie puis par campagne/compte — voir
+    send_daily_leads_digest dans services/staff_notify.py.
+    POST /api/reminders/leads-digest/run permet un déclenchement manuel/cron."""
+    log = logging.getLogger(__name__)
+    while True:
+        await asyncio.sleep(_seconds_until_next_leads_digest())
+        try:
+            notified = await send_daily_leads_digest()
+            if notified:
+                log.info(f"Récap quotidien des prospects : {notified} admin(s) notifié(s)")
+        except Exception as e:
+            log.warning(f"Récap quotidien des prospects : erreur — {e}")
+
+
 async def _session_reminders_loop():
     """Toutes les 24h, envoie un rappel aux apprenants inscrits et aux
     formateurs assignés pour chaque session commençant dans
@@ -517,6 +544,7 @@ async def startup():
     asyncio.create_task(_payment_sync_loop())
     asyncio.create_task(_wordpress_auto_sync_loop())
     asyncio.create_task(_weekly_admin_report_loop())
+    asyncio.create_task(_leads_digest_loop())
     asyncio.create_task(_session_reminders_loop())
     asyncio.create_task(_understaffed_session_alerts_loop())
     asyncio.create_task(_emargement_reminders_loop())

@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import Iterable, Optional
+from typing import Dict, Iterable, Optional
 
 from core.config import ROLES_DOSSIERS_MGMT, ROLES_ALL_STAFF
 from core.database import db
@@ -496,6 +496,110 @@ async def send_weekly_admin_report() -> int:
             f"{dossiers_restants} dossier(s) et {callbacks_restants} demande(s) restant à traiter",
             "/admin",
         )
+    return notified
+
+
+async def send_daily_leads_digest() -> int:
+    """Récap quotidien (fin de journée) envoyé aux comptes admin : combien de
+    prospects restent à traiter, par catégorie de formation puis par
+    campagne/compte — pour les deux sources de prospects (Cosmosia/formulaire
+    public via db.leads, et Meta Lead Ads via db.meta_lead_imports), qui ont
+    des champs de qualification différents donc sont traitées séparément.
+    Plus lisible que les tableaux détaillés du dashboard : juste "reste X sur
+    Y" par regroupement, pour une lecture en 30 secondes."""
+    admins = await db.users.find(
+        {"active": True, "role": "admin"}, {"_id": 0, "id": 1, "email": 1, "name": 1}
+    ).to_list(50)
+    if not admins:
+        return 0
+
+    # --- Prospects Cosmosia/formulaire (db.leads) : par catégorie > campagne ---
+    leads_pipeline = [
+        {"$group": {
+            "_id": {"category": "$category", "campaign": "$campaign"},
+            "total": {"$sum": 1},
+            "restants": {"$sum": {"$cond": [{"$eq": ["$contacted", True]}, 0, 1]}},
+        }},
+    ]
+    leads_rows = await db.leads.aggregate(leads_pipeline).to_list(500)
+    leads_by_category: Dict[str, list] = {}
+    for r in leads_rows:
+        cat = r["_id"].get("category") or "Non catégorisé"
+        leads_by_category.setdefault(cat, []).append({
+            "campaign": r["_id"].get("campaign") or "Sans campagne",
+            "total": r["total"], "restants": r["restants"],
+        })
+
+    # --- Prospects Meta (db.meta_lead_imports) : par compte > campagne ---
+    meta_pipeline = [
+        {"$group": {
+            "_id": {"account": "$meta_account", "campaign": "$campaign_name"},
+            "total": {"$sum": 1},
+            "restants": {"$sum": {"$cond": [{"$eq": ["$qualification", "a_contacter"]}, 1, 0]}},
+        }},
+    ]
+    meta_rows = await db.meta_lead_imports.aggregate(meta_pipeline).to_list(500)
+    meta_by_account: Dict[str, list] = {}
+    for r in meta_rows:
+        acc = r["_id"].get("account") or "Compte non précisé"
+        meta_by_account.setdefault(acc, []).append({
+            "campaign": r["_id"].get("campaign") or "Sans campagne",
+            "total": r["total"], "restants": r["restants"],
+        })
+
+    if not leads_by_category and not meta_by_account:
+        return 0
+
+    def _section_rows(groups: Dict[str, list]) -> str:
+        html = ""
+        for group_name, rows in sorted(groups.items()):
+            group_total = sum(r["total"] for r in rows)
+            group_restants = sum(r["restants"] for r in rows)
+            html += (
+                f"<p style='margin:14px 0 4px;'><b>{CATEGORY_LABELS.get(group_name, group_name)}</b> "
+                f"— {group_restants} restant(s) sur {group_total}</p>"
+                f"<table style='border-collapse:collapse;width:100%;margin-bottom:4px;'>"
+                f"<tr style='background:#f5f5f5;text-align:left;'>"
+                f"<th style='padding:4px 10px;font-size:12px;'>Campagne</th>"
+                f"<th style='padding:4px 10px;font-size:12px;'>Restant / Total</th></tr>"
+            )
+            for r in sorted(rows, key=lambda x: -x["restants"]):
+                html += (
+                    f"<tr><td style='padding:4px 10px;border-bottom:1px solid #eee;font-size:13px;'>{r['campaign']}</td>"
+                    f"<td style='padding:4px 10px;border-bottom:1px solid #eee;font-size:13px;'>{r['restants']} / {r['total']}</td></tr>"
+                )
+            html += "</table>"
+        return html
+
+    total_leads_restants = sum(r["restants"] for rows in leads_by_category.values() for r in rows)
+    total_leads = sum(r["total"] for rows in leads_by_category.values() for r in rows)
+    total_meta_restants = sum(r["restants"] for rows in meta_by_account.values() for r in rows)
+    total_meta = sum(r["total"] for rows in meta_by_account.values() for r in rows)
+
+    today_label = datetime.now(timezone.utc).strftime("%d-%m-%Y")
+    subject = f"📋 Récap quotidien des prospects ({today_label}) — {total_leads_restants + total_meta_restants} restant(s)"
+    body = (
+        f"<p>Bonjour,</p>"
+        f"<p>Voici l'état des prospects en fin de journée.</p>"
+    )
+    if leads_by_category:
+        body += (
+            f"<p style='margin:16px 0 4px;'><b>📇 Prospects (formulaire / Cosmosia) — {total_leads_restants} restant(s) sur {total_leads}</b></p>"
+            + _section_rows(leads_by_category)
+        )
+    if meta_by_account:
+        body += (
+            f"<p style='margin:16px 0 4px;'><b>📘 Prospects Meta — {total_meta_restants} restant(s) sur {total_meta}</b></p>"
+            + _section_rows(meta_by_account)
+        )
+    body += "<p style='margin-top:16px;'>Rendez-vous sur le dashboard (pages Prospects / Marketing) pour le détail.</p>"
+
+    notified = 0
+    for admin in admins:
+        if not admin.get("email"):
+            continue
+        await send_email(admin["email"], subject, body)
+        notified += 1
     return notified
 
 

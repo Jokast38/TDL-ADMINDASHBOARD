@@ -5,7 +5,7 @@ from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
     send_emargement_reminders, send_convention_session_reminders,
-    send_understaffed_session_alerts,
+    send_understaffed_session_alerts, send_daily_leads_digest,
 )
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
@@ -31,6 +31,15 @@ async def run_dossiers_digest(user: dict = Depends(require_role("admin"))):
     l'envoie automatiquement tous les jours à 10h, plus une fois immédiatement
     au démarrage du serveur."""
     notified = await send_daily_pending_dossiers_digest()
+    return {"notified": notified}
+
+
+@router.post("/leads-digest/run")
+async def run_leads_digest(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel du récap quotidien des prospects restant à traiter
+    (test, ou cron externe) — la boucle de fond (voir server.py) l'envoie
+    automatiquement tous les jours à 19h."""
+    notified = await send_daily_leads_digest()
     return {"notified": notified}
 
 
