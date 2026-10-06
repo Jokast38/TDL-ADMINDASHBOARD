@@ -363,9 +363,9 @@ export default function Activity() {
                 <tr>
                   <th className="py-2 px-5 overline font-normal">Employé</th>
                   <th className="py-2 px-4 overline font-normal">Temps passé</th>
-                  <th className="py-2 px-4 overline font-normal">Dossiers traités</th>
-                  <th className="py-2 px-4 overline font-normal">Leads contactés</th>
-                  <th className="py-2 px-4 overline font-normal">Appels (total)</th>
+                  <th className="py-2 px-4 overline font-normal" title="Inscriptions traitées + rappels traités + ajustement manuel — les dossiers/inscriptions qui changent réellement d'état">Dossiers traités</th>
+                  <th className="py-2 px-4 overline font-normal" title="Nombre de leads distincts contactés au moins une fois (Prospects/Cosmosia/Meta)">Leads contactés</th>
+                  <th className="py-2 px-4 overline font-normal" title="Nombre total d'appels passés (peut compter plusieurs appels pour un même lead)">Appels (total)</th>
                   <th className="py-2 px-4 overline font-normal">Activité</th>
                   <th className="py-2 px-4"></th>
                 </tr>

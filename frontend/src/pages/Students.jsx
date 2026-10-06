@@ -77,6 +77,11 @@ export default function Students() {
   const [q, setQ] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [dossierFilter, setDossierFilter] = useState("all");
+  const [monthFilter, setMonthFilter] = useState("all");
+  // Par défaut on ne montre que les apprenants dont l'inscription est
+  // vraiment finalisée (tag commercial "finalisee") — décochable pour
+  // retrouver aussi les inscriptions encore en cours de traitement.
+  const [finalizedOnly, setFinalizedOnly] = useState(true);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
   const [selectedDocs, setSelectedDocs] = useState([]);
@@ -108,12 +113,23 @@ export default function Students() {
 
   const load = () => {
     setLoading(true);
-    api.get("/students")
+    api.get("/students", { params: { finalized_only: finalizedOnly } })
       .then((r) => setItems(r.data))
       .catch((e) => toast.error(e.response?.data?.detail || "Erreur de chargement"))
       .finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [finalizedOnly]);
+
+  const monthOptions = useMemo(() => {
+    const set = new Set();
+    items.forEach((s) => { if (s.session_month) set.add(s.session_month); });
+    return Array.from(set).sort();
+  }, [items]);
+  const monthLabel = (m) => {
+    const [y, mo] = m.split("-");
+    return `${["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"][+mo]} ${y}`;
+  };
 
   const categories = useMemo(() => {
     const set = new Set();
@@ -129,10 +145,11 @@ export default function Students() {
       dossierFilter === "all" ? true :
       dossierFilter === "aucun" ? !s.dossier_status :
       s.dossier_status === dossierFilter;
-    return matchesQuery && matchesCategory && matchesDossier;
-  }), [items, q, categoryFilter, dossierFilter]);
+    const matchesMonth = monthFilter === "all" ? true : s.session_month === monthFilter;
+    return matchesQuery && matchesCategory && matchesDossier && matchesMonth;
+  }), [items, q, categoryFilter, dossierFilter, monthFilter]);
 
-  useEffect(() => { setPage(1); }, [q, categoryFilter, dossierFilter]);
+  useEffect(() => { setPage(1); }, [q, categoryFilter, dossierFilter, monthFilter]);
 
   const openDossier = async (s) => {
     if (!s.dossier_id) return toast.error("Aucun dossier pour cet apprenant");
@@ -415,6 +432,17 @@ export default function Students() {
             <SelectItem value="aucun">Sans dossier</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={monthFilter} onValueChange={setMonthFilter}>
+          <SelectTrigger className="w-48" data-testid="students-filter-month"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Mois de session : tous</SelectItem>
+            {monthOptions.map((m) => <SelectItem key={m} value={m}>{monthLabel(m)}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <label className="flex items-center gap-1.5 text-xs text-gray-600 select-none cursor-pointer" title="Par défaut, seuls les apprenants dont l'inscription est marquée « Inscription finalisée » apparaissent ici">
+          <input type="checkbox" checked={finalizedOnly} onChange={(e) => setFinalizedOnly(e.target.checked)} data-testid="students-finalized-only" />
+          Inscriptions finalisées uniquement
+        </label>
       </div>
 
       {checkedIds.size > 0 && (
@@ -514,8 +542,8 @@ export default function Students() {
                       }>{PAYMENT_LABEL[s.payment_status] || s.payment_status}</Badge>
                     ) : <span className="text-xs text-gray-300">—</span>}
                   </td>
-                  <td className="py-3 px-4 text-xs">{s.cma || <span className="text-gray-300">—</span>}</td>
-                  <td className="py-3 px-4 text-xs">{s.cpf || <span className="text-gray-300">—</span>}</td>
+                  <td className="py-3 px-4 text-xs">{(s.categories || []).includes(ATTESTATION_CATEGORY) ? <span className="text-gray-300" title="Pas de compte CMA pour cette formation">N/A</span> : (s.cma || <span className="text-gray-300">—</span>)}</td>
+                  <td className="py-3 px-4 text-xs">{s.cpf || <span className="text-gray-300">—</span>}{s.cpf === "OUI" && s.cpf_titulaire ? <span className="text-gray-400"> ({s.cpf_titulaire})</span> : null}</td>
                   <td className="py-3 px-4">
                     {s.dossier_status ? (
                       <Badge className={`${DOSSIER_STATUS_COLOR[s.dossier_status] || "bg-gray-100 text-gray-700"} hover:opacity-90`}>

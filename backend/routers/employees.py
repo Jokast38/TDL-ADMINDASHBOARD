@@ -556,7 +556,13 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
             })
 
         adjustment = s.get("manual_dossier_adjustment") or 0
-        total_dossiers = leads_contacted + inscriptions_traitees + callbacks_handled + adjustment
+        # "Dossiers traités" = dossiers/inscriptions qui changent réellement
+        # d'état de traitement (inscriptions_traitees + rappels traités +
+        # ajustement manuel) — exclut volontairement leads_contacted, qui est
+        # un simple compteur d'appels/contacts et était avant compté deux fois
+        # (une fois ici, une fois affiché séparément comme "Leads contactés"),
+        # ce qui gonflait artificiellement ce total.
+        total_dossiers = inscriptions_traitees + callbacks_handled + adjustment
 
         connection_minutes_today = 0
         sess = sessions_by_user.get(uid)

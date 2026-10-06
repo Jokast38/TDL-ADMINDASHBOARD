@@ -100,6 +100,28 @@ async def import_vtc_taxi_excel(file: UploadFile = File(...), user: dict = Depen
 
     formations = await db.formations.find({}, {"_id": 0, "id": 1, "title": 1, "category": 1, "price": 1}).to_list(200)
 
+    # Associe la colonne "RESPONSABLE" (prénom de l'agent qui a suivi le
+    # dossier sur le fichier Excel) à un compte staff existant, pour remplir
+    # `processed_by` dès l'import — sinon la colonne "Traité par" et les
+    # statistiques de la page Activité restent vides pour tous les dossiers
+    # importés en masse.
+    from routers.employees import VALID_STAFF_ROLES
+    import unicodedata
+
+    def _norm(s):
+        s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().upper().strip()
+        return s
+
+    staff_users = await db.users.find({"role": {"$in": list(VALID_STAFF_ROLES)}}, {"_id": 0, "id": 1, "name": 1}).to_list(200)
+    staff_by_first_name = {}
+    for su in staff_users:
+        first = _norm((su.get("name") or "").split(" ")[0])
+        if first:
+            staff_by_first_name.setdefault(first, su["id"])
+
+    def _match_staff(responsable_name):
+        return staff_by_first_name.get(_norm(responsable_name))
+
     sessions_created = 0
     sessions_existing = 0
     inscriptions_created = 0
@@ -219,6 +241,9 @@ async def import_vtc_taxi_excel(file: UploadFile = File(...), user: dict = Depen
                 note_parts.append(f"CMA : {get(idx_cma)}")
             note_parts.append(f"Créneau : {creneau} — importé du fichier Excel VTC_TAXI 2026 ({ws.title})")
 
+            contact_status = "finalisee" if cpf_ok else "a_contacter"
+            processed_by = _match_staff(get(idx_resp))
+
             insc_id = str(uuid.uuid4())
             inscription = {
                 "id": insc_id, "formation_id": formation["id"], "formation_title": formation["title"],
@@ -229,11 +254,13 @@ async def import_vtc_taxi_excel(file: UploadFile = File(...), user: dict = Depen
                 # validé (statut dédié "cpf_valide", distinct d'un règlement
                 # direct "paid") ; sinon en attente de validation CPF.
                 "payment_status": "cpf_valide" if cpf_ok else "cpf_attente",
-                "status": "active", "contact_status": "finalisee" if cpf_ok else "a_contacter",
+                "status": "active", "contact_status": contact_status,
                 "notes": " · ".join(note_parts), "created_at": now_iso(),
                 "source": "excel_import_vtc_taxi_2026", "session": stage_id, "stage_id": stage_id,
                 "center": _CENTRE_VILLE[centre_key],
             }
+            if processed_by:
+                inscription["processed_by"] = processed_by
             if cpf_ok:
                 inscription["paid_at"] = now_iso()
                 inscription["amount_paid"] = formation.get("price", 0)
@@ -244,7 +271,13 @@ async def import_vtc_taxi_excel(file: UploadFile = File(...), user: dict = Depen
                 "id": dossier_id, "inscription_id": insc_id, "student_id": user_id,
                 "formation_id": formation["id"], "formation_title": formation["title"],
                 "category": formation["category"], "student_name": name, "student_email": email.lower(),
-                "status": "nouveau", "notes": "", "assigned_to": None,
+                # Si l'inscription est déjà "finalisee" dès l'import (CPF déjà
+                # validé sur le fichier de suivi), le dossier ne reste pas
+                # bloqué sur "nouveau" — même comportement que la mise à jour
+                # automatique faite par PUT /inscriptions/{iid} quand un agent
+                # passe le tag sur "finalisee" après coup.
+                "status": "en_verification" if contact_status == "finalisee" else "nouveau",
+                "notes": "", "assigned_to": None,
                 "documents_requis": formation.get("documents_requis", []),
                 "trello_card_id": None, "trello_card_url": None,
                 "documents": [], "created_at": now_iso(), "updated_at": now_iso(),

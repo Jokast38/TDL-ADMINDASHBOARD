@@ -53,6 +53,12 @@ class InscriptionUpdate(BaseModel):
     # nuance déjà utilisée par l'équipe sur le fichier de suivi.
     cma: Optional[str] = None
     cpf: Optional[str] = None
+    # Nom du titulaire du compte CPF utilisé pour financer la formation —
+    # renseigné uniquement quand `cpf` = "OUI". Si le titulaire est la même
+    # personne que l'inscrit, l'équipe y met simplement le nom de l'inscrit ;
+    # sinon le nom réel du titulaire (cas d'un proche finançant pour un
+    # tiers), pour que les évidences EDOF correspondent au bon titulaire CPF.
+    cpf_titulaire: Optional[str] = None
     # Mode de règlement réel (carte, espèces, virement, chèque, CPF, CMA,
     # Klarna...) — distinct de `payment_status` (payé/en attente/remboursé)
     # qui ne dit pas COMMENT la personne a payé, saisi manuellement par

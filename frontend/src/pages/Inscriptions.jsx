@@ -28,21 +28,26 @@ const PAYMENT_LABEL = {
 };
 const PAYMENT_PAID_LIKE = ["paid", "cpf_valide"];
 
-// Mode de règlement réel — distinct de payment_status (payé/en attente),
-// saisi manuellement par l'équipe comme CMA/CPF.
+// Mode de règlement réel — distinct de payment_status (payé/en attente).
+// "CMA" n'est pas un mode de paiement (juste le statut du compte CMA, déjà
+// suivi dans sa propre colonne) donc volontairement absent d'ici.
 const PAYMENT_METHOD_LABEL = {
   carte: "Carte bancaire", especes: "Espèces", virement: "Virement",
-  cheque: "Chèque", cpf: "CPF", cma: "CMA", klarna: "Klarna",
+  cheque: "Chèque", cpf: "CPF", klarna: "Klarna",
 };
 
-// Options CMA/CPF — reprises des valeurs réellement utilisées sur le fichier
-// de suivi Excel existant ("OUI", "NON", "EVALBOX" pour un dossier en
-// vérification sur la plateforme Evalbox). "Autre" bascule sur un champ
-// texte libre pour les cas particuliers (montant, note...).
-const FUNDING_OPTIONS = ["OUI", "NON", "EVALBOX"];
+// Options CMA — la "CMA" ici signifie juste que le compte CMA du candidat a
+// été créé, pas un financement ; statuts de suivi de ce compte.
+const CMA_OPTIONS = ["OUI", "NON", "En vérification", "A payer", "Pièces refusées"];
+// Options CPF — financement par le Compte Personnel de Formation ; si "OUI",
+// voir le champ titulaire juste à côté (CpfCell ci-dessous).
+const CPF_OPTIONS = ["OUI", "NON", "En attente"];
+// Catégories de formation pour lesquelles la CMA n'a pas de sens (ex:
+// récupération de points — pas de compte CMA à créer pour ce type de stage).
+const NO_CMA_CATEGORIES = ["PERMIS"];
 
-function FundingCell({ value, onSave, disabled, testId }) {
-  const isPreset = FUNDING_OPTIONS.includes(value);
+function FundingCell({ value, onSave, disabled, testId, options }) {
+  const isPreset = options.includes(value);
   const isCustom = !!value && !isPreset;
   const [mode, setMode] = useState(isCustom ? "autre" : "preset");
   const [customValue, setCustomValue] = useState(isCustom ? value : "");
@@ -90,7 +95,7 @@ function FundingCell({ value, onSave, disabled, testId }) {
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="vide">—</SelectItem>
-        {FUNDING_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+        {options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
         <SelectItem value="autre">Autre...</SelectItem>
       </SelectContent>
     </Select>
@@ -202,6 +207,7 @@ export default function Inscriptions() {
   const [contactFilter, setContactFilter] = useState("all"); // all | en_cours | a_contacter | sans_reponse | finalisee
   const [formationFilter, setFormationFilter] = useState("all");
   const [originFilter, setOriginFilter] = useState("all"); // all | website | walkin | imported
+  const [monthFilter, setMonthFilter] = useState("all"); // all | "YYYY-MM" (mois de la session de formation)
   const [page, setPage] = useState(1);
 
   // Section "Demandes de rappel" : repliée par défaut pour laisser la place à
@@ -372,6 +378,19 @@ export default function Inscriptions() {
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [items]);
 
+  // Mois des sessions de formation réellement affectées (session_month,
+  // posé côté serveur depuis stages.date_debut) — pour filtrer par mois de
+  // session plutôt que par date de création de l'inscription.
+  const monthOptions = useMemo(() => {
+    const set = new Set();
+    items.forEach((i) => { if (i.session_month) set.add(i.session_month); });
+    return Array.from(set).sort();
+  }, [items]);
+  const monthLabel = (m) => {
+    const [y, mo] = m.split("-");
+    return `${["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"][+mo]} ${y}`;
+  };
+
   const filtered = useMemo(() => items.filter((i) => {
     const matchesQuery = (i.student_name + i.student_email + i.formation_title).toLowerCase().includes(q.toLowerCase());
     const matchesPayment =
@@ -389,10 +408,11 @@ export default function Inscriptions() {
     const matchesContact = contactFilter === "all" ? true : (i.contact_status || "en_cours") === contactFilter;
     const matchesFormation = formationFilter === "all" ? true : i.formation_id === formationFilter;
     const matchesOrigin = originFilter === "all" ? true : getOrigin(i) === originFilter;
-    return matchesQuery && matchesPayment && matchesTraitement && matchesStatus && matchesContact && matchesFormation && matchesOrigin;
-  }), [items, q, paymentFilter, traitementFilter, statusFilter, contactFilter, formationFilter, originFilter]);
+    const matchesMonth = monthFilter === "all" ? true : i.session_month === monthFilter;
+    return matchesQuery && matchesPayment && matchesTraitement && matchesStatus && matchesContact && matchesFormation && matchesOrigin && matchesMonth;
+  }), [items, q, paymentFilter, traitementFilter, statusFilter, contactFilter, formationFilter, originFilter, monthFilter]);
 
-  useEffect(() => { setPage(1); }, [q, paymentFilter, traitementFilter, statusFilter, contactFilter, formationFilter, originFilter]);
+  useEffect(() => { setPage(1); }, [q, paymentFilter, traitementFilter, statusFilter, contactFilter, formationFilter, originFilter, monthFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -624,6 +644,13 @@ export default function Inscriptions() {
             {Object.entries(ORIGIN_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={monthFilter} onValueChange={setMonthFilter}>
+          <SelectTrigger className="w-48" data-testid="filter-month"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Mois de session : tous</SelectItem>
+            {monthOptions.map((m) => <SelectItem key={m} value={m}>{monthLabel(m)}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       {byAgent.length > 0 && (
@@ -762,10 +789,27 @@ export default function Inscriptions() {
                       </Select>
                     </td>
                     <td className="py-3 px-4">
-                      <FundingCell value={i.cma} onSave={(v) => updateFunding(i.id, "cma", v)} disabled={cancelled} testId={`cma-${i.id}`} />
+                      {NO_CMA_CATEGORIES.includes(i.category) ? (
+                        <span className="text-xs text-gray-300" title="Pas de compte CMA pour cette formation">N/A</span>
+                      ) : (
+                        <FundingCell value={i.cma} onSave={(v) => updateFunding(i.id, "cma", v)} disabled={cancelled} testId={`cma-${i.id}`} options={CMA_OPTIONS} />
+                      )}
                     </td>
                     <td className="py-3 px-4">
-                      <FundingCell value={i.cpf} onSave={(v) => updateFunding(i.id, "cpf", v)} disabled={cancelled} testId={`cpf-${i.id}`} />
+                      <div className="flex flex-col gap-1">
+                        <FundingCell value={i.cpf} onSave={(v) => updateFunding(i.id, "cpf", v)} disabled={cancelled} testId={`cpf-${i.id}`} options={CPF_OPTIONS} />
+                        {i.cpf === "OUI" && (
+                          <input
+                            defaultValue={i.cpf_titulaire || ""}
+                            onBlur={(e) => { if (e.target.value !== (i.cpf_titulaire || "")) updateFunding(i.id, "cpf_titulaire", e.target.value); }}
+                            placeholder="Nom du titulaire CPF"
+                            title="Si différent de l'inscrit, préciser le nom du titulaire du compte CPF ; sinon mettre le nom de l'inscrit"
+                            className="w-28 text-[11px] border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#d4af37]"
+                            disabled={cancelled}
+                            data-testid={`cpf-titulaire-${i.id}`}
+                          />
+                        )}
+                      </div>
                     </td>
                     <td className="py-3 px-4">
                       <button

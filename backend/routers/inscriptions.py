@@ -199,7 +199,7 @@ async def create_inscription(payload: InscriptionIn, request: Request):
 
 
 @router.get("/students")
-async def list_students(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+async def list_students(finalized_only: bool = True, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
     """Vue d'ensemble des apprenants (users role=etudiant) pour la page
     Apprenants du dashboard — chaque étudiant enrichi de ses inscriptions et
     du statut de son dossier le plus récent, pour éviter d'avoir à croiser
@@ -227,7 +227,7 @@ async def list_students(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))
     stage_ids = {i[0]["stage_id"] for i in inscriptions_by_student.values() if i and i[0].get("stage_id")}
     stages_by_id = {}
     if stage_ids:
-        for st in await db.stages.find({"id": {"$in": list(stage_ids)}}, {"_id": 0, "id": 1, "date_fin": 1}).to_list(1000):
+        for st in await db.stages.find({"id": {"$in": list(stage_ids)}}, {"_id": 0, "id": 1, "date_debut": 1, "date_fin": 1}).to_list(1000):
             stages_by_id[st["id"]] = st
 
     result = []
@@ -238,6 +238,13 @@ async def list_students(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))
         latest_insc = my_inscriptions[0] if my_inscriptions else None
         latest_stage = stages_by_id.get(latest_insc.get("stage_id")) if latest_insc else None
         hours_since_end = _hours_since_end(latest_stage) if latest_stage else None
+        # Une inscription "vraiment finalisée" = tag commercial "finalisee"
+        # (voir CONTACT_STATUS_LABEL côté frontend) — distinct du statut du
+        # dossier administratif (qui peut encore être en cours de traitement
+        # ANTS/CMA après la finalisation commerciale de l'inscription elle-même).
+        is_finalized = bool(latest_insc and latest_insc.get("contact_status") == "finalisee")
+        if finalized_only and not is_finalized:
+            continue
         result.append({
             **s,
             "inscriptions_count": len(my_inscriptions),
@@ -246,6 +253,10 @@ async def list_students(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))
             "payment_status": my_inscriptions[0]["payment_status"] if my_inscriptions else None,
             "cma": latest_insc.get("cma") if latest_insc else None,
             "cpf": latest_insc.get("cpf") if latest_insc else None,
+            "cpf_titulaire": latest_insc.get("cpf_titulaire") if latest_insc else None,
+            "contact_status": latest_insc.get("contact_status") if latest_insc else None,
+            "category": latest_insc.get("category") if latest_insc else None,
+            "session_month": (latest_stage.get("date_debut", "")[:7] if latest_stage and latest_stage.get("date_debut") else None),
             "inscription_status": my_inscriptions[0]["status"] if my_inscriptions else None,
             "dossier_id": latest_dossier["id"] if latest_dossier else None,
             "dossier_status": latest_dossier["status"] if latest_dossier else None,
@@ -416,11 +427,21 @@ async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MG
     if processed_by_ids:
         staff = await db.users.find({"id": {"$in": list(processed_by_ids)}}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
         staff_by_id = {s["id"]: s.get("name", "") for s in staff}
+    # Mois de la session de formation affectée — pour le filtre par mois côté
+    # frontend (Inscriptions/Apprenants), distinct du mois de création de
+    # l'inscription elle-même.
+    stage_ids = {i["stage_id"] for i in items if i.get("stage_id")}
+    stages_by_id = {}
+    if stage_ids:
+        stages = await db.stages.find({"id": {"$in": list(stage_ids)}}, {"_id": 0, "id": 1, "date_debut": 1}).to_list(len(stage_ids))
+        stages_by_id = {s["id"]: s for s in stages}
     for i in items:
         d = by_inscription.get(i["id"])
         i["dossier_id"] = d["id"] if d else None
         i["dossier_status"] = d["status"] if d else None
         i["processed_by_name"] = staff_by_id.get(i.get("processed_by"))
+        stage = stages_by_id.get(i.get("stage_id"))
+        i["session_month"] = (stage["date_debut"][:7] if stage and stage.get("date_debut") else None)
     return items
 
 
@@ -459,6 +480,15 @@ async def update_inscription(iid: str, payload: InscriptionUpdate, user: dict = 
             await check_dossier_milestone(user["id"])
         except Exception:
             pass
+        # Quand l'agent marque l'inscription "finalisée" côté commercial, on
+        # sort automatiquement le dossier lié du statut "nouveau" (équivalent
+        # du clic manuel sur "Traiter") — sinon le dossier reste bloqué sur le
+        # bouton "Traiter" dans la colonne Traitement alors que l'inscription
+        # est déjà finalisée.
+        if update.get("contact_status") == "finalisee":
+            dossier = await db.dossiers.find_one({"inscription_id": iid}, {"_id": 0, "id": 1, "status": 1})
+            if dossier and dossier.get("status") == "nouveau":
+                await db.dossiers.update_one({"id": dossier["id"]}, {"$set": {"status": "en_verification", "updated_at": now_iso()}})
     return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
 
 
