@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ export default function Modules() {
 
   const [imageVersions, setImageVersions] = useState(() => Object.fromEntries(CATEGORIES.map((c) => [c, Date.now()])));
   const [uploadingCategory, setUploadingCategory] = useState(null);
+  const frenchTestFileRefs = useRef({});
 
   const uploadFrenchTestImage = async (category, file) => {
     if (!file) return;
@@ -303,12 +304,18 @@ export default function Modules() {
                   />
                   <div className="hidden items-center justify-center text-xs text-gray-400 h-full w-full">Aucune image</div>
                 </div>
-                <label className="inline-block mt-2">
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => uploadFrenchTestImage(cat, e.target.files?.[0])} />
-                  <Button variant="outline" size="sm" disabled={uploadingCategory === cat} className="cursor-pointer">
-                    <UploadSimple size={14} className="mr-1" /> {uploadingCategory === cat ? "Envoi..." : "Changer l'image"}
-                  </Button>
-                </label>
+                <input
+                  ref={(el) => (frenchTestFileRefs.current[cat] = el)}
+                  type="file" accept="image/*" className="hidden"
+                  onChange={(e) => uploadFrenchTestImage(cat, e.target.files?.[0])}
+                />
+                <Button
+                  type="button" variant="outline" size="sm" className="mt-2"
+                  disabled={uploadingCategory === cat}
+                  onClick={() => frenchTestFileRefs.current[cat]?.click()}
+                >
+                  <UploadSimple size={14} className="mr-1" /> {uploadingCategory === cat ? "Envoi..." : "Changer l'image"}
+                </Button>
               </Card>
             ))}
           </div>

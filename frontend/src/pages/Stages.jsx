@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -230,6 +230,8 @@ export default function Stages() {
     return result;
   }, [items]);
 
+  const importFileRef = useRef(null);
+
   const importExcel = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -276,12 +278,16 @@ export default function Stages() {
           <p className="text-gray-500 mt-2">{items.length} session(s) planifiée(s).</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <label className="inline-block">
-            <input type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} data-testid="stages-import-excel" />
-            <Button variant="outline" disabled={importing} className="cursor-pointer" title="Importe les sessions VTC/Taxi/Passerelle depuis un fichier Excel (1 onglet par mois)">
-              <UploadSimple size={16} className="mr-1" /> {importing ? "Import..." : "Importer Excel VTC/Taxi"}
-            </Button>
-          </label>
+          <input ref={importFileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} data-testid="stages-import-excel" />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={importing}
+            onClick={() => importFileRef.current?.click()}
+            title="Importe les sessions VTC/Taxi/Passerelle depuis un fichier Excel (1 onglet par mois)"
+          >
+            <UploadSimple size={16} className="mr-1" /> {importing ? "Import..." : "Importer Excel VTC/Taxi"}
+          </Button>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditingId(null); setForm(empty); } }}>
           <DialogTrigger asChild>
             <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="new-stage-btn" onClick={openCreate}>
