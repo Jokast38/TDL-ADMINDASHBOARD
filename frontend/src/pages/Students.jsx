@@ -585,8 +585,23 @@ export default function Students() {
                       }>{PAYMENT_LABEL[s.payment_status] || s.payment_status}</Badge>
                     ) : <span className="text-xs text-gray-300">—</span>}
                   </td>
-                  <td className="py-3 px-4 text-xs">{(s.categories || []).includes(ATTESTATION_CATEGORY) ? <span className="text-gray-300" title="Pas de compte CMA pour cette formation">N/A</span> : (s.cma || <span className="text-gray-300">—</span>)}</td>
-                  <td className="py-3 px-4 text-xs">{s.cpf || <span className="text-gray-300">—</span>}{s.cpf === "OUI" && s.cpf_titulaire ? <span className="text-gray-400"> ({s.cpf_titulaire})</span> : null}</td>
+                  <td className="py-3 px-4 text-xs">
+                    {(s.categories || []).includes(ATTESTATION_CATEGORY) ? (
+                      <span className="text-gray-300" title="Pas de compte CMA pour cette formation">N/A</span>
+                    ) : s.cma ? (
+                      <span className={s.cma === "OUI" ? "text-[#0B7238] font-medium" : s.cma === "NON" ? "text-gray-400" : "text-[#F5A623]"}>
+                        {s.cma}
+                      </span>
+                    ) : <span className="text-gray-300">—</span>}
+                  </td>
+                  <td className="py-3 px-4 text-xs">
+                    {s.cpf ? (
+                      <span className={s.cpf === "OUI" ? "text-[#0B7238] font-medium" : s.cpf === "NON" ? "text-gray-400" : "text-[#F5A623]"}>
+                        {s.cpf}
+                      </span>
+                    ) : <span className="text-gray-300">—</span>}
+                    {s.cpf === "OUI" && s.cpf_titulaire ? <span className="text-gray-400"> ({s.cpf_titulaire})</span> : null}
+                  </td>
                   <td className="py-3 px-4">
                     {s.dossier_status ? (
                       <Badge className={`${DOSSIER_STATUS_COLOR[s.dossier_status] || "bg-gray-100 text-gray-700"} hover:opacity-90`}>
