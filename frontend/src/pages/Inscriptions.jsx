@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -200,8 +201,10 @@ const previewLandingUrl = (url) => {
 const PAGE_SIZE = 25;
 
 export default function Inscriptions() {
+  const location = useLocation();
   const [items, setItems] = useState([]);
-  const [q, setQ] = useState("");
+  // Redirection depuis le bilan détaillé d'un employé (EmployeeAudit.jsx)
+  const [q, setQ] = useState(location.state?.prefillSearch || "");
   const [paymentFilter, setPaymentFilter] = useState("all"); // all | paid | unpaid
   const [traitementFilter, setTraitementFilter] = useState("all"); // all | traite | non_traite
   const [statusFilter, setStatusFilter] = useState("all"); // all | active | cloturee

@@ -677,6 +677,47 @@ async def employees_activity_log(
     total = await db.activity_log.count_documents(query)
     items = await db.activity_log.find(query, {"_id": 0}).sort("at", -1) \
         .skip((page - 1) * page_size).limit(page_size).to_list(page_size)
+
+    # Les notes saisies par l'équipe vivent sur la fiche (lead/inscription/
+    # dossier/demande de rappel), pas dans le journal d'activité lui-même —
+    # on les rapatrie ici pour que la page "bilan détaillé" montre vraiment
+    # ce qui a été écrit au moment de l'action, sans avoir à rouvrir chaque
+    # fiche une par une (voir page Activité > bilan employé). Un seul aller-
+    # retour par collection cible plutôt qu'une requête par entrée.
+    ids_by_type: dict = {}
+    for i in items:
+        if i.get("target_type") and i.get("target_id"):
+            ids_by_type.setdefault(i["target_type"], set()).add(i["target_id"])
+
+    notes_by_key = {}
+    links_by_key = {}
+    collection_by_type = {
+        "lead": ("leads", "/admin/leads"),
+        "inscription": ("inscriptions", "/admin/inscriptions"),
+        "callback_request": ("callback_requests", "/admin/inscriptions"),
+        "meta_lead": ("meta_lead_imports", "/admin/marketing"),
+    }
+    for target_type, ids in ids_by_type.items():
+        coll_name, link_base = collection_by_type.get(target_type, (None, None))
+        if not coll_name:
+            continue
+        docs = await db[coll_name].find(
+            {"id": {"$in": list(ids)}}, {"_id": 0, "id": 1, "notes": 1, "student_email": 1, "email": 1, "name": 1, "student_name": 1}
+        ).to_list(len(ids))
+        for d in docs:
+            key = (target_type, d["id"])
+            notes_by_key[key] = d.get("notes")
+            # Redirection : la page cible n'a pas de route de détail par id,
+            # on pré-remplit sa barre de recherche (email/nom) via le state
+            # de navigation — voir EmployeeAudit.jsx côté frontend.
+            links_by_key[key] = {"path": link_base, "query": d.get("student_email") or d.get("email") or d.get("name") or d.get("student_name")}
+
+    for i in items:
+        key = (i.get("target_type"), i.get("target_id"))
+        if key in notes_by_key:
+            i["target_notes"] = notes_by_key[key]
+            i["target_link"] = links_by_key[key]
+
     return {"items": items, "total": total, "page": page, "page_size": page_size,
             "pages": max((total + page_size - 1) // page_size, 1)}
 

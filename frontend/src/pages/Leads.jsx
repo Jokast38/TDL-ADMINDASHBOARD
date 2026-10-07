@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -435,10 +436,13 @@ const emptyLead = { name: "", email: "", phone: "", interest: "", notes: "", tag
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function Leads() {
+  const location = useLocation();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const [q, setQ] = useState("");
+  // Redirection depuis le bilan détaillé d'un employé (EmployeeAudit.jsx) —
+  // pré-remplit la recherche avec l'email/nom du lead concerné.
+  const [q, setQ] = useState(location.state?.prefillSearch || "");
   const [statusFilter, setStatusFilter] = useState("all");
   const [contactedFilter, setContactedFilter] = useState("all");
   const [callOnlyFilter, setCallOnlyFilter] = useState(false);
