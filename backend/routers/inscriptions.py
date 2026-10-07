@@ -239,10 +239,15 @@ async def list_students(finalized_only: bool = True, user: dict = Depends(requir
         latest_stage = stages_by_id.get(latest_insc.get("stage_id")) if latest_insc else None
         hours_since_end = _hours_since_end(latest_stage) if latest_stage else None
         # Une inscription "vraiment finalisée" = tag commercial "finalisee"
-        # (voir CONTACT_STATUS_LABEL côté frontend) — distinct du statut du
-        # dossier administratif (qui peut encore être en cours de traitement
-        # ANTS/CMA après la finalisation commerciale de l'inscription elle-même).
-        is_finalized = bool(latest_insc and latest_insc.get("contact_status") == "finalisee")
+        # (voir CONTACT_STATUS_LABEL côté frontend) OU dossier administratif
+        # déjà "complet" (ou au-delà : soumis_ants/termine) — un dossier
+        # complet signifie que toutes les pièces sont réunies et validées,
+        # donc l'inscription est bien finalisée même si l'agent n'a pas
+        # explicitement posé le tag commercial "finalisee" sur l'inscription.
+        is_finalized = bool(
+            (latest_insc and latest_insc.get("contact_status") == "finalisee")
+            or (latest_dossier and latest_dossier.get("status") in ("complet", "soumis_ants", "termine"))
+        )
         if finalized_only and not is_finalized:
             continue
         result.append({

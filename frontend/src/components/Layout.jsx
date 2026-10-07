@@ -81,21 +81,24 @@ export default function Layout({ children }) {
     localStorage.setItem("sidebar_collapsed", collapsed ? "1" : "0");
   }, [collapsed]);
 
-  // Temps de travail réel (page Activité) : on signale une interaction
-  // concrète (clic, frappe, scroll) au backend, throttlé à un appel toutes
-  // les 30s max — pas à chaque appel API comme avant, ce qui comptait aussi
+  // Temps de travail réel (page Activité) : TOUTE interaction avec la
+  // plateforme (clic, frappe, scroll, mouvement de souris, molette, tap
+  // tactile) signale au backend qu'on est actif, throttlé à un appel toutes
+  // les 20s max — pas à chaque appel API comme avant, ce qui comptait aussi
   // le simple polling en arrière-plan (cloche de notifications...) comme du
   // temps de présence même onglet laissé ouvert sans personne devant l'écran.
+  // Le backend (services/activity.py::ping_interaction) met le décompte en
+  // pause après 5 min sans qu'aucun de ces pings n'arrive.
   const lastInteractionPingRef = useRef(0);
   useEffect(() => {
-    const INTERACTION_PING_THROTTLE_MS = 30_000;
+    const INTERACTION_PING_THROTTLE_MS = 20_000;
     const onInteraction = () => {
       const now = Date.now();
       if (now - lastInteractionPingRef.current < INTERACTION_PING_THROTTLE_MS) return;
       lastInteractionPingRef.current = now;
       api.post("/me/activity-ping").catch(() => {});
     };
-    const events = ["click", "keydown", "scroll"];
+    const events = ["click", "keydown", "scroll", "mousemove", "wheel", "touchstart", "pointerdown"];
     events.forEach((ev) => window.addEventListener(ev, onInteraction, { passive: true }));
     onInteraction();
     return () => events.forEach((ev) => window.removeEventListener(ev, onInteraction));

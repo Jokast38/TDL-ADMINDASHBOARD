@@ -605,23 +605,49 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
 
 @router.get("/employees/activity-timeseries")
 async def employees_activity_timeseries(days: int = 7, user: dict = Depends(require_role("admin", *ROLES_TEAM_MGMT))):
-    """Temps de connexion cumulé de toute l'équipe, par jour, sur les N derniers
-    jours — alimente le graphique d'activité de la page Activité."""
+    """Temps de travail réel cumulé de toute l'équipe, par jour, sur les N
+    derniers jours — alimente le graphique d'activité de la page Activité.
+    Basé sur active_seconds (temps d'interaction réelle, voir
+    services/activity.py::ping_interaction), pas le temps de connexion brut."""
     days = min(max(days, 1), 31)
     today = datetime.now(timezone.utc).date()
     date_keys = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days - 1, -1, -1)]
     sessions = await db.user_sessions.find(
-        {"date": {"$in": date_keys}}, {"_id": 0, "date": 1, "first_seen": 1, "last_seen": 1}
+        {"date": {"$in": date_keys}}, {"_id": 0, "date": 1, "active_seconds": 1}
     ).to_list(5000)
     minutes_by_date = {k: 0 for k in date_keys}
     for s in sessions:
-        try:
-            fs = datetime.fromisoformat(s["first_seen"].replace("Z", "+00:00"))
-            ls = datetime.fromisoformat(s["last_seen"].replace("Z", "+00:00"))
-            minutes_by_date[s["date"]] += max(0, round((ls - fs).total_seconds() / 60))
-        except Exception:
-            pass
+        minutes_by_date[s["date"]] += round((s.get("active_seconds") or 0) / 60)
     return [{"date": k, "minutes": minutes_by_date[k]} for k in date_keys]
+
+
+@router.get("/employees/activity-by-day")
+async def employees_activity_by_day(days: int = 14, user: dict = Depends(require_role("admin", *ROLES_TEAM_MGMT))):
+    """Temps de travail réel PAR employé ET par jour — contrairement à
+    GET /employees/activity (total global uniquement) et à
+    GET /employees/activity-timeseries (total de toute l'équipe par jour),
+    celui-ci croise les deux pour afficher le détail jour par jour de chaque
+    employé (section "Statistiques par jour" de la page Activité)."""
+    days = min(max(days, 1), 31)
+    today = datetime.now(timezone.utc).date()
+    date_keys = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days - 1, -1, -1)]
+    staff = await db.users.find(
+        {"role": {"$in": list(VALID_STAFF_ROLES)}}, {"_id": 0, "id": 1, "name": 1, "role": 1}
+    ).to_list(500)
+    sessions = await db.user_sessions.find(
+        {"date": {"$in": date_keys}}, {"_id": 0, "user_id": 1, "date": 1, "active_seconds": 1}
+    ).to_list(5000)
+    minutes_by_user_date = {}
+    for s in sessions:
+        minutes_by_user_date[(s["user_id"], s["date"])] = round((s.get("active_seconds") or 0) / 60)
+
+    employees = []
+    for s in staff:
+        days_data = [{"date": d, "minutes": minutes_by_user_date.get((s["id"], d), 0)} for d in date_keys]
+        total = sum(d["minutes"] for d in days_data)
+        employees.append({"id": s["id"], "name": s.get("name", ""), "role": s.get("role"), "days": days_data, "total_minutes": total})
+    employees.sort(key=lambda x: -x["total_minutes"])
+    return {"date_keys": date_keys, "employees": employees}
 
 
 @router.get("/employees/activity-log")

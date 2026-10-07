@@ -102,7 +102,12 @@ export default function Activity() {
   const [employeesPage, setEmployeesPage] = useState(1);
   const EMPLOYEES_PAGE_SIZE = 5;
 
+  const [dailyStats, setDailyStats] = useState(null);
+  const [dailyDays, setDailyDays] = useState(14);
+
   const load = () => api.get("/employees/activity").then((r) => setItems(r.data)).catch(() => setItems([]));
+  const loadDaily = () => api.get("/employees/activity-by-day", { params: { days: dailyDays } })
+    .then((r) => setDailyStats(r.data)).catch(() => setDailyStats(null));
   const loadLog = () => api.get("/employees/activity-log", { params: { page_size: 8 } })
     .then((r) => setLog(r.data.items)).catch(() => setLog([]));
 
@@ -116,6 +121,8 @@ export default function Activity() {
     api.get("/dashboard/revenue-timeseries", { params: { months: 6 } }).then((r) => setRevenueTimeseries(r.data)).catch(() => {});
     api.get("/dashboard/revenue-breakdown", { params: { months: 6 } }).then((r) => setRevenueBreakdown(r.data)).catch(() => {});
   }, []);
+
+  useEffect(() => { loadDaily(); }, [dailyDays]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Horloge pour le temps de connexion en temps réel des employés en ligne
   // (voir colonne "Temps passé" du tableau) — recalculée chaque seconde sans
@@ -533,6 +540,66 @@ export default function Activity() {
           </div>
         </Card>
       </div>
+
+      {/* Statistiques par jour, par employé — section globale distincte du
+          total agrégé du tableau principal plus haut : on voit ici, jour par
+          jour, qui a été actif et combien de temps, sur la période choisie. */}
+      <Card className="p-5 border border-gray-200 rounded-md shadow-none" data-testid="daily-stats-section">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+          <p className="font-display text-lg font-bold flex items-center gap-2">
+            <Clock size={16} className="text-[#d4af37]" /> Statistiques par jour — temps de travail par employé
+          </p>
+          <div className="flex border border-gray-200 rounded-md overflow-hidden">
+            {[7, 14, 31].map((d) => (
+              <button
+                key={d}
+                className={`px-3 py-1 text-xs font-medium ${dailyDays === d ? "bg-[#0a0a0a] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                onClick={() => setDailyDays(d)}
+                data-testid={`daily-stats-range-${d}`}
+              >{d} jours</button>
+            ))}
+          </div>
+        </div>
+        {!dailyStats ? (
+          <p className="text-sm text-gray-400">Chargement...</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left border-y border-gray-100 text-gray-400">
+                <tr>
+                  <th className="py-2 px-3 overline font-normal sticky left-0 bg-white">Employé</th>
+                  {dailyStats.date_keys.map((d) => (
+                    <th key={d} className="py-2 px-2 overline font-normal text-center whitespace-nowrap">
+                      {d.slice(8, 10)}/{d.slice(5, 7)}
+                    </th>
+                  ))}
+                  <th className="py-2 px-3 overline font-normal text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dailyStats.employees.map((emp) => (
+                  <tr key={emp.id} className="border-b border-gray-50">
+                    <td className="py-2 px-3 font-medium whitespace-nowrap sticky left-0 bg-white">{emp.name}</td>
+                    {emp.days.map((d) => (
+                      <td key={d.date} className="py-2 px-2 text-center font-mono text-xs">
+                        {d.minutes > 0 ? (
+                          <span className={d.minutes >= 240 ? "text-[#0B7238] font-semibold" : "text-gray-600"}>
+                            {d.minutes >= 60 ? `${Math.floor(d.minutes / 60)}h${String(d.minutes % 60).padStart(2, "0")}` : `${d.minutes}m`}
+                          </span>
+                        ) : <span className="text-gray-200">—</span>}
+                      </td>
+                    ))}
+                    <td className="py-2 px-3 text-right font-semibold font-mono">{formatMinutes(emp.total_minutes)}</td>
+                  </tr>
+                ))}
+                {!dailyStats.employees.length && (
+                  <tr><td colSpan={dailyStats.date_keys.length + 2} className="py-10 text-center text-gray-400">Aucune donnée.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       <Dialog open={!!adjustTarget} onOpenChange={(v) => !v && setAdjustTarget(null)}>
         <DialogContent>

@@ -74,7 +74,7 @@ async def ping_session(user_id: str) -> None:
 # écoulé n'est PAS ajouté au compteur, et une nouvelle "tranche active"
 # démarre à la prochaine interaction — plutôt que de compter tout l'intervalle
 # comme si la personne avait travaillé sans interruption.
-_INTERACTION_GAP_LIMIT_SECONDS = 10 * 60
+_INTERACTION_GAP_LIMIT_SECONDS = 5 * 60
 
 
 async def ping_interaction(user_id: str) -> None:

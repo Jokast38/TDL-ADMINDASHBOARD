@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, API } from "@/lib/api";
 import { Card } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { MagnifyingGlass, EnvelopeSimple, Phone, GraduationCap, FolderOpen, Sparkle, PaperPlaneTilt, Signature, Trash, DownloadSimple, UsersThree } from "@phosphor-icons/react";
+import { MagnifyingGlass, EnvelopeSimple, Phone, GraduationCap, FolderOpen, Sparkle, PaperPlaneTilt, Signature, Trash, DownloadSimple, UsersThree, CheckCircle, Clock, FileText } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { formatDateFR, formatDateLongFR } from "@/lib/dateFormat";
 
@@ -50,7 +51,17 @@ const DOSSIER_STATUS_COLOR = {
   rejete: "bg-red-100 text-red-700",
 };
 
-const PAYMENT_LABEL = { pending: "En attente", paid: "Payé", refunded: "Remboursé" };
+// "cpf_valide"/"cpf_attente" couvrent le financement CPF (dossier validé ou
+// pas encore) — distinct de "paid"/"pending" qui concernent un règlement
+// direct. CPF validé est traité visuellement comme un paiement acquis (vert),
+// comme "Payé" — même logique que PAYMENT_LABEL/PAYMENT_PAID_LIKE dans
+// Inscriptions.jsx, sans quoi "cpf_valide" ressortait en orange avec son nom
+// de statut brut au lieu d'un libellé lisible.
+const PAYMENT_LABEL = {
+  pending: "En attente", paid: "Payé", refunded: "Remboursé",
+  cpf_valide: "CPF Validé", cpf_attente: "CPF en attente",
+};
+const PAYMENT_PAID_LIKE = ["paid", "cpf_valide"];
 
 const CENTER_OPTIONS = ["Épinay-sur-Seine (93)", "Creil (60)"];
 
@@ -61,6 +72,27 @@ const CATEGORY_LABELS = {
   VTC_TAXI: "VTC / Taxi", PERMIS: "Récupération de points", CACES: "CACES",
   AUTO_ECOLE: "Auto-école", SSIAP: "SSIAP", ECSR: "ECSR", VENTE: "Conseiller de Vente",
 };
+
+// Colonnes CMA/CPF adaptées à la formation (voir mapping fourni par l'équipe) :
+// la CMA (création du compte Chambre de Métiers) ne concerne que VTC/Taxi ;
+// le financement CPF ne concerne pas la récupération de points (financée
+// autrement, voir coupon/Groupon). Quand une seule catégorie est affichée
+// (onglet actif ≠ "all"), la colonne correspondante est carrément masquée
+// plutôt que de montrer "N/A" sur toute la colonne.
+const CMA_VISIBLE_CATEGORIES = ["VTC_TAXI"];
+const CPF_HIDDEN_CATEGORIES = ["PERMIS"];
+
+const AVATAR_COLORS = ["#0052CC", "#d4af37", "#0B7238", "#6b21a8", "#c2410c", "#be123c", "#0e7490"];
+function avatarColorFor(id) {
+  let hash = 0;
+  for (let i = 0; i < (id || "").length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+function initials(name) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
+}
 
 // Modèle "Convocation à un examen" : génère l'objet + le message à partir de
 // l'intitulé de l'examen, la date de convocation et le centre — l'agent peut
@@ -408,12 +440,64 @@ export default function Students() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // Colonnes CMA/CPF adaptées à la catégorie active — masquées entièrement
+  // (pas juste "N/A") dès qu'un seul onglet de formation est sélectionné et
+  // que cette formation n'en a pas besoin.
+  const showCmaColumn = categoryFilter === "all" || CMA_VISIBLE_CATEGORIES.includes(categoryFilter);
+  const showCpfColumn = categoryFilter === "all" || !CPF_HIDDEN_CATEGORIES.includes(categoryFilter);
+
+  const kpis = useMemo(() => {
+    const finalises = filtered.filter((s) => s.dossier_status === "termine").length;
+    const enAttente = filtered.filter((s) => s.dossier_status && s.dossier_status !== "termine").length;
+    const sansDossier = filtered.filter((s) => !s.dossier_status).length;
+    return { total: filtered.length, finalises, enAttente, sansDossier };
+  }, [filtered]);
+
   return (
     <div className="space-y-6" data-testid="students-page">
       <div>
         <p className="overline">Vue d'ensemble</p>
         <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Apprenants</h1>
         <p className="text-gray-500 mt-2">{items.length} apprenant(s) au total.</p>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="p-4 border border-gray-200 rounded-md shadow-none flex items-center gap-3">
+          <div className="h-9 w-9 rounded-full bg-[#0052CC]/10 flex items-center justify-center shrink-0">
+            <UsersThree size={18} className="text-[#0052CC]" />
+          </div>
+          <div>
+            <p className="text-xl font-bold leading-tight">{kpis.total}</p>
+            <p className="text-xs text-gray-400">Affiché{kpis.total > 1 ? "s" : ""}</p>
+          </div>
+        </Card>
+        <Card className="p-4 border border-gray-200 rounded-md shadow-none flex items-center gap-3">
+          <div className="h-9 w-9 rounded-full bg-[#0B7238]/10 flex items-center justify-center shrink-0">
+            <CheckCircle size={18} className="text-[#0B7238]" />
+          </div>
+          <div>
+            <p className="text-xl font-bold leading-tight">{kpis.finalises}</p>
+            <p className="text-xs text-gray-400">Dossiers terminés</p>
+          </div>
+        </Card>
+        <Card className="p-4 border border-gray-200 rounded-md shadow-none flex items-center gap-3">
+          <div className="h-9 w-9 rounded-full bg-[#F5A623]/10 flex items-center justify-center shrink-0">
+            <Clock size={18} className="text-[#F5A623]" />
+          </div>
+          <div>
+            <p className="text-xl font-bold leading-tight">{kpis.enAttente}</p>
+            <p className="text-xs text-gray-400">Dossiers en cours</p>
+          </div>
+        </Card>
+        <Card className="p-4 border border-gray-200 rounded-md shadow-none flex items-center gap-3">
+          <div className="h-9 w-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+            <FileText size={18} className="text-gray-500" />
+          </div>
+          <div>
+            <p className="text-xl font-bold leading-tight">{kpis.sansDossier}</p>
+            <p className="text-xs text-gray-400">Sans dossier</p>
+          </div>
+        </Card>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -538,8 +622,8 @@ export default function Students() {
                 <th className="py-3 px-4 overline">Apprenant</th>
                 <th className="py-3 px-4 overline">Formation(s)</th>
                 <th className="py-3 px-4 overline">Paiement</th>
-                <th className="py-3 px-4 overline">CMA</th>
-                <th className="py-3 px-4 overline">CPF</th>
+                {showCmaColumn && <th className="py-3 px-4 overline">CMA</th>}
+                {showCpfColumn && <th className="py-3 px-4 overline">CPF</th>}
                 <th className="py-3 px-4 overline">Dossier</th>
                 <th className="py-3 px-4 overline">Inscrit(e) le</th>
                 <th className="py-3 px-4 overline text-right">Contact</th>
@@ -560,9 +644,18 @@ export default function Students() {
                     />
                   </td>
                   <td className="py-3 px-4">
-                    <p className="font-medium">{s.name}</p>
-                    <p className="text-xs text-gray-500">{s.email}</p>
-                    {s.phone && <p className="text-xs text-gray-400">{s.phone}</p>}
+                    <div className="flex items-center gap-2.5">
+                      <Avatar className="h-8 w-8 shrink-0">
+                        <AvatarFallback style={{ backgroundColor: avatarColorFor(s.id), color: "#fff" }} className="text-xs font-semibold">
+                          {initials(s.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{s.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{s.email}</p>
+                        {s.phone && <p className="text-xs text-gray-400">{s.phone}</p>}
+                      </div>
+                    </div>
                   </td>
                   <td className="py-3 px-4">
                     {s.formations?.length ? (
@@ -579,29 +672,35 @@ export default function Students() {
                   <td className="py-3 px-4">
                     {s.payment_status ? (
                       <Badge className={
-                        s.payment_status === "paid" ? "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10" :
+                        PAYMENT_PAID_LIKE.includes(s.payment_status) ? "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10" :
                         s.payment_status === "refunded" ? "bg-gray-200 text-gray-600 hover:bg-gray-200" :
                         "bg-[#F5A623]/10 text-[#F5A623] hover:bg-[#F5A623]/10"
                       }>{PAYMENT_LABEL[s.payment_status] || s.payment_status}</Badge>
                     ) : <span className="text-xs text-gray-300">—</span>}
                   </td>
-                  <td className="py-3 px-4 text-xs">
-                    {(s.categories || []).includes(ATTESTATION_CATEGORY) ? (
-                      <span className="text-gray-300" title="Pas de compte CMA pour cette formation">N/A</span>
-                    ) : s.cma ? (
-                      <span className={s.cma === "OUI" ? "text-[#0B7238] font-medium" : s.cma === "NON" ? "text-gray-400" : "text-[#F5A623]"}>
-                        {s.cma}
-                      </span>
-                    ) : <span className="text-gray-300">—</span>}
-                  </td>
-                  <td className="py-3 px-4 text-xs">
-                    {s.cpf ? (
-                      <span className={s.cpf === "OUI" ? "text-[#0B7238] font-medium" : s.cpf === "NON" ? "text-gray-400" : "text-[#F5A623]"}>
-                        {s.cpf}
-                      </span>
-                    ) : <span className="text-gray-300">—</span>}
-                    {s.cpf === "OUI" && s.cpf_titulaire ? <span className="text-gray-400"> ({s.cpf_titulaire})</span> : null}
-                  </td>
+                  {showCmaColumn && (
+                    <td className="py-3 px-4 text-xs">
+                      {!CMA_VISIBLE_CATEGORIES.some((c) => (s.categories || []).includes(c)) ? (
+                        <span className="text-gray-300" title="Pas de compte CMA pour cette formation">N/A</span>
+                      ) : s.cma ? (
+                        <span className={s.cma === "OUI" ? "text-[#0B7238] font-medium" : s.cma === "NON" ? "text-gray-400" : "text-[#F5A623]"}>
+                          {s.cma}
+                        </span>
+                      ) : <span className="text-gray-300">—</span>}
+                    </td>
+                  )}
+                  {showCpfColumn && (
+                    <td className="py-3 px-4 text-xs">
+                      {CPF_HIDDEN_CATEGORIES.some((c) => (s.categories || []).includes(c)) && !(s.categories || []).some((c) => !CPF_HIDDEN_CATEGORIES.includes(c)) ? (
+                        <span className="text-gray-300" title="Pas de financement CPF pour cette formation">N/A</span>
+                      ) : s.cpf ? (
+                        <span className={s.cpf === "OUI" ? "text-[#0B7238] font-medium" : s.cpf === "NON" ? "text-gray-400" : "text-[#F5A623]"}>
+                          {s.cpf}
+                        </span>
+                      ) : <span className="text-gray-300">—</span>}
+                      {s.cpf === "OUI" && s.cpf_titulaire ? <span className="text-gray-400"> ({s.cpf_titulaire})</span> : null}
+                    </td>
+                  )}
                   <td className="py-3 px-4">
                     {s.dossier_status ? (
                       <Badge className={`${DOSSIER_STATUS_COLOR[s.dossier_status] || "bg-gray-100 text-gray-700"} hover:opacity-90`}>
@@ -742,6 +841,35 @@ export default function Students() {
                 </div>
 
                 {selected.notes && <p className="text-sm bg-gray-50 p-3 rounded-md border border-gray-200">{selected.notes}</p>}
+
+                {(() => {
+                  // Documents requis pour la formation mais pas encore
+                  // déposés — calculé sur TOUS les dossiers (pas seulement
+                  // ceux avec une liste "documents_manquants" déjà posée côté
+                  // serveur), à partir de documents_requis vs les types déjà
+                  // présents dans selectedDocs, pour que l'agent voie
+                  // toujours ce qu'il manque à un nouvel élève.
+                  const required = selected.documents_manquants?.length
+                    ? selected.documents_manquants
+                    : (selected.documents_requis || []).filter(
+                        (t) => !selectedDocs.some((d) => d.doc_type === t)
+                      );
+                  if (!required.length) return null;
+                  return (
+                    <div className="border border-[#F5A623]/30 bg-[#F5A623]/5 rounded-md p-3">
+                      <p className="text-xs font-medium text-[#8a6d00] mb-1.5">
+                        {required.length} document(s) manquant(s)
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {required.map((t) => (
+                          <Badge key={t} variant="outline" className="border-[#F5A623]/50 text-[#8a6d00] text-xs">
+                            {DOC_TYPE_LABELS[t] || t}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {selectedDocs.length > 0 ? (
                   <div className="space-y-1">
