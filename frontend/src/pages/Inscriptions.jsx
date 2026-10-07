@@ -414,7 +414,7 @@ export default function Inscriptions() {
   }, [items]);
 
   const filtered = useMemo(() => items.filter((i) => {
-    const matchesQuery = (i.student_name + i.student_email + i.formation_title).toLowerCase().includes(q.toLowerCase());
+    const matchesQuery = (i.student_name + i.student_email + (i.student_phone || "") + i.formation_title).toLowerCase().includes(q.toLowerCase());
     const matchesPayment =
       paymentFilter === "all" ? true :
       paymentFilter === "paid" ? PAYMENT_PAID_LIKE.includes(i.payment_status) :
@@ -617,7 +617,7 @@ export default function Inscriptions() {
         <div className="relative max-w-md flex-1 min-w-[220px]">
           <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />
           <Input
-            placeholder="Rechercher un étudiant, formation..."
+            placeholder="Rechercher un étudiant, téléphone, formation..."
             value={q} onChange={(e) => setQ(e.target.value)}
             className="pl-9" data-testid="search-input"
           />

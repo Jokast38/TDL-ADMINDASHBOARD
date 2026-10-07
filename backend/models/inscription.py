@@ -35,6 +35,12 @@ class InscriptionIn(BaseModel):
     event_id: Optional[str] = None
     fbc: Optional[str] = None
     fbp: Optional[str] = None
+    # Tarif promo landing page (ex: 179€ au lieu des 200€ catalogue pour le
+    # stage récupération de points, réservé au trafic publicitaire Meta — voir
+    # StageRecuperationPointsLanding.jsx). Optionnel : la plupart des flux
+    # d'inscription (formulaire public générique, agent sur place...) ne
+    # l'envoient pas et se voient appliquer le prix catalogue de la formation.
+    price: Optional[float] = None
 
 
 class InscriptionUpdate(BaseModel):

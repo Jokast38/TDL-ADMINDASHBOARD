@@ -185,10 +185,18 @@ export default function Students() {
     return Array.from(set).sort();
   }, [items]);
   const [lieuFilter, setLieuFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all"); // all | paid | unpaid
+  const [formationFilter, setFormationFilter] = useState("all");
+
+  const formationOptions = useMemo(() => {
+    const set = new Set();
+    items.forEach((s) => (s.formations || []).forEach((f) => set.add(f)));
+    return Array.from(set).sort();
+  }, [items]);
 
   const filtered = useMemo(() => items.filter((s) => {
     const query = q.trim().toLowerCase();
-    const matchesQuery = !query || `${s.name || ""} ${s.email || ""}`.toLowerCase().includes(query);
+    const matchesQuery = !query || `${s.name || ""} ${s.email || ""} ${s.phone || ""}`.toLowerCase().includes(query);
     const matchesCategory = categoryFilter === "all" || (s.categories || []).includes(categoryFilter);
     const matchesDossier =
       dossierFilter === "all" ? true :
@@ -196,10 +204,15 @@ export default function Students() {
       s.dossier_status === dossierFilter;
     const matchesMonth = monthFilter === "all" ? true : s.session_month === monthFilter;
     const matchesLieu = lieuFilter === "all" ? true : s.lieu_ville === lieuFilter;
-    return matchesQuery && matchesCategory && matchesDossier && matchesMonth && matchesLieu;
-  }), [items, q, categoryFilter, dossierFilter, monthFilter, lieuFilter]);
+    const matchesPayment =
+      paymentFilter === "all" ? true :
+      paymentFilter === "paid" ? PAYMENT_PAID_LIKE.includes(s.payment_status) :
+      !PAYMENT_PAID_LIKE.includes(s.payment_status);
+    const matchesFormation = formationFilter === "all" ? true : (s.formations || []).includes(formationFilter);
+    return matchesQuery && matchesCategory && matchesDossier && matchesMonth && matchesLieu && matchesPayment && matchesFormation;
+  }), [items, q, categoryFilter, dossierFilter, monthFilter, lieuFilter, paymentFilter, formationFilter]);
 
-  useEffect(() => { setPage(1); }, [q, categoryFilter, dossierFilter, monthFilter, lieuFilter]);
+  useEffect(() => { setPage(1); }, [q, categoryFilter, dossierFilter, monthFilter, lieuFilter, paymentFilter, formationFilter]);
 
   const openDossier = async (s) => {
     if (!s.dossier_id) return toast.error("Aucun dossier pour cet apprenant");
@@ -514,7 +527,7 @@ export default function Students() {
         <div className="relative max-w-md flex-1 min-w-[220px]">
           <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />
           <Input
-            placeholder="Rechercher un apprenant (nom, email)..."
+            placeholder="Rechercher un apprenant (nom, email, téléphone)..."
             value={q} onChange={(e) => setQ(e.target.value)}
             className="pl-9" data-testid="students-search"
           />
@@ -539,6 +552,21 @@ export default function Students() {
           <SelectContent>
             <SelectItem value="all">Lieu : tous</SelectItem>
             {lieuOptions.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+          <SelectTrigger className="w-44" data-testid="students-filter-payment"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Paiement : tous</SelectItem>
+            <SelectItem value="paid">Payé / CPF validé</SelectItem>
+            <SelectItem value="unpaid">En attente</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={formationFilter} onValueChange={setFormationFilter}>
+          <SelectTrigger className="w-56" data-testid="students-filter-formation"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Formation : toutes</SelectItem>
+            {formationOptions.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
           </SelectContent>
         </Select>
         <label className="flex items-center gap-1.5 text-xs text-gray-600 select-none cursor-pointer" title="Par défaut, seuls les apprenants dont l'inscription est marquée « Inscription finalisée » apparaissent ici">

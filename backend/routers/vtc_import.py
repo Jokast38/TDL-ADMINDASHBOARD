@@ -169,7 +169,14 @@ async def import_vtc_taxi_excel(file: UploadFile = File(...), user: dict = Depen
                 if idx is None or idx >= len(values):
                     return None
                 v = values[idx]
-                return str(v).strip() if v is not None else None
+                if v is None:
+                    return None
+                # Un numéro de dossier (ex: N° DOSSIER) saisi comme nombre dans
+                # Excel (pas du texte) ressort en float via openpyxl — sans ce
+                # cas, str(74706.0) donne "74706.0" au lieu de "74706".
+                if isinstance(v, float) and v.is_integer():
+                    return str(int(v))
+                return str(v).strip()
 
             email = get(idx_email)
             metier = get(idx_metier)

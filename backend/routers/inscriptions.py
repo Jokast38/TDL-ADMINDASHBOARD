@@ -112,7 +112,13 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         "formation_title": formation["title"], "category": formation["category"],
         "student_id": user_id, "student_name": payload.student_name,
         "student_email": payload.student_email.lower(), "student_phone": payload.student_phone,
-        "price": formation.get("price", 0), "payment_status": "pending",
+        # `price` envoyé par la page (ex: tarif promo Meta 179€) a priorité
+        # sur le prix catalogue de la formation — sinon des pages comme
+        # StageRecuperationPointsLanding.jsx annonçaient/trackaient 179€ côté
+        # Meta Pixel tout en facturant réellement 200€, un vrai écart de prix
+        # affiché vs facturé.
+        "price": payload.price if payload.price is not None else formation.get("price", 0),
+        "payment_status": "pending",
         "status": "active", "contact_status": "en_cours", "notes": payload.notes or "", "created_at": now_iso(),
         "source": payload.source or "", "landing_url": payload.landing_url or "",
         # `fbc` (cookie Meta Click ID) n'existe QUE si le visiteur est arrivé en

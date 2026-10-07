@@ -300,6 +300,13 @@ async def enroll_meta_lead(lead_id: str, payload: MetaLeadEnrollIn, request: Req
     )
     result = await create_inscription(inscription_payload, request)
     inscription = result["inscription"] if isinstance(result, dict) and "inscription" in result else result
+    # `from_meta_ads` n'est posé par create_inscription que si un cookie `fbc`
+    # est transmis (cas du formulaire public avec tracking Pixel) — ici
+    # l'inscription est créée côté serveur par un agent depuis un lead Meta
+    # déjà confirmé (import Lead Ads), donc on force le marqueur pour que la
+    # colonne "Origine" affiche bien "Pub Meta" et non "Site internet".
+    if isinstance(inscription, dict) and inscription.get("id"):
+        await db.inscriptions.update_one({"id": inscription["id"]}, {"$set": {"from_meta_ads": True}})
 
     stage = await db.stages.find_one({"id": payload.stage_id}, {"_id": 0}) if payload.stage_id else None
     if stage:
