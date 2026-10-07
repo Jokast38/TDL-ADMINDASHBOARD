@@ -177,6 +177,15 @@ export default function Students() {
     return Array.from(set).sort();
   }, [items]);
 
+  // Lieu de la formation (Épinay-sur-Seine / Creil...) — posé côté serveur
+  // depuis la session affectée, ou le centre saisi à l'import à défaut.
+  const lieuOptions = useMemo(() => {
+    const set = new Set();
+    items.forEach((s) => { if (s.lieu_ville) set.add(s.lieu_ville); });
+    return Array.from(set).sort();
+  }, [items]);
+  const [lieuFilter, setLieuFilter] = useState("all");
+
   const filtered = useMemo(() => items.filter((s) => {
     const query = q.trim().toLowerCase();
     const matchesQuery = !query || `${s.name || ""} ${s.email || ""}`.toLowerCase().includes(query);
@@ -186,10 +195,11 @@ export default function Students() {
       dossierFilter === "aucun" ? !s.dossier_status :
       s.dossier_status === dossierFilter;
     const matchesMonth = monthFilter === "all" ? true : s.session_month === monthFilter;
-    return matchesQuery && matchesCategory && matchesDossier && matchesMonth;
-  }), [items, q, categoryFilter, dossierFilter, monthFilter]);
+    const matchesLieu = lieuFilter === "all" ? true : s.lieu_ville === lieuFilter;
+    return matchesQuery && matchesCategory && matchesDossier && matchesMonth && matchesLieu;
+  }), [items, q, categoryFilter, dossierFilter, monthFilter, lieuFilter]);
 
-  useEffect(() => { setPage(1); }, [q, categoryFilter, dossierFilter, monthFilter]);
+  useEffect(() => { setPage(1); }, [q, categoryFilter, dossierFilter, monthFilter, lieuFilter]);
 
   const openDossier = async (s) => {
     if (!s.dossier_id) return toast.error("Aucun dossier pour cet apprenant");
@@ -524,6 +534,13 @@ export default function Students() {
             {monthOptions.map((m) => <SelectItem key={m} value={m}>{monthLabel(m)}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={lieuFilter} onValueChange={setLieuFilter}>
+          <SelectTrigger className="w-44" data-testid="students-filter-lieu"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Lieu : tous</SelectItem>
+            {lieuOptions.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <label className="flex items-center gap-1.5 text-xs text-gray-600 select-none cursor-pointer" title="Par défaut, seuls les apprenants dont l'inscription est marquée « Inscription finalisée » apparaissent ici">
           <input type="checkbox" checked={finalizedOnly} onChange={(e) => setFinalizedOnly(e.target.checked)} data-testid="students-finalized-only" />
           Inscriptions finalisées uniquement
@@ -621,6 +638,7 @@ export default function Students() {
                 </th>
                 <th className="py-3 px-4 overline">Apprenant</th>
                 <th className="py-3 px-4 overline">Formation(s)</th>
+                <th className="py-3 px-4 overline">Lieu</th>
                 <th className="py-3 px-4 overline">Paiement</th>
                 {showCmaColumn && <th className="py-3 px-4 overline">CMA</th>}
                 {showCpfColumn && <th className="py-3 px-4 overline">CPF</th>}
@@ -669,6 +687,7 @@ export default function Students() {
                       <span className="text-xs text-gray-300 inline-flex items-center gap-1"><GraduationCap size={12} /> Aucune</span>
                     )}
                   </td>
+                  <td className="py-3 px-4 text-xs text-gray-600">{s.lieu_ville || <span className="text-gray-300">—</span>}</td>
                   <td className="py-3 px-4">
                     {s.payment_status ? (
                       <Badge className={

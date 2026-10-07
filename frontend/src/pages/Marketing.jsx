@@ -618,6 +618,7 @@ const META_LEAD_QUALIF_COLORS = {
   pas_de_reponse: "bg-amber-100 text-amber-700 hover:bg-amber-100",
   injoignable: "bg-gray-200 text-gray-700 hover:bg-gray-200",
   a_relancer: "bg-blue-100 text-blue-700 hover:bg-blue-100",
+  a_relancer_1_an: "bg-purple-100 text-purple-700 hover:bg-purple-100",
   plus_interesse: "bg-red-100 text-red-700 hover:bg-red-100",
   // Vert franc (distinct de "interesse", vert plus clair) — pour que le
   // passage en "Inscrit" (lead converti) saute aux yeux dans le tableau.

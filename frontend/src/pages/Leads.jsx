@@ -58,6 +58,11 @@ const STATUS_LABEL = {
   interesse:     "Intéressé",
   pas_interesse: "Pas intéressé",
   a_relancer:    "À relancer",
+  // Cas spécifique récupération de points : la réglementation n'autorise
+  // qu'un stage par an, donc un lead qui vient d'en faire un ne peut pas être
+  // réinscrit avant un an — distinct de "À relancer" (délai court, qualif.
+  // commerciale classique) pour ne pas le mélanger dans les relances du jour.
+  a_relancer_1_an: "À relancer dans 1 an",
 };
 const STATUS_COLOR = {
   nouveau:       "bg-gray-100 text-gray-600",
@@ -65,6 +70,7 @@ const STATUS_COLOR = {
   interesse:     "bg-green-100 text-green-700",
   pas_interesse: "bg-red-100 text-red-700",
   a_relancer:    "bg-amber-100 text-amber-700",
+  a_relancer_1_an: "bg-purple-100 text-purple-700",
 };
 
 // ─── URLs TDL ─────────────────────────────────────────────────────────────────

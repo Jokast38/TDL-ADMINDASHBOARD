@@ -227,7 +227,7 @@ async def list_students(finalized_only: bool = True, user: dict = Depends(requir
     stage_ids = {i[0]["stage_id"] for i in inscriptions_by_student.values() if i and i[0].get("stage_id")}
     stages_by_id = {}
     if stage_ids:
-        for st in await db.stages.find({"id": {"$in": list(stage_ids)}}, {"_id": 0, "id": 1, "date_debut": 1, "date_fin": 1}).to_list(1000):
+        for st in await db.stages.find({"id": {"$in": list(stage_ids)}}, {"_id": 0, "id": 1, "date_debut": 1, "date_fin": 1, "lieu_ville": 1}).to_list(1000):
             stages_by_id[st["id"]] = st
 
     result = []
@@ -263,6 +263,7 @@ async def list_students(finalized_only: bool = True, user: dict = Depends(requir
             "contact_status": latest_insc.get("contact_status") if latest_insc else None,
             "category": latest_insc.get("category") if latest_insc else None,
             "session_month": (latest_stage.get("date_debut", "")[:7] if latest_stage and latest_stage.get("date_debut") else None),
+            "lieu_ville": ((latest_stage.get("lieu_ville") if latest_stage else None) or (latest_insc.get("center") if latest_insc else None)),
             "inscription_status": my_inscriptions[0]["status"] if my_inscriptions else None,
             "dossier_id": latest_dossier["id"] if latest_dossier else None,
             "dossier_status": latest_dossier["status"] if latest_dossier else None,
@@ -439,7 +440,7 @@ async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MG
     stage_ids = {i["stage_id"] for i in items if i.get("stage_id")}
     stages_by_id = {}
     if stage_ids:
-        stages = await db.stages.find({"id": {"$in": list(stage_ids)}}, {"_id": 0, "id": 1, "date_debut": 1}).to_list(len(stage_ids))
+        stages = await db.stages.find({"id": {"$in": list(stage_ids)}}, {"_id": 0, "id": 1, "date_debut": 1, "lieu_ville": 1}).to_list(len(stage_ids))
         stages_by_id = {s["id"]: s for s in stages}
     for i in items:
         d = by_inscription.get(i["id"])
@@ -448,6 +449,11 @@ async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MG
         i["processed_by_name"] = staff_by_id.get(i.get("processed_by"))
         stage = stages_by_id.get(i.get("stage_id"))
         i["session_month"] = (stage["date_debut"][:7] if stage and stage.get("date_debut") else None)
+        # Lieu de la formation (Épinay-sur-Seine / Creil...) — repris de la
+        # session affectée en priorité (toujours à jour), sinon du champ
+        # `center` saisi à la création (ex: import Excel VTC/Taxi) pour les
+        # inscriptions pas encore affectées à une session précise.
+        i["lieu_ville"] = (stage.get("lieu_ville") if stage else None) or i.get("center")
     return items
 
 

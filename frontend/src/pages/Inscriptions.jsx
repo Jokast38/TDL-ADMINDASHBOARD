@@ -209,6 +209,7 @@ export default function Inscriptions() {
   const [formationFilter, setFormationFilter] = useState("all");
   const [originFilter, setOriginFilter] = useState("all"); // all | website | walkin | imported
   const [monthFilter, setMonthFilter] = useState("all"); // all | "YYYY-MM" (mois de la session de formation)
+  const [lieuFilter, setLieuFilter] = useState("all"); // all | lieu_ville exact
   const [page, setPage] = useState(1);
 
   // Section "Demandes de rappel" : repliée par défaut pour laisser la place à
@@ -404,6 +405,14 @@ export default function Inscriptions() {
     return `${["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"][+mo]} ${y}`;
   };
 
+  // Lieu de la formation (Épinay-sur-Seine / Creil...) — posé côté serveur
+  // depuis la session affectée, ou le centre saisi à l'import à défaut.
+  const lieuOptions = useMemo(() => {
+    const set = new Set();
+    items.forEach((i) => { if (i.lieu_ville) set.add(i.lieu_ville); });
+    return Array.from(set).sort();
+  }, [items]);
+
   const filtered = useMemo(() => items.filter((i) => {
     const matchesQuery = (i.student_name + i.student_email + i.formation_title).toLowerCase().includes(q.toLowerCase());
     const matchesPayment =
@@ -422,10 +431,11 @@ export default function Inscriptions() {
     const matchesFormation = formationFilter === "all" ? true : i.formation_id === formationFilter;
     const matchesOrigin = originFilter === "all" ? true : getOrigin(i) === originFilter;
     const matchesMonth = monthFilter === "all" ? true : i.session_month === monthFilter;
-    return matchesQuery && matchesPayment && matchesTraitement && matchesStatus && matchesContact && matchesFormation && matchesOrigin && matchesMonth;
-  }), [items, q, paymentFilter, traitementFilter, statusFilter, contactFilter, formationFilter, originFilter, monthFilter]);
+    const matchesLieu = lieuFilter === "all" ? true : i.lieu_ville === lieuFilter;
+    return matchesQuery && matchesPayment && matchesTraitement && matchesStatus && matchesContact && matchesFormation && matchesOrigin && matchesMonth && matchesLieu;
+  }), [items, q, paymentFilter, traitementFilter, statusFilter, contactFilter, formationFilter, originFilter, monthFilter, lieuFilter]);
 
-  useEffect(() => { setPage(1); }, [q, paymentFilter, traitementFilter, statusFilter, contactFilter, formationFilter, originFilter, monthFilter]);
+  useEffect(() => { setPage(1); }, [q, paymentFilter, traitementFilter, statusFilter, contactFilter, formationFilter, originFilter, monthFilter, lieuFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -664,6 +674,13 @@ export default function Inscriptions() {
             {monthOptions.map((m) => <SelectItem key={m} value={m}>{monthLabel(m)}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={lieuFilter} onValueChange={setLieuFilter}>
+          <SelectTrigger className="w-44" data-testid="filter-lieu"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Lieu : tous</SelectItem>
+            {lieuOptions.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+          </SelectContent>
+        </Select>
       </div>
 
       {byAgent.length > 0 && (
@@ -684,6 +701,7 @@ export default function Inscriptions() {
                 <th className="py-3 px-4 overline">Étudiant</th>
                 <th className="py-3 px-4 overline">Formation</th>
                 <th className="py-3 px-4 overline">Catégorie</th>
+                <th className="py-3 px-4 overline">Lieu</th>
                 <th className="py-3 px-4 overline">Origine</th>
                 <th className="py-3 px-4 overline">Paiement</th>
                 <th className="py-3 px-4 overline">Mode de paiement</th>
@@ -714,6 +732,7 @@ export default function Inscriptions() {
                     </td>
                     <td className="py-3 px-4">{i.formation_title}</td>
                     <td className="py-3 px-4"><Badge variant="outline">{i.category}</Badge></td>
+                    <td className="py-3 px-4 text-xs text-gray-600">{i.lieu_ville || <span className="text-gray-300">—</span>}</td>
                     <td className="py-3 px-4">
                       {i.landing_url ? (
                         <a

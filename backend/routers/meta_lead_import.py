@@ -44,6 +44,9 @@ QUALIFICATION_LABELS = {
     "pas_de_reponse": "Pas de réponse",
     "injoignable": "Injoignable",
     "a_relancer": "À relancer",
+    # Cas récupération de points : un seul stage autorisé par an, donc un
+    # prospect qui vient d'en faire un ne peut être réinscrit avant un an.
+    "a_relancer_1_an": "À relancer dans 1 an",
     "plus_interesse": "Plus intéressé",
     "inscrit": "Inscrit",
 }
