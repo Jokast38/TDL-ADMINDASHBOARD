@@ -42,7 +42,6 @@ QUALIFICATION_LABELS = {
     "non_qualifie": "Prospect non qualifié",
     "interesse": "Intéressé",
     "pas_de_reponse": "Pas de réponse",
-    "injoignable": "Injoignable",
     "a_relancer": "À relancer",
     # Cas récupération de points : un seul stage autorisé par an, donc un
     # prospect qui vient d'en faire un ne peut être réinscrit avant un an.
