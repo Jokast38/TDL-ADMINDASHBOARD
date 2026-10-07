@@ -224,7 +224,7 @@ export default function Inscriptions() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [editForm, setEditForm] = useState({ student_name: "", student_phone: "", notes: "" });
+  const [editForm, setEditForm] = useState({ student_name: "", student_phone: "", notes: "", price: "" });
   const [saving, setSaving] = useState(false);
 
   const [callbacks, setCallbacks] = useState([]);
@@ -505,7 +505,7 @@ export default function Inscriptions() {
 
   const openEdit = (i) => {
     setEditItem(i);
-    setEditForm({ student_name: i.student_name || "", student_phone: i.student_phone || "", notes: i.notes || "" });
+    setEditForm({ student_name: i.student_name || "", student_phone: i.student_phone || "", notes: i.notes || "", price: i.price ?? "" });
     setEditOpen(true);
   };
 
@@ -513,7 +513,8 @@ export default function Inscriptions() {
     if (!editItem) return;
     setSaving(true);
     try {
-      await api.put(`/inscriptions/${editItem.id}`, editForm);
+      const payload = { ...editForm, price: editForm.price === "" ? undefined : +editForm.price };
+      await api.put(`/inscriptions/${editItem.id}`, payload);
       toast.success("Inscription mise à jour");
       setEditOpen(false);
       load();
@@ -983,6 +984,16 @@ export default function Inscriptions() {
             <div>
               <label className="text-sm font-medium">Téléphone</label>
               <Input value={editForm.student_phone} onChange={(e) => setEditForm({ ...editForm, student_phone: e.target.value })} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Prix (€)</label>
+              <Input
+                type="number" step="0.01" min="0"
+                value={editForm.price}
+                onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
+                placeholder={editItem?.price != null ? String(editItem.price) : "0"}
+                data-testid="edit-inscription-price"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Notes</label>

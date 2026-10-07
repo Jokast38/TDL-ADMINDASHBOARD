@@ -47,6 +47,10 @@ class InscriptionUpdate(BaseModel):
     student_name: Optional[str] = None
     student_phone: Optional[str] = None
     payment_status: Optional[str] = None
+    # Prix de cette inscription — modifiable au cas par cas depuis le dialogue
+    # d'édition (remise commerciale, tarif promo non capté à la création...),
+    # distinct du prix catalogue de la formation qui ne change jamais.
+    price: Optional[float] = None
     notes: Optional[str] = None
     # Tag de suivi commercial manuel (voir CONTACT_STATUS_LABEL côté
     # frontend) : "en_cours", "a_contacter", "sans_reponse", "finalisee".
