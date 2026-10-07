@@ -59,6 +59,7 @@ const AIAssistant = lazy(() => import("@/pages/AIAssistant"));
 const Employees = lazy(() => import("@/pages/Employees"));
 const Formateurs = lazy(() => import("@/pages/Formateurs"));
 const Activity = lazy(() => import("@/pages/Activity"));
+const EmployeeAudit = lazy(() => import("@/pages/EmployeeAudit"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Marketing = lazy(() => import("@/pages/Marketing"));
 const AdminBlog = lazy(() => import("@/pages/AdminBlog"));
@@ -269,6 +270,9 @@ function App() {
             } />
             <Route path="/admin/activite" element={
               <ProtectedRoute roles={["admin"]}><AdminLayout><Activity /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/activite/employe/:employeeId" element={
+              <ProtectedRoute roles={["admin"]}><AdminLayout><EmployeeAudit /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/settings" element={
               <ProtectedRoute roles={["admin"]}><AdminLayout><Settings /></AdminLayout></ProtectedRoute>

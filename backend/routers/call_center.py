@@ -104,6 +104,7 @@ async def log_call(payload: CallLogIn, user: dict = Depends(require_role(*ROLES_
     await db.commercial_calls.insert_one(call)
     await log_action(user, "appel", "lead", payload.lead_id, {
         "outcome": payload.outcome, "lead_name": lead.get("name"), "objection_reason": payload.objection_reason,
+        "note": payload.note,
     })
 
     lead_update = {

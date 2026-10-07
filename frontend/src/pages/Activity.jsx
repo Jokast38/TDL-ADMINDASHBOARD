@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +87,7 @@ function bucketDossierStatus(byStatus) {
 }
 
 export default function Activity() {
+  const navigate = useNavigate();
   const [items, setItems] = useState(null);
   const [adjustTarget, setAdjustTarget] = useState(null);
   const [adjustValue, setAdjustValue] = useState(0);
@@ -377,7 +379,13 @@ export default function Activity() {
                   // une activité continue depuis first_seen) : on affiche la
                   // valeur reçue, rafraîchie à chaque rechargement de la page.
                   return (
-                    <tr key={i.id} className="border-b border-gray-50 hover:bg-gray-50" data-testid={`activity-row-${i.id}`}>
+                    <tr
+                      key={i.id}
+                      className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
+                      onClick={(e) => { if (!e.target.closest("button")) navigate(`/admin/activite/employe/${i.id}`, { state: { name: i.name, role: i.role } }); }}
+                      title="Voir le bilan détaillé de cet employé"
+                      data-testid={`activity-row-${i.id}`}
+                    >
                       <td className="py-2.5 px-5">
                         <div className="flex items-center gap-2.5">
                           <Avatar className="h-8 w-8">
