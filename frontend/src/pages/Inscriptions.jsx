@@ -34,7 +34,7 @@ const PAYMENT_PAID_LIKE = ["paid", "cpf_valide"];
 // suivi dans sa propre colonne) donc volontairement absent d'ici.
 const PAYMENT_METHOD_LABEL = {
   carte: "Carte bancaire", especes: "Espèces", virement: "Virement",
-  cheque: "Chèque", cpf: "CPF", klarna: "Klarna",
+  cheque: "Chèque", cpf: "CPF", klarna: "Klarna", autre: "Autre",
 };
 
 // Options CMA — la "CMA" ici signifie juste que le compte CMA du candidat a

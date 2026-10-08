@@ -25,6 +25,7 @@ const ACTION_META = {
   rdv_appel_cree: { label: "Rendez-vous créé", icon: Clock, color: "#c2410c" },
   appel_attribue: { label: "Appel attribué", icon: PhoneCall, color: "#0e7490" },
   inscription_creee: { label: "Inscription créée", icon: UserPlus, color: "#0B7238" },
+  lead_note: { label: "Note ajoutée", icon: NotePencil, color: "#6b7280" },
 };
 
 function actionMeta(action) {

@@ -17,40 +17,12 @@ import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import {
   Plus, UploadSimple, FileXls, FileCode, MagnifyingGlass, Trash, Phone,
   EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree, PencilSimple, GraduationCap,
-  EnvelopeOpen, Eye, Megaphone, ArrowsClockwise, CalendarPlus,
+  EnvelopeOpen, Eye, Megaphone, ArrowsClockwise, CalendarPlus, NotePencil,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
+import { canonicalizeInterest } from "@/lib/leadInterest";
 
-// ─── Regroupement des intérêts par mots-clés ─────────────────────────────────
-// Le texte libre saisi/importé varie beaucoup (casse, mots en plus, accents…) :
-// deux leads "VTC" et "Formation VTC complète" doivent finir dans le même
-// groupe de filtre. On classe donc par mot-clé plutôt que par égalité stricte,
-// et tout ce qui ne correspond à aucun mot-clé connu tombe dans "Inconnus".
-const stripAccents = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-const INTEREST_GROUPS = [
-  { label: "Passerelle VTC", test: (s) => s.includes("passerelle") && s.includes("vtc") },
-  { label: "Passerelle Taxi", test: (s) => s.includes("passerelle") && s.includes("taxi") },
-  { label: "Passerelle", test: (s) => s.includes("passerelle") },
-  { label: "Mobilité Taxi", test: (s) => s.includes("mobilit") && s.includes("taxi") },
-  { label: "Mobilité", test: (s) => s.includes("mobilit") },
-  { label: "Récupération points de permis", test: (s) => (s.includes("recuperation") || s.includes("rattrapage")) && s.includes("permis") },
-  { label: "Permis B", test: (s) => s.includes("permis b") },
-  { label: "VTC", test: (s) => s.includes("vtc") },
-  { label: "Taxi", test: (s) => s.includes("taxi") },
-  { label: "CACES", test: (s) => s.includes("caces") },
-  { label: "SSIAP", test: (s) => s.includes("ssiap") },
-  { label: "CRM", test: (s) => s.includes("crm") },
-  { label: "Stage", test: (s) => s.includes("stage") },
-];
-
-const canonicalizeInterest = (raw) => {
-  if (!raw || !raw.trim()) return "Inconnus";
-  const s = stripAccents(raw.trim().toLowerCase());
-  const group = INTEREST_GROUPS.find((g) => g.test(s));
-  return group ? group.label : "Inconnus";
-};
 
 // ─── Statuts ──────────────────────────────────────────────────────────────────
 const STATUS_LABEL = {
@@ -549,6 +521,15 @@ export default function Leads() {
   // Intérêts distincts sur TOUTE la base (indépendant de la page affichée),
   // via un endpoint léger dédié plutôt que de déduire du seul lot chargé.
   const [allInterests, setAllInterests] = useState([]);
+  const [villeOptions, setVilleOptions] = useState([]);
+  const [villeFilter, setVilleFilter] = useState("all");
+
+  // Rappel visuel des leads "à relancer" — popup animée à l'ouverture de la
+  // page (une fois par session, pas à chaque re-render) plutôt qu'une
+  // relance automatique envoyée toute seule (demande explicite : juste un
+  // rappel visuel, pas d'automatisation d'envoi).
+  const [relanceDueCount, setRelanceDueCount] = useState(0);
+  const [showRelancePopup, setShowRelancePopup] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -560,6 +541,7 @@ export default function Leads() {
       if (callOnlyFilter) params.has_email = false;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
+      if (villeFilter !== "all") params.ville = villeFilter;
       if (interestFilter !== "all") {
         // Le regroupement (VTC, Taxi, ...) est calculé côté client via
         // canonicalizeInterest() ; on envoie au backend les valeurs brutes
@@ -578,13 +560,13 @@ export default function Leads() {
     }
   };
 
-  useEffect(() => { load(); }, [page, statusFilter, contactedFilter, callOnlyFilter, interestFilter, dateFrom, dateTo]);
+  useEffect(() => { load(); }, [page, statusFilter, contactedFilter, callOnlyFilter, interestFilter, villeFilter, dateFrom, dateTo]);
   // Un changement de filtre (statut/contacté/à appeler/intérêt/date) doit revenir à la page 1.
   const isFirstFilterRun = useRef(true);
   useEffect(() => {
     if (isFirstFilterRun.current) { isFirstFilterRun.current = false; return; }
     setPage(1);
-  }, [statusFilter, contactedFilter, callOnlyFilter, interestFilter, dateFrom, dateTo]);
+  }, [statusFilter, contactedFilter, callOnlyFilter, interestFilter, villeFilter, dateFrom, dateTo]);
   // Recherche texte : debounce, et retour à la page 1 (sinon "page 3" pourrait
   // se retrouver vide après une nouvelle recherche plus étroite).
   useEffect(() => {
@@ -605,6 +587,22 @@ export default function Leads() {
   }, [q]);
   useEffect(() => {
     api.get("/leads/interests").then(({ data }) => setAllInterests(data)).catch(() => {});
+    api.get("/leads/villes").then(({ data }) => setVilleOptions(data)).catch(() => {});
+  }, []);
+  useEffect(() => {
+    api.get("/leads", { params: { status: "a_relancer", page: 1, page_size: 1 } })
+      .then(({ data }) => {
+        setRelanceDueCount(data.total || 0);
+        // Une seule popup par jour/session (sessionStorage) — sinon elle
+        // réapparaîtrait à chaque navigation vers la page, ce qui userait
+        // vite l'attention plutôt que de la capter.
+        const alreadyShownToday = sessionStorage.getItem("leads_relance_popup_shown");
+        if ((data.total || 0) > 0 && !alreadyShownToday) {
+          setShowRelancePopup(true);
+          sessionStorage.setItem("leads_relance_popup_shown", "1");
+        }
+      })
+      .catch(() => {});
   }, []);
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } })
@@ -1088,6 +1086,44 @@ export default function Leads() {
 
   return (
     <div className="space-y-6" data-testid="leads-page">
+
+      {/* Rappel visuel — popup animée signalant des leads à relancer, à
+          l'ouverture de la page (une fois/session). Purement informatif :
+          aucune relance n'est envoyée automatiquement, c'est juste un
+          rappel pour inciter l'agent à aller les traiter (onglet "À
+          relancer" juste au-dessus du tableau). */}
+      {showRelancePopup && (
+        <div
+          className="fixed bottom-6 right-6 z-50 w-80 bg-white border border-amber-300 shadow-xl rounded-lg p-4 animate-in slide-in-from-bottom-5 fade-in duration-300"
+          data-testid="relance-popup"
+        >
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0 animate-bounce">
+              <Phone size={16} className="text-amber-600" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-sm">
+                {relanceDueCount} lead{relanceDueCount > 1 ? "s" : ""} à relancer
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Ces prospects attendent un nouveau contact — un petit coup de fil peut faire la différence.
+              </p>
+              <div className="flex gap-2 mt-3">
+                <Button
+                  size="sm"
+                  className="h-7 text-xs bg-amber-500 hover:bg-amber-600 text-white"
+                  onClick={() => { setStatusFilter("a_relancer"); setShowRelancePopup(false); }}
+                >
+                  Voir la liste
+                </Button>
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowRelancePopup(false)}>
+                  Plus tard
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── En-tête ── */}
       <div className="flex items-end justify-between flex-wrap gap-4">
@@ -1613,6 +1649,14 @@ export default function Leads() {
           </SelectContent>
         </Select>
 
+        <Select value={villeFilter} onValueChange={setVilleFilter}>
+          <SelectTrigger className="w-44" data-testid="filter-ville"><SelectValue placeholder="Toutes les villes" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les villes</SelectItem>
+            {villeOptions.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
         <button
           onClick={() => setCallOnlyFilter((v) => !v)}
           className={`text-xs px-3 py-2 rounded-md border inline-flex items-center gap-1 transition-colors
@@ -1798,6 +1842,36 @@ export default function Leads() {
         )}
       </div>
 
+      {/* Onglets par formation d'intérêt — raccourci visuel au-dessus du
+          tableau, en plus du menu déroulant déjà présent dans les filtres
+          (les deux pilotent le même état `interestFilter`). */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1" data-testid="leads-interest-tabs">
+        <button
+          onClick={() => setStatusFilter(statusFilter === "a_relancer" ? "all" : "a_relancer")}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors inline-flex items-center gap-1.5 ${statusFilter === "a_relancer" ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"}`}
+          data-testid="leads-tab-relance"
+        >
+          <Phone size={12} /> À relancer{relanceDueCount > 0 ? ` (${relanceDueCount})` : ""}
+        </button>
+        <div className="w-px h-5 bg-gray-200 mx-0.5" />
+        <button
+          onClick={() => setInterestFilter("all")}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${interestFilter === "all" ? "bg-[#0a0a0a] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+        >
+          Toutes formations
+        </button>
+        {uniqueInterests.map((i) => (
+          <button
+            key={i}
+            onClick={() => setInterestFilter(i)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${interestFilter === i ? "bg-[#0a0a0a] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            data-testid={`leads-interest-tab-${i}`}
+          >
+            {i}
+          </button>
+        ))}
+      </div>
+
       {/* ── Tableau ── */}
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
         <div className="overflow-x-auto">
@@ -1814,6 +1888,7 @@ export default function Leads() {
                 <th className="py-3 px-4 overline">Intérêt</th>
                 <th className="py-3 px-4 overline">Tags</th>
                 <th className="py-3 px-4 overline">Statut</th>
+                <th className="py-3 px-4 overline">Suivi</th>
                 <th className="py-3 px-4 overline">Date</th>
                 <th className="py-3 px-4 overline text-right">Actions</th>
               </tr>
@@ -1865,6 +1940,25 @@ export default function Leads() {
                         {Object.entries(STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                  </td>
+                  <td className="py-3 px-4 text-xs">
+                    <div className="flex flex-col gap-1">
+                      <span
+                        className="inline-flex items-center gap-1 text-gray-600 w-fit"
+                        title={l.last_contacted_at ? `Dernière relance : ${formatDateTimeFR(l.last_contacted_at)}` : "Jamais relancé"}
+                      >
+                        <Phone size={11} className={l.relance_count ? "text-[#0052CC]" : "text-gray-300"} />
+                        {l.relance_count || 0} relance{l.relance_count > 1 ? "s" : ""}
+                      </span>
+                      {l.notes && (
+                        <span
+                          className="inline-flex items-center gap-1 text-gray-400 truncate max-w-[140px]"
+                          title={`${l.notes}${l.notes_updated_at ? ` — modifié le ${formatDateTimeFR(l.notes_updated_at)}${l.notes_updated_by_name ? ` par ${l.notes_updated_by_name}` : ""}` : ""}`}
+                        >
+                          <NotePencil size={11} /> {l.notes_updated_at ? formatDateTimeFR(l.notes_updated_at) : "note"}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="py-3 px-4 text-xs text-gray-500 whitespace-nowrap">
                     {l.created_at ? formatDateFR(l.created_at) : "—"}

@@ -219,6 +219,13 @@ async def list_meta_leads(
             {"phone": {"$regex": search, "$options": "i"}},
         ]
     docs = await db.meta_lead_imports.find(query, {"_id": 0}).sort("created_time", -1).to_list(5000)
+    for d in docs:
+        # Même logique que routers/leads.py::list_leads — un lead déjà
+        # qualifié avant la mise en place du compteur a forcément été traité
+        # au moins une fois, "0 relance" ne doit s'afficher que pour "à
+        # contacter" (jamais touché).
+        if not d.get("relance_count") and d.get("qualification") not in (None, "", "a_contacter"):
+            d["relance_count"] = 1
     accounts = sorted([a for a in await db.meta_lead_imports.distinct("meta_account") if a])
     campaigns = sorted([c for c in await db.meta_lead_imports.distinct("campaign_name") if c])
     return {
@@ -247,8 +254,35 @@ async def update_meta_lead(lead_id: str, payload: MetaLeadUpdate, user: dict = D
         updates["qualified_by"] = user["id"]
         updates["qualified_by_name"] = user.get("name", "")
         updates["qualified_at"] = now_iso()
+    # Horodatage de la note (même logique que routers/leads.py::update_lead) —
+    # savoir quand une note a été écrite, et par qui, compte autant que son
+    # contenu pour un bon suivi commercial.
+    notes_changed = "notes" in updates and updates["notes"] != (doc.get("notes") or "")
+    if notes_changed:
+        updates["notes_updated_at"] = now_iso()
+        updates["notes_updated_by"] = user["id"]
+        updates["notes_updated_by_name"] = user.get("name", "")
     updates["updated_at"] = now_iso()
-    await db.meta_lead_imports.update_one({"id": lead_id}, {"$set": updates})
+    # Nombre de fois où ce prospect a été recontacté/retraité — pas de journal
+    # d'appels dédié pour les leads Meta (contrairement à db.commercial_calls
+    # pour Prospects/Cosmosia), donc chaque changement de qualification ou
+    # nouvelle note sert ici de proxy fiable à un suivi réel.
+    inc = {}
+    if qualification_changed or notes_changed:
+        inc["relance_count"] = 1
+    mongo_update = {"$set": updates}
+    if inc:
+        mongo_update["$inc"] = inc
+    if notes_changed and updates["notes"]:
+        # Historique des notes — voir routers/leads.py::update_lead pour la
+        # même logique côté Prospects/Cosmosia.
+        mongo_update["$push"] = {"notes_history": {
+            "$each": [{"text": updates["notes"], "at": updates["notes_updated_at"], "by_name": user.get("name", "")}],
+            "$slice": -20,
+        }}
+    await db.meta_lead_imports.update_one({"id": lead_id}, mongo_update)
+    if notes_changed:
+        await log_action(user, "lead_note", "meta_lead", lead_id, {"name": doc.get("name"), "note": updates["notes"]})
     if updates.get("qualification") == NO_RESPONSE_QUALIFICATION and doc.get("qualification") != NO_RESPONSE_QUALIFICATION:
         await send_no_response_followup(doc.get("name"), doc.get("email"))
     if qualification_changed:

@@ -27,6 +27,7 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
+import { canonicalizeInterest } from "@/lib/leadInterest";
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler,
 } from "chart.js";
@@ -640,29 +641,53 @@ function CosmosiaTab() {
   const [search, setSearch] = useState("");
   const [campaignFilter, setCampaignFilter] = useState("");
   const [campaignOptions, setCampaignOptions] = useState([]);
+  const [villeFilter, setVilleFilter] = useState("");
+  const [villeOptions, setVilleOptions] = useState([]);
+  const [interestFilter, setInterestFilter] = useState("all");
+  const [allInterests, setAllInterests] = useState([]);
   const [qualifOptions, setQualifOptions] = useState({});
+  const [qualifFilter, setQualifFilter] = useState("");
   const [page, setPage] = useState(1);
   const [importing, setImporting] = useState(false);
   const [bookTarget, setBookTarget] = useState(null);
+  const [relanceDueCount, setRelanceDueCount] = useState(0);
 
   const load = () => {
     setLoading(true);
     const params = { source: "cosmosia", page, page_size: COSMOSIA_PAGE_SIZE };
     if (search.trim()) params.q = search.trim();
     if (campaignFilter) params.campaign = campaignFilter;
+    if (villeFilter) params.ville = villeFilter;
+    if (qualifFilter) params.qualification = qualifFilter;
+    if (interestFilter !== "all") {
+      const rawValues = allInterests.filter((raw) => canonicalizeInterest(raw) === interestFilter);
+      params.interest_in = (rawValues.length ? rawValues : [interestFilter]).join("|");
+    }
     api.get("/leads", { params })
       .then(({ data }) => { setItems(data.items); setTotal(data.total); })
       .catch(() => toast.error("Erreur de chargement des leads Cosmosia"))
       .finally(() => setLoading(false));
   };
-  useEffect(load, [search, campaignFilter, page]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setPage(1); }, [search, campaignFilter]);
+  useEffect(load, [search, campaignFilter, villeFilter, qualifFilter, interestFilter, page]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(1); }, [search, campaignFilter, villeFilter, qualifFilter, interestFilter]);
   useEffect(() => {
     api.get("/leads/campaigns", { params: { source: "cosmosia" } }).then(({ data }) => setCampaignOptions(data)).catch(() => {});
+    api.get("/leads/villes").then(({ data }) => setVilleOptions(data)).catch(() => {});
+    api.get("/leads/interests").then(({ data }) => setAllInterests(data)).catch(() => {});
     // Mêmes libellés de qualification que l'onglet Meta, pour rester cohérent
     // entre les deux tableaux de prospects publicitaires.
     api.get("/meta-lead-import/qualification-options").then(({ data }) => setQualifOptions(data)).catch(() => {});
+    // Rappel visuel (popup) — une fois par session, voir Leads.jsx pour la
+    // même logique sur la page Prospects.
+    api.get("/leads", { params: { source: "cosmosia", qualification: "a_relancer", page: 1, page_size: 1 } })
+      .then(({ data }) => setRelanceDueCount(data.total || 0)).catch(() => {});
   }, []);
+
+  const uniqueInterests = useMemo(() => {
+    const s = new Set(allInterests.map(canonicalizeInterest));
+    const sorted = Array.from(s).filter((v) => v !== "Inconnus").sort();
+    return s.has("Inconnus") ? [...sorted, "Inconnus"] : sorted;
+  }, [allInterests]);
 
   const totalPages = Math.max(1, Math.ceil(total / COSMOSIA_PAGE_SIZE));
 
@@ -715,6 +740,22 @@ function CosmosiaTab() {
 
   return (
     <div className="space-y-4 mt-2">
+      {relanceDueCount > 0 && (
+        <div
+          className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 animate-in slide-in-from-top-3 fade-in duration-300"
+          data-testid="cosmosia-relance-banner"
+        >
+          <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0 animate-bounce">
+            <Phone size={14} className="text-amber-600" />
+          </div>
+          <p className="text-sm flex-1">
+            <b>{relanceDueCount}</b> prospect{relanceDueCount > 1 ? "s" : ""} Cosmosia à relancer.
+          </p>
+          <Button size="sm" className="h-7 text-xs bg-amber-500 hover:bg-amber-600 text-white" onClick={() => setQualifFilter("a_relancer")}>
+            Voir la liste
+          </Button>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2">
@@ -747,6 +788,41 @@ function CosmosiaTab() {
             {campaignOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={villeFilter || "all"} onValueChange={(v) => setVilleFilter(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-44" data-testid="cosmosia-ville-filter"><SelectValue placeholder="Toutes les villes" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les villes</SelectItem>
+            {villeOptions.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Onglets par formation d'intérêt — même logique que la page Prospects
+          (Leads.jsx), au-dessus du tableau. */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1" data-testid="cosmosia-interest-tabs">
+        <button
+          onClick={() => setQualifFilter(qualifFilter === "a_relancer" ? "" : "a_relancer")}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors inline-flex items-center gap-1.5 ${qualifFilter === "a_relancer" ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"}`}
+          data-testid="cosmosia-tab-relance"
+        >
+          <Phone size={12} /> À relancer{relanceDueCount > 0 ? ` (${relanceDueCount})` : ""}
+        </button>
+        <div className="w-px h-5 bg-gray-200 mx-0.5" />
+        <button
+          onClick={() => setInterestFilter("all")}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${interestFilter === "all" ? "bg-[#0a0a0a] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+        >
+          Toutes formations
+        </button>
+        {uniqueInterests.map((i) => (
+          <button
+            key={i}
+            onClick={() => setInterestFilter(i)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${interestFilter === i ? "bg-[#0a0a0a] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+          >
+            {i}
+          </button>
+        ))}
       </div>
 
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
@@ -759,6 +835,7 @@ function CosmosiaTab() {
                 <th className="py-2.5 px-4 overline">Intérêt</th>
                 <th className="py-2.5 px-4 overline">Qualification</th>
                 <th className="py-2.5 px-4 overline">Traité par</th>
+                <th className="py-2.5 px-4 overline">Suivi</th>
                 <th className="py-2.5 px-4 overline">Notes</th>
                 <th className="py-2.5 px-4 overline">Importé le</th>
                 <th className="py-2.5 px-4 overline text-right">Rendez-vous</th>
@@ -766,7 +843,7 @@ function CosmosiaTab() {
             </thead>
             <tbody>
               {!items.length && (
-                <tr><td colSpan="8" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="9" className="py-10 text-center text-gray-400">
                   {total ? "Aucun lead pour ce filtre." : "Aucun lead Cosmosia importé — utilisez le bouton ci-dessus."}
                 </td></tr>
               )}
@@ -790,6 +867,15 @@ function CosmosiaTab() {
                     </Select>
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-600">{l.qualified_by_name || <span className="text-gray-300">—</span>}</td>
+                  <td className="py-2.5 px-4 text-xs">
+                    <span
+                      className="inline-flex items-center gap-1 text-gray-600"
+                      title={l.last_contacted_at ? `Dernière relance : ${formatDateTimeFR(l.last_contacted_at)}` : "Jamais relancé"}
+                    >
+                      <Phone size={11} className={l.relance_count ? "text-[#0052CC]" : "text-gray-300"} />
+                      {l.relance_count || 0}
+                    </span>
+                  </td>
                   <td className="py-2.5 px-4 max-w-[220px]">
                     <MetaLeadNotesCell lead={l} onSave={updateNotes} />
                   </td>
@@ -849,6 +935,12 @@ function MetaEventsTab() {
   const [pendingImportFile, setPendingImportFile] = useState(null);
   const [enrollFor, setEnrollFor] = useState(null);
   const [bookTarget, setBookTarget] = useState(null);
+  const [relanceDueCount, setRelanceDueCount] = useState(0);
+
+  useEffect(() => {
+    api.get("/meta-lead-import", { params: { qualification: "a_relancer" } })
+      .then(({ data }) => setRelanceDueCount((data.items || []).length)).catch(() => {});
+  }, []);
 
   const load = () => {
     setLoading(true);
@@ -870,8 +962,35 @@ function MetaEventsTab() {
   useEffect(load, [search, qualifFilter, accountFilter, campaignFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(1); }, [search, qualifFilter, accountFilter, campaignFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(items.length / META_LEADS_PAGE_SIZE));
-  const pagedItems = items.slice((page - 1) * META_LEADS_PAGE_SIZE, page * META_LEADS_PAGE_SIZE);
+  // Meta Lead Ads ne fournit ni champ "intérêt" structuré ni champ ville —
+  // on les déduit au mieux du nom du formulaire/de la campagne (qui mentionne
+  // généralement la formation et parfois la ville), même logique de
+  // regroupement que Prospects/Cosmosia (canonicalizeInterest).
+  const metaVille = (l) => {
+    const text = `${l.form_name || ""} ${l.campaign_name || ""}`.toUpperCase();
+    if (text.includes("EPINAY")) return "Épinay-sur-Seine";
+    if (text.includes("CREIL")) return "Creil";
+    return null;
+  };
+  const [interestFilter, setInterestFilter] = useState("all");
+  const [villeFilter, setVilleFilter] = useState("all");
+  const uniqueInterests = useMemo(() => {
+    const s = new Set(items.map((l) => canonicalizeInterest(l.form_name || l.campaign_name)));
+    const sorted = Array.from(s).filter((v) => v !== "Inconnus").sort();
+    return s.has("Inconnus") ? [...sorted, "Inconnus"] : sorted;
+  }, [items]);
+  const uniqueVilles = useMemo(() => {
+    const s = new Set(items.map(metaVille).filter(Boolean));
+    return Array.from(s).sort();
+  }, [items]);
+  const filteredItems = useMemo(() => items.filter((l) =>
+    (interestFilter === "all" || canonicalizeInterest(l.form_name || l.campaign_name) === interestFilter) &&
+    (villeFilter === "all" || metaVille(l) === villeFilter)
+  ), [items, interestFilter, villeFilter]);
+  useEffect(() => { setPage(1); }, [interestFilter, villeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / META_LEADS_PAGE_SIZE));
+  const pagedItems = filteredItems.slice((page - 1) * META_LEADS_PAGE_SIZE, page * META_LEADS_PAGE_SIZE);
 
   const pickImportFile = (e) => {
     const file = e.target.files?.[0];
@@ -936,6 +1055,22 @@ function MetaEventsTab() {
 
   return (
     <div className="space-y-4 mt-2">
+      {relanceDueCount > 0 && (
+        <div
+          className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 animate-in slide-in-from-top-3 fade-in duration-300"
+          data-testid="meta-leads-relance-banner"
+        >
+          <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0 animate-bounce">
+            <Phone size={14} className="text-amber-600" />
+          </div>
+          <p className="text-sm flex-1">
+            <b>{relanceDueCount}</b> prospect{relanceDueCount > 1 ? "s" : ""} Meta à relancer.
+          </p>
+          <Button size="sm" className="h-7 text-xs bg-amber-500 hover:bg-amber-600 text-white" onClick={() => setQualifFilter("a_relancer")}>
+            Voir la liste
+          </Button>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2">
@@ -1002,6 +1137,33 @@ function MetaEventsTab() {
             {campaignOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={villeFilter} onValueChange={setVilleFilter}>
+          <SelectTrigger className="w-44" data-testid="meta-leads-ville-filter"><SelectValue placeholder="Toutes les villes" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les villes</SelectItem>
+            {uniqueVilles.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Onglets par formation — déduits du nom du formulaire/de la campagne
+          (pas de champ "intérêt" structuré côté Meta Lead Ads). */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1" data-testid="meta-leads-interest-tabs">
+        <button
+          onClick={() => setInterestFilter("all")}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${interestFilter === "all" ? "bg-[#0a0a0a] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+        >
+          Toutes formations
+        </button>
+        {uniqueInterests.map((i) => (
+          <button
+            key={i}
+            onClick={() => setInterestFilter(i)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors ${interestFilter === i ? "bg-[#0a0a0a] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+          >
+            {i}
+          </button>
+        ))}
       </div>
 
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
@@ -1015,13 +1177,14 @@ function MetaEventsTab() {
                 <th className="py-2.5 px-4 overline">Inscrit le</th>
                 <th className="py-2.5 px-4 overline">Qualification</th>
                 <th className="py-2.5 px-4 overline">Traité par</th>
+                <th className="py-2.5 px-4 overline">Suivi</th>
                 <th className="py-2.5 px-4 overline">Notes</th>
                 <th className="py-2.5 px-4 overline text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {!pagedItems.length && (
-                <tr><td colSpan="8" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="9" className="py-10 text-center text-gray-400">
                   {items.length ? "Aucun lead pour ce filtre." : "Aucun lead — importez un export CSV pour commencer."}
                 </td></tr>
               )}
@@ -1051,6 +1214,15 @@ function MetaEventsTab() {
                     </Select>
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-600">{l.qualified_by_name || <span className="text-gray-300">—</span>}</td>
+                  <td className="py-2.5 px-4 text-xs">
+                    <span
+                      className="inline-flex items-center gap-1 text-gray-600"
+                      title={l.qualified_at ? `Dernière mise à jour : ${formatDateTimeFR(l.qualified_at)}` : "Jamais retraité"}
+                    >
+                      <Phone size={11} className={l.relance_count ? "text-[#0052CC]" : "text-gray-300"} />
+                      {l.relance_count || 0}
+                    </span>
+                  </td>
                   <td className="py-2.5 px-4 max-w-[220px]">
                     <MetaLeadNotesCell lead={l} onSave={updateNotes} />
                   </td>
@@ -1082,7 +1254,7 @@ function MetaEventsTab() {
 
       {items.length > 0 && (
         <div className="flex items-center justify-between text-sm text-gray-500">
-          <p>{(page - 1) * META_LEADS_PAGE_SIZE + 1}–{Math.min(page * META_LEADS_PAGE_SIZE, items.length)} sur {items.length}</p>
+          <p>{(page - 1) * META_LEADS_PAGE_SIZE + 1}–{Math.min(page * META_LEADS_PAGE_SIZE, filteredItems.length)} sur {filteredItems.length}</p>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} data-testid="meta-leads-prev-page">Précédent</Button>
             <span className="text-xs">Page {page} / {totalPages}</span>
@@ -1164,13 +1336,30 @@ function MetaLeadNotesCell({ lead, onSave }) {
             </UiTooltipTrigger>
             <UiTooltipContent side="top" className="max-w-xs whitespace-pre-wrap text-left">
               {lead.notes}
+              {lead.notes_updated_at && (
+                <p className="text-[10px] text-gray-300 mt-1 border-t border-gray-700 pt-1">
+                  Modifié le {formatDateTimeFR(lead.notes_updated_at)}{lead.notes_updated_by_name ? ` par ${lead.notes_updated_by_name}` : ""}
+                </p>
+              )}
             </UiTooltipContent>
           </UiTooltip>
         ) : (
           <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         )}
         <PopoverContent className="w-80" align="start">
-          <p className="text-xs font-medium text-gray-600 mb-2">Note sur {lead.name || lead.email || "ce prospect"}</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-gray-600">Note sur {lead.name || lead.email || "ce prospect"}</p>
+            {hasNotes && (
+              <button
+                type="button"
+                onClick={() => setDraft("")}
+                className="text-[11px] text-[#0052CC] hover:underline flex items-center gap-1"
+                data-testid={`meta-lead-notes-new-${lead.id}`}
+              >
+                + Nouvelle note
+              </button>
+            )}
+          </div>
           <Textarea
             rows={4}
             value={draft}
@@ -1184,6 +1373,19 @@ function MetaLeadNotesCell({ lead, onSave }) {
               {saving ? "..." : "Enregistrer"}
             </Button>
           </div>
+          {(lead.notes_history || []).length > 0 && (
+            <div className="mt-3 pt-2 border-t border-gray-100 max-h-40 overflow-y-auto space-y-2">
+              <p className="text-[10px] font-medium text-gray-400 uppercase">Historique</p>
+              {[...lead.notes_history].reverse().map((h, idx) => (
+                <div key={idx} className="text-xs bg-gray-50 rounded px-2 py-1.5">
+                  <p className="whitespace-pre-wrap">{h.text}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    {formatDateTimeFR(h.at)}{h.by_name ? ` — ${h.by_name}` : ""}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </PopoverContent>
       </Popover>
     </UiTooltipProvider>

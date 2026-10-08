@@ -196,6 +196,25 @@ def _detect_tdl_planning_columns(headers: list) -> Optional[dict]:
     }
 
 
+# Normalisation de la ville de centre — mêmes valeurs/orthographe que
+# CENTRE_VILLE dans routers/vtc_import.py, pour filtrer de façon cohérente
+# sur toute l'app peu importe la source d'import.
+_CENTRE_VILLE = {
+    "EPINAY-SUR-SEINE": "Épinay-sur-Seine", "EPINAY": "Épinay-sur-Seine",
+    "CREIL": "Creil",
+}
+
+
+def _normalize_centre_ville(raw: str) -> Optional[str]:
+    if not raw:
+        return None
+    key = raw.strip().upper()
+    for k, v in _CENTRE_VILLE.items():
+        if k in key:
+            return v
+    return raw.strip() or None
+
+
 def _normalize_lead_tdl(row: tuple, col_map: dict, source: str) -> Optional[dict]:
     def get(idx) -> str:
         if idx >= len(row) or row[idx] is None:
@@ -210,12 +229,13 @@ def _normalize_lead_tdl(row: tuple, col_map: dict, source: str) -> Optional[dict
     phone = _clean_phone(row[col_map["phone"]] if col_map["phone"] < len(row) else None)
     interest = _normalize_interest(get(col_map["interet"]))
     notes = get(col_map["commentaire"])
+    ville = _normalize_centre_ville(get(col_map["centre"]))
     if not name and not email and not phone:
         return None
     tags = ["a_appeler"] if phone and not email else []
     return {
         "id": str(uuid.uuid4()), "name": name or email or phone or "Lead sans nom",
-        "email": email, "phone": phone, "interest": interest, "notes": notes,
+        "email": email, "phone": phone, "interest": interest, "notes": notes, "ville": ville,
         "tags": tags, "contacted": False, "status": "nouveau",
         "source": source, "created_at": now_iso(), "updated_at": now_iso(),
     }
@@ -451,6 +471,8 @@ async def list_leads(
     date_to: Optional[str] = None,
     source: Optional[str] = None,
     campaign: Optional[str] = None,
+    ville: Optional[str] = None,
+    qualification: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
     user: dict = Depends(require_role(*ROLES_LEADS))
@@ -463,6 +485,8 @@ async def list_leads(
     if status: query["status"] = status
     if source: query["source"] = source
     if campaign: query["campaign"] = campaign
+    if ville: query["ville"] = ville
+    if qualification: query["qualification"] = qualification
     if contacted is not None: query["contacted"] = contacted
     if has_email is not None:
         query["email"] = {"$ne": None} if has_email else None
@@ -503,7 +527,7 @@ async def list_leads(
             {"$or": [{"category": {"$in": assigned}}, {"category": None}, {"category": {"$exists": False}}]}
         ]
 
-    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, source, campaign, page, page_size,
+    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, source, campaign, ville, qualification, page, page_size,
                  tuple(sorted(assigned)) if scoped else None)
     cached = _leads_cache_get(cache_key)
     if cached is not None:
@@ -515,6 +539,32 @@ async def list_leads(
         .skip((page - 1) * page_size) \
         .limit(page_size) \
         .to_list(page_size)
+
+    # Nombre de fois où le lead a réellement été relancé — deux sources
+    # distinctes et cumulées : les appels formellement loggés (POST /calls,
+    # un document par appel dans db.commercial_calls) + le compteur stocké
+    # `relance_count` (incrémenté sur chaque nouvelle note ou changement de
+    # qualification/contact, voir update_lead — une nouvelle note est aussi
+    # une tentative de contact réelle, pas seulement un appel).
+    lead_ids = [i["id"] for i in items]
+    counts_by_id = {}
+    if lead_ids:
+        counts = await db.commercial_calls.aggregate([
+            {"$match": {"lead_id": {"$in": lead_ids}}},
+            {"$group": {"_id": "$lead_id", "count": {"$sum": 1}}},
+        ]).to_list(len(lead_ids))
+        counts_by_id = {c["_id"]: c["count"] for c in counts}
+    for i in items:
+        count = counts_by_id.get(i["id"], 0) + (i.get("relance_count") or 0)
+        # Un lead déjà qualifié/contacté avant la mise en place de ce suivi
+        # (ou par un canal sans appel/note loggé) a forcément été touché au
+        # moins une fois — n'afficher "0 relance" que pour un lead vraiment
+        # jamais traité ("à contacter", encore intact).
+        already_handled = bool(i.get("contacted")) or i.get("status") not in (None, "nouveau") or \
+            i.get("qualification") not in (None, "", "a_contacter")
+        if count == 0 and already_handled:
+            count = 1
+        i["relance_count"] = count
 
     result = {"items": items, "total": total, "page": page, "page_size": page_size, "pages": max((total + page_size - 1) // page_size, 1)}
     _leads_cache_set(cache_key, result)
@@ -530,6 +580,21 @@ async def list_distinct_interests(user: dict = Depends(require_role(*ROLES_LEADS
     if cached is not None:
         return cached
     values = await db.leads.distinct("interest", {"interest": {"$nin": [None, ""]}})
+    _leads_cache_set(cache_key, values)
+    return values
+
+
+@router.get("/villes")
+async def list_distinct_villes(user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Villes de centre distinctes (Épinay-sur-Seine, Creil...) — pour le
+    filtre par localisation de campagne. Seuls les leads importés après la
+    mise en place de ce champ en ont un ; les plus anciens n'apparaissent
+    donc pas tant qu'ils n'ont pas été réimportés."""
+    cache_key = ("villes",)
+    cached = _leads_cache_get(cache_key)
+    if cached is not None:
+        return cached
+    values = await db.leads.distinct("ville", {"ville": {"$nin": [None, ""]}})
     _leads_cache_set(cache_key, values)
     return values
 
@@ -585,6 +650,15 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
     if "interest" in update:
         update["category"] = _category_for_interest(update["interest"])
+    # Horodatage de la note — pour un bon suivi commercial, savoir QUAND une
+    # note a été écrite (et par qui) compte autant que son contenu. Tracé
+    # aussi dans le journal d'activité pour apparaître dans le bilan détaillé
+    # de l'employé (voir EmployeeAudit.jsx côté frontend).
+    notes_changed = "notes" in update and update["notes"] != (existing.get("notes") or "")
+    if notes_changed:
+        update["notes_updated_at"] = now_iso()
+        update["notes_updated_by"] = user["id"]
+        update["notes_updated_by_name"] = user.get("name", "")
     # Qui a traité ce lead en dernier — colonne "Traité par" côté dashboard
     # (Marketing.jsx, onglet Cosmosia) + traçage dans le journal d'activité.
     qualification_changed = "qualification" in update and update["qualification"] != existing.get("qualification")
@@ -599,13 +673,32 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
         update.setdefault("contacted", True)
         update.setdefault("last_contacted_by", user["id"])
         update.setdefault("last_contacted_at", now_iso())
-    if update.get("contacted") or update.get("status") in ("contacte", "interesse", "pas_interesse"):
+    contact_event = bool(update.get("contacted")) or update.get("status") in ("contacte", "interesse", "pas_interesse")
+    if contact_event:
         update["last_contacted_by"] = user["id"]
         update.setdefault("last_contacted_at", now_iso())
         await log_action(user, "lead_contacte", "lead", lid, {"status": update.get("status"), "name": existing.get("name")})
     update["updated_at"] = now_iso()
-    await db.leads.update_one({"id": lid}, {"$set": update})
+    mongo_update = {"$set": update}
+    # Une nouvelle note = une nouvelle tentative de contact (le staff vient
+    # de parler/écrire au prospect et le consigne) — compte comme une
+    # relance au même titre qu'un appel loggé (call_center.py) ou un
+    # changement de qualification, pour que "Suivi" reflète toute action
+    # réelle sur ce lead, pas seulement les appels formellement loggés.
+    if notes_changed or qualification_changed or contact_event:
+        mongo_update["$inc"] = {"relance_count": 1}
+    if notes_changed and update["notes"]:
+        # Historique des notes — permet d'ajouter une NOUVELLE note sans
+        # perdre les précédentes (contrairement à `notes`, simple champ texte
+        # écrasé à chaque sauvegarde). $slice garde les 20 plus récentes.
+        mongo_update["$push"] = {"notes_history": {
+            "$each": [{"text": update["notes"], "at": update["notes_updated_at"], "by_name": user.get("name", "")}],
+            "$slice": -20,
+        }}
+    await db.leads.update_one({"id": lid}, mongo_update)
     _leads_cache_clear()
+    if notes_changed:
+        await log_action(user, "lead_note", "lead", lid, {"name": existing.get("name"), "note": update["notes"]})
     if update.get("qualification") == NO_RESPONSE_QUALIFICATION and existing.get("qualification") != NO_RESPONSE_QUALIFICATION:
         await send_no_response_followup(existing.get("name"), existing.get("email"))
     if qualification_changed:
