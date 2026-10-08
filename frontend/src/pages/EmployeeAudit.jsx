@@ -26,6 +26,7 @@ const ACTION_META = {
   appel_attribue: { label: "Appel attribué", icon: PhoneCall, color: "#0e7490" },
   inscription_creee: { label: "Inscription créée", icon: UserPlus, color: "#0B7238" },
   lead_note: { label: "Note ajoutée", icon: NotePencil, color: "#6b7280" },
+  paiement_lien_envoye: { label: "Lien de paiement envoyé", icon: Clock, color: "#0B7238" },
 };
 
 function actionMeta(action) {
@@ -67,6 +68,8 @@ function describeEntry(e) {
   const parts = [];
   if (m.formation_title) parts.push(`Formation : ${m.formation_title}`);
   if (m.mode === "sur_place") parts.push("Sur place (agent)");
+  if (m.title) parts.push(`Intitulé : ${m.title}`);
+  if (m.price != null) parts.push(`Montant : ${m.price} €`);
   if (m.outcome) parts.push(`Résultat : ${m.outcome}`);
   if (m.qualification) parts.push(`Qualification : ${m.qualification}`);
   if (m.contact_status) parts.push(`Tag : ${m.contact_status}`);

@@ -17,3 +17,8 @@ class CustomPaymentIn(BaseModel):
     # que le destinataire sache précisément à quelle session ce paiement se
     # rapporte (voir GET /stages/public/available, réutilisé par la page).
     session_label: Optional[str] = None
+    # Lead d'origine quand ce lien est envoyé depuis un bouton "Envoyer un
+    # lien de paiement" sur une liste de prospects (Leads.jsx, Marketing.jsx)
+    # — pour relier ce paiement au prospect dans le bilan d'activité et
+    # permettre une redirection vers sa fiche.
+    lead_id: Optional[str] = None

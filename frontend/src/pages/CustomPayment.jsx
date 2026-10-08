@@ -34,6 +34,12 @@ export default function CustomPayment() {
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data)).catch(() => {});
     loadHistory();
+    // Le statut "Payé" est posé par le webhook Stripe dès que le paiement
+    // aboutit (voir routers/payments.py) — un simple rafraîchissement
+    // périodique suffit à le refléter sans action manuelle, pas besoin de
+    // websocket pour une page peu critique en latence.
+    const id = setInterval(loadHistory, 15000);
+    return () => clearInterval(id);
   }, []);
 
   // Recherche de personne déjà en base (Prospects ou apprenants) pour
@@ -215,12 +221,13 @@ export default function CustomPayment() {
                 <th className="py-2.5 px-4 overline text-right">Prix</th>
                 <th className="py-2.5 px-4 overline">Statut</th>
                 <th className="py-2.5 px-4 overline">Envoyé le</th>
+                <th className="py-2.5 px-4 overline">Envoyé par</th>
                 <th className="py-2.5 px-4 overline text-right">Lien</th>
               </tr>
             </thead>
             <tbody>
               {!loadingHistory && !history.length && (
-                <tr><td colSpan="6" className="py-10 text-center text-gray-400">Aucun paiement personnalisé envoyé.</td></tr>
+                <tr><td colSpan="7" className="py-10 text-center text-gray-400">Aucun paiement personnalisé envoyé.</td></tr>
               )}
               {history.map((h) => (
                 <tr key={h.id} className="border-b border-gray-100">
@@ -241,6 +248,7 @@ export default function CustomPayment() {
                   <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
                     {h.created_at ? formatDateFR(h.created_at) : "—"}
                   </td>
+                  <td className="py-2.5 px-4 text-xs text-gray-600">{h.created_by_name || <span className="text-gray-300">—</span>}</td>
                   <td className="py-2.5 px-4 text-right">
                     <a href={h.stripe_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-[#0a0a0a] hover:underline">
                       <LinkSimple size={12} /> Ouvrir

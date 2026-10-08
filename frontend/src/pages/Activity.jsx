@@ -35,6 +35,7 @@ const ROLE_LABELS = {
 const ACTIVITY_ACTION_LABELS = {
   lead_contacte: "Lead contacté", appel: "Appel", dossier_traite: "Dossier", rappel_traite: "Rappel",
   lead_qualifie: "Qualification", inscription_creee: "Inscription créée", lead_note: "Note ajoutée",
+  paiement_lien_envoye: "Lien de paiement envoyé",
 };
 
 const AVATAR_COLORS = ["#0052CC", "#d4af37", "#0B7238", "#6b21a8", "#c2410c", "#be123c", "#0e7490"];

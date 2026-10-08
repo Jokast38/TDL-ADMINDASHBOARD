@@ -23,10 +23,11 @@ import {
   ChartLineUp, MagnifyingGlass, Megaphone, EnvelopeSimple, ShareNetwork, Sparkle,
   EnvelopeOpen, Cursor, PaperPlaneTilt, WarningCircle, Paperclip, X as XIcon, PencilSimple,
   Browser, ArrowSquareOut, Robot, PhoneCall, LinkedinLogo, Phone, Headset, NotePencil,
-  LinkSimple, UploadSimple, Tag, CalendarPlus,
+  LinkSimple, UploadSimple, Tag, CalendarPlus, CreditCard,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
+import SendPaymentLinkDialog from "@/components/SendPaymentLinkDialog";
 import { canonicalizeInterest } from "@/lib/leadInterest";
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler,
@@ -650,6 +651,7 @@ function CosmosiaTab() {
   const [page, setPage] = useState(1);
   const [importing, setImporting] = useState(false);
   const [bookTarget, setBookTarget] = useState(null);
+  const [paymentLinkTarget, setPaymentLinkTarget] = useState(null);
   const [relanceDueCount, setRelanceDueCount] = useState(0);
 
   const load = () => {
@@ -883,14 +885,25 @@ function CosmosiaTab() {
                     {l.created_at ? formatDateFR(l.created_at) : "—"}
                   </td>
                   <td className="py-2.5 px-4 text-right">
-                    <button
-                      onClick={() => setBookTarget(l)}
-                      className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded"
-                      title="Planifier un rendez-vous"
-                      data-testid={`cosmosia-book-btn-${l.id}`}
-                    >
-                      <CalendarPlus size={14} />
-                    </button>
+                    <div className="flex justify-end items-center gap-1">
+                      <button
+                        onClick={() => setPaymentLinkTarget(l)}
+                        className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded disabled:opacity-30"
+                        disabled={!l.email}
+                        title={l.email ? "Envoyer un lien de paiement" : "Email requis"}
+                        data-testid={`cosmosia-payment-link-btn-${l.id}`}
+                      >
+                        <CreditCard size={14} />
+                      </button>
+                      <button
+                        onClick={() => setBookTarget(l)}
+                        className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded"
+                        title="Planifier un rendez-vous"
+                        data-testid={`cosmosia-book-btn-${l.id}`}
+                      >
+                        <CalendarPlus size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -915,6 +928,11 @@ function CosmosiaTab() {
         onOpenChange={(v) => !v && setBookTarget(null)}
         lead={bookTarget}
       />
+      <SendPaymentLinkDialog
+        open={!!paymentLinkTarget}
+        onOpenChange={(v) => !v && setPaymentLinkTarget(null)}
+        lead={paymentLinkTarget}
+      />
     </div>
   );
 }
@@ -935,6 +953,7 @@ function MetaEventsTab() {
   const [pendingImportFile, setPendingImportFile] = useState(null);
   const [enrollFor, setEnrollFor] = useState(null);
   const [bookTarget, setBookTarget] = useState(null);
+  const [paymentLinkTarget, setPaymentLinkTarget] = useState(null);
   const [relanceDueCount, setRelanceDueCount] = useState(0);
 
   useEffect(() => {
@@ -1229,6 +1248,15 @@ function MetaEventsTab() {
                   <td className="py-2.5 px-4 text-right">
                     <div className="flex justify-end items-center gap-1">
                       <button
+                        onClick={() => setPaymentLinkTarget(l)}
+                        className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded disabled:opacity-30"
+                        disabled={!l.email}
+                        title={l.email ? "Envoyer un lien de paiement" : "Email requis"}
+                        data-testid={`meta-lead-payment-link-btn-${l.id}`}
+                      >
+                        <CreditCard size={14} />
+                      </button>
+                      <button
                         onClick={() => setBookTarget(l)}
                         className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded"
                         title="Planifier un rendez-vous"
@@ -1274,6 +1302,11 @@ function MetaEventsTab() {
         open={!!bookTarget}
         onOpenChange={(v) => !v && setBookTarget(null)}
         lead={bookTarget}
+      />
+      <SendPaymentLinkDialog
+        open={!!paymentLinkTarget}
+        onOpenChange={(v) => !v && setPaymentLinkTarget(null)}
+        lead={paymentLinkTarget}
       />
     </div>
   );

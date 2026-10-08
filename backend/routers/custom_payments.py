@@ -19,13 +19,24 @@ from models.custom_payment import CustomPaymentIn
 from services import stripe_service
 from services.email import send_email
 from services.email_template import render_branded_email
+from services.activity import log_action
 
 router = APIRouter(prefix="/custom-payments", tags=["custom-payments"])
 
 
 @router.get("")
 async def list_custom_payments(user: dict = Depends(require_role(*ROLES_LEADS))):
-    return await db.custom_payments.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    items = await db.custom_payments.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # "Envoyé par" — jointure sur created_by pour afficher un nom plutôt
+    # qu'un id brut dans l'historique (voir CustomPayment.jsx).
+    staff_ids = {i["created_by"] for i in items if i.get("created_by")}
+    staff_by_id = {}
+    if staff_ids:
+        staff = await db.users.find({"id": {"$in": list(staff_ids)}}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
+        staff_by_id = {s["id"]: s.get("name", "") for s in staff}
+    for i in items:
+        i["created_by_name"] = staff_by_id.get(i.get("created_by"))
+    return items
 
 
 @router.post("")
@@ -50,12 +61,17 @@ async def create_custom_payment(payload: CustomPaymentIn, user: dict = Depends(r
     doc = {
         "id": payment_id, "title": payload.title, "price": payload.price,
         "recipient_name": payload.recipient_name, "recipient_email": payload.recipient_email,
-        "session_label": payload.session_label,
+        "session_label": payload.session_label, "lead_id": payload.lead_id,
         "stripe_session_id": session.id, "stripe_url": session.url,
         "status": "pending", "created_by": user["id"], "created_at": now_iso(),
         "paid_at": None,
     }
     await db.custom_payments.insert_one(doc)
+    # Traçabilité pour le bilan d'activité par employé (EmployeeAudit.jsx) —
+    # qui a envoyé quel lien de paiement, à qui, pour quel montant.
+    await log_action(user, "paiement_lien_envoye", "lead" if payload.lead_id else None, payload.lead_id, {
+        "name": payload.recipient_name, "title": payload.title, "price": payload.price,
+    })
 
     session_line = f"\nSession concernée : {payload.session_label}\n" if payload.session_label else ""
     body = render_branded_email(

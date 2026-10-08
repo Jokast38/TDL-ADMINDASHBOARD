@@ -17,10 +17,11 @@ import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import {
   Plus, UploadSimple, FileXls, FileCode, MagnifyingGlass, Trash, Phone,
   EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree, PencilSimple, GraduationCap,
-  EnvelopeOpen, Eye, Megaphone, ArrowsClockwise, CalendarPlus, NotePencil,
+  EnvelopeOpen, Eye, Megaphone, ArrowsClockwise, CalendarPlus, NotePencil, CreditCard,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
+import SendPaymentLinkDialog from "@/components/SendPaymentLinkDialog";
 import { canonicalizeInterest } from "@/lib/leadInterest";
 
 
@@ -504,6 +505,7 @@ export default function Leads() {
   const [enrollForm, setEnrollForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "" });
   const [enrolling, setEnrolling] = useState(false);
   const [bookTarget, setBookTarget] = useState(null);
+  const [paymentLinkTarget, setPaymentLinkTarget] = useState(null);
 
   const [emailsOpen, setEmailsOpen] = useState(false);
   const [emailsLead, setEmailsLead] = useState(null);
@@ -1990,6 +1992,15 @@ export default function Leads() {
                         <CalendarPlus size={14} />
                       </button>
                       <button
+                        onClick={() => setPaymentLinkTarget(l)}
+                        className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded disabled:opacity-30"
+                        disabled={!l.email}
+                        title={l.email ? "Envoyer un lien de paiement" : "Email requis pour envoyer un lien de paiement"}
+                        data-testid={`send-payment-link-${l.id}`}
+                      >
+                        <CreditCard size={14} />
+                      </button>
+                      <button
                         onClick={() => openEdit(l)}
                         className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
                         title="Modifier"
@@ -2184,6 +2195,12 @@ export default function Leads() {
         open={!!bookTarget}
         onOpenChange={(v) => !v && setBookTarget(null)}
         lead={bookTarget}
+      />
+
+      <SendPaymentLinkDialog
+        open={!!paymentLinkTarget}
+        onOpenChange={(v) => !v && setPaymentLinkTarget(null)}
+        lead={paymentLinkTarget}
       />
     </div>
   );
