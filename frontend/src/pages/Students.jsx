@@ -12,7 +12,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { MagnifyingGlass, EnvelopeSimple, Phone, GraduationCap, FolderOpen, Sparkle, PaperPlaneTilt, Signature, Trash, DownloadSimple, UsersThree, CheckCircle, Clock, FileText } from "@phosphor-icons/react";
+import { MagnifyingGlass, EnvelopeSimple, Phone, GraduationCap, FolderOpen, Sparkle, PaperPlaneTilt, Signature, Trash, DownloadSimple, UsersThree, CheckCircle, Clock, FileText, IdentificationCard, PencilSimple, ArrowsClockwise } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { formatDateFR, formatDateLongFR } from "@/lib/dateFormat";
 
@@ -30,6 +30,17 @@ const ATTESTATION_CATEGORY = "PERMIS";
 // directement un email de réussite une fois le résultat connu. Doit rester
 // synchronisé avec CMA_CATEGORIES côté backend (routers/exams.py).
 const CMA_CATEGORIES = ["VTC_TAXI", "AUTO_ECOLE"];
+
+// Champs d'identité extraits automatiquement par OCR au dépôt d'une pièce
+// (permis, CNI, justificatif de domicile — voir services/identity_extraction.py
+// côté backend) et préremplis sur le profil de l'apprenant une seule fois,
+// réutilisables pour tous ses dossiers/attestations.
+const IDENTITY_FIELD_LABELS = {
+  numero_permis: "N° de permis", date_delivrance_permis: "Délivré le",
+  prefecture_delivrance: "Préfecture de délivrance", nom: "Nom", prenom: "Prénom",
+  date_naissance: "Date de naissance", lieu_naissance: "Lieu de naissance",
+  adresse: "Adresse", ville: "Ville", code_postal: "Code postal",
+};
 
 const DOC_TYPE_LABELS = {
   identite: "Pièce d'identité", photo: "Photo d'identité", permis: "Permis de conduire",
@@ -125,6 +136,10 @@ export default function Students() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
   const [selectedDocs, setSelectedDocs] = useState([]);
+  const [identityEditOpen, setIdentityEditOpen] = useState(false);
+  const [identityForm, setIdentityForm] = useState({});
+  const [savingIdentity, setSavingIdentity] = useState(false);
+  const [ocrRerunningId, setOcrRerunningId] = useState(null);
   const [sending, setSending] = useState(false);
   const [composeTarget, setComposeTarget] = useState(null);
   const [composeSubject, setComposeSubject] = useState("");
@@ -229,6 +244,40 @@ export default function Students() {
       }
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur de chargement du dossier");
+    }
+  };
+
+  const openIdentityEdit = () => {
+    setIdentityForm({ ...(selected?.identity_info || {}) });
+    setIdentityEditOpen(true);
+  };
+
+  const saveIdentity = async () => {
+    if (!selected) return;
+    setSavingIdentity(true);
+    try {
+      const { data } = await api.put(`/students/${selected.student_id}/identity-fields`, identityForm);
+      setSelected({ ...selected, identity_info: data });
+      toast.success("Informations mises à jour");
+      setIdentityEditOpen(false);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSavingIdentity(false);
+    }
+  };
+
+  const rerunOcr = async (docId) => {
+    setOcrRerunningId(docId);
+    try {
+      const { data } = await api.post(`/documents/${docId}/ocr-rerun`);
+      setSelected((prev) => prev && { ...prev, identity_info: data.identity_info });
+      if (data.written?.length) toast.success(`OCR relancé — ${data.written.length} champ(s) complété(s)`);
+      else toast.info("OCR relancé — aucun nouveau champ trouvé (déjà renseignés ou pièce illisible)");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur lors de la relance OCR");
+    } finally {
+      setOcrRerunningId(null);
     }
   };
 
@@ -889,6 +938,31 @@ export default function Students() {
 
                 {selected.notes && <p className="text-sm bg-gray-50 p-3 rounded-md border border-gray-200">{selected.notes}</p>}
 
+                <div className="border border-gray-200 rounded-md p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-gray-500 flex items-center gap-1.5">
+                      <IdentificationCard size={14} /> Informations extraites (OCR des pièces déposées)
+                    </p>
+                    <button onClick={openIdentityEdit} className="text-gray-400 hover:text-gray-900" title="Modifier" data-testid="edit-identity-info">
+                      <PencilSimple size={13} />
+                    </button>
+                  </div>
+                  {Object.keys(selected.identity_info || {}).length ? (
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      {Object.entries(selected.identity_info).map(([k, v]) => (
+                        <div key={k}>
+                          <span className="text-gray-400">{IDENTITY_FIELD_LABELS[k] || k} : </span>
+                          <span className="font-medium">{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400">
+                      Aucune information extraite pour l'instant — se remplit automatiquement au dépôt d'un permis, d'une pièce d'identité ou d'un justificatif de domicile.
+                    </p>
+                  )}
+                </div>
+
                 {(() => {
                   // Documents requis pour la formation mais pas encore
                   // déposés — calculé sur TOUS les dossiers (pas seulement
@@ -928,6 +1002,17 @@ export default function Students() {
                             doc.verification_status === "approved" ? "border-green-500 text-green-600" :
                             doc.verification_status === "rejected" ? "border-red-500 text-red-600" : "text-gray-500"
                           }>{doc.verification_status === "approved" ? "Approuvé" : doc.verification_status === "rejected" ? "Rejeté" : "En attente"}</Badge>
+                          {["permis", "identite", "justificatif_domicile"].includes(doc.doc_type) && (
+                            <button
+                              onClick={() => rerunOcr(doc.id)}
+                              disabled={ocrRerunningId === doc.id}
+                              className="p-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-40"
+                              title="Relancer l'extraction OCR sur cette pièce"
+                              data-testid={`rerun-ocr-${doc.id}`}
+                            >
+                              <ArrowsClockwise size={14} className={ocrRerunningId === doc.id ? "animate-spin" : ""} />
+                            </button>
+                          )}
                           <button
                             onClick={() => window.open(`${API}/documents/${doc.id}/download?auth=${localStorage.getItem("tdl_token")}`, "_blank")}
                             className="p-1 text-gray-500 hover:bg-gray-100 rounded"
@@ -978,6 +1063,30 @@ export default function Students() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={identityEditOpen} onOpenChange={setIdentityEditOpen}>
+        <DialogContent data-testid="edit-identity-dialog">
+          <DialogHeader><DialogTitle>Informations extraites — correction manuelle</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            {Object.entries(IDENTITY_FIELD_LABELS).map(([key, label]) => (
+              <div key={key}>
+                <label className="text-xs font-medium text-gray-500">{label}</label>
+                <Input
+                  value={identityForm[key] || ""}
+                  onChange={(e) => setIdentityForm({ ...identityForm, [key]: e.target.value })}
+                  data-testid={`identity-field-${key}`}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setIdentityEditOpen(false)} disabled={savingIdentity}>Annuler</Button>
+            <Button onClick={saveIdentity} disabled={savingIdentity} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+              {savingIdentity ? "..." : "Enregistrer"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

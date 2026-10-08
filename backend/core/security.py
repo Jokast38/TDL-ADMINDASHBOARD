@@ -53,6 +53,26 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Token invalide")
 
 
+async def get_optional_user(request: Request) -> dict | None:
+    """Comme get_current_user, mais ne lève jamais — pour les routes
+    publiques (ex: POST /inscriptions, utilisée à la fois par le formulaire
+    public sans authentification ET par un agent qui inscrit quelqu'un sur
+    place depuis le dashboard) qui ont besoin de savoir SI un membre du staff
+    est à l'origine de l'appel, sans rendre l'authentification obligatoire."""
+    token = request.cookies.get("access_token")
+    if not token:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+    except Exception:
+        return None
+
+
 def require_role(*roles):
     async def dep(user: dict = Depends(get_current_user)):
         if user.get("role") not in roles:

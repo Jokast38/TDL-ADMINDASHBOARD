@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 
 from core.database import db
-from core.security import hash_password, get_current_user, require_role
+from core.security import hash_password, get_current_user, get_optional_user, require_role
 from core.utils import now_iso, format_date_long_fr
 from core.config import ROLES_DOSSIERS_MGMT, PUBLIC_FRONTEND_URL
 from models.inscription import InscriptionIn, InscriptionUpdate, DossierUpdate, StageAssignIn
@@ -106,6 +106,15 @@ async def create_inscription(payload: InscriptionIn, request: Request):
     else:
         user_id = user["id"]
 
+    # Un agent connecté qui inscrit quelqu'un sur place (depuis la page
+    # Inscriptions) envoie son propre token même si la route reste publique
+    # pour le formulaire du site — on le détecte pour savoir QUI a fait
+    # l'inscription (colonne "Traité par" + bilan d'activité par employé),
+    # sans jamais exiger d'authentification pour un visiteur du site public.
+    acting_staff = await get_optional_user(request)
+    if acting_staff and acting_staff.get("role") == "etudiant":
+        acting_staff = None
+
     insc_id = str(uuid.uuid4())
     inscription = {
         "id": insc_id, "formation_id": payload.formation_id,
@@ -132,7 +141,19 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         "stage_id": payload.stage_id, "stage_titre": stage_titre,
         "financing_mode": payload.financing_mode or "",
     }
+    if acting_staff:
+        # Posé dès la création (pas seulement au premier changement de tag
+        # commercial, voir update_inscription) — sinon la colonne "Traité
+        # par" restait vide tant que personne n'avait encore touché au tag.
+        inscription["created_by"] = acting_staff["id"]
+        inscription["created_by_name"] = acting_staff.get("name")
+        inscription["processed_by"] = acting_staff["id"]
     await db.inscriptions.insert_one(inscription)
+    if acting_staff:
+        await log_action(acting_staff, "inscription_creee", "inscription", insc_id, {
+            "student_name": payload.student_name, "formation_title": formation["title"],
+            "mode": "sur_place" if payload.source == "admin_walkin" else (payload.source or ""),
+        })
 
     dossier_id = str(uuid.uuid4())
     trello_card = await TrelloService.create_card(
@@ -660,6 +681,14 @@ async def get_dossier(did: str, user: dict = Depends(get_current_user)):
     manquants = _missing_docs(d, docs)
     d["documents_manquants"] = manquants
     d["nb_documents_manquants"] = len(manquants)
+    # Informations extraites automatiquement par OCR à partir des pièces
+    # déposées (permis, CNI, justificatif de domicile — voir
+    # services/identity_extraction.py, déclenché à chaque upload) : numéro de
+    # permis, état civil, adresse... déjà sur le profil de l'apprenant mais
+    # jamais affichées nulle part avant — on les expose ici pour que l'agent
+    # les voie directement en ouvrant le dossier, sans ressaisie manuelle.
+    identity_fields = await identity_extraction.get_profile_defaults(d["student_id"])
+    d["identity_info"] = identity_fields
     return d
 
 

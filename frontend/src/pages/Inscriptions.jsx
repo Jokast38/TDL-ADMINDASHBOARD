@@ -750,7 +750,9 @@ export default function Inscriptions() {
                           </Badge>
                         </a>
                       ) : (
-                        <Badge variant="outline" className={`text-[10px] ${ORIGIN_COLOR[getOrigin(i)]}`}>{ORIGIN_LABEL[getOrigin(i)]}</Badge>
+                        <Badge variant="outline" className={`text-[10px] ${ORIGIN_COLOR[getOrigin(i)]}`}>
+                          {ORIGIN_LABEL[getOrigin(i)]}{getOrigin(i) === ORIGIN_WALKIN && i.created_by_name ? ` — ${i.created_by_name}` : ""}
+                        </Badge>
                       )}
                     </td>
                     <td className="py-3 px-4">

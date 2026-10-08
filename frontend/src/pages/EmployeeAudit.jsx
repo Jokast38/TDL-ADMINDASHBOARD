@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { CaretLeft, Clock, ListChecks, PhoneCall, FolderOpen, CaretDown, CaretRight, ArrowSquareOut, NotePencil } from "@phosphor-icons/react";
+import { CaretLeft, Clock, ListChecks, PhoneCall, FolderOpen, CaretDown, CaretRight, ArrowSquareOut, NotePencil, UserPlus } from "@phosphor-icons/react";
 import { formatDateLongFR, formatDateFR } from "@/lib/dateFormat";
 
 // Même vocabulaire que Activity.jsx — gardé synchronisé manuellement (petit
@@ -24,6 +24,7 @@ const ACTION_META = {
   lead_qualifie: { label: "Qualification", icon: ListChecks, color: "#6b21a8" },
   rdv_appel_cree: { label: "Rendez-vous créé", icon: Clock, color: "#c2410c" },
   appel_attribue: { label: "Appel attribué", icon: PhoneCall, color: "#0e7490" },
+  inscription_creee: { label: "Inscription créée", icon: UserPlus, color: "#0B7238" },
 };
 
 function actionMeta(action) {
@@ -63,6 +64,8 @@ function describeEntry(e) {
   const m = e.meta || {};
   const who = m.lead_name || m.student_name || m.name || null;
   const parts = [];
+  if (m.formation_title) parts.push(`Formation : ${m.formation_title}`);
+  if (m.mode === "sur_place") parts.push("Sur place (agent)");
   if (m.outcome) parts.push(`Résultat : ${m.outcome}`);
   if (m.qualification) parts.push(`Qualification : ${m.qualification}`);
   if (m.contact_status) parts.push(`Tag : ${m.contact_status}`);

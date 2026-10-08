@@ -192,3 +192,42 @@ async def verify_document(doc_id: str, status: str, user: dict = Depends(require
                 )
 
     return await db.documents.find_one({"id": doc_id}, {"_id": 0})
+
+
+@router.post("/documents/{doc_id}/ocr-rerun")
+async def rerun_document_ocr(doc_id: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Relance l'extraction OCR sur une pièce déjà déposée — pour les
+    documents uploadés avant la mise en place de l'extraction automatique
+    (voir services/identity_extraction.py), ou si la première tentative a
+    échoué (panne réseau/modèle au moment du dépôt)."""
+    doc = await db.documents.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+    dossier = await db.dossiers.find_one({"documents": doc_id}, {"_id": 0, "student_id": 1})
+    if not dossier:
+        raise HTTPException(status_code=404, detail="Dossier introuvable pour ce document")
+    data, content_type = await get_object(doc["storage_path"])
+    result = await identity_extraction.extract_and_prefill_profile(
+        dossier["student_id"], doc.get("doc_type", "autre"), data, content_type or doc.get("content_type") or "", doc_id
+    )
+    identity_info = await identity_extraction.get_profile_defaults(dossier["student_id"])
+    return {**result, "identity_info": identity_info}
+
+
+@router.put("/students/{student_id}/identity-fields")
+async def update_student_identity_fields(student_id: str, payload: dict, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Correction manuelle des champs d'identité préremplis par OCR (numéro de
+    permis, état civil, adresse...) — une correction humaine est explicite et
+    remplace la valeur sans condition (voir save_confirmed_fields),
+    contrairement à l'extraction automatique qui n'écrit jamais par-dessus
+    une valeur déjà présente."""
+    allowed = {
+        "numero_permis", "date_delivrance_permis", "prefecture_delivrance",
+        "nom", "prenom", "date_naissance", "lieu_naissance",
+        "adresse", "ville", "code_postal",
+    }
+    fields = {k: v for k, v in payload.items() if k in allowed}
+    if not fields:
+        raise HTTPException(status_code=400, detail="Aucun champ valide à mettre à jour")
+    await identity_extraction.save_confirmed_fields(student_id, fields)
+    return await identity_extraction.get_profile_defaults(student_id)
