@@ -56,7 +56,7 @@ function startOfMonthGrid(d) {
 }
 
 const HOUR_START = 7;
-const HOUR_END = 20;
+const HOUR_END = 22; // les sessions SOIR vont jusqu'à 21h30
 const HOUR_HEIGHT = 48; // px par heure, vue semaine
 
 function minutesFromMidnight(hhmm) {

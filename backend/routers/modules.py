@@ -216,13 +216,20 @@ async def get_agenda(date_from: Optional[str] = None, date_to: Optional[str] = N
                 continue
             stage_animateur_ids = s.get("animateur_ids") or ([s["animateur_id"]] if s.get("animateur_id") else [])
             animateur_nom = ", ".join(animateur_names.get(aid, "") for aid in stage_animateur_ids if animateur_names.get(aid))
+            # Reprend les horaires réels de la session (créneau JOUR 9h-17h ou
+            # SOIR 18h-21h30, voir backend/models/stage.py) plutôt que de
+            # coder "09:00"-"17:00" en dur — sinon une session SOIR s'affiche
+            # au même horaire visuel qu'une session JOUR du même jour et les
+            # deux événements se superposent sur l'agenda.
+            heure_debut = s.get("heure_debut") or "09:00"
+            heure_fin = s.get("heure_fin") or "17:00"
             cur = d1
             while cur <= d2:
                 events.append({
                     "id": f"{s['id']}_{cur.isoformat()}",
                     "date": cur.isoformat(),
-                    "heure_debut": "09:00",
-                    "heure_fin": "17:00",
+                    "heure_debut": heure_debut,
+                    "heure_fin": heure_fin,
                     "module_nom": s.get("formation_titre") or "Session",
                     "stage_id": s["id"],
                     "formation_titre": s.get("formation_titre"),
