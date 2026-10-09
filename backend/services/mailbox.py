@@ -283,4 +283,27 @@ async def get_attachment(folder: str, uid: str, part_index: int):
 
 
 async def send_and_save(to: str, subject: str, body_html: str, attachments: list = None, cc: list = None) -> dict:
-    return await asyncio.to_thread(_send_and_save_sync, to, subject, body_html, attachments, cc)
+    try:
+        return await asyncio.to_thread(_send_and_save_sync, to, subject, body_html, attachments, cc)
+    except Exception as e:
+        # o2switch restreint parfois temporairement le compte (rate-limit
+        # anti-spam ou blocage de sécurité côté hébergeur) : plutôt que de
+        # faire échouer la notification, on bascule sur Brevo (API HTTPS,
+        # jamais affecté par une restriction SMTP de l'hébergeur).
+        from core.database import db
+        from services.email import _send_via_brevo
+        settings = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
+        api_key = settings.get("brevo_fallback_api_key")
+        if not api_key:
+            raise
+        logger.warning(f"SMTP o2switch en échec pour {to} ({e}), tentative Brevo en secours...")
+        from_addr = settings.get("email_from", MAILBOX_USER)
+        attachment = None
+        if attachments:
+            import base64
+            first = attachments[0]
+            attachment = {"content_b64": base64.b64encode(first["content"]).decode(), "filename": first["filename"]}
+        status = await _send_via_brevo(api_key, from_addr, to, subject, body_html, attachment, cc)
+        if status != "sent":
+            raise
+        return {"status": "sent", "fallback_provider": "brevo"}

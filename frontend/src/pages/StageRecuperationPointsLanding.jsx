@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
@@ -17,8 +17,6 @@ import {
 } from "@phosphor-icons/react";
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
-
-const EpinayLocalMap = lazy(() => import("@/components/EpinayLocalMap"));
 
 
 const { TopBar, StageNav, Hero, StepsSection, FaqGrid, BookingForm } = Kit;
@@ -65,7 +63,7 @@ const FAQ = [
   { q: "Combien de points puis-je récupérer ?", a: "Jusqu'à 4 points, conformément à la réglementation, dans la limite du plafond de votre permis." },
   { q: "Combien de temps dure le stage ?", a: "Le stage se déroule sur 2 jours consécutifs. Il n'y a pas d'examen final, votre présence pendant les deux journées complètes est obligatoire." },
   { q: "Puis-je payer en plusieurs fois ?", a: "Oui, nous proposons un paiement en plusieurs fois selon les modalités disponibles au moment de la réservation en ligne." },
-  { q: "Où se déroule le stage ?", a: "Dans notre centre situé au 59 avenue Joffre, 93800 Épinay-sur-Seine, facilement accessible depuis les départements 92, 93 et 95. Un second centre est disponible à Creil (60)." },
+  { q: "Où se déroule le stage ?", a: "Dans notre centre situé au 59 avenue Joffre, 93800 Épinay-sur-Seine, facilement accessible depuis les départements 92, 93 et 95. Un second centre est disponible au 27 Place Saint-Médard, 60100 Creil." },
   { q: "Quand les points sont-ils crédités ?", a: "Les démarches administratives sont réalisées conformément à la réglementation après votre participation complète au stage." },
   { q: "Que dois-je apporter le jour du stage ?", a: "Les documents nécessaires (pièce d'identité, permis de conduire...) vous seront communiqués dans votre confirmation d'inscription." },
   { q: "Puis-je annuler ou modifier ma réservation ?", a: "Contactez notre équipe dès que possible par téléphone ou via le formulaire de contact : nous étudions chaque situation au cas par cas pour trouver la meilleure solution." },
@@ -851,9 +849,17 @@ export default function StageRecuperationPointsLanding() {
           </div>
 
           <div className="location-grid">
-            <Suspense fallback={<div className="local-map" style={{ background: "#111113" }} />}>
-              <EpinayLocalMap className="local-map" />
-            </Suspense>
+            <div className="local-map" style={{ position: "relative", overflow: "hidden" }}>
+              <iframe
+                title="Carte Google Maps — TDL Formation Épinay-sur-Seine"
+                src="https://www.google.com/maps?q=59+avenue+Joffre,+93800+%C3%89pinay-sur-Seine&output=embed"
+                width="100%"
+                height="100%"
+                style={{ border: 0, position: "absolute", inset: 0 }}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
 
             <aside className="access-card">
               <p className="eyebrow">Venir au centre</p>

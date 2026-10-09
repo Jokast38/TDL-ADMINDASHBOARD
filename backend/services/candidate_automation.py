@@ -24,6 +24,77 @@ def _today():
     return datetime.now().date()
 
 
+def _minus_30min(hhmm: str) -> str:
+    try:
+        h, m = (int(x) for x in hhmm.split(":"))
+        total = h * 60 + m - 30
+        return f"{(total // 60) % 24:02d}h{total % 60:02d}"
+    except Exception:
+        return hhmm
+
+
+def _hhmm_to_h(hhmm: str) -> str:
+    try:
+        h, m = (int(x) for x in hhmm.split(":"))
+        return f"{h}h{m:02d}" if m else f"{h}h"
+    except Exception:
+        return hhmm
+
+
+def convocation_message(stage: dict, insc: dict) -> str:
+    """Corps du mail de convocation — version détaillée (consignes de
+    ponctualité, matériel à prévoir...) pour les formations VTC/Taxi, version
+    courte pour les autres catégories (stage récup de points, CACES...), qui
+    n'ont pas le même format pédagogique."""
+    student_name = insc.get("student_name", "")
+    date_debut = format_date_long_fr(stage.get("date_debut", ""))
+    date_fin = format_date_long_fr(stage.get("date_fin", ""))
+    heure_debut = stage.get("heure_debut") or "09:00"
+    heure_fin = stage.get("heure_fin") or "17:00"
+    lieu = f"{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}"
+
+    if stage.get("formation_category") == "VTC_TAXI":
+        arrivee = _minus_30min(heure_debut)
+        return (
+            "Madame, Monsieur,\n\n"
+            "Nous avons le plaisir de vous confirmer votre inscription à la formation VTC / TAXI organisée par TDL Formation.\n\n"
+            "La session se déroulera selon les modalités suivantes :\n\n"
+            f"Dates : du {date_debut} au {date_fin}\n"
+            f"Horaires : de {_hhmm_to_h(heure_debut)} à {_hhmm_to_h(heure_fin)}\n"
+            f"Lieu de formation : TDL Formation – {lieu}\n\n"
+            "Merci de bien vouloir confirmer votre présence à cette formation par retour de mail.\n\n"
+            "PREMIER JOUR DE FORMATION\n"
+            f"Le {date_debut}, nous vous demandons de vous présenter 30 minutes avant le début de la formation, soit à {arrivee}.\n\n"
+            "Cette arrivée anticipée permettra d'effectuer votre accueil, les éventuelles vérifications administratives ainsi que la présentation de l'organisation et du déroulement de la formation.\n\n"
+            "PONCTUALITÉ – RETARDS – ABSENCES\n"
+            "La ponctualité et l'assiduité sont indispensables au bon déroulement de votre formation.\n\n"
+            "En cas de retard ou d'absence, vous devez impérativement prévenir la Direction de TDL Formation dans les meilleurs délais.\n\n"
+            "Nous vous remercions de respecter les horaires prévus pendant toute la durée de la session.\n\n"
+            "MATÉRIEL À PRÉVOIR\n"
+            "Afin de suivre votre formation dans de bonnes conditions, merci de vous munir de :\n\n"
+            "Un cahier ou un bloc-notes\n"
+            "Un stylo\n"
+            "Tout matériel nécessaire à votre prise de notes\n\n"
+            "UN MOT POUR VOTRE FORMATION\n"
+            "Cette formation constitue une étape importante dans votre projet professionnel.\n\n"
+            "Notre objectif est de vous préparer dans les meilleures conditions à la réussite de votre examen, mais également de vous transmettre les connaissances, les méthodes de travail et les bonnes pratiques nécessaires à l'exercice de votre futur métier.\n\n"
+            "Nous souhaitons vous accompagner afin que vous deveniez des chauffeurs VTC ou TAXI professionnels, responsables, ponctuels, rigoureux et attentifs à la qualité du service proposé à vos futurs clients.\n\n"
+            "Votre implication, votre assiduité et votre sérieux tout au long de la formation seront essentiels à votre réussite.\n\n"
+            "Toute l'équipe de TDL Formation vous souhaite une excellente formation et beaucoup de réussite dans votre projet professionnel.\n\n"
+            "Cordialement"
+        )
+
+    return (
+        f"Bonjour {student_name},\n\n"
+        f"Nous vous confirmons votre convocation à la formation {stage.get('formation_titre', '')}.\n\n"
+        f"Dates : du {date_debut} au {date_fin}\n"
+        f"Horaires : de {_hhmm_to_h(heure_debut)} à {_hhmm_to_h(heure_fin)}\n"
+        f"Lieu : {lieu}\n\n"
+        "Merci de vous présenter avec une pièce d'identité valide et les documents demandés dans votre dossier.\n\n"
+        f"Pour toute question, contactez-nous : {CONTACT_EMAIL}."
+    )
+
+
 async def send_convocations() -> int:
     """Envoie la convocation 7 jours avant le début de chaque session, à
     tout candidat actif affecté et pas encore convoqué."""
@@ -31,20 +102,15 @@ async def send_convocations() -> int:
     stages = await db.stages.find({"date_debut": target, "statut": {"$ne": "annule"}}, {"_id": 0}).to_list(200)
     count = 0
     for stage in stages:
+        formation = await db.formations.find_one({"id": stage.get("formation_id")}, {"_id": 0, "category": 1}) or {}
+        stage["formation_category"] = formation.get("category")
         inscriptions = await db.inscriptions.find(
             {"stage_id": stage["id"], "status": "active", "convocation_sent_at": {"$exists": False}}, {"_id": 0}
         ).to_list(300)
         for insc in inscriptions:
             if not insc.get("student_email"):
                 continue
-            message = (
-                f"Bonjour {insc.get('student_name', '')},\n\n"
-                f"Nous vous confirmons votre convocation à la formation {stage.get('formation_titre', '')}.\n\n"
-                f"Dates : du {format_date_long_fr(stage.get('date_debut', ''))} au {format_date_long_fr(stage.get('date_fin', ''))}\n"
-                f"Lieu : {stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}\n\n"
-                "Merci de vous présenter avec une pièce d'identité valide et les documents demandés dans votre dossier.\n\n"
-                f"Pour toute question, contactez-nous : {CONTACT_EMAIL}."
-            )
+            message = convocation_message(stage, insc)
             await send_email(insc["student_email"], f"📋 Convocation — {stage.get('formation_titre', '')}", render_branded_email(message))
             await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"convocation_sent_at": now_iso()}})
             count += 1

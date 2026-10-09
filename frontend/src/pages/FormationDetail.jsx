@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { TopBar } from "@/components/StageLandingPage";
+import Kit from "@/components/StageLandingPage";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ArrowRight, CaretRight, Clock, Users, CheckCircle, DownloadSimple } from "@phosphor-icons/react";
+import {
+  ArrowRight, CaretRight, Clock, Users, CheckCircle, DownloadSimple,
+  CurrencyEur, CalendarBlank, UsersThree,
+} from "@phosphor-icons/react";
 import { heroForCategory, galleryForCategory, CATEGORY_LABELS } from "@/constants/formationAssets";
 import { faqsForCategory } from "@/constants/formationFaqs";
 import { careerOutlookForCategory, videoForCategory } from "@/constants/careerOutlook";
@@ -17,6 +19,12 @@ import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
 import { useReveal } from "@/hooks/useReveal";
 import { setPageMeta } from "@/lib/seo";
+import UpcomingSessionsSection from "@/components/UpcomingSessions";
+import GoogleCentersMap from "@/components/GoogleCentersMap";
+import PricingTable from "@/components/PricingTable";
+import SideRail from "@/components/SideRail";
+
+const { TopBar, StageNav, GOLD } = Kit;
 
 const CATEGORY_PROGRAM_PDF = {
   VENTE: "/doc/programme_externe_TP_conseiller_de_vente_TDL_Qualiopi_CFA-2.pdf",
@@ -75,6 +83,13 @@ export default function FormationDetail() {
 
   const f = formation;
   const gallery = galleryForCategory(f.category);
+  const facts = [
+    f.duration_hours > 0 && { icon: Clock, label: "Durée", value: `${f.duration_hours} heures` },
+    { icon: CurrencyEur, label: "Tarif", value: f.price > 0 ? `${f.price.toLocaleString("fr-FR")} € TTC` : "Sur devis" },
+    f.sessions_per_month > 0 && { icon: CalendarBlank, label: "Sessions", value: `${f.sessions_per_month} par mois` },
+    { icon: UsersThree, label: "Format", value: "Présentiel" },
+    { icon: CheckCircle, label: "Centres", value: "93 & 60" },
+  ].filter(Boolean);
   const courseJsonLd = {
     "@context": "https://schema.org",
     "@type": "Course",
@@ -91,22 +106,8 @@ export default function FormationDetail() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(courseJsonLd) }} />
       {/* Header */}
       <TopBar />
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
-            <span className="font-display font-bold text-lg tracking-tight hidden sm:inline">TDL Formation</span>
-          </Link>
-          <div className="flex items-center gap-2">
-            <Link to="/login"><Button variant="outline" size="sm">Connexion</Button></Link>
-            <Link to={`/inscription?formation=${f.id}`}>
-              <Button size="sm" className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
-                S'inscrire <ArrowRight size={14} className="ml-1" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+      <StageNav ctaLabel="S'inscrire" ctaHref="#inscription" />
+      <SideRail centresHref="#centres-formation" contactHref="#inscription" />
 
       {/* Breadcrumb */}
       <div className="border-b border-gray-100 bg-gray-50">
@@ -119,21 +120,54 @@ export default function FormationDetail() {
         </div>
       </div>
 
-      {/* Hero banner */}
-      <section className="relative border-b border-gray-200 overflow-hidden">
-        <div className="absolute inset-0">
+      {/* Hero banner — même traitement que la landing VTC : fond noir avec
+          l'image de la formation en arrière-plan plein format, dynamique par
+          catégorie (f.image_url en priorité, sinon l'image par défaut de la
+          catégorie), avec les infos clés de la formation en pastilles. */}
+      <section className="relative bg-black text-white overflow-hidden">
+        <div className="absolute inset-0" aria-hidden="true">
           <img
             src={f.image_url || heroForCategory(f.category)}
-            alt={f.title || "Formation TDL Formation"}
-            className="w-full h-full object-cover"
+            alt=""
+            className="w-full h-full object-cover opacity-40 scale-105"
+            loading="eager"
+            fetchpriority="high"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black via-black/85 to-black/35" />
         </div>
-        <div className="relative max-w-5xl mx-auto px-6 lg:px-8 py-16 lg:py-24 animate-fade-in-up">
-          <Badge className="mb-4 bg-[#d4af37] text-black hover:bg-[#d4af37]">{CATEGORY_LABELS[f.category] || f.category}</Badge>
-          <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight leading-tight text-white max-w-3xl">
+        <div className="relative max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-24">
+          <span className="inline-block rounded-md px-3 py-1 font-display font-extrabold text-xs uppercase" style={{ backgroundColor: GOLD, color: "#0a0a0a" }}>
+            {CATEGORY_LABELS[f.category] || f.category}
+          </span>
+          <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-[1.02] mt-4 max-w-3xl">
             {f.title}
           </h1>
+          {f.description && (
+            <p className="text-gray-300 max-w-2xl mt-5 line-clamp-3">{f.description}</p>
+          )}
+          <div className="flex flex-wrap gap-3 mt-8">
+            {facts.map((fact) => (
+              <div key={fact.label} className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border border-white/15 bg-white/5 backdrop-blur-sm">
+                <fact.icon size={18} weight="bold" style={{ color: GOLD }} />
+                <div className="leading-tight">
+                  <small className="block text-[10px] uppercase tracking-wide text-gray-400">{fact.label}</small>
+                  <b className="text-sm">{fact.value}</b>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-3 mt-8">
+            <a href="#inscription">
+              <Button style={{ backgroundColor: GOLD }} className="text-black font-bold uppercase text-xs tracking-wide">
+                Je m'inscris <CaretRight size={12} className="ml-1" weight="bold" />
+              </Button>
+            </a>
+            <a href="#tarifs-formation">
+              <Button variant="outline" className="font-bold uppercase text-xs tracking-wide border-white text-white hover:bg-white hover:text-black">
+                Voir les tarifs
+              </Button>
+            </a>
+          </div>
         </div>
       </section>
 
@@ -170,6 +204,20 @@ export default function FormationDetail() {
               </ul>
             </div>
 
+            <div className="mt-10 pt-8 border-t border-gray-200" id="tarifs-formation">
+              <PricingTable formation={f} others={others} ctaHref="#inscription" />
+            </div>
+
+            <div className="mt-10 pt-8 border-t border-gray-200" id="dates-formation" data-reveal>
+              <UpcomingSessionsSection formationId={f.id} />
+            </div>
+
+            <div className="mt-10 pt-8 border-t border-gray-200" id="centres-formation" data-reveal>
+              <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#8A6400" }}>Où se former</p>
+              <h2 className="font-display text-xl font-bold mb-4">Nos centres</h2>
+              <GoogleCentersMap centreIds={["epinay", "creil"]} />
+            </div>
+
             {gallery.length > 0 && (
               <div className="mt-10 pt-8 border-t border-gray-200">
                 <h2 className="font-display text-xl font-bold mb-4">Projetez-vous</h2>
@@ -198,7 +246,7 @@ export default function FormationDetail() {
 
           {/* Sidebar */}
           <div>
-            <Card className="p-6 border border-gray-200 rounded-md shadow-none sticky top-24">
+            <Card id="inscription" className="p-6 border border-gray-200 rounded-md shadow-none sticky top-24">
               <p className="font-display text-3xl font-bold mb-1">
                 {f.price > 0 ? `${f.price.toLocaleString("fr-FR")}€` : "Sur devis"}
               </p>

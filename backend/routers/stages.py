@@ -67,6 +67,7 @@ async def list_public_available_stages(formation_id: str):
             "id": s["id"], "date_debut": s["date_debut"], "date_fin": s["date_fin"],
             "lieu_ville": s.get("lieu_ville", ""), "lieu_adresse": s.get("lieu_adresse", ""),
             "places_restantes": remaining, "creneau": s.get("creneau"),
+            "heure_debut": s.get("heure_debut"), "heure_fin": s.get("heure_fin"),
         })
     return result
 

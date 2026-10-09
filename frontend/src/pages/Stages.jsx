@@ -63,10 +63,14 @@ function groupByMonth(sessions) {
 const empty = {
   formation_id: "", date_debut: "", date_fin: "",
   lieu_adresse: "", lieu_ville: "", capacite_max: 20,
-  animateur_ids: [], statut: "planifie", notes: "", creneau: ""
+  animateur_ids: [], statut: "planifie", notes: "", creneau: "",
+  heure_debut: "09:00", heure_fin: "17:00",
 };
 
 const CRENEAU_LABEL = { JOUR: "Jour", SOIR: "Soir" };
+// Horaires par défaut selon le rythme choisi — le soir est toujours
+// 18h00-21h30 (horaire fixe des sessions VTC/Taxi en soirée).
+const CRENEAU_HOURS = { JOUR: { heure_debut: "09:00", heure_fin: "17:00" }, SOIR: { heure_debut: "18:00", heure_fin: "21:30" } };
 
 const STATUTS = ["planifie", "en_cours", "termine", "annule"];
 
@@ -143,6 +147,7 @@ export default function Stages() {
       formation_id: s.formation_id || "", date_debut: s.date_debut || "", date_fin: s.date_fin || "",
       lieu_adresse: s.lieu_adresse || "", lieu_ville: s.lieu_ville || "", capacite_max: s.capacite_max ?? 20,
       animateur_ids: ids, statut: s.statut || "planifie", notes: s.notes || "", creneau: s.creneau || "",
+      heure_debut: s.heure_debut || "09:00", heure_fin: s.heure_fin || "17:00",
     });
     setStageModules(s.modules || []);
     setSelectedTemplateId("");
@@ -362,7 +367,13 @@ export default function Stages() {
               </div>
               <div>
                 <label className="text-sm font-medium">Rythme</label>
-                <Select value={form.creneau || "aucun"} onValueChange={(v) => setForm({ ...form, creneau: v === "aucun" ? "" : v })}>
+                <Select
+                  value={form.creneau || "aucun"}
+                  onValueChange={(v) => {
+                    const creneau = v === "aucun" ? "" : v;
+                    setForm((f) => ({ ...f, creneau, ...(CRENEAU_HOURS[creneau] || {}) }));
+                  }}
+                >
                   <SelectTrigger data-testid="stage-creneau"><SelectValue placeholder="Aucun rythme précis" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="aucun">Aucun rythme précis</SelectItem>
@@ -370,6 +381,14 @@ export default function Stages() {
                     <SelectItem value="SOIR">Soir</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Heure de début</label>
+                <Input type="time" value={form.heure_debut} onChange={(e) => setForm({ ...form, heure_debut: e.target.value })} data-testid="stage-heure-debut" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Heure de fin</label>
+                <Input type="time" value={form.heure_fin} onChange={(e) => setForm({ ...form, heure_fin: e.target.value })} data-testid="stage-heure-fin" />
               </div>
               {editingId && (
                 <div>
@@ -578,6 +597,9 @@ function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete,
             <Badge variant="outline" className="text-[10px] gap-1">
               {creneau === "JOUR" ? <Sun size={10} /> : <Moon size={10} />} {creneau}
             </Badge>
+          )}
+          {s.heure_debut && s.heure_fin && (
+            <span className="text-[10px] text-gray-400">{s.heure_debut}–{s.heure_fin}</span>
           )}
         </div>
         <div className="flex items-center gap-2">

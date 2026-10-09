@@ -23,7 +23,7 @@ from services.activity import log_action
 from services.meta_capi import send_capi_event
 from services.password_reset import create_reset_token
 from services import identity_extraction
-from services.candidate_automation import _hours_since_end
+from services.candidate_automation import _hours_since_end, convocation_message
 
 router = APIRouter(tags=["inscriptions"])
 
@@ -570,14 +570,9 @@ async def assign_inscription_stage(iid: str, payload: StageAssignIn, user: dict 
     # pour éviter un double envoi par la relance automatique.
     if payload.stage_id and inscription.get("student_email") and not inscription.get("convocation_sent_at"):
         try:
-            message = (
-                f"Bonjour {inscription.get('student_name', '')},\n\n"
-                f"Nous vous confirmons votre convocation à la formation {stage.get('formation_titre', '')}.\n\n"
-                f"Dates : du {format_date_long_fr(stage.get('date_debut', ''))} au {format_date_long_fr(stage.get('date_fin', ''))}\n"
-                f"Lieu : {stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}\n\n"
-                "Merci de vous présenter avec une pièce d'identité valide et les documents demandés dans votre dossier.\n\n"
-                "Pour toute question, contactez-nous : contact@tdl-formation.fr."
-            )
+            formation = await db.formations.find_one({"id": stage.get("formation_id")}, {"_id": 0, "category": 1}) or {}
+            stage["formation_category"] = formation.get("category")
+            message = convocation_message(stage, inscription)
             await send_email(inscription["student_email"], f"📋 Convocation — {stage.get('formation_titre', '')}", render_branded_email(message))
             await db.inscriptions.update_one({"id": iid}, {"$set": {"convocation_sent_at": now_iso()}})
         except Exception:
