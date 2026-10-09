@@ -27,12 +27,12 @@ import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
 import { useReveal } from "@/hooks/useReveal";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { setPageMeta } from "@/lib/seo";
+import GoogleCentersMap from "@/components/GoogleCentersMap";
 
 // Sections sous la ligne de flottaison + widget de chat : chargées à la
 // demande plutôt que dans le bundle initial, pour ne pas ralentir le premier
 // affichage (LCP) avec du JS qui ne sert qu'après le scroll.
 const GoogleReviewsCarousel = lazy(() => import("@/components/GoogleReviewsCarousel"));
-const FranceMapSection = lazy(() => import("@/components/FranceMapSection"));
 const ChatWidget = lazy(() => import("@/components/ChatWidget"));
 const ContactBubble = lazy(() => import("@/components/ContactBubble"));
 
@@ -764,9 +764,7 @@ export default function Landing() {
           <p className="overline">Nos centres</p>
           <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mt-2 mb-10">Où nous trouver</h2>
           <div className="w-full">
-            <Suspense fallback={null}>
-              <FranceMapSection className="!bg-transparent !shadow-none !border-none" />
-            </Suspense>
+            <GoogleCentersMap centreIds={["epinay", "creil"]} />
           </div>
         </div>
       </section>
