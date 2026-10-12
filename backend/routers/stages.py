@@ -65,7 +65,7 @@ async def list_public_available_stages(formation_id: str):
     result = []
     for s in stages:
         nb_inscrits = await db.inscriptions.count_documents({"stage_id": s["id"], "status": "active"})
-        remaining = max(0, (s.get("capacite_max") or 0) - nb_inscrits)
+        remaining = max(0, (s.get("capacite_max") or 0) - nb_inscrits - (s.get("external_reserved") or 0))
         if remaining <= 0:
             continue
         result.append({
@@ -104,6 +104,7 @@ async def list_stages(
         counts_by_stage = {c["_id"]: c["n"] for c in counts}
         for s in stages:
             s["nb_inscrits"] = counts_by_stage.get(s["id"], 0)
+            s["places_restantes"] = max(0, (s.get("capacite_max") or 0) - s["nb_inscrits"] - (s.get("external_reserved") or 0))
     return stages
 
 

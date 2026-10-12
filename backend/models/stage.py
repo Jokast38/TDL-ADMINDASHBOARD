@@ -27,6 +27,13 @@ class StageIn(BaseModel):
     # Défaut au rythme JOUR (9h-17h) ; le rythme SOIR est 18h00-21h30.
     heure_debut: Optional[str] = "09:00"
     heure_fin: Optional[str] = "17:00"
+    # Places déjà prises par une plateforme externe (Groupon...) qui ne passe
+    # pas par nos inscriptions — à défaut de pouvoir les compter
+    # automatiquement, on les déclare à la main pour que les places
+    # restantes réellement disponibles (capacite_max - nb_inscrits -
+    # external_reserved) restent justes partout (page publique, affectation
+    # manuelle). Voir aussi `statut="complet"` pour verrouiller entièrement.
+    external_reserved: int = 0
 
 
 class StageUpdate(BaseModel):
@@ -42,6 +49,7 @@ class StageUpdate(BaseModel):
     creneau: Optional[str] = None
     heure_debut: Optional[str] = None
     heure_fin: Optional[str] = None
+    external_reserved: Optional[int] = None
 
 
 class EmargementIn(BaseModel):

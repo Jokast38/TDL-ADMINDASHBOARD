@@ -102,7 +102,7 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         if stage.get("statut") == "complet":
             raise HTTPException(status_code=409, detail="Cette session est complète.")
         nb_inscrits = await db.inscriptions.count_documents({"stage_id": payload.stage_id, "status": "active"})
-        if nb_inscrits >= (stage.get("capacite_max") or 0):
+        if nb_inscrits + (stage.get("external_reserved") or 0) >= (stage.get("capacite_max") or 0):
             raise HTTPException(status_code=409, detail="Cette session est complète.")
 
     user = await db.users.find_one({"email": payload.student_email.lower()})
@@ -575,8 +575,8 @@ async def assign_inscription_stage(iid: str, payload: StageAssignIn, user: dict 
             if stage.get("statut") == "complet":
                 raise HTTPException(status_code=409, detail="Cette session est complète — déverrouillez-la d'abord si vous voulez vraiment y affecter ce candidat.")
             nb_inscrits = await db.inscriptions.count_documents({"stage_id": payload.stage_id, "status": "active"})
-            if nb_inscrits >= (stage.get("capacite_max") or 0):
-                raise HTTPException(status_code=409, detail=f"Cette session est à son quota ({stage.get('capacite_max')} places) — augmentez la capacité ou choisissez une autre session.")
+            if nb_inscrits + (stage.get("external_reserved") or 0) >= (stage.get("capacite_max") or 0):
+                raise HTTPException(status_code=409, detail=f"Cette session est à son quota ({stage.get('capacite_max')} places, dont {stage.get('external_reserved') or 0} réservée(s) ailleurs) — augmentez la capacité ou choisissez une autre session.")
 
     await db.inscriptions.update_one(
         {"id": iid}, {"$set": {"stage_id": payload.stage_id, "stage_titre": stage_titre, "updated_at": now_iso()}}

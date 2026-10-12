@@ -64,7 +64,7 @@ const empty = {
   formation_id: "", date_debut: "", date_fin: "",
   lieu_adresse: "", lieu_ville: "", capacite_max: 20,
   animateur_ids: [], statut: "planifie", notes: "", creneau: "",
-  heure_debut: "09:00", heure_fin: "17:00",
+  heure_debut: "09:00", heure_fin: "17:00", external_reserved: 0,
 };
 
 const CRENEAU_LABEL = { JOUR: "Jour", SOIR: "Soir" };
@@ -159,6 +159,7 @@ export default function Stages() {
       lieu_adresse: s.lieu_adresse || "", lieu_ville: s.lieu_ville || "", capacite_max: s.capacite_max ?? 20,
       animateur_ids: ids, statut: s.statut || "planifie", notes: s.notes || "", creneau: s.creneau || "",
       heure_debut: s.heure_debut || "09:00", heure_fin: s.heure_fin || "17:00",
+      external_reserved: s.external_reserved ?? 0,
     });
     setStageModules(s.modules || []);
     setSelectedTemplateId("");
@@ -215,7 +216,7 @@ export default function Stages() {
 
   const save = async () => {
     try {
-      const payload = { ...form, capacite_max: +form.capacite_max, creneau: form.creneau || null };
+      const payload = { ...form, capacite_max: +form.capacite_max, external_reserved: +form.external_reserved || 0, creneau: form.creneau || null };
       if (editingId) {
         await api.put(`/stages/${editingId}`, payload);
         toast.success("Session mise à jour");
@@ -389,7 +390,22 @@ export default function Stages() {
               </div>
               <div>
                 <label className="text-sm font-medium">Capacité max</label>
-                <Input type="number" value={form.capacite_max} onChange={(e) => setForm({ ...form, capacite_max: e.target.value })} />
+                <Input type="number" value={form.capacite_max} onChange={(e) => setForm({ ...form, capacite_max: e.target.value })} data-testid="stage-capacite-max" />
+              </div>
+              <div>
+                <label className="text-sm font-medium" title="Places déjà prises par une plateforme externe (Groupon...) qui ne passe pas par nos inscriptions — vient en déduction des places restantes affichées et proposées à la réservation.">
+                  Places réservées ailleurs (Groupon...)
+                </label>
+                <Input
+                  type="number" min="0" value={form.external_reserved}
+                  onChange={(e) => setForm({ ...form, external_reserved: e.target.value })}
+                  data-testid="stage-external-reserved"
+                />
+                {editingId && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Places restantes réelles : {Math.max(0, (+form.capacite_max || 0) - (items.find((i) => i.id === editingId)?.nb_inscrits || 0) - (+form.external_reserved || 0))}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium">Rythme</label>
@@ -609,7 +625,8 @@ export default function Stages() {
 
 function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete, onViewRoster, onToggleLock, muted }) {
   const creneau = s.creneau || extractCreneau(s.notes);
-  const full = (s.nb_inscrits || 0) >= s.capacite_max;
+  const placesRestantes = s.places_restantes ?? Math.max(0, (s.capacite_max || 0) - (s.nb_inscrits || 0) - (s.external_reserved || 0));
+  const full = placesRestantes <= 0;
   const locked = s.statut === "complet";
   return (
     <Card
@@ -633,10 +650,11 @@ function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete,
           <button
             onClick={(e) => { e.stopPropagation(); onViewRoster(s); }}
             className={`text-xs flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-gray-100 ${full ? "text-red-600 font-semibold" : "text-gray-500"}`}
-            title="Voir les inscrits de cette session"
+            title={`${s.nb_inscrits || 0} inscrit(s)${s.external_reserved ? ` + ${s.external_reserved} réservée(s) ailleurs` : ""} sur ${s.capacite_max} — ${placesRestantes} place(s) restante(s)`}
             data-testid={`stage-roster-${s.id}`}
           >
-            <Users size={12} />{s.nb_inscrits || 0}/{s.capacite_max}
+            <Users size={12} />{s.nb_inscrits || 0}{s.external_reserved ? `+${s.external_reserved}` : ""}/{s.capacite_max}
+            <span className={`ml-1 ${full ? "text-red-600" : "text-gray-400"}`}>({placesRestantes} rest.)</span>
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onToggleLock(s); }}
