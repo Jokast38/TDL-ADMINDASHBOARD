@@ -177,28 +177,67 @@ def _iso_week_key(date_str: str) -> str:
     return f"{year}-S{week:02d}"
 
 
-@router.get("/leads-timeseries")
-async def leads_timeseries_stats(days: int = 60, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
-    """Nombre de nouveaux prospects par jour et par semaine, sur les `days`
-    derniers jours — bilans demandés pour la section Statistiques."""
-    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-    leads = await db.leads.find({"created_at": {"$gte": since}}, {"_id": 0, "created_at": 1}).to_list(100000)
-
+def _bucket_dates(dates: list) -> tuple:
     daily: dict = {}
     weekly: dict = {}
-    for l in leads:
-        created = l.get("created_at") or ""
+    for created in dates:
         if not created:
             continue
-        day_key = created[:10]
-        daily[day_key] = daily.get(day_key, 0) + 1
+        daily[created[:10]] = daily.get(created[:10], 0) + 1
         try:
             week_key = _iso_week_key(created)
         except Exception:
             continue
         weekly[week_key] = weekly.get(week_key, 0) + 1
+    return daily, weekly
+
+
+@router.get("/leads-timeseries")
+async def leads_timeseries_stats(days: int = 60, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Nombre de nouveaux prospects ET nombre de prospects suivis (relancés/
+    contactés) par jour et par semaine, sur les `days` derniers jours —
+    bilans + courbe de suivi demandés pour la section Statistiques."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    created_leads = await db.leads.find({"created_at": {"$gte": since}}, {"_id": 0, "created_at": 1}).to_list(100000)
+    contacted_leads = await db.leads.find({"last_contacted_at": {"$gte": since}}, {"_id": 0, "last_contacted_at": 1}).to_list(100000)
+
+    new_daily, new_weekly = _bucket_dates([l.get("created_at") for l in created_leads])
+    followup_daily, followup_weekly = _bucket_dates([l.get("last_contacted_at") for l in contacted_leads])
+
+    all_days = sorted(set(new_daily) | set(followup_daily))
+    all_weeks = sorted(set(new_weekly) | set(followup_weekly))
 
     return {
-        "daily": [{"date": k, "count": v} for k, v in sorted(daily.items())],
-        "weekly": [{"week": k, "count": v} for k, v in sorted(weekly.items())],
+        "daily": [{"date": k, "count": new_daily.get(k, 0), "suivi": followup_daily.get(k, 0)} for k in all_days],
+        "weekly": [{"week": k, "count": new_weekly.get(k, 0), "suivi": followup_weekly.get(k, 0)} for k in all_weeks],
     }
+
+
+@router.get("/calls-by-hour")
+async def calls_by_hour_stats(days: int = 90, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Répartition des appels (db.commercial_calls) par heure de la journée,
+    avec taux de conversion (issue "interesse"/"inscrit") — pour repérer les
+    créneaux horaires les plus propices à l'appel."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    calls = await db.commercial_calls.find({"at": {"$gte": since}}, {"_id": 0, "at": 1, "outcome": 1}).to_list(200000)
+
+    by_hour: dict = {h: {"total": 0, "conversions": 0} for h in range(24)}
+    for c in calls:
+        at = c.get("at") or ""
+        if len(at) < 13:
+            continue
+        try:
+            hour = int(at[11:13])
+        except ValueError:
+            continue
+        by_hour[hour]["total"] += 1
+        if c.get("outcome") in ("interesse", "inscrit"):
+            by_hour[hour]["conversions"] += 1
+
+    return [
+        {
+            "hour": h, "total": v["total"], "conversions": v["conversions"],
+            "taux_conversion": round(100 * v["conversions"] / v["total"], 1) if v["total"] else 0,
+        }
+        for h, v in sorted(by_hour.items())
+    ]

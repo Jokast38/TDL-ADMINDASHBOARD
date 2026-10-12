@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Users, FolderOpen, Clock, CurrencyEur, PencilSimple, Trophy, ShoppingCart,
+  Users, FolderOpen, Clock, CurrencyEur, PencilSimple, Trophy, ShoppingCart, CaretRight,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { formatDateTimeFR } from "@/lib/dateFormat";
@@ -126,6 +126,7 @@ export default function Activity() {
   const [originStats, setOriginStats] = useState(null);
   const [leadsTimeseries, setLeadsTimeseries] = useState(null);
   const [leadsTimeseriesRange, setLeadsTimeseriesRange] = useState("day");
+  const [callsByHour, setCallsByHour] = useState(null);
 
   const load = () => api.get("/employees/activity").then((r) => setItems(r.data)).catch(() => setItems([]));
   const loadDaily = () => api.get("/employees/activity-by-day", { params: { days: dailyDays } })
@@ -146,6 +147,7 @@ export default function Activity() {
     api.get("/stats/meta-leads").then((r) => setMetaLeadsStats(r.data)).catch(() => {});
     api.get("/stats/leads-by-origin").then((r) => setOriginStats(r.data)).catch(() => {});
     api.get("/stats/leads-timeseries", { params: { days: 90 } }).then((r) => setLeadsTimeseries(r.data)).catch(() => {});
+    api.get("/stats/calls-by-hour", { params: { days: 90 } }).then((r) => setCallsByHour(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => { loadDaily(); }, [dailyDays]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -196,6 +198,13 @@ export default function Activity() {
   }), { contacted: 0, interesse: 0, callbacks: 0, inscriptions: 0, dossiersTraites: 0 }), [items]);
 
   const weekMinutes = useMemo(() => timeseries.reduce((s, d) => s + d.minutes, 0), [timeseries]);
+  // Seuil de 3 appels minimum pour ne pas laisser une heure à 1 seul appel
+  // "100% converti" écraser artificiellement le repère visuel du créneau le
+  // plus propice.
+  const bestCallHourRate = useMemo(() => {
+    const eligible = (callsByHour || []).filter((h) => h.total >= 3);
+    return eligible.length ? Math.max(...eligible.map((h) => h.taux_conversion)) : 0;
+  }, [callsByHour]);
   const dossierBuckets = useMemo(() => bucketDossierStatus(stats?.by_status), [stats]);
 
   // "Actif" ici = connecté en ce moment (même calcul que le badge
@@ -220,6 +229,26 @@ export default function Activity() {
   useEffect(() => {
     if (employeesPage > employeesTotalPages) setEmployeesPage(1);
   }, [employeesTotalPages, employeesPage]);
+
+  // Hors ligne = comptes actifs qui ne remplissent pas le critère "en ligne"
+  // ci-dessus (jamais connecté ou dernier ping trop ancien) — permet de
+  // cliquer sur un employé non connecté pour consulter son historique
+  // (même page de bilan détaillé que pour un employé en ligne).
+  const offlineEmployees = useMemo(() =>
+    [...(items || [])]
+      .filter((i) => i.active !== false && i.account_status !== "suspendu" && i.account_status !== "archive")
+      .filter((i) => !i.last_seen || (now - new Date(i.last_seen).getTime()) >= ONLINE_THRESHOLD_MS)
+      .sort((a, b) => new Date(b.last_seen || 0).getTime() - new Date(a.last_seen || 0).getTime()),
+    [items, now]);
+  const [offlinePage, setOfflinePage] = useState(1);
+  const offlineTotalPages = Math.max(1, Math.ceil(offlineEmployees.length / EMPLOYEES_PAGE_SIZE));
+  const pagedOfflineEmployees = useMemo(
+    () => offlineEmployees.slice((offlinePage - 1) * EMPLOYEES_PAGE_SIZE, offlinePage * EMPLOYEES_PAGE_SIZE),
+    [offlineEmployees, offlinePage]
+  );
+  useEffect(() => {
+    if (offlinePage > offlineTotalPages) setOfflinePage(1);
+  }, [offlineTotalPages, offlinePage]);
 
   if (items === null) {
     return <p className="text-sm text-gray-400 py-12 text-center">Chargement...</p>;
@@ -476,6 +505,82 @@ export default function Activity() {
                 </Button>
                 <span className="text-xs">Page {employeesPage} / {employeesTotalPages}</span>
                 <Button variant="outline" size="sm" disabled={employeesPage >= employeesTotalPages} onClick={() => setEmployeesPage((p) => Math.min(employeesTotalPages, p + 1))} data-testid="employees-next-page">
+                  Suivant
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* Employés hors ligne — cliquables pour voir leur historique, même
+            page de bilan détaillé que les employés en ligne ci-dessus. */}
+        <Card className="lg:col-span-2 p-0 border border-gray-200 rounded-md shadow-none overflow-hidden" data-testid="offline-employees-section">
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
+            <p className="font-display text-lg font-bold flex items-center gap-2"><Users size={16} className="text-gray-400" /> Employés hors ligne</p>
+            <Badge className="bg-gray-100 text-gray-500 hover:bg-gray-100">
+              <span className="h-1.5 w-1.5 rounded-full mr-1.5 bg-gray-300" /> {offlineEmployees.length} déconnecté(s)
+            </Badge>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left border-y border-gray-100 text-gray-400">
+                <tr>
+                  <th className="py-2 px-5 overline font-normal">Employé</th>
+                  <th className="py-2 px-4 overline font-normal">Dernière connexion</th>
+                  <th className="py-2 px-4 overline font-normal" title="Inscriptions traitées + rappels traités + ajustement manuel">Dossiers traités</th>
+                  <th className="py-2 px-4 overline font-normal">Leads contactés</th>
+                  <th className="py-2 px-4"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedOfflineEmployees.map((i) => (
+                  <tr
+                    key={i.id}
+                    className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
+                    onClick={() => navigate(`/admin/activite/employe/${i.id}`, { state: { name: i.name, role: i.role } })}
+                    title="Voir l'historique de cet employé"
+                    data-testid={`offline-employee-row-${i.id}`}
+                  >
+                    <td className="py-2.5 px-5">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar className="h-8 w-8 opacity-70">
+                          <AvatarFallback style={{ backgroundColor: colorFor(i.id), color: "#fff" }} className="text-xs font-semibold">
+                            {initials(i.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium leading-tight">{i.name}</p>
+                          <p className="text-[11px] text-gray-400">{ROLE_LABELS[i.role] || i.role}</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
+                      {i.last_seen ? formatDateTimeFR(i.last_seen) : "Jamais connecté"}
+                    </td>
+                    <td className="py-2.5 px-4 font-mono font-semibold">{i.total_dossiers_traites || 0}</td>
+                    <td className="py-2.5 px-4 font-mono text-xs">{i.leads_contacted}</td>
+                    <td className="py-2.5 px-4 text-right pr-5">
+                      <CaretRight size={14} className="text-gray-300" />
+                    </td>
+                  </tr>
+                ))}
+                {!offlineEmployees.length && (
+                  <tr><td colSpan="5" className="py-10 text-center text-gray-400">Aucun employé hors ligne.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {offlineEmployees.length > EMPLOYEES_PAGE_SIZE && (
+            <div className="flex items-center justify-between text-sm text-gray-500 px-5 py-3 border-t border-gray-100">
+              <p className="text-xs">
+                {(offlinePage - 1) * EMPLOYEES_PAGE_SIZE + 1}–{Math.min(offlinePage * EMPLOYEES_PAGE_SIZE, offlineEmployees.length)} sur {offlineEmployees.length}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={offlinePage <= 1} onClick={() => setOfflinePage((p) => Math.max(1, p - 1))} data-testid="offline-employees-prev-page">
+                  Précédent
+                </Button>
+                <span className="text-xs">Page {offlinePage} / {offlineTotalPages}</span>
+                <Button variant="outline" size="sm" disabled={offlinePage >= offlineTotalPages} onClick={() => setOfflinePage((p) => Math.min(offlineTotalPages, p + 1))} data-testid="offline-employees-next-page">
                   Suivant
                 </Button>
               </div>
@@ -826,8 +931,8 @@ export default function Activity() {
           <Card className="lg:col-span-2 p-5 border border-gray-200 rounded-md shadow-none">
             <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
               <div>
-                <p className="font-display text-lg font-bold">Bilan des prospects — nouveaux leads</p>
-                <p className="text-xs text-gray-500">90 derniers jours</p>
+                <p className="font-display text-lg font-bold">Bilan et suivi des prospects</p>
+                <p className="text-xs text-gray-500">90 derniers jours — nouveaux leads vs. prospects suivis (relancés)</p>
               </div>
               <div className="flex border border-gray-200 rounded-md overflow-hidden">
                 {[{ key: "day", label: "Par jour" }, { key: "week", label: "Par semaine" }].map((o) => (
@@ -844,25 +949,56 @@ export default function Activity() {
               <p className="text-sm text-gray-400">Chargement...</p>
             ) : (
               <div style={{ height: 220 }}>
-                <Bar
+                <Line
                   data={{
                     labels: (leadsTimeseriesRange === "day" ? leadsTimeseries.daily.slice(-30) : leadsTimeseries.weekly).map((d) =>
                       leadsTimeseriesRange === "day"
                         ? new Date(d.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })
                         : d.week
                     ),
-                    datasets: [{
-                      label: "Nouveaux prospects",
-                      data: (leadsTimeseriesRange === "day" ? leadsTimeseries.daily.slice(-30) : leadsTimeseries.weekly).map((d) => d.count),
-                      backgroundColor: "#d4af37", borderRadius: 4, maxBarThickness: 24,
-                    }],
+                    datasets: [
+                      {
+                        label: "Nouveaux prospects",
+                        data: (leadsTimeseriesRange === "day" ? leadsTimeseries.daily.slice(-30) : leadsTimeseries.weekly).map((d) => d.count),
+                        borderColor: "#d4af37", backgroundColor: "rgba(212,175,55,0.08)", tension: 0.35, fill: true, pointRadius: 2,
+                      },
+                      {
+                        label: "Suivi (relances/contacts)",
+                        data: (leadsTimeseriesRange === "day" ? leadsTimeseries.daily.slice(-30) : leadsTimeseries.weekly).map((d) => d.suivi),
+                        borderColor: "#0052CC", backgroundColor: "rgba(0,82,204,0.08)", tension: 0.35, fill: true, pointRadius: 2,
+                      },
+                    ],
                   }}
-                  options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }}
+                  options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }}
                 />
               </div>
             )}
           </Card>
         </div>
+
+        <Card className="p-5 border border-gray-200 rounded-md shadow-none">
+          <p className="font-display text-lg font-bold mb-1">Meilleures heures d'appel</p>
+          <p className="text-xs text-gray-500 mb-4">Volume d'appels et taux de conversion (intéressé/inscrit) par heure — 90 derniers jours.</p>
+          {!callsByHour ? (
+            <p className="text-sm text-gray-400">Chargement...</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-2.5">
+              {callsByHour.filter((h) => h.total > 0).map((h) => {
+                const best = h.total >= 3 && h.taux_conversion === bestCallHourRate && bestCallHourRate > 0;
+                return (
+                  <div key={h.hour} className={`flex items-center justify-between text-sm px-2 py-1.5 rounded-md ${best ? "bg-[#fff8dc]" : ""}`}>
+                    <span className={best ? "font-semibold" : ""}>{String(h.hour).padStart(2, "0")}h{best ? " 🏆" : ""}</span>
+                    <span className="text-right">
+                      <span className="font-mono text-gray-500 text-xs">{h.total} appel(s)</span>
+                      <span className={`block font-mono text-xs font-semibold ${best ? "text-[#8A6400]" : "text-[#0B7238]"}`}>{h.taux_conversion}% conv.</span>
+                    </span>
+                  </div>
+                );
+              })}
+              {!callsByHour.filter((h) => h.total > 0).length && <p className="text-sm text-gray-400 col-span-full">Aucun appel enregistré.</p>}
+            </div>
+          )}
+        </Card>
       </div>
 
       <Dialog open={!!adjustTarget} onOpenChange={(v) => !v && setAdjustTarget(null)}>

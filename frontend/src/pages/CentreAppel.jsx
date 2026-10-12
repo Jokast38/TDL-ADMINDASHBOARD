@@ -15,18 +15,23 @@ import {
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-// Doit rester synchronisé avec core.config.PIPELINE_STATUS_LABELS côté backend.
+// Doit rester synchronisé avec core.config.PIPELINE_STATUS_LABELS côté
+// backend. Une couleur DISTINCTE par statut (même les 3 étapes de relance,
+// avant partagées et donc impossibles à distinguer d'un coup d'œil sur une
+// carte) — dégradé du bleu (premier contact) vers le rouge (sans réponse)
+// en passant par le violet (relances), pour lire la progression visuellement.
 const COLUMNS = [
   { key: "formulaire_rempli", label: "Formulaire Rempli", color: "#868e96" },
-  { key: "lead_entrant_sans_rdv", label: "Lead Entrant Sans RDV", color: "#F5A623" },
-  { key: "a_recontacter", label: "A recontacter (dans la journée)", color: "#0052CC" },
+  { key: "lead_entrant_sans_rdv", label: "Lead Entrant Sans RDV", color: "#0052CC" },
+  { key: "a_recontacter", label: "A recontacter (dans la journée)", color: "#2563eb" },
   { key: "premiere_relance", label: "Première relance faite", color: "#7048e8" },
-  { key: "deuxieme_relance", label: "Deuxième relance faite", color: "#7048e8" },
-  { key: "troisieme_relance", label: "Troisième relance faite", color: "#7048e8" },
+  { key: "deuxieme_relance", label: "Deuxième relance faite", color: "#9333ea" },
+  { key: "troisieme_relance", label: "Troisième relance faite", color: "#c026d3" },
   { key: "pas_de_reponse", label: "Pas de réponse", color: "#D0021B" },
   { key: "lead_tiede", label: "Lead tiède", color: "#F5A623" },
-  { key: "poubelle", label: "Poubelle", color: "#868e96" },
+  { key: "poubelle", label: "Poubelle", color: "#4b5563" },
 ];
+const COLUMN_BY_KEY = Object.fromEntries(COLUMNS.map((c) => [c.key, c]));
 const DEFAULT_COLUMN = "lead_entrant_sans_rdv";
 
 const DOCUMENT_OPTIONS = [
@@ -240,7 +245,8 @@ export default function CentreAppel() {
                       key={l.id}
                       draggable
                       onDragStart={() => setDragging(l.id)}
-                      className="bg-white p-3 rounded-md border border-gray-200 shadow-sm hover:border-[#0a0a0a]"
+                      className="bg-white p-3 rounded-md border border-gray-200 border-l-4 shadow-sm hover:border-[#0a0a0a]"
+                      style={{ borderLeftColor: (COLUMN_BY_KEY[l.pipeline_status || DEFAULT_COLUMN] || {}).color }}
                       data-testid={`centre-appel-card-${l.id}`}
                     >
                       <p className="font-semibold text-sm leading-tight">{l.name}</p>
