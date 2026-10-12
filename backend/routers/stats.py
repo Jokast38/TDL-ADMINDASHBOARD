@@ -152,6 +152,29 @@ async def meta_leads_stats(date_from: Optional[str] = None, date_to: Optional[st
     }
 
 
+@router.get("/leads-by-qualification")
+async def leads_by_qualification_stats(origin: Optional[str] = None, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Répartition par qualification (mêmes libellés que l'onglet Meta/
+    Cosmosia, voir routers.meta_lead_import.QUALIFICATION_LABELS) des
+    prospects db.leads — `origin` restreint à une origine regroupée (ex:
+    "cosmosia", voir core.config.canonicalize_lead_origin)."""
+    leads = await db.leads.find({}, {"_id": 0, "source": 1, "qualification": 1}).to_list(200000)
+    by_qualif: dict = {}
+    for l in leads:
+        if origin and canonicalize_lead_origin(l.get("source")) != origin:
+            continue
+        qual = l.get("qualification") or "a_contacter"
+        by_qualif[qual] = by_qualif.get(qual, 0) + 1
+    total = sum(by_qualif.values())
+    return {
+        "total": total,
+        "by_status": [
+            {"statut": k, "nb": v, "pct": round(100 * v / total, 1) if total else 0}
+            for k, v in sorted(by_qualif.items(), key=lambda x: -x[1])
+        ],
+    }
+
+
 @router.get("/leads-by-origin")
 async def leads_by_origin_stats(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
     """Répartition des prospects (db.leads) par origine regroupée — chiffres

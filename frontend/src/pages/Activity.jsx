@@ -52,6 +52,24 @@ const META_QUALIF_COLUMNS = [
   { key: "a_contacter", label: "À contacter" },
 ];
 const META_STATUS_LABELS = Object.fromEntries(META_QUALIF_COLUMNS.map((c) => [c.key, c.label]));
+// Même code couleur que le tableau Marketing.jsx (META_LEAD_QUALIF_COLORS) —
+// répété ici pour que "Intéressé"/"Inscrit"/etc. se reconnaissent au même
+// coup d'œil, que ce soit sur la page Marketing ou dans Activité.
+const QUALIF_BADGE = {
+  a_contacter: "bg-gray-100 text-gray-600",
+  non_qualifie: "bg-gray-200 text-gray-500",
+  interesse: "bg-[#0B7238]/10 text-[#0B7238]",
+  pas_de_reponse: "bg-amber-100 text-amber-700",
+  a_relancer: "bg-blue-100 text-blue-700",
+  a_relancer_1_an: "bg-purple-100 text-purple-700",
+  plus_interesse: "bg-red-100 text-red-700",
+  inscrit: "bg-green-600 text-white",
+};
+const QUALIF_DOT = {
+  a_contacter: "#9ca3af", non_qualifie: "#6b7280", interesse: "#0B7238",
+  pas_de_reponse: "#b45309", a_relancer: "#1d4ed8", a_relancer_1_an: "#7e22ce",
+  plus_interesse: "#dc2626", inscrit: "#16a34a",
+};
 
 function colorFor(id) {
   let hash = 0;
@@ -127,6 +145,7 @@ export default function Activity() {
   const [leadsTimeseries, setLeadsTimeseries] = useState(null);
   const [leadsTimeseriesRange, setLeadsTimeseriesRange] = useState("day");
   const [callsByHour, setCallsByHour] = useState(null);
+  const [cosmosiaStats, setCosmosiaStats] = useState(null);
 
   const load = () => api.get("/employees/activity").then((r) => setItems(r.data)).catch(() => setItems([]));
   const loadDaily = () => api.get("/employees/activity-by-day", { params: { days: dailyDays } })
@@ -148,6 +167,7 @@ export default function Activity() {
     api.get("/stats/leads-by-origin").then((r) => setOriginStats(r.data)).catch(() => {});
     api.get("/stats/leads-timeseries", { params: { days: 90 } }).then((r) => setLeadsTimeseries(r.data)).catch(() => {});
     api.get("/stats/calls-by-hour", { params: { days: 90 } }).then((r) => setCallsByHour(r.data)).catch(() => {});
+    api.get("/stats/leads-by-qualification", { params: { origin: "cosmosia" } }).then((r) => setCosmosiaStats(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => { loadDaily(); }, [dailyDays]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -852,10 +872,13 @@ export default function Activity() {
               <div className="space-y-2.5">
                 {metaLeadsStats.by_status.map((s) => (
                   <div key={s.statut} className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">{META_STATUS_LABELS[s.statut] || s.statut}</span>
+                    <span className="flex items-center gap-2 text-gray-600">
+                      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: QUALIF_DOT[s.statut] || "#9ca3af" }} />
+                      {META_STATUS_LABELS[s.statut] || s.statut}
+                    </span>
                     <span className="text-right">
-                      <span className="font-mono font-semibold">{s.nb} <span className="text-gray-400 font-normal">({s.pct}%)</span></span>
-                      <span className="block text-xs font-mono text-[#0B7238]">{fmtMoney(s.ca_potentiel)}</span>
+                      <span className={`font-mono font-semibold px-1.5 py-0.5 rounded ${QUALIF_BADGE[s.statut] || "bg-gray-100 text-gray-600"}`}>{s.nb} <span className="font-normal opacity-70">({s.pct}%)</span></span>
+                      <span className="block text-xs font-mono text-[#0B7238] mt-0.5">{fmtMoney(s.ca_potentiel)}</span>
                     </span>
                   </div>
                 ))}
@@ -876,7 +899,12 @@ export default function Activity() {
                       <th className="py-2 px-3 overline font-normal">Traité par</th>
                       <th className="py-2 px-3 overline font-normal text-right">Total</th>
                       {META_QUALIF_COLUMNS.map((c) => (
-                        <th key={c.key} className="py-2 px-3 overline font-normal text-right">{c.label}</th>
+                        <th key={c.key} className="py-2 px-3 overline font-normal text-right">
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: QUALIF_DOT[c.key] || "#9ca3af" }} />
+                            {c.label}
+                          </span>
+                        </th>
                       ))}
                     </tr>
                   </thead>
@@ -886,7 +914,13 @@ export default function Activity() {
                         <td className="py-2 px-3 font-medium">{p.personne}</td>
                         <td className="py-2 px-3 text-right font-mono font-semibold">{p.total}</td>
                         {META_QUALIF_COLUMNS.map((c) => (
-                          <td key={c.key} className="py-2 px-3 text-right font-mono">{p[c.key] || 0}</td>
+                          <td key={c.key} className="py-2 px-3 text-right">
+                            {p[c.key] ? (
+                              <span className={`font-mono text-xs px-1.5 py-0.5 rounded ${QUALIF_BADGE[c.key] || "bg-gray-100 text-gray-600"}`}>{p[c.key]}</span>
+                            ) : (
+                              <span className="font-mono text-xs text-gray-300">0</span>
+                            )}
+                          </td>
                         ))}
                       </tr>
                     ))}
@@ -902,6 +936,27 @@ export default function Activity() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="p-5 border border-gray-200 rounded-md shadow-none">
+            <p className="font-display text-lg font-bold mb-1">Prospects Cosmosia par statut</p>
+            <p className="text-xs text-gray-500 mb-4">{cosmosiaStats?.total ?? 0} lead(s) Cosmosia au total</p>
+            {!cosmosiaStats ? (
+              <p className="text-sm text-gray-400">Chargement...</p>
+            ) : (
+              <div className="space-y-2.5">
+                {cosmosiaStats.by_status.map((s) => (
+                  <div key={s.statut} className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-2 text-gray-600">
+                      <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: QUALIF_DOT[s.statut] || "#9ca3af" }} />
+                      {META_STATUS_LABELS[s.statut] || s.statut}
+                    </span>
+                    <span className={`font-mono font-semibold px-1.5 py-0.5 rounded ${QUALIF_BADGE[s.statut] || "bg-gray-100 text-gray-600"}`}>{s.nb} <span className="font-normal opacity-70">({s.pct}%)</span></span>
+                  </div>
+                ))}
+                {!cosmosiaStats.by_status.length && <p className="text-sm text-gray-400">Aucune donnée.</p>}
+              </div>
+            )}
+          </Card>
+
+          <Card className="lg:col-span-2 p-5 border border-gray-200 rounded-md shadow-none">
             <p className="font-display text-lg font-bold mb-1">Prospects par origine</p>
             <p className="text-xs text-gray-500 mb-4">Toute la base (db.leads), tous statuts confondus.</p>
             {!originStats ? (
