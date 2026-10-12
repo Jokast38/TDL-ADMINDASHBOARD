@@ -981,6 +981,15 @@ function MetaEventsTab() {
   useEffect(load, [search, qualifFilter, accountFilter, campaignFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(1); }, [search, qualifFilter, accountFilter, campaignFilter]);
 
+  // Rafraîchit le statut de paiement en temps réel : un lien envoyé passe en
+  // "Payé" dès que le webhook Stripe confirme la transaction côté serveur
+  // (voir GET /meta-lead-import, qui croise db.custom_payments), sans que
+  // l'agent ait besoin de recharger la page à la main.
+  useEffect(() => {
+    const id = setInterval(load, 15000);
+    return () => clearInterval(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Meta Lead Ads ne fournit ni champ "intérêt" structuré ni champ ville —
   // on les déduit au mieux du nom du formulaire/de la campagne (qui mentionne
   // généralement la formation et parfois la ville), même logique de
@@ -1317,7 +1326,7 @@ function MetaEventsTab() {
       />
       <SendPaymentLinkDialog
         open={!!paymentLinkTarget}
-        onOpenChange={(v) => !v && setPaymentLinkTarget(null)}
+        onOpenChange={(v) => { if (!v) { setPaymentLinkTarget(null); load(); } }}
         lead={paymentLinkTarget}
       />
     </div>

@@ -244,8 +244,31 @@ async def list_meta_leads(
     for i in inscriptions:
         by_email.setdefault(i["student_email"], i)  # le plus récent d'abord (tri ci-dessus)
 
+    # Un lien de paiement envoyé depuis CE tableau (bouton "Envoyer un lien de
+    # paiement", voir SendPaymentLinkDialog.jsx -> POST /custom-payments) n'est
+    # PAS une inscription — son statut ("pending"/"paid") vit dans sa propre
+    # collection, mise à jour en temps réel par le webhook Stripe (voir
+    # routers/payments.py). Sans ce second lookup, un lien de paiement envoyé
+    # puis payé restait invisible ici tant que personne ne l'inscrivait "en dur".
+    lead_ids = [d["id"] for d in docs]
+    custom_payments = await db.custom_payments.find(
+        {"lead_id": {"$in": lead_ids}}, {"_id": 0, "lead_id": 1, "status": 1, "price": 1, "paid_at": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(2000)
+    by_lead_id: Dict[str, dict] = {}
+    for cp in custom_payments:
+        by_lead_id.setdefault(cp["lead_id"], cp)  # le plus récent d'abord (tri ci-dessus)
+
     for d in docs:
+        cp = by_lead_id.get(d["id"])
         insc = by_id.get(d.get("inscription_id")) or by_email.get(d.get("email"))
+        if cp:
+            d["payment_status"] = cp.get("status")
+            d["paid"] = cp.get("status") == "paid"
+            d["amount_paid"] = cp.get("price") if cp.get("status") == "paid" else None
+            d["price"] = cp.get("price")
+            d["paid_at"] = cp.get("paid_at")
+            d["payment_link_sent_at"] = cp.get("created_at")
+            continue
         d["payment_status"] = insc.get("payment_status") if insc else None
         d["paid"] = insc.get("payment_status") in ("paid", "cpf_valide") if insc else False
         d["amount_paid"] = insc.get("amount_paid") if insc else None
