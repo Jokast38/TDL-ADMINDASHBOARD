@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from core.database import db
 from core.security import require_role
 from core.utils import now_iso
-from core.config import ROLES_LEADS
-from models.lead import LeadIn, LeadUpdate, LeadImportJsonIn, LeadRelanceIn, LeadRelanceSingleIn, LeadBroadcastIn
+from core.config import ROLES_LEADS, canonicalize_lead_origin, ORIGIN_LABELS
+from models.lead import LeadIn, LeadUpdate, LeadImportJsonIn, LeadRelanceIn, LeadRelanceSingleIn, LeadBroadcastIn, DocumentRequestIn
 from services.email import send_email
 from services.activity import log_action
 from services.lead_followup import send_no_response_followup, NO_RESPONSE_QUALIFICATION
@@ -473,6 +473,9 @@ async def list_leads(
     campaign: Optional[str] = None,
     ville: Optional[str] = None,
     qualification: Optional[str] = None,
+    pipeline_status: Optional[str] = None,
+    assigned_to: Optional[str] = None,
+    origin: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
     user: dict = Depends(require_role(*ROLES_LEADS))
@@ -487,6 +490,17 @@ async def list_leads(
     if campaign: query["campaign"] = campaign
     if ville: query["ville"] = ville
     if qualification: query["qualification"] = qualification
+    if pipeline_status: query["pipeline_status"] = pipeline_status
+    if assigned_to: query["assigned_to"] = assigned_to
+    if origin:
+        # `origin` regroupe plusieurs valeurs brutes de `source` (voir
+        # core.config.canonicalize_lead_origin) — on résout dynamiquement
+        # quelles valeurs brutes appartiennent à ce groupe plutôt que de
+        # maintenir une liste statique qui se périmerait à chaque nouvel
+        # import (chaque onglet Excel crée une nouvelle valeur de source).
+        all_sources = await db.leads.distinct("source")
+        matching = [s for s in all_sources if canonicalize_lead_origin(s) == origin]
+        query["source"] = {"$in": matching}
     if contacted is not None: query["contacted"] = contacted
     if has_email is not None:
         query["email"] = {"$ne": None} if has_email else None
@@ -520,14 +534,22 @@ async def list_leads(
     # Un commercial/responsable commercial avec des catégories assignées ne voit
     # que ses leads (+ ceux sans catégorie déduite, pour ne jamais en perdre) —
     # les autres rôles (admin, admission...) voient tout, comportement inchangé.
+    # Un agent téléphonique (Centre d'appel) suit la même règle que le
+    # commercial : au départ AUCUN lead n'a de `assigned_to` renseigné (champ
+    # réservé au suivi manuel "qui s'en occupe", pas au contrôle d'accès) —
+    # scoper strictement dessus laissait le Centre d'appel vide pour tout
+    # agent tant que personne n'avait fait d'affectation manuelle. L'agent a
+    # donc accès au pool de prospects de ses catégories assignées, comme un
+    # commercial, et peut ensuite se les répartir avec `assigned_to`.
     assigned = user.get("assigned_categories") or []
-    scoped = user["role"] in ("commercial", "responsable_commercial") and assigned
+    scoped = user["role"] in ("commercial", "responsable_commercial", "agent_telephonique") and assigned
     if scoped:
         query["$and"] = query.get("$and", []) + [
             {"$or": [{"category": {"$in": assigned}}, {"category": None}, {"category": {"$exists": False}}]}
         ]
 
-    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, source, campaign, ville, qualification, page, page_size,
+    cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, source, campaign, ville, qualification,
+                 pipeline_status, assigned_to, origin, page, page_size,
                  tuple(sorted(assigned)) if scoped else None)
     cached = _leads_cache_get(cache_key)
     if cached is not None:
@@ -569,6 +591,24 @@ async def list_leads(
     result = {"items": items, "total": total, "page": page, "page_size": page_size, "pages": max((total + page_size - 1) // page_size, 1)}
     _leads_cache_set(cache_key, result)
     return result
+
+
+@router.get("/origins")
+async def list_lead_origins(user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Origines regroupées (voir core.config.canonicalize_lead_origin) avec
+    décompte — alimente les onglets d'origine du Centre d'appel
+    (CentreAppel.jsx), sur TOUTE la base (pas seulement la page chargée)."""
+    assigned = user.get("assigned_categories") or []
+    scoped = user["role"] in ("commercial", "responsable_commercial", "agent_telephonique") and assigned
+    query: Dict[str, Any] = {}
+    if scoped:
+        query["$or"] = [{"category": {"$in": assigned}}, {"category": None}, {"category": {"$exists": False}}]
+    sources = await db.leads.find(query, {"_id": 0, "source": 1}).to_list(100000)
+    counts: Dict[str, int] = {}
+    for s in sources:
+        origin = canonicalize_lead_origin(s.get("source"))
+        counts[origin] = counts.get(origin, 0) + 1
+    return [{"key": k, "label": ORIGIN_LABELS.get(k, k), "count": v} for k, v in sorted(counts.items(), key=lambda x: -x[1])]
 
 
 @router.get("/interests")
@@ -821,6 +861,42 @@ async def list_lead_emails(lid: str, user: dict = Depends(require_role(*ROLES_LE
     return await db.email_logs.find(
         {"lead_id": lid}, {"_id": 0, "body": 0}
     ).sort("created_at", -1).to_list(200)
+
+
+@router.post("/{lid}/request-documents")
+async def request_documents(lid: str, payload: DocumentRequestIn, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Envoie au prospect un email listant les pièces à fournir (ex: pièce
+    d'identité, permis, justificatif de domicile) — préparation du dossier
+    par les agents du Centre d'appel, avant la finalisation de l'inscription."""
+    lead = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead introuvable")
+    if not lead.get("email"):
+        raise HTTPException(status_code=400, detail="Ce prospect n'a pas d'adresse email")
+    if not payload.documents:
+        raise HTTPException(status_code=400, detail="Sélectionnez au moins un document à demander")
+
+    items = "".join(f"<li>{d}</li>" for d in payload.documents)
+    body = (
+        f"Bonjour {lead.get('name', '')},<br><br>"
+        "Afin de finaliser votre dossier, merci de nous transmettre les documents suivants "
+        f"par réponse à cet email :<ul>{items}</ul>"
+        + (f"<p>{payload.message}</p>" if payload.message else "")
+        + "<br>Cordialement,<br>L'équipe TDL Formation"
+    )
+    log = await send_email(lead["email"], "Documents à nous transmettre — TDL Formation", body, extra={"lead_id": lid})
+    if log["status"] not in ("sent", "mocked"):
+        raise HTTPException(status_code=502, detail="Échec de l'envoi de l'email")
+
+    await db.leads.update_one({"id": lid}, {"$set": {
+        "documents_requested": payload.documents,
+        "documents_requested_at": now_iso(),
+        "documents_requested_by": user["id"],
+        "updated_at": now_iso(),
+    }})
+    _leads_cache_clear()
+    await log_action(user, "lead_demande_documents", "lead", lid, {"name": lead.get("name"), "documents": payload.documents})
+    return {"sent": True, "documents": payload.documents}
 
 
 @router.post("/relance/single")

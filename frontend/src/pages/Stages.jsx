@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight, UploadSimple, Sun, Moon, FolderOpen, Books } from "@phosphor-icons/react";
+import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight, UploadSimple, Sun, Moon, FolderOpen, Books, Lock, LockOpen } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 
@@ -72,7 +72,18 @@ const CRENEAU_LABEL = { JOUR: "Jour", SOIR: "Soir" };
 // 18h00-21h30 (horaire fixe des sessions VTC/Taxi en soirée).
 const CRENEAU_HOURS = { JOUR: { heure_debut: "09:00", heure_fin: "17:00" }, SOIR: { heure_debut: "18:00", heure_fin: "21:30" } };
 
-const STATUTS = ["planifie", "en_cours", "termine", "annule"];
+// "complet" verrouille manuellement les inscriptions AVANT d'atteindre
+// capacite_max (ex: des places sont vendues en parallèle sur Groupon pour
+// les stages de récupération de points, et le total réel ne doit jamais
+// dépasser le nombre de places physiques) — backend : GET
+// /stages/public/available l'exclut, et POST /inscriptions + PUT
+// /inscriptions/{id}/stage le refusent explicitement (voir routers/stages.py
+// et routers/inscriptions.py).
+const STATUTS = ["planifie", "en_cours", "complet", "termine", "annule"];
+const STATUT_LABELS = {
+  planifie: "Planifié", en_cours: "En cours", complet: "Complet (verrouillé)",
+  termine: "Terminé", annule: "Annulé",
+};
 
 export default function Stages() {
   const [items, setItems] = useState([]);
@@ -283,6 +294,21 @@ export default function Stages() {
     }
   };
 
+  // Verrouillage rapide depuis la carte — bascule statut "complet" (ferme les
+  // inscriptions publiques et l'affectation manuelle, voir STATUTS plus haut)
+  // sans ouvrir le formulaire complet, pour fermer une session en un clic
+  // quand les places sont épuisées côté Groupon ou autre canal externe.
+  const toggleLock = async (s) => {
+    const next = s.statut === "complet" ? "planifie" : "complet";
+    try {
+      await api.put(`/stages/${s.id}`, { statut: next });
+      toast.success(next === "complet" ? "Session verrouillée (complet)" : "Session déverrouillée");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
   const remove = async (id) => {
     try {
       await api.delete(`/stages/${id}`);
@@ -395,7 +421,7 @@ export default function Stages() {
                   <label className="text-sm font-medium">Statut</label>
                   <Select value={form.statut} onValueChange={(v) => setForm({ ...form, statut: v })}>
                     <SelectTrigger data-testid="stage-statut"><SelectValue /></SelectTrigger>
-                    <SelectContent>{STATUTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                    <SelectContent>{STATUTS.map((s) => <SelectItem key={s} value={s}>{STATUT_LABELS[s] || s}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               )}
@@ -514,7 +540,7 @@ export default function Stages() {
                     <p className="text-xs font-semibold text-gray-500 capitalize mb-2">{mg.label}</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {mg.sessions.map((s) => (
-                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} onViewRoster={openRoster} />
+                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} onViewRoster={openRoster} onToggleLock={toggleLock} />
                       ))}
                     </div>
                   </div>
@@ -530,7 +556,7 @@ export default function Stages() {
                     <p className="text-xs font-semibold text-gray-400 capitalize mb-2">{mg.label}</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {mg.sessions.map((s) => (
-                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} onViewRoster={openRoster} muted />
+                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} onViewRoster={openRoster} onToggleLock={toggleLock} muted />
                       ))}
                     </div>
                   </div>
@@ -581,9 +607,10 @@ export default function Stages() {
   );
 }
 
-function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete, onViewRoster, muted }) {
+function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete, onViewRoster, onToggleLock, muted }) {
   const creneau = s.creneau || extractCreneau(s.notes);
   const full = (s.nb_inscrits || 0) >= s.capacite_max;
+  const locked = s.statut === "complet";
   return (
     <Card
       className={`p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all cursor-pointer relative group ${muted ? "opacity-70" : ""}`}
@@ -592,7 +619,7 @@ function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete,
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          <Badge variant="outline">{s.statut}</Badge>
+          <Badge variant="outline" className={locked ? "border-red-300 text-red-700" : undefined}>{STATUT_LABELS[s.statut] || s.statut}</Badge>
           {creneau && (
             <Badge variant="outline" className="text-[10px] gap-1">
               {creneau === "JOUR" ? <Sun size={10} /> : <Moon size={10} />} {creneau}
@@ -610,6 +637,14 @@ function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete,
             data-testid={`stage-roster-${s.id}`}
           >
             <Users size={12} />{s.nb_inscrits || 0}/{s.capacite_max}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleLock(s); }}
+            className={`transition-colors ${locked ? "text-red-600 hover:text-red-700" : "text-gray-300 hover:text-[#0a0a0a]"}`}
+            title={locked ? "Déverrouiller (réouvrir les inscriptions)" : "Déclarer complet (verrouiller les inscriptions)"}
+            data-testid={`stage-lock-${s.id}`}
+          >
+            {locked ? <Lock size={14} weight="fill" /> : <LockOpen size={14} />}
           </button>
           <PencilSimple size={14} className="text-gray-300 group-hover:text-[#d4af37] transition-colors" />
           <AlertDialog open={deletingId === s.id} onOpenChange={(v) => !v && setDeletingId(null)}>

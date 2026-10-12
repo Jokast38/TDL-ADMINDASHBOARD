@@ -23,7 +23,7 @@ from routers import (
     company_documents, positioning_tests, backlinks, docs, places,
     exams, appointments, stage_attestations, modules, satisfaction, french_tests,
     mailbox, meta_leads, flash_offer, ocr_test, meta_lead_import,
-    call_center, cosmosia_import, custom_payments, meta_crm_test,
+    call_center, cosmosia_import, custom_payments, meta_crm_test, stats,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import (
@@ -113,6 +113,7 @@ app.include_router(positioning_tests.router, prefix=_PREFIX)
 app.include_router(backlinks.router,      prefix=_PREFIX)
 app.include_router(docs.router,           prefix=_PREFIX)
 app.include_router(places.router,         prefix=_PREFIX)
+app.include_router(stats.router,          prefix=_PREFIX)
 app.include_router(exams.router,          prefix=_PREFIX)
 app.include_router(appointments.router,   prefix=_PREFIX)
 app.include_router(stage_attestations.router, prefix=_PREFIX)

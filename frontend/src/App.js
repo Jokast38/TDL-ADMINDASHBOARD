@@ -53,6 +53,7 @@ const Students = lazy(() => import("@/pages/Students"));
 const Exams = lazy(() => import("@/pages/Exams"));
 const Appointments = lazy(() => import("@/pages/Appointments"));
 const Dossiers = lazy(() => import("@/pages/Dossiers"));
+const CentreAppel = lazy(() => import("@/pages/CentreAppel"));
 const KamiStreet = lazy(() => import("@/pages/KamiStreet"));
 const Orders = lazy(() => import("@/pages/Orders"));
 const AIAssistant = lazy(() => import("@/pages/AIAssistant"));
@@ -197,7 +198,7 @@ function App() {
               <ProtectedRoute roles={["admin", "employe", "responsable_commercial"]}><AdminLayout><Dashboard /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/accueil" element={
-              <ProtectedRoute roles={["responsable_admission", "agent_admin"]}><AdminLayout><EmployeeHome /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["responsable_admission", "agent_admin", "agent_telephonique"]}><AdminLayout><EmployeeHome /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/formations" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission"]}><AdminLayout><Formations /></AdminLayout></ProtectedRoute>
@@ -229,6 +230,9 @@ function App() {
             <Route path="/admin/dossiers" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Dossiers /></AdminLayout></ProtectedRoute>
             } />
+            <Route path="/admin/centre-appel" element={
+              <ProtectedRoute roles={["admin", "responsable_admission", "agent_telephonique"]}><AdminLayout><CentreAppel /></AdminLayout></ProtectedRoute>
+            } />
             <Route path="/admin/examens" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Exams /></AdminLayout></ProtectedRoute>
             } />
@@ -236,7 +240,7 @@ function App() {
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Appointments /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/leads" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Leads /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"]}><AdminLayout><Leads /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/documents-library" element={
               <ProtectedRoute roles={["admin", "responsable_admission", "agent_admin"]}><AdminLayout><DocumentsLibrary /></AdminLayout></ProtectedRoute>
@@ -290,7 +294,7 @@ function App() {
               <ProtectedRoute roles={["admin"]}><AdminLayout><MetaCrmTest /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/marketing" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Marketing /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"]}><AdminLayout><Marketing /></AdminLayout></ProtectedRoute>
             } />
 
             <Route path="*" element={<ErrorPage />} />

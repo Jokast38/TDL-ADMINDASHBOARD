@@ -7,7 +7,7 @@ import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
   CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive, Question, Student,
-  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLeft, CaretRight, Headset, CreditCard,
+  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLeft, CaretRight, Headset, CreditCard, PhoneCall,
 } from "@phosphor-icons/react";
 
 // Exporté pour être réutilisé par le sélecteur de pages autorisées sur la
@@ -22,7 +22,7 @@ export const navAll = [
   // faute d'autorisation backend. Leur page d'accueil est /admin/accueil
   // (voir lib/roleHome.js et pages/EmployeeHome.jsx).
   { to: "/admin", label: "Dashboard", icon: House, roles: ["admin", "employe", "responsable_commercial"], end: true },
-  { to: "/admin/accueil", label: "Accueil", icon: House, roles: ["responsable_admission", "agent_admin"], end: true },
+  { to: "/admin/accueil", label: "Accueil", icon: House, roles: ["responsable_admission", "agent_admin", "agent_telephonique"], end: true },
   // Seul lien de retour vers l'espace animateur depuis le reste du dashboard —
   // sans ça, un formateur qui clique sur Agenda/Assistant IA/Centre d'aide
   // n'avait aucun moyen de revenir à /espace-animateur (pas de "Dashboard"
@@ -32,6 +32,7 @@ export const navAll = [
   { to: "/admin/stages", label: "Sessions de formation", icon: CalendarCheck, roles: ["admin", "responsable_admission"] },
   { to: "/admin/agenda", label: "Agenda", icon: CalendarBlank, roles: ["admin", "responsable_admission", "animateur"] },
   { to: "/admin/agenda-appel", label: "Agenda d'appel", icon: Headset, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
+  { to: "/admin/centre-appel", label: "Centre d'appel", icon: PhoneCall, roles: ["admin", "responsable_admission", "agent_telephonique"] },
   { to: "/admin/paiement-personnalise", label: "Paiement personnalisé", icon: CreditCard, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
   { to: "/admin/modules", label: "Modules de formation", icon: Books, roles: ["admin", "responsable_admission"] },
   { to: "/admin/formateurs", label: "Formateurs", icon: PenNib, roles: ["admin", "responsable_admission", "agent_admin"] },
@@ -40,7 +41,7 @@ export const navAll = [
   { to: "/admin/dossiers", label: "Dossiers (Kanban)", icon: Folders, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/examens", label: "Examens", icon: ClipboardText, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/rdv", label: "Rendez-vous", icon: CalendarPlus, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
-  { to: "/admin/leads", label: "Leads", icon: UsersThree, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
+  { to: "/admin/leads", label: "Leads", icon: UsersThree, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
   { to: "/admin/documents-library", label: "Bibliothèque PDF", icon: FilePdf, roles: ["admin", "responsable_admission", "agent_admin"] },
   { to: "/admin/doc-templates", label: "Modèles PDF", icon: FileText, roles: ["admin"] },
   { to: "/admin/company-documents", label: "Documents entreprise", icon: Archive, roles: ["admin", "responsable_admission", "agent_admin"] },
@@ -52,11 +53,11 @@ export const navAll = [
   { to: "/admin/employees", label: "Employés", icon: Users, roles: ["admin", "responsable_commercial"] },
   { to: "/admin/activite", label: "Activité", icon: TrendUp, roles: ["admin"] },
   { to: "/admin/settings", label: "Paramètres", icon: Gear, roles: ["admin"] },
-  { to: "/admin/marketing", label: "Marketing", icon: ChartBar, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
+  { to: "/admin/marketing", label: "Marketing", icon: ChartBar, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
   { to: "/admin/aide", label: "Centre d'aide", icon: Question, roles: ["admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
 ];
 
-const NOTIFICATION_ROLES = ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"];
+const NOTIFICATION_ROLES = ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"];
 
 const ROLE_LABELS = {
   admin: "Administrateur",
@@ -66,6 +67,7 @@ const ROLE_LABELS = {
   agent_admin: "Agent administratif",
   commercial: "Commercial",
   responsable_commercial: "Responsable commercial",
+  agent_telephonique: "Agent téléphonique",
   etudiant: "Étudiant",
 };
 

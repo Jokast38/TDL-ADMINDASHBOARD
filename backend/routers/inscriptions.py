@@ -92,6 +92,18 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         })
         if duplicate:
             raise HTTPException(status_code=409, detail="Cette personne est déjà inscrite à cette même session — pour une nouvelle tentative (ex: repassage d'examen), assignez-la plutôt à une autre session.")
+        # Garde-fou de capacité au moment de l'écriture (pas seulement au
+        # filtrage de GET /stages/public/available) — une place peut être
+        # vendue en parallèle sur une plateforme externe (ex: Groupon pour
+        # les stages de récupération de points), donc on ne fait jamais
+        # confiance qu'au filtre affiché : on revérifie ici, juste avant de
+        # créer l'inscription, que la session n'est ni verrouillée
+        # ("complet") ni déjà à son quota (capacite_max).
+        if stage.get("statut") == "complet":
+            raise HTTPException(status_code=409, detail="Cette session est complète.")
+        nb_inscrits = await db.inscriptions.count_documents({"stage_id": payload.stage_id, "status": "active"})
+        if nb_inscrits >= (stage.get("capacite_max") or 0):
+            raise HTTPException(status_code=409, detail="Cette session est complète.")
 
     user = await db.users.find_one({"email": payload.student_email.lower()})
     if not user:
@@ -556,6 +568,15 @@ async def assign_inscription_stage(iid: str, payload: StageAssignIn, user: dict 
         })
         if duplicate:
             raise HTTPException(status_code=409, detail="Cette personne est déjà inscrite à cette session")
+        # Même garde-fou de capacité que la création publique — sauf si
+        # l'inscription est déjà sur CETTE session (simple ré-enregistrement,
+        # ne doit jamais être bloqué par son propre compte).
+        if inscription.get("stage_id") != payload.stage_id:
+            if stage.get("statut") == "complet":
+                raise HTTPException(status_code=409, detail="Cette session est complète — déverrouillez-la d'abord si vous voulez vraiment y affecter ce candidat.")
+            nb_inscrits = await db.inscriptions.count_documents({"stage_id": payload.stage_id, "status": "active"})
+            if nb_inscrits >= (stage.get("capacite_max") or 0):
+                raise HTTPException(status_code=409, detail=f"Cette session est à son quota ({stage.get('capacite_max')} places) — augmentez la capacité ou choisissez une autre session.")
 
     await db.inscriptions.update_one(
         {"id": iid}, {"$set": {"stage_id": payload.stage_id, "stage_titre": stage_titre, "updated_at": now_iso()}}

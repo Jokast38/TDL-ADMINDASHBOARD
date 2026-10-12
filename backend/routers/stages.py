@@ -53,8 +53,13 @@ async def list_public_available_stages(formation_id: str):
     endpoint public (page d'inscription non authentifiée), ne renvoie que le
     strict nécessaire (pas d'infos internes comme les notes ou l'animateur)."""
     today = datetime.now().date().isoformat()
+    # "complet" est un verrou manuel (voir PUT /stages/{id}) utilisé pour
+    # fermer les inscriptions AVANT d'atteindre capacite_max — notamment
+    # quand des places sont vendues en parallèle sur une plateforme externe
+    # (ex: Groupon pour les stages de récupération de points) et qu'il ne
+    # faut jamais dépasser le total réel de places physiques.
     stages = await db.stages.find(
-        {"formation_id": formation_id, "date_fin": {"$gte": today}, "statut": {"$ne": "annule"}},
+        {"formation_id": formation_id, "date_fin": {"$gte": today}, "statut": {"$nin": ["annule", "complet"]}},
         {"_id": 0},
     ).sort("date_debut", 1).to_list(100)
     result = []

@@ -40,6 +40,19 @@ const ACTIVITY_ACTION_LABELS = {
 
 const AVATAR_COLORS = ["#0052CC", "#d4af37", "#0B7238", "#6b21a8", "#c2410c", "#be123c", "#0e7490"];
 
+// Doit rester synchronisé avec routers.meta_lead_import.QUALIFICATION_LABELS
+// côté backend — colonnes du tableau "Prospects Meta par personne".
+const META_QUALIF_COLUMNS = [
+  { key: "interesse", label: "Intéressé" },
+  { key: "inscrit", label: "Inscrit" },
+  { key: "a_relancer", label: "À relancer" },
+  { key: "pas_de_reponse", label: "Pas de réponse" },
+  { key: "plus_interesse", label: "Plus intéressé" },
+  { key: "non_qualifie", label: "Non qualifié" },
+  { key: "a_contacter", label: "À contacter" },
+];
+const META_STATUS_LABELS = Object.fromEntries(META_QUALIF_COLUMNS.map((c) => [c.key, c.label]));
+
 function colorFor(id) {
   let hash = 0;
   for (let i = 0; i < (id || "").length; i++) hash = id.charCodeAt(i) + ((hash << 5) - hash);
@@ -108,6 +121,12 @@ export default function Activity() {
   const [dailyStats, setDailyStats] = useState(null);
   const [dailyDays, setDailyDays] = useState(14);
 
+  const [agentsFormationsStats, setAgentsFormationsStats] = useState(null);
+  const [metaLeadsStats, setMetaLeadsStats] = useState(null);
+  const [originStats, setOriginStats] = useState(null);
+  const [leadsTimeseries, setLeadsTimeseries] = useState(null);
+  const [leadsTimeseriesRange, setLeadsTimeseriesRange] = useState("day");
+
   const load = () => api.get("/employees/activity").then((r) => setItems(r.data)).catch(() => setItems([]));
   const loadDaily = () => api.get("/employees/activity-by-day", { params: { days: dailyDays } })
     .then((r) => setDailyStats(r.data)).catch(() => setDailyStats(null));
@@ -123,6 +142,10 @@ export default function Activity() {
     api.get("/employees/activity-timeseries", { params: { days: 7 } }).then((r) => setTimeseries(r.data)).catch(() => {});
     api.get("/dashboard/revenue-timeseries", { params: { months: 6 } }).then((r) => setRevenueTimeseries(r.data)).catch(() => {});
     api.get("/dashboard/revenue-breakdown", { params: { months: 6 } }).then((r) => setRevenueBreakdown(r.data)).catch(() => {});
+    api.get("/stats/agents-formations").then((r) => setAgentsFormationsStats(r.data)).catch(() => {});
+    api.get("/stats/meta-leads").then((r) => setMetaLeadsStats(r.data)).catch(() => {});
+    api.get("/stats/leads-by-origin").then((r) => setOriginStats(r.data)).catch(() => {});
+    api.get("/stats/leads-timeseries", { params: { days: 90 } }).then((r) => setLeadsTimeseries(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => { loadDaily(); }, [dailyDays]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -609,6 +632,238 @@ export default function Activity() {
           </div>
         )}
       </Card>
+
+      {/* Statistiques — inscriptions par agent/formation (Centre d'appel) et
+          prospects Meta par statut/agent, reprenant le mapping fourni par
+          l'équipe (voir backend/routers/stats.py). */}
+      <div className="space-y-4" data-testid="stats-section">
+        <div>
+          <p className="overline">Nouvelle section</p>
+          <h2 className="font-display text-2xl font-bold tracking-tight mt-1">Statistiques</h2>
+        </div>
+
+        <Card className="p-5 border border-gray-200 rounded-md shadow-none overflow-hidden">
+          <p className="font-display text-lg font-bold mb-1">Inscriptions par agent et type de formation</p>
+          <p className="text-xs text-gray-500 mb-4">Centre d'appel — tous les prospects finalisés en inscription, par agent en charge du dossier.</p>
+          {!agentsFormationsStats ? (
+            <p className="text-sm text-gray-400">Chargement...</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left border-y border-gray-100 text-gray-400">
+                  <tr>
+                    <th className="py-2 px-3 overline font-normal">Agent</th>
+                    <th className="py-2 px-3 overline font-normal text-right">VTC/Taxi</th>
+                    <th className="py-2 px-3 overline font-normal text-right">Permis (points)</th>
+                    <th className="py-2 px-3 overline font-normal text-right">ECSR</th>
+                    <th className="py-2 px-3 overline font-normal text-right">Autres</th>
+                    <th className="py-2 px-3 overline font-normal text-right">Total</th>
+                    <th className="py-2 px-3 overline font-normal text-right">Finalisées</th>
+                    <th className="py-2 px-3 overline font-normal text-right">Taux finalisation</th>
+                    <th className="py-2 px-3 overline font-normal text-right pr-3">CA potentiel</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agentsFormationsStats.agents.map((a) => (
+                    <tr key={a.agent} className="border-b border-gray-50">
+                      <td className="py-2 px-3 font-medium">{a.agent}</td>
+                      <td className="py-2 px-3 text-right font-mono">{a.vtc_taxi}</td>
+                      <td className="py-2 px-3 text-right font-mono">{a.permis}</td>
+                      <td className="py-2 px-3 text-right font-mono">{a.ecsr}</td>
+                      <td className="py-2 px-3 text-right font-mono">{a.autres}</td>
+                      <td className="py-2 px-3 text-right font-mono font-semibold">{a.total}</td>
+                      <td className="py-2 px-3 text-right font-mono">{a.finalisees}</td>
+                      <td className="py-2 px-3 text-right font-mono">{a.taux_finalisation}%</td>
+                      <td className="py-2 px-3 text-right font-mono pr-3">{fmtMoney(a.ca_potentiel)}</td>
+                    </tr>
+                  ))}
+                  {!agentsFormationsStats.agents.length && (
+                    <tr><td colSpan="9" className="py-10 text-center text-gray-400">Aucune inscription.</td></tr>
+                  )}
+                </tbody>
+                {!!agentsFormationsStats.agents.length && (
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-200 font-semibold">
+                      <td className="py-2 px-3">Total</td>
+                      <td className="py-2 px-3 text-right font-mono" colSpan="3" />
+                      <td className="py-2 px-3 text-right font-mono">{agentsFormationsStats.totals.total}</td>
+                      <td className="py-2 px-3 text-right font-mono">{agentsFormationsStats.totals.finalisees}</td>
+                      <td className="py-2 px-3 text-right font-mono">{agentsFormationsStats.totals.taux_finalisation}%</td>
+                      <td className="py-2 px-3 text-right font-mono pr-3">{fmtMoney(agentsFormationsStats.totals.ca_potentiel)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-5 border border-gray-200 rounded-md shadow-none overflow-hidden">
+          <p className="font-display text-lg font-bold mb-4">Performance par formation</p>
+          {!agentsFormationsStats ? (
+            <p className="text-sm text-gray-400">Chargement...</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left border-y border-gray-100 text-gray-400">
+                  <tr>
+                    <th className="py-2 px-3 overline font-normal">Formation</th>
+                    <th className="py-2 px-3 overline font-normal text-right">Inscriptions</th>
+                    <th className="py-2 px-3 overline font-normal text-right">Finalisées</th>
+                    <th className="py-2 px-3 overline font-normal text-right">Taux</th>
+                    <th className="py-2 px-3 overline font-normal text-right">CA potentiel</th>
+                    <th className="py-2 px-3 overline font-normal text-right pr-3">CA finalisé</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agentsFormationsStats.formations.map((f) => (
+                    <tr key={f.formation} className="border-b border-gray-50">
+                      <td className="py-2 px-3 font-medium truncate max-w-[220px]" title={f.formation}>{f.formation}</td>
+                      <td className="py-2 px-3 text-right font-mono">{f.inscriptions}</td>
+                      <td className="py-2 px-3 text-right font-mono">{f.finalisees}</td>
+                      <td className="py-2 px-3 text-right font-mono">{f.taux}%</td>
+                      <td className="py-2 px-3 text-right font-mono">{fmtMoney(f.ca_potentiel)}</td>
+                      <td className="py-2 px-3 text-right font-mono pr-3 text-[#0B7238]">{fmtMoney(f.ca_finalise)}</td>
+                    </tr>
+                  ))}
+                  {!agentsFormationsStats.formations.length && (
+                    <tr><td colSpan="6" className="py-10 text-center text-gray-400">Aucune donnée.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="p-5 border border-gray-200 rounded-md shadow-none">
+            <p className="font-display text-lg font-bold mb-1">Prospects Meta par statut</p>
+            <p className="text-xs text-gray-500 mb-4" title="CA potentiel = prix de l'inscription si déjà créée, sinon estimé à partir du prix catalogue de la formation devinée (nom de campagne/formulaire) — approximatif pour les prospects pas encore inscrits.">
+              {metaLeadsStats?.total ?? 0} lead(s) au total · CA potentiel estimé
+            </p>
+            {!metaLeadsStats ? (
+              <p className="text-sm text-gray-400">Chargement...</p>
+            ) : (
+              <div className="space-y-2.5">
+                {metaLeadsStats.by_status.map((s) => (
+                  <div key={s.statut} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">{META_STATUS_LABELS[s.statut] || s.statut}</span>
+                    <span className="text-right">
+                      <span className="font-mono font-semibold">{s.nb} <span className="text-gray-400 font-normal">({s.pct}%)</span></span>
+                      <span className="block text-xs font-mono text-[#0B7238]">{fmtMoney(s.ca_potentiel)}</span>
+                    </span>
+                  </div>
+                ))}
+                {!metaLeadsStats.by_status.length && <p className="text-sm text-gray-400">Aucune donnée.</p>}
+              </div>
+            )}
+          </Card>
+
+          <Card className="lg:col-span-2 p-5 border border-gray-200 rounded-md shadow-none overflow-hidden">
+            <p className="font-display text-lg font-bold mb-4">Prospects Meta par personne</p>
+            {!metaLeadsStats ? (
+              <p className="text-sm text-gray-400">Chargement...</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left border-y border-gray-100 text-gray-400">
+                    <tr>
+                      <th className="py-2 px-3 overline font-normal">Traité par</th>
+                      <th className="py-2 px-3 overline font-normal text-right">Total</th>
+                      {META_QUALIF_COLUMNS.map((c) => (
+                        <th key={c.key} className="py-2 px-3 overline font-normal text-right">{c.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metaLeadsStats.by_person.map((p) => (
+                      <tr key={p.personne} className="border-b border-gray-50">
+                        <td className="py-2 px-3 font-medium">{p.personne}</td>
+                        <td className="py-2 px-3 text-right font-mono font-semibold">{p.total}</td>
+                        {META_QUALIF_COLUMNS.map((c) => (
+                          <td key={c.key} className="py-2 px-3 text-right font-mono">{p[c.key] || 0}</td>
+                        ))}
+                      </tr>
+                    ))}
+                    {!metaLeadsStats.by_person.length && (
+                      <tr><td colSpan={2 + META_QUALIF_COLUMNS.length} className="py-10 text-center text-gray-400">Aucune donnée.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card className="p-5 border border-gray-200 rounded-md shadow-none">
+            <p className="font-display text-lg font-bold mb-1">Prospects par origine</p>
+            <p className="text-xs text-gray-500 mb-4">Toute la base (db.leads), tous statuts confondus.</p>
+            {!originStats ? (
+              <p className="text-sm text-gray-400">Chargement...</p>
+            ) : (
+              <div className="space-y-3">
+                {originStats.map((o) => {
+                  const maxTotal = Math.max(...originStats.map((x) => x.total), 1);
+                  const pctWidth = Math.round((o.total / maxTotal) * 100);
+                  return (
+                    <div key={o.origin}>
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <span>{o.label}</span>
+                        <span className="font-mono font-semibold">{o.total} <span className="text-gray-400 font-normal">({o.contactes} contactés, {o.interesses + o.inscrits} intéressés/inscrits)</span></span>
+                      </div>
+                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-[#0052CC]" style={{ width: `${pctWidth}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {!originStats.length && <p className="text-sm text-gray-400">Aucune donnée.</p>}
+              </div>
+            )}
+          </Card>
+
+          <Card className="lg:col-span-2 p-5 border border-gray-200 rounded-md shadow-none">
+            <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+              <div>
+                <p className="font-display text-lg font-bold">Bilan des prospects — nouveaux leads</p>
+                <p className="text-xs text-gray-500">90 derniers jours</p>
+              </div>
+              <div className="flex border border-gray-200 rounded-md overflow-hidden">
+                {[{ key: "day", label: "Par jour" }, { key: "week", label: "Par semaine" }].map((o) => (
+                  <button
+                    key={o.key}
+                    className={`px-3 py-1 text-xs font-medium ${leadsTimeseriesRange === o.key ? "bg-[#0a0a0a] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                    onClick={() => setLeadsTimeseriesRange(o.key)}
+                    data-testid={`leads-timeseries-range-${o.key}`}
+                  >{o.label}</button>
+                ))}
+              </div>
+            </div>
+            {!leadsTimeseries ? (
+              <p className="text-sm text-gray-400">Chargement...</p>
+            ) : (
+              <div style={{ height: 220 }}>
+                <Bar
+                  data={{
+                    labels: (leadsTimeseriesRange === "day" ? leadsTimeseries.daily.slice(-30) : leadsTimeseries.weekly).map((d) =>
+                      leadsTimeseriesRange === "day"
+                        ? new Date(d.date).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })
+                        : d.week
+                    ),
+                    datasets: [{
+                      label: "Nouveaux prospects",
+                      data: (leadsTimeseriesRange === "day" ? leadsTimeseries.daily.slice(-30) : leadsTimeseries.weekly).map((d) => d.count),
+                      backgroundColor: "#d4af37", borderRadius: 4, maxBarThickness: 24,
+                    }],
+                  }}
+                  options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }}
+                />
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
 
       <Dialog open={!!adjustTarget} onOpenChange={(v) => !v && setAdjustTarget(null)}>
         <DialogContent>

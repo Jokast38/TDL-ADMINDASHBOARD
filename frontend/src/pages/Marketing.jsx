@@ -23,7 +23,7 @@ import {
   ChartLineUp, MagnifyingGlass, Megaphone, EnvelopeSimple, ShareNetwork, Sparkle,
   EnvelopeOpen, Cursor, PaperPlaneTilt, WarningCircle, Paperclip, X as XIcon, PencilSimple,
   Browser, ArrowSquareOut, Robot, PhoneCall, LinkedinLogo, Phone, Headset, NotePencil,
-  LinkSimple, UploadSimple, Tag, CalendarPlus, CreditCard,
+  LinkSimple, UploadSimple, Tag, CalendarPlus, CreditCard, CheckCircle,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
@@ -1195,6 +1195,7 @@ function MetaEventsTab() {
                 <th className="py-2.5 px-4 overline">Campagne</th>
                 <th className="py-2.5 px-4 overline">Inscrit le</th>
                 <th className="py-2.5 px-4 overline">Qualification</th>
+                <th className="py-2.5 px-4 overline">Paiement</th>
                 <th className="py-2.5 px-4 overline">Traité par</th>
                 <th className="py-2.5 px-4 overline">Suivi</th>
                 <th className="py-2.5 px-4 overline">Notes</th>
@@ -1203,7 +1204,7 @@ function MetaEventsTab() {
             </thead>
             <tbody>
               {!pagedItems.length && (
-                <tr><td colSpan="9" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="10" className="py-10 text-center text-gray-400">
                   {items.length ? "Aucun lead pour ce filtre." : "Aucun lead — importez un export CSV pour commencer."}
                 </td></tr>
               )}
@@ -1231,6 +1232,17 @@ function MetaEventsTab() {
                         {Object.entries(qualifOptions).map(([k, label]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                  </td>
+                  <td className="py-2.5 px-4 text-xs whitespace-nowrap">
+                    {l.paid ? (
+                      <span className="inline-flex items-center gap-1 text-[#0B7238] font-medium" title={l.paid_at ? `Payé le ${formatDateTimeFR(l.paid_at)}` : "Payé"}>
+                        <CheckCircle size={12} weight="fill" /> Payé{l.amount_paid ? ` · ${l.amount_paid}€` : ""}
+                      </span>
+                    ) : l.payment_status ? (
+                      <span className="text-amber-700">En attente{l.price ? ` · ${l.price}€` : ""}</span>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-600">{l.qualified_by_name || <span className="text-gray-300">—</span>}</td>
                   <td className="py-2.5 px-4 text-xs">

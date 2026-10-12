@@ -31,7 +31,7 @@ def _generate_simple_password() -> str:
 
 VALID_STAFF_ROLES = (
     "admin", "employe", "animateur", "responsable_admission", "agent_admin",
-    "commercial", "responsable_commercial",
+    "commercial", "responsable_commercial", "agent_telephonique",
 )
 
 # Pièces justifiant le droit d'exercer d'un formateur/animateur/psychologue —

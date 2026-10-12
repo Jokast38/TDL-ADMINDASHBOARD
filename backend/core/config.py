@@ -109,12 +109,65 @@ PUBLIC_BACKEND_URL = os.environ.get("PUBLIC_BACKEND_URL", "https://tdl-admindash
 PUBLIC_FRONTEND_URL = os.environ.get("PUBLIC_FRONTEND_URL", "https://www.tdl-formation.fr").rstrip("/")
 
 # Permission groups
-ROLES_ALL_STAFF = ("admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial")
+ROLES_ALL_STAFF = ("admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique")
 ROLES_ADMIN_STAFF = ("admin", "responsable_admission", "agent_admin")
 ROLES_DOSSIERS_MGMT = ("admin", "employe", "responsable_admission", "agent_admin")
 ROLES_DOCS_VIEW = ("admin", "employe", "responsable_admission", "agent_admin")
 ROLES_ANIMATEUR_PLUS = ("admin", "animateur")
-ROLES_LEADS = ("admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial")
+ROLES_LEADS = ("admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique")
+# Espace dédié aux agents téléphoniques (Bouchra/Lydia/Lina...) — centre
+# d'appel kanban, demande de documents, RDV. Rôle restreint : voir
+# ROLES_LEADS pour les endpoints /leads (déjà scopés par agent ci-dessous),
+# et ce groupe pour l'accès à la page et aux stats dédiées.
+ROLES_CALL_CENTER = ("admin", "responsable_admission", "agent_telephonique")
+
+# Colonnes du kanban du Centre d'appel, dans l'ordre d'affichage — doit rester
+# synchronisé avec frontend/src/pages/CentreAppel.jsx (PIPELINE_COLUMNS).
+# Regroupement des valeurs brutes de `lead.source` (très nombreuses — un
+# import Excel crée un libellé distinct par onglet mensuel, ex:
+# "import_xlsx_tdl_JANVIER 26") en quelques origines lisibles, pour les
+# onglets du Centre d'appel (CentreAppel.jsx) et les stats "par origine"
+# (voir routers/stats.py). Même logique reproduite côté frontend
+# (CentreAppel.jsx canonicalizeOrigin) — dupliquée faute de pouvoir partager
+# du code entre Python et JS, à garder synchronisée si une origine change.
+def canonicalize_lead_origin(source: str) -> str:
+    s = (source or "").lower()
+    if not s:
+        return "autre"
+    if s.startswith("meta"):
+        return "meta"
+    if s == "cosmosia":
+        return "cosmosia"
+    if s in ("contact_page", "contact_bubble"):
+        return "site_web"
+    if s == "manuel":
+        return "manuel"
+    if s == "inscription":
+        return "ex_inscription"
+    if "vtc_taxi" in s:
+        return "vtc_taxi_excel"
+    if s.startswith("import_xlsx") or s.startswith("import_json"):
+        return "import_excel"
+    return "autre"
+
+
+ORIGIN_LABELS = {
+    "meta": "Meta Ads", "cosmosia": "Cosmosia", "site_web": "Site web",
+    "manuel": "Manuel", "ex_inscription": "Ex-inscription",
+    "vtc_taxi_excel": "VTC/Taxi (Excel)", "import_excel": "Import Excel", "autre": "Autre",
+}
+
+PIPELINE_STATUS_LABELS = {
+    "formulaire_rempli": "Formulaire Rempli",
+    "lead_entrant_sans_rdv": "Lead Entrant Sans RDV",
+    "a_recontacter": "A recontacter (dans la journée)",
+    "premiere_relance": "Première relance faite",
+    "deuxieme_relance": "Deuxième relance faite",
+    "troisieme_relance": "Troisième relance faite",
+    "pas_de_reponse": "Pas de réponse",
+    "lead_tiede": "Lead tiède",
+    "poubelle": "Poubelle",
+}
 # Tous les employés internes (bureau) — pas les animateurs, qui ont leur
 # propre espace dédié (/espace-animateur) et pas accès au reste du dashboard.
 ROLES_MAILBOX = ROLES_LEADS

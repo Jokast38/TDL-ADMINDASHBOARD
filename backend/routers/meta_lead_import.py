@@ -18,7 +18,7 @@ import io
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 
@@ -226,6 +226,35 @@ async def list_meta_leads(
         # contacter" (jamais touché).
         if not d.get("relance_count") and d.get("qualification") not in (None, "", "a_contacter"):
             d["relance_count"] = 1
+
+    # Statut de paiement — d'abord via `inscription_id` (lien posé par
+    # POST /{lead_id}/enroll), et à défaut par email, pour aussi retrouver
+    # une inscription/un paiement créé par un AUTRE canal que le bouton
+    # "Inscrire" de ce tableau (ex: la personne s'est finalement inscrite
+    # elle-même sur le site public) — sinon "a-t-il payé ?" resterait
+    # invisible ici alors que l'argent est bien rentré.
+    insc_ids = [d["inscription_id"] for d in docs if d.get("inscription_id")]
+    emails = [d["email"] for d in docs if d.get("email") and not d.get("inscription_id")]
+    inscriptions = await db.inscriptions.find(
+        {"$or": [{"id": {"$in": insc_ids}}, {"student_email": {"$in": emails}}]} if (insc_ids or emails) else {"id": "__none__"},
+        {"_id": 0, "id": 1, "student_email": 1, "payment_status": 1, "price": 1, "amount_paid": 1, "paid_at": 1, "formation_title": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(2000)
+    by_id = {i["id"]: i for i in inscriptions}
+    by_email: Dict[str, dict] = {}
+    for i in inscriptions:
+        by_email.setdefault(i["student_email"], i)  # le plus récent d'abord (tri ci-dessus)
+
+    for d in docs:
+        insc = by_id.get(d.get("inscription_id")) or by_email.get(d.get("email"))
+        d["payment_status"] = insc.get("payment_status") if insc else None
+        d["paid"] = insc.get("payment_status") in ("paid", "cpf_valide") if insc else False
+        d["amount_paid"] = insc.get("amount_paid") if insc else None
+        d["price"] = insc.get("price") if insc else None
+        d["paid_at"] = insc.get("paid_at") if insc else None
+        if insc and not d.get("inscription_id"):
+            d["inscription_id"] = insc["id"]
+            d["inscription_formation_title"] = insc.get("formation_title")
+
     accounts = sorted([a for a in await db.meta_lead_imports.distinct("meta_account") if a])
     campaigns = sorted([c for c in await db.meta_lead_imports.distinct("campaign_name") if c])
     return {

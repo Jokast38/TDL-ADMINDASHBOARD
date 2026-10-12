@@ -12,6 +12,7 @@ export const ROLE_HOME = {
   commercial: "/admin/leads",
   responsable_admission: "/admin/accueil",
   agent_admin: "/admin/accueil",
+  agent_telephonique: "/admin/accueil",
   admin: "/admin",
   employe: "/admin",
   responsable_commercial: "/admin",

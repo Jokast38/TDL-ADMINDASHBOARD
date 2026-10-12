@@ -23,6 +23,7 @@ const ROLE_LABEL = {
   employe: "Employé", animateur: "Animateur / Formateur",
   responsable_admission: "Responsable admission", agent_admin: "Agent administratif",
   commercial: "Commercial", responsable_commercial: "Responsable commercial", admin: "Administrateur",
+  agent_telephonique: "Agent téléphonique (Centre d'appel)",
 };
 
 // Une seule ligne par page du menu (certains chemins comme /admin apparaissent
@@ -46,7 +47,7 @@ const CATEGORY_OPTIONS = [
   { key: "ECSR", label: "ECSR" },
   { key: "VENTE", label: "Conseiller de Vente" },
 ];
-const ROLES_WITH_ASSIGNMENT = ["commercial", "responsable_commercial", "responsable_admission", "agent_admin"];
+const ROLES_WITH_ASSIGNMENT = ["commercial", "responsable_commercial", "responsable_admission", "agent_admin", "agent_telephonique"];
 
 const STATUS_BADGE = {
   actif: "bg-green-100 text-green-700 hover:bg-green-100",
@@ -237,6 +238,7 @@ export default function Employees() {
                         <SelectItem value="animateur">Animateur / Formateur</SelectItem>
                         <SelectItem value="responsable_admission">Responsable admission</SelectItem>
                         <SelectItem value="agent_admin">Agent administratif</SelectItem>
+                        <SelectItem value="agent_telephonique">Agent téléphonique (Centre d'appel)</SelectItem>
                         <SelectItem value="commercial">Commercial</SelectItem>
                         <SelectItem value="responsable_commercial">Responsable commercial</SelectItem>
                         <SelectItem value="admin">Administrateur</SelectItem>

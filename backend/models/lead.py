@@ -26,6 +26,25 @@ class LeadUpdate(BaseModel):
     # filtrage dans les tableaux Meta/Cosmosia (mêmes libellés, voir
     # routers.meta_lead_import.QUALIFICATION_LABELS).
     qualification: Optional[str] = None
+    # Colonne du kanban du Centre d'appel (voir frontend/src/pages/CentreAppel.jsx
+    # et core.config.PIPELINE_STATUS_LABELS) — distincte de `status`/`qualification`
+    # ci-dessus : c'est le pipeline d'appel propre aux agents téléphoniques
+    # (formulaire_rempli, lead_entrant_sans_rdv, a_recontacter, premiere_relance,
+    # deuxieme_relance, troisieme_relance, pas_de_reponse, lead_tiede, poubelle).
+    pipeline_status: Optional[str] = None
+    # Agent téléphonique en charge de ce prospect (id utilisateur) — un
+    # agent_telephonique ne voit que les leads qui lui sont assignés (voir
+    # scoping dans GET /leads), les autres rôles voient tout.
+    assigned_to: Optional[str] = None
+
+
+class DocumentRequestIn(BaseModel):
+    # Libellés libres des pièces demandées (ex: "Pièce d'identité", "Permis de
+    # conduire", "Justificatif de domicile") plutôt qu'un enum strict — un
+    # agent peut avoir besoin de demander une pièce qui ne correspond à aucun
+    # DOC_TYPE_LABELS existant (voir routers/documents.py).
+    documents: List[str]
+    message: Optional[str] = None
 
 
 class LeadImportJsonIn(BaseModel):
