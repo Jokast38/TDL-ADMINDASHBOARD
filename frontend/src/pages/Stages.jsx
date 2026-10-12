@@ -634,28 +634,33 @@ function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete,
       data-testid={`stage-card-${s.id}`}
       onClick={() => onEdit(s)}
     >
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className={locked ? "border-red-300 text-red-700" : undefined}>{STATUT_LABELS[s.statut] || s.statut}</Badge>
-          {creneau && (
-            <Badge variant="outline" className="text-[10px] gap-1">
-              {creneau === "JOUR" ? <Sun size={10} /> : <Moon size={10} />} {creneau}
-            </Badge>
-          )}
-          {s.heure_debut && s.heure_fin && (
-            <span className="text-[10px] text-gray-400">{s.heure_debut}–{s.heure_fin}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={(e) => { e.stopPropagation(); onViewRoster(s); }}
-            className={`text-xs flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-gray-100 ${full ? "text-red-600 font-semibold" : "text-gray-500"}`}
-            title={`${s.nb_inscrits || 0} inscrit(s)${s.external_reserved ? ` + ${s.external_reserved} réservée(s) ailleurs` : ""} sur ${s.capacite_max} — ${placesRestantes} place(s) restante(s)`}
-            data-testid={`stage-roster-${s.id}`}
-          >
-            <Users size={12} />{s.nb_inscrits || 0}{s.external_reserved ? `+${s.external_reserved}` : ""}/{s.capacite_max}
-            <span className={`ml-1 ${full ? "text-red-600" : "text-gray-400"}`}>({placesRestantes} rest.)</span>
-          </button>
+      {/* Deux lignes distinctes plutôt qu'une seule rangée qui poussait les
+          boutons hors de la carte sur les grilles à 2-3 colonnes : les
+          badges de statut (qui peuvent déjà être longs) ont leur propre
+          ligne avec flex-wrap, les actions (places/verrou/modifier/
+          supprimer) sont sur une seconde ligne dédiée, groupées à droite. */}
+      <div className="flex items-center flex-wrap gap-1.5 mb-2">
+        <Badge variant="outline" className={locked ? "border-red-300 text-red-700" : undefined}>{STATUT_LABELS[s.statut] || s.statut}</Badge>
+        {creneau && (
+          <Badge variant="outline" className="text-[10px] gap-1">
+            {creneau === "JOUR" ? <Sun size={10} /> : <Moon size={10} />} {creneau}
+          </Badge>
+        )}
+        {s.heure_debut && s.heure_fin && (
+          <span className="text-[10px] text-gray-400 whitespace-nowrap">{s.heure_debut}–{s.heure_fin}</span>
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <button
+          onClick={(e) => { e.stopPropagation(); onViewRoster(s); }}
+          className={`text-xs flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-gray-100 min-w-0 shrink ${full ? "text-red-600 font-semibold" : "text-gray-500"}`}
+          title={`${s.nb_inscrits || 0} inscrit(s)${s.external_reserved ? ` + ${s.external_reserved} réservée(s) ailleurs` : ""} sur ${s.capacite_max} — ${placesRestantes} place(s) restante(s)`}
+          data-testid={`stage-roster-${s.id}`}
+        >
+          <Users size={12} className="shrink-0" />
+          <span className="truncate">{placesRestantes} rest. <span className="text-gray-400 font-normal">/{s.capacite_max}</span></span>
+        </button>
+        <div className="flex items-center gap-2.5 shrink-0">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleLock(s); }}
             className={`transition-colors ${locked ? "text-red-600 hover:text-red-700" : "text-gray-300 hover:text-[#0a0a0a]"}`}
@@ -664,7 +669,7 @@ function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete,
           >
             {locked ? <Lock size={14} weight="fill" /> : <LockOpen size={14} />}
           </button>
-          <PencilSimple size={14} className="text-gray-300 group-hover:text-[#d4af37] transition-colors" />
+          <PencilSimple size={14} className="text-gray-300 group-hover:text-[#d4af37] transition-colors shrink-0" />
           <AlertDialog open={deletingId === s.id} onOpenChange={(v) => !v && setDeletingId(null)}>
             <AlertDialogTrigger asChild>
               <button
