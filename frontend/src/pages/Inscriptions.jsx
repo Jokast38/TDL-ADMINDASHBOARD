@@ -475,6 +475,7 @@ export default function Inscriptions() {
     catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }
   };
 
+
   const updatePaymentStatus = async (id, payment_status) => {
     try { await api.put(`/inscriptions/${id}`, { payment_status }); toast.success("Statut de paiement mis à jour"); load(); }
     catch (e) { toast.error(e.response?.data?.detail || "Erreur"); }

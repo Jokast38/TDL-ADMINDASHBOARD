@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +29,18 @@ function toISO(d) {
  *   plutôt que d'en recréer un nouveau.
  */
 export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedLead, onCreated }) {
+  const { user } = useAuth();
+  // L'attribution du suivi (qui s'occupe de ce prospect) se fait ici, au
+  // moment de la prise de RDV, plutôt que sur l'inscription a posteriori —
+  // plus naturel : c'est l'instant où on décide qui va effectivement traiter
+  // le dossier. Réservé aux rôles qui gèrent une équipe (admin, responsable
+  // d'admission) ou au Centre d'appel (un agent peut passer la main à un
+  // collègue ou à l'admission) ; les autres rôles gardent le comportement
+  // d'avant (RDV toujours pris en son propre nom, voir commercial_id côté
+  // backend qui défaut à l'utilisateur connecté si non fourni).
+  const canAssign = ["admin", "responsable_admission", "agent_telephonique"].includes(user?.role);
+  const [assignees, setAssignees] = useState([]);
+  const [assignedTo, setAssignedTo] = useState("");
   const [lead, setLead] = useState(fixedLead || null);
   const [leadQuery, setLeadQuery] = useState("");
   const [leadResults, setLeadResults] = useState([]);
@@ -48,9 +61,13 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
     if (!open) return;
     setLead(fixedLead || null);
     setLeadQuery(""); setLeadResults([]); setPendingSlot(null);
-    setKind("physique"); setFormationId(""); setLocation("");
+    setKind("physique"); setFormationId(""); setLocation(""); setAssignedTo("");
     setDate(toISO(new Date())); setTime("09:00"); setNotes("");
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data)).catch(() => {});
+    if (canAssign) {
+      api.get("/employees").then((r) => setAssignees((r.data || []).filter((u) => u.role === "agent_telephonique" || u.role === "responsable_admission"))).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, fixedLead]);
 
   // Lead déjà connu (fixedLead) : on vérifie s'il a un créneau d'appel
@@ -111,6 +128,7 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
         formation_id: formationId || undefined,
         formation_titre: formation?.title,
         notes: notes || undefined,
+        commercial_id: assignedTo || undefined,
       });
       toast.success("Rendez-vous créé");
       onCreated?.();
@@ -184,6 +202,18 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
             </div>
           )}
 
+          {canAssign && (
+            <div>
+              <label className="text-sm font-medium">Attribuer à</label>
+              <Select value={assignedTo || "__self__"} onValueChange={(v) => setAssignedTo(v === "__self__" ? "" : v)}>
+                <SelectTrigger data-testid="book-appointment-assignee"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__self__">Moi-même</SelectItem>
+                  {assignees.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div>
             <label className="text-sm font-medium">Type de rendez-vous</label>
             <Select value={kind} onValueChange={setKind}>

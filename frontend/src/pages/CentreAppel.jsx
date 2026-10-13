@@ -11,9 +11,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
 import {
-  Phone, EnvelopeSimple, FileText, CalendarPlus, CheckCircle, Headset, MagnifyingGlass,
+  Phone, EnvelopeSimple, FileText, CalendarPlus, CheckCircle, Headset, MagnifyingGlass, X as XIcon,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import { formatDateTimeFR } from "@/lib/dateFormat";
+
+const HISTORY_ACTION_LABELS = {
+  lead_note: "Note ajoutée",
+  lead_qualifie: "Qualification modifiée",
+  lead_pipeline_status: "Déplacé dans le pipeline",
+  lead_assigne: "Attribué",
+  lead_demande_documents: "Documents demandés",
+  lead_contacte: "Contact enregistré",
+  rdv_appel_cree: "RDV d'appel créé",
+  rdv_physique_cree: "RDV physique créé",
+  paiement_lien_envoye: "Lien de paiement envoyé",
+  dossier_traite: "Dossier traité",
+};
 
 // Doit rester synchronisé avec core.config.PIPELINE_STATUS_LABELS côté
 // backend. Une couleur DISTINCTE par statut (même les 3 étapes de relance,
@@ -55,6 +69,12 @@ export default function CentreAppel() {
   const [dragging, setDragging] = useState(null);
   const [visibleCounts, setVisibleCounts] = useState({});
   const [formations, setFormations] = useState([]);
+  // Filtre par formation — affiche uniquement les prospects de la catégorie
+  // de la formation choisie (les leads n'ont pas de formation_id précis,
+  // seulement une catégorie déduite de leur intérêt, voir
+  // core.utils._category_for_interest côté backend), plutôt que tout
+  // mélanger par défaut.
+  const [filterFormationCategory, setFilterFormationCategory] = useState("all");
 
   const [docDialogLead, setDocDialogLead] = useState(null);
   const [docSelection, setDocSelection] = useState([]);
@@ -67,11 +87,44 @@ export default function CentreAppel() {
   const [finalizeFormationId, setFinalizeFormationId] = useState("");
   const [finalizing, setFinalizing] = useState(false);
 
+  const [detailLead, setDetailLead] = useState(null);
+  const [emails, setEmails] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+
+  const loadHistory = (leadId) => api.get(`/leads/${leadId}/activity`).then((r) => setHistory(r.data || [])).catch(() => setHistory([]));
+
+  const openDetail = (lead) => {
+    setDetailLead(lead);
+    setNoteDraft("");
+    api.get(`/leads/${lead.id}/emails`).then((r) => setEmails(r.data || [])).catch(() => setEmails([]));
+    loadHistory(lead.id);
+  };
+
+  const saveNote = async () => {
+    if (!noteDraft.trim()) return;
+    setSavingNote(true);
+    try {
+      const { data } = await api.put(`/leads/${detailLead.id}`, { notes: noteDraft.trim() });
+      setDetailLead(data);
+      setItems((prev) => prev.map((l) => (l.id === data.id ? data : l)));
+      setNoteDraft("");
+      toast.success("Note enregistrée");
+      loadHistory(data.id);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   const load = () => {
     setLoading(true);
     const params = { page_size: 200 };
     if (isAdminLike && filterAgent !== "all") params.assigned_to = filterAgent;
     if (filterOrigin !== "all") params.origin = filterOrigin;
+    if (filterFormationCategory !== "all") params.category = filterFormationCategory;
     return api.get("/leads", { params })
       .then((r) => setItems(r.data.items || []))
       .catch(() => setItems([]))
@@ -79,7 +132,7 @@ export default function CentreAppel() {
   };
   const loadOrigins = () => api.get("/leads/origins").then((r) => setOrigins(r.data || [])).catch(() => setOrigins([]));
 
-  useEffect(() => { load(); }, [filterAgent, filterOrigin]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [filterAgent, filterOrigin, filterFormationCategory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadOrigins();
@@ -88,6 +141,19 @@ export default function CentreAppel() {
     }
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data || [])).catch(() => {});
   }, [isAdminLike]);
+
+  // Une formation par catégorie affichée (plusieurs formations peuvent
+  // partager la même catégorie, ex: VTC et Taxi -> VTC_TAXI) pour éviter des
+  // entrées en double dans le menu alors que le filtre porte sur la
+  // catégorie, pas sur la formation précise.
+  const formationOptions = useMemo(() => {
+    const seen = new Set();
+    return formations.filter((f) => {
+      if (!f.category || seen.has(f.category)) return false;
+      seen.add(f.category);
+      return true;
+    });
+  }, [formations]);
 
   const filteredItems = useMemo(() => {
     const query = q.trim().toLowerCase();
@@ -182,6 +248,13 @@ export default function CentreAppel() {
           <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />
           <Input placeholder="Rechercher un prospect..." value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" data-testid="centre-appel-search" />
         </div>
+        <Select value={filterFormationCategory} onValueChange={setFilterFormationCategory}>
+          <SelectTrigger className="w-full sm:w-64 h-9 text-xs" data-testid="centre-appel-filter-formation"><SelectValue placeholder="Formation" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les formations</SelectItem>
+            {formationOptions.map((f) => <SelectItem key={f.category} value={f.category}>{f.title}</SelectItem>)}
+          </SelectContent>
+        </Select>
         {isAdminLike && (
           <Select value={filterAgent} onValueChange={setFilterAgent}>
             <SelectTrigger className="w-full sm:w-56 h-9 text-xs" data-testid="centre-appel-filter-agent"><SelectValue placeholder="Agent" /></SelectTrigger>
@@ -245,22 +318,25 @@ export default function CentreAppel() {
                       key={l.id}
                       draggable
                       onDragStart={() => setDragging(l.id)}
-                      className="bg-white p-3 rounded-md border border-gray-200 border-l-4 shadow-sm hover:border-[#0a0a0a]"
+                      onClick={() => openDetail(l)}
+                      className="bg-white p-3 rounded-md border border-gray-200 border-l-4 shadow-sm hover:border-[#0a0a0a] cursor-pointer"
                       style={{ borderLeftColor: (COLUMN_BY_KEY[l.pipeline_status || DEFAULT_COLUMN] || {}).color }}
                       data-testid={`centre-appel-card-${l.id}`}
                     >
                       <p className="font-semibold text-sm leading-tight">{l.name}</p>
                       <p className="text-xs text-gray-500 mt-0.5">{l.interest || "—"}</p>
                       {isAdminLike && (
-                        <Select value={l.assigned_to || "__none__"} onValueChange={(v) => assignTo(l.id, v === "__none__" ? null : v)}>
-                          <SelectTrigger className="h-7 text-[11px] mt-2"><SelectValue placeholder="Agent" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">Non assigné</SelectItem>
-                            {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Select value={l.assigned_to || "__none__"} onValueChange={(v) => assignTo(l.id, v === "__none__" ? null : v)}>
+                            <SelectTrigger className="h-7 text-[11px] mt-2"><SelectValue placeholder="Agent" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Non assigné</SelectItem>
+                              {agents.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       )}
-                      <div className="flex items-center gap-1 mt-2.5">
+                      <div className="flex items-center gap-1 mt-2.5" onClick={(e) => e.stopPropagation()}>
                         <a href={l.phone ? `tel:${l.phone}` : undefined} className={`p-1.5 rounded hover:bg-gray-100 ${!l.phone ? "opacity-30 pointer-events-none" : "text-gray-600"}`} title="Appeler">
                           <Phone size={14} />
                         </a>
@@ -340,6 +416,128 @@ export default function CentreAppel() {
         lead={rdvLead}
         onCreated={() => { setRdvLead(null); toast.success("Rendez-vous planifié"); }}
       />
+
+      {/* Détail du prospect — ouvert en cliquant n'importe où sur la carte
+          (hors boutons d'action, qui gardent leur propre comportement). */}
+      <Dialog open={!!detailLead} onOpenChange={(v) => !v && setDetailLead(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" data-testid="centre-appel-detail-dialog">
+          {detailLead && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 pr-6">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: (COLUMN_BY_KEY[detailLead.pipeline_status || DEFAULT_COLUMN] || {}).color }}
+                  />
+                  {detailLead.name}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 text-sm">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-xs text-gray-400">Email</p>
+                    <p className="truncate">{detailLead.email || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Téléphone</p>
+                    <p>{detailLead.phone || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Intérêt</p>
+                    <p>{detailLead.interest || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Statut pipeline</p>
+                    <p>{(COLUMN_BY_KEY[detailLead.pipeline_status || DEFAULT_COLUMN] || {}).label}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Origine (brute)</p>
+                    <p className="truncate" title={detailLead.source}>{detailLead.source || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400">Relances</p>
+                    <p>{detailLead.relance_count || 0}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Notes</p>
+                  {detailLead.notes && (
+                    <p className="whitespace-pre-line bg-gray-50 rounded-md p-2 text-xs mb-2">{detailLead.notes}</p>
+                  )}
+                  <Textarea
+                    value={noteDraft}
+                    onChange={(e) => setNoteDraft(e.target.value)}
+                    placeholder="Ajouter une note..."
+                    className="text-xs"
+                    rows={2}
+                    data-testid="centre-appel-note-input"
+                  />
+                  <Button
+                    size="sm"
+                    className="mt-1"
+                    disabled={savingNote || !noteDraft.trim()}
+                    onClick={saveNote}
+                    data-testid="centre-appel-note-save"
+                  >
+                    {savingNote ? "Enregistrement..." : "Enregistrer la note"}
+                  </Button>
+                </div>
+
+                {detailLead.documents_requested?.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">
+                      Documents demandés {detailLead.documents_requested_at ? `(${detailLead.documents_requested_at.slice(0, 10)})` : ""}
+                    </p>
+                    <ul className="text-xs list-disc list-inside text-gray-600">
+                      {detailLead.documents_requested.map((d) => <li key={d}>{d}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Historique des emails ({emails.length})</p>
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {emails.slice(0, 10).map((e, i) => (
+                      <p key={i} className="text-xs text-gray-500 truncate">
+                        {e.created_at?.slice(0, 10)} — {e.subject}
+                      </p>
+                    ))}
+                    {!emails.length && <p className="text-xs text-gray-400">Aucun email envoyé.</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Historique ({history.length})</p>
+                  <div className="max-h-40 overflow-y-auto space-y-1.5">
+                    {history.map((h, i) => (
+                      <div key={i} className="text-xs text-gray-600 border-l-2 border-gray-200 pl-2">
+                        <span className="text-gray-400">{h.at ? formatDateTimeFR(h.at) : ""}</span>
+                        {" — "}
+                        <span className="font-medium">{h.user_name || "Système"}</span>
+                        {" : "}
+                        <span>{HISTORY_ACTION_LABELS[h.action] || h.action}</span>
+                        {h.meta?.pipeline_status && (
+                          <span className="text-gray-500"> → {(COLUMN_BY_KEY[h.meta.pipeline_status] || {}).label || h.meta.pipeline_status}</span>
+                        )}
+                        {h.meta?.assigned_to_name && <span className="text-gray-500"> → {h.meta.assigned_to_name}</span>}
+                        {h.meta?.qualification && <span className="text-gray-500"> → {h.meta.qualification}</span>}
+                      </div>
+                    ))}
+                    {!history.length && <p className="text-xs text-gray-400">Aucun historique.</p>}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                  <Button variant="outline" size="sm" onClick={() => setDetailLead(null)} data-testid="centre-appel-detail-close">
+                    <XIcon size={14} className="mr-1" /> Fermer
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

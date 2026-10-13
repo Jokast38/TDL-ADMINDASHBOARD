@@ -219,13 +219,13 @@ function App() {
               <ProtectedRoute roles={["admin", "responsable_admission"]}><AdminLayout><Modules /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/inscriptions" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><Inscriptions /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"]}><AdminLayout><Inscriptions /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/paiement-confirmation" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><PaiementConfirmation /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/apprenants" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Students /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "agent_telephonique"]}><AdminLayout><Students /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/dossiers" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Dossiers /></AdminLayout></ProtectedRoute>

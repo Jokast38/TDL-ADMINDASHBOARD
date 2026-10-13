@@ -102,6 +102,10 @@ MANAGEABLE_ROLES_BY_ROLE = {
     "responsable_commercial": ("commercial",),
     "agent_admin": ("animateur",),
     "responsable_admission": ("animateur",),
+    # Un agent téléphonique doit pouvoir voir ses collègues et les
+    # responsables d'admission pour leur attribuer une inscription (colonne
+    # "Traité par" de la page Inscriptions) — pas le reste du staff.
+    "agent_telephonique": ("agent_telephonique", "responsable_admission"),
 }
 
 
@@ -110,7 +114,7 @@ def _manageable_roles(role: str) -> tuple:
 
 
 @router.get("/employees")
-async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin", "responsable_admission"))):
+async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin", "responsable_admission", "agent_telephonique"))):
     roles = list(VALID_STAFF_ROLES) if user["role"] == "admin" else list(_manageable_roles(user["role"]))
     staff = await db.users.find(
         {"role": {"$in": roles}},

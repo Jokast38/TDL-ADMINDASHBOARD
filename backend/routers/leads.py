@@ -476,6 +476,7 @@ async def list_leads(
     pipeline_status: Optional[str] = None,
     assigned_to: Optional[str] = None,
     origin: Optional[str] = None,
+    category: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
     user: dict = Depends(require_role(*ROLES_LEADS))
@@ -492,6 +493,12 @@ async def list_leads(
     if qualification: query["qualification"] = qualification
     if pipeline_status: query["pipeline_status"] = pipeline_status
     if assigned_to: query["assigned_to"] = assigned_to
+    # Filtre par formation côté Centre d'appel (CentreAppel.jsx) — `category`
+    # est déjà déduite côté serveur de `interest` à la création/mise à jour
+    # du lead (voir _category_for_interest), donc fiable pour filtrer "ne me
+    # montrer que les prospects VTC/Taxi", etc. sans dépendre d'un champ
+    # formation_id qui n'existe pas sur les leads.
+    if category: query["category"] = category
     if origin:
         # `origin` regroupe plusieurs valeurs brutes de `source` (voir
         # core.config.canonicalize_lead_origin) — on résout dynamiquement
@@ -549,7 +556,7 @@ async def list_leads(
         ]
 
     cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, source, campaign, ville, qualification,
-                 pipeline_status, assigned_to, origin, page, page_size,
+                 pipeline_status, assigned_to, origin, category, page, page_size,
                  tuple(sorted(assigned)) if scoped else None)
     cached = _leads_cache_get(cache_key)
     if cached is not None:
@@ -713,6 +720,15 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
         update.setdefault("contacted", True)
         update.setdefault("last_contacted_by", user["id"])
         update.setdefault("last_contacted_at", now_iso())
+    # Suivi rigoureux du Centre d'appel : un déplacement de carte (colonne du
+    # kanban) ou une réattribution à un autre agent sont des actions tout
+    # aussi réelles qu'une note ou une qualification — tracées de la même
+    # façon pour qu'un responsable puisse reconstituer qui a fait quoi, quand
+    # (voir GET /leads/{lid}/activity, consommé par CentreAppel.jsx, et le
+    # journal global de la page Activité).
+    pipeline_status_changed = "pipeline_status" in update and update["pipeline_status"] != existing.get("pipeline_status")
+    assigned_to_changed = "assigned_to" in update and update["assigned_to"] != existing.get("assigned_to")
+
     contact_event = bool(update.get("contacted")) or update.get("status") in ("contacte", "interesse", "pas_interesse")
     if contact_event:
         update["last_contacted_by"] = user["id"]
@@ -750,6 +766,15 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
                 [user["id"]], "🎉 Lead converti !",
                 f"{existing.get('name') or 'Un prospect'} vient d'être marqué Inscrit — bravo !", "/admin/marketing",
             )
+    if pipeline_status_changed:
+        await log_action(user, "lead_pipeline_status", "lead", lid, {
+            "name": existing.get("name"), "pipeline_status": update["pipeline_status"],
+        })
+    if assigned_to_changed:
+        assignee = await db.users.find_one({"id": update["assigned_to"]}, {"_id": 0, "name": 1}) if update.get("assigned_to") else None
+        await log_action(user, "lead_assigne", "lead", lid, {
+            "name": existing.get("name"), "assigned_to_name": assignee.get("name") if assignee else None,
+        })
     return await db.leads.find_one({"id": lid}, {"_id": 0})
 
 
@@ -861,6 +886,17 @@ async def list_lead_emails(lid: str, user: dict = Depends(require_role(*ROLES_LE
     return await db.email_logs.find(
         {"lead_id": lid}, {"_id": 0, "body": 0}
     ).sort("created_at", -1).to_list(200)
+
+
+@router.get("/{lid}/activity")
+async def lead_activity(lid: str, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Historique complet de ce prospect (qui a fait quoi, quand) — notes,
+    qualifications, déplacements de colonne du Centre d'appel, attributions,
+    demandes de documents... voir services/activity.log_action, appelé à
+    chaque modification notable dans update_lead et request_documents."""
+    return await db.activity_log.find(
+        {"target_type": "lead", "target_id": lid}, {"_id": 0}
+    ).sort("at", -1).to_list(200)
 
 
 @router.post("/{lid}/request-documents")

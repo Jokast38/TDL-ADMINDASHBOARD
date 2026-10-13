@@ -111,7 +111,7 @@ PUBLIC_FRONTEND_URL = os.environ.get("PUBLIC_FRONTEND_URL", "https://www.tdl-for
 # Permission groups
 ROLES_ALL_STAFF = ("admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique")
 ROLES_ADMIN_STAFF = ("admin", "responsable_admission", "agent_admin")
-ROLES_DOSSIERS_MGMT = ("admin", "employe", "responsable_admission", "agent_admin")
+ROLES_DOSSIERS_MGMT = ("admin", "employe", "responsable_admission", "agent_admin", "agent_telephonique")
 ROLES_DOCS_VIEW = ("admin", "employe", "responsable_admission", "agent_admin")
 ROLES_ANIMATEUR_PLUS = ("admin", "animateur")
 ROLES_LEADS = ("admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique")
