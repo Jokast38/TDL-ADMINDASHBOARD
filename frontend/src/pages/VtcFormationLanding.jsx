@@ -168,7 +168,7 @@ export default function VtcFormationLanding() {
     <div className="min-h-screen bg-white" data-testid="vtc-landing-page" ref={revealRef}>
       <TopBar />
       <StageNav ctaLabel="Demander un devis" ctaHref="#contact" />
-      <SideRail centresHref="#centres" contactHref="#contact" />
+      <SideRail centresHref="#centres" brochureHref="/doc/calendrier_examens_2026.pdf" contactHref="#contact" />
 
       {/* Hero */}
       <section className="relative bg-black text-white overflow-hidden">

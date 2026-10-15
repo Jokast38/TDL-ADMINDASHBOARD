@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { trackLead, newEventId, getFbCookies } from "@/lib/metaPixel";
 import HeroSlideshow from "@/components/HeroSlideshow";
 import FormationBookingWidget from "@/components/FormationBookingWidget";
+import SideRail from "@/components/SideRail";
 import SiteFooter from "@/components/SiteFooter";
 import FormationCard from "@/components/FormationCard";
 import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
@@ -369,6 +370,7 @@ export default function Landing() {
     <div className="min-h-screen bg-white" data-testid="landing-page" ref={revealRef}>
       {/* Header */}
       <TopBar />
+      <SideRail centresHref="#catalogue" brochureHref="/doc/calendrier_examens_2026.pdf" contactHref="#contact" />
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           <Link to="/" className="flex items-center gap-2 shrink-0" onClick={() => setMobileOpen(false)}>

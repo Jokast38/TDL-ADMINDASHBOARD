@@ -1860,12 +1860,9 @@ function BacklinkRequestForm({ backlink, onSent, onCancel }) {
         ? FORMATION_KEYWORDS[backlink._filterHint]
         : suggestKeywords(backlink)
   );
-  const defaultMessage = (hasPrice) =>
-    `Bonjour,\n\nNous sommes TDL Formation, organisme de formation certifié Qualiopi (permis, CACES, SSIAP, VTC/Taxi) basé en Île-de-France.\n\nNous souhaiterions obtenir un lien depuis votre site (${backlink.url}) vers le nôtre (https://tdl-formation.fr), idéalement sur les mots-clés ci-dessous.`
-    + (hasPrice
-      ? " Nous sommes disposés à rémunérer cet emplacement.\n\nN'hésitez pas à nous indiquer vos conditions si celles proposées ne conviennent pas."
-      : " Il s'agirait d'un simple échange de liens (netlinking), sans contrepartie financière.")
-    + `\n\nBien cordialement,\nL'équipe TDL Formation`;
+  const defaultMessage = (hasPrice) => hasPrice
+    ? `Bonjour,\n\nNous sommes TDL Formation, organisme de formation certifié Qualiopi (permis, CACES, SSIAP, VTC/Taxi) basé en Île-de-France.\n\nNous souhaiterions obtenir un lien depuis votre site (${backlink.url}) vers le nôtre (https://tdl-formation.fr), idéalement sur les mots-clés ci-dessous. Nous sommes disposés à rémunérer cet emplacement.\n\nN'hésitez pas à nous indiquer vos conditions si celles proposées ne conviennent pas.\n\nBien cordialement,\nL'équipe TDL Formation`
+    : `Bonjour,\n\nJe me permets de vous contacter au nom de TDL Formation, un centre spécialisé dans les formations professionnelles (VTC, Taxi, CACES, etc.).\n\nDans le cadre du développement de notre visibilité en ligne, nous souhaitons établir des collaborations avec des sites comme le vôtre.\n\nNous aimerions savoir s'il serait possible de publier un article invité ou d'intégrer un lien vers notre site dans l'un de vos contenus existants, lorsque cela est pertinent pour vos lecteurs.\n\nNous pouvons également vous proposer un article original et de qualité, adapté à votre ligne éditoriale.\n\nSeriez-vous ouvert à ce type de collaboration ?\n\nMerci d'avance pour votre retour.\n\nBien cordialement,\nL'équipe TDL Formation\nwww.tdl-formation.fr`;
   const [message, setMessage] = useState(
     backlink.last_request?.message || defaultMessage(!!(backlink.last_request?.price))
   );

@@ -7,6 +7,7 @@ import { useReveal } from "@/hooks/useReveal";
 import { trackViewContent } from "@/lib/metaPixel";
 import Kit from "@/components/StageLandingPage";
 import FormationBookingWidget from "@/components/FormationBookingWidget";
+import SideRail from "@/components/SideRail";
 import {
   CaretRight, CalendarBlank, Certificate, Taxi, MapPin,
 } from "@phosphor-icons/react";
@@ -66,6 +67,7 @@ export default function PasserelleTaxiBanlieueLanding() {
   return (
     <div className="min-h-screen bg-white" data-testid="passerelle-taxi-banlieue-landing-page" ref={revealRef}>
       <TopBar />
+      <SideRail centresHref="#programme" brochureHref="/doc/calendrier_examens_2026.pdf" contactHref="#contact" />
       <StageNav ctaLabel="Recevoir le programme" ctaHref="#contact" />
 
       {/* Hero */}

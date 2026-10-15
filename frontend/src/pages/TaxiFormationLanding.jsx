@@ -7,6 +7,7 @@ import { useReveal } from "@/hooks/useReveal";
 import { trackViewContent } from "@/lib/metaPixel";
 import Kit from "@/components/StageLandingPage";
 import FormationBookingWidget from "@/components/FormationBookingWidget";
+import SideRail from "@/components/SideRail";
 import {
   CaretRight, ShieldCheck, CalendarBlank, Certificate, Taxi,
 } from "@phosphor-icons/react";
@@ -69,6 +70,7 @@ export default function TaxiFormationLanding() {
   return (
     <div className="min-h-screen bg-white" data-testid="taxi-landing-page" ref={revealRef}>
       <TopBar />
+      <SideRail centresHref="#programme" brochureHref="/doc/calendrier_examens_2026.pdf" contactHref="#contact" />
       <StageNav ctaLabel="Demander un devis" ctaHref="#contact" />
 
       {/* Hero */}
