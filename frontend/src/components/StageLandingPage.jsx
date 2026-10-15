@@ -589,10 +589,13 @@ function FeatureStrip({ items }) {
 }
 
 // ─── Étapes (carte dynamique cliquable, avec détail et barre de progression) ──
+const STEPS_COLS_CLASS = { 3: "sm:grid-cols-3", 4: "sm:grid-cols-4", 5: "sm:grid-cols-5", 6: "sm:grid-cols-6" };
+
 function StepsSection({ title, steps, id }) {
   const [active, setActive] = useState(0);
   const current = steps[active] || steps[0];
   const progress = steps.length > 1 ? active / (steps.length - 1) : 0;
+  const colsClass = STEPS_COLS_CLASS[steps.length] || "sm:grid-cols-5";
 
   return (
     <section id={id} className="py-16 lg:py-20 bg-gray-50 scroll-mt-20">
@@ -606,7 +609,7 @@ function StepsSection({ title, steps, id }) {
               style={{ backgroundColor: GOLD, transform: `scaleX(${progress})` }}
             />
           </div>
-          <ol className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-2 relative">
+          <ol className={`grid grid-cols-2 ${colsClass} gap-3 sm:gap-2 relative`}>
             {steps.map((s, i) => (
               <li key={i} className="flex sm:flex-col items-center sm:text-center gap-3 sm:gap-1">
                 <button

@@ -1860,11 +1860,29 @@ function BacklinkRequestForm({ backlink, onSent, onCancel }) {
         ? FORMATION_KEYWORDS[backlink._filterHint]
         : suggestKeywords(backlink)
   );
+  const defaultMessage = (hasPrice) =>
+    `Bonjour,\n\nNous sommes TDL Formation, organisme de formation certifié Qualiopi (permis, CACES, SSIAP, VTC/Taxi) basé en Île-de-France.\n\nNous souhaiterions obtenir un lien depuis votre site (${backlink.url}) vers le nôtre (https://tdl-formation.fr), idéalement sur les mots-clés ci-dessous.`
+    + (hasPrice
+      ? " Nous sommes disposés à rémunérer cet emplacement.\n\nN'hésitez pas à nous indiquer vos conditions si celles proposées ne conviennent pas."
+      : " Il s'agirait d'un simple échange de liens (netlinking), sans contrepartie financière.")
+    + `\n\nBien cordialement,\nL'équipe TDL Formation`;
   const [message, setMessage] = useState(
-    backlink.last_request?.message ||
-    `Bonjour,\n\nNous sommes TDL Formation, organisme de formation certifié Qualiopi (permis, CACES, SSIAP, VTC/Taxi) basé en Île-de-France.\n\nNous souhaiterions obtenir un lien depuis votre site (${backlink.url}) vers le nôtre (https://tdl-formation.fr), idéalement sur les mots-clés ci-dessous. Nous sommes disposés à rémunérer cet emplacement.\n\nN'hésitez pas à nous indiquer vos conditions si celles proposées ne conviennent pas.\n\nBien cordialement,\nL'équipe TDL Formation`
+    backlink.last_request?.message || defaultMessage(!!(backlink.last_request?.price))
   );
   const [sending, setSending] = useState(false);
+
+  // Si le message n'a pas été modifié à la main (il correspond encore à l'un
+  // des deux modèles), on le resynchronise quand le prix passe de rempli à
+  // vide (ou l'inverse), pour ne jamais envoyer un message qui mentionne une
+  // rémunération alors que le prix a été retiré (ou l'inverse).
+  const handlePriceChange = (v) => {
+    const hadPrice = !!String(price).trim();
+    const hasPrice = !!String(v).trim();
+    if (hadPrice !== hasPrice && (message === defaultMessage(hadPrice) || !message.trim())) {
+      setMessage(defaultMessage(hasPrice));
+    }
+    setPrice(v);
+  };
 
   const addKeyword = () => {
     const v = keywordInput.trim();
@@ -1875,13 +1893,13 @@ function BacklinkRequestForm({ backlink, onSent, onCancel }) {
 
   const send = async () => {
     if (!toEmail.trim()) return toast.error("Adresse email destinataire requise");
-    if (!price || Number(price) <= 0) return toast.error("Indiquez un prix proposé");
+    if (price && Number(price) <= 0) return toast.error("Le prix proposé doit être supérieur à 0, ou laissé vide");
     if (!message.trim()) return toast.error("Le message ne peut pas être vide");
     setSending(true);
     try {
       const { data } = await api.post(`/backlinks/${backlink.id}/request`, {
         to_email: toEmail.trim(),
-        price: Number(price),
+        price: price ? Number(price) : null,
         keywords,
         message,
       });
@@ -1901,8 +1919,8 @@ function BacklinkRequestForm({ backlink, onSent, onCancel }) {
         <Input type="email" value={toEmail} onChange={(e) => setToEmail(e.target.value)} placeholder="contact@site.fr" data-testid="backlink-to-email" />
       </div>
       <div>
-        <label className="text-sm font-medium">Prix proposé (€)</label>
-        <Input type="number" min="0" step="1" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="ex: 80" data-testid="backlink-price" />
+        <label className="text-sm font-medium">Prix proposé (€) — facultatif</label>
+        <Input type="number" min="0" step="1" value={price} onChange={(e) => handlePriceChange(e.target.value)} placeholder="Laisser vide pour un simple échange de liens gratuit" data-testid="backlink-price" />
       </div>
       <div>
         <label className="text-sm font-medium mb-1 block">Mots-clés visés</label>

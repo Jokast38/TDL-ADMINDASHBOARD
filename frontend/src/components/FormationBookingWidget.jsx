@@ -9,6 +9,9 @@ import { trackLead, trackSchedule, newEventId, getFbCookies } from "@/lib/metaPi
 
 const GOLD = "#d4af37";
 
+const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
+const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
+
 const CENTERS = [
   { id: "epinay", label: "Épinay-sur-Seine (93)", match: "Épinay" },
   { id: "creil", label: "Creil (60)", match: "Creil" },
@@ -106,6 +109,10 @@ export default function FormationBookingWidget({ formationId: initialFormationId
     e.preventDefault();
     if (!form.prenom.trim() || !form.nom.trim() || !form.telephone.trim()) {
       toast.error("Merci de renseigner vos coordonnées");
+      return;
+    }
+    if (!isValidPhone(form.telephone)) {
+      toast.error("Merci de vérifier votre numéro de téléphone (10 chiffres, ex : 06 12 34 56 78)");
       return;
     }
     if (!consent) {
@@ -279,9 +286,15 @@ export default function FormationBookingWidget({ formationId: initialFormationId
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
-                  <input value={form.prenom} onChange={(e) => setForm((f) => ({ ...f, prenom: e.target.value }))} placeholder="Nom et prénom" className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm sm:col-span-2" />
+                  <input value={form.prenom} onChange={(e) => setForm((f) => ({ ...f, prenom: e.target.value }))} placeholder="Prénom" className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm" />
+                  <input value={form.nom} onChange={(e) => setForm((f) => ({ ...f, nom: e.target.value }))} placeholder="Nom" className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm" />
                   <input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="E-mail" className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm" />
-                  <input value={form.telephone} onChange={(e) => setForm((f) => ({ ...f, telephone: e.target.value }))} placeholder="Téléphone" className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm" />
+                  <div>
+                    <input type="tel" value={form.telephone} onChange={(e) => setForm((f) => ({ ...f, telephone: e.target.value }))} placeholder="Téléphone" className="w-full border border-gray-300 rounded-md px-3 py-2.5 text-sm" />
+                    {form.telephone.trim() && !isValidPhone(form.telephone) && (
+                      <p className="text-xs text-red-500 mt-1">Format invalide (ex : 06 12 34 56 78)</p>
+                    )}
+                  </div>
                 </div>
 
                 <PrivacyConsentCheckbox checked={consent} onChange={setConsent} testId="booking-widget-consent" />

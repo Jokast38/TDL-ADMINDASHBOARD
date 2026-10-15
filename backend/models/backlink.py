@@ -12,7 +12,9 @@ class BacklinkUpdate(BaseModel):
 
 class BacklinkRequestIn(BaseModel):
     to_email: str
-    price: float
+    # Facultatif : certaines demandes sont de simples échanges de netlinking
+    # gratuits, sans rémunération proposée (voir routers/backlinks.py).
+    price: Optional[float] = None
     keywords: List[str] = []
     message: str
     subject: Optional[str] = None

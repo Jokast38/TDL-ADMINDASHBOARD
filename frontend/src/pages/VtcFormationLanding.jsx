@@ -81,6 +81,7 @@ const STEPS = [
   { title: "Préparer la théorie", desc: "Réglementation, gestion, sécurité, français et anglais." },
   { title: "Réussir l'admissibilité", desc: "Entraînements réguliers et examens blancs jusqu'à l'examen officiel." },
   { title: "Préparer la pratique", desc: "Conduite, parcours, accueil client et facturation." },
+  { title: "Carte VTC", desc: "Après la réussite, notre équipe suit votre demande de carte professionnelle VTC (dossier ANTS) jusqu'à l'obtention." },
 ];
 
 const FAQ = [

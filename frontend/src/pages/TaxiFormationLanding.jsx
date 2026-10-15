@@ -36,6 +36,7 @@ const STEPS = [
   { title: "Préparer la théorie", desc: "Réglementation, gestion, sécurité, français et anglais." },
   { title: "Réussir l'admissibilité", desc: "Entraînements réguliers et examens blancs." },
   { title: "Préparer la pratique", desc: "Conduite, parcours, accueil client et facturation." },
+  { title: "Carte professionnelle Taxi", desc: "Après la réussite, notre équipe suit votre demande de carte professionnelle (dossier préfectoral) jusqu'à l'obtention." },
 ];
 
 const FAQ = [
