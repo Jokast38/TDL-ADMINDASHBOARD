@@ -5,11 +5,11 @@ import { setPageMeta } from "@/lib/seo";
 import { trackLead, trackInitiateCheckout, trackViewContent, newEventId, getFbCookies } from "@/lib/metaPixel";
 import Kit from "@/components/StageLandingPage";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
+import SiteFooter from "@/components/SiteFooter";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { api } from "@/lib/api";
 import "@/styles/stage-recuperation-points.css";
 import heroTrainingImage from "@/assets/hero-training.jpeg";
-import logoTdlImage from "@/assets/logo-tdl.png";
 import {
   Check, CreditCard, Star, Envelope, Phone, MapPin, CalendarBlank, Fire, Lightning,
 } from "@phosphor-icons/react";
@@ -318,26 +318,7 @@ export default function OffreFlashPointsLanding() {
         </div>
       </section>
 
-      <footer className="site-footer">
-        <div className="container footer-grid">
-          <div className="footer-brand">
-            <img src={logoTdlImage} alt="TDL Formation" />
-            <p>Formation, prévention routière et accompagnement des conducteurs.</p>
-          </div>
-          <div>
-            <h3>Notre centre</h3>
-            <p>59 avenue Joffre<br />93800 Épinay-sur-Seine</p>
-          </div>
-          <div>
-            <h3>Nous contacter</h3>
-            <a href="tel:+33180907249">01 80 90 72 49</a>
-            <a href="mailto:contact@tdl-formation.fr">contact@tdl-formation.fr</a>
-          </div>
-        </div>
-        <div className="container footer-bottom">
-          <span>© 2026 TDL Formation</span>
-        </div>
-      </footer>
+      <SiteFooter />
 
       <ChatWidget />
       <ContactBubble />

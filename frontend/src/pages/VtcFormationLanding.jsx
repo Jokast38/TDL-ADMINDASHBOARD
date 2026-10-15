@@ -1,18 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { setPageMeta } from "@/lib/seo";
-import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
 import SiteFooter from "@/components/SiteFooter";
 import { useReveal } from "@/hooks/useReveal";
-import { trackLead, trackViewContent, trackSchedule, newEventId, getFbCookies } from "@/lib/metaPixel";
+import { trackLead, trackViewContent, newEventId, getFbCookies } from "@/lib/metaPixel";
 import Kit from "@/components/StageLandingPage";
 import GoogleCentersMap from "@/components/GoogleCentersMap";
 import SideRail from "@/components/SideRail";
 import UpcomingSessionsSection, { useUpcomingSessions, sessionLabel } from "@/components/UpcomingSessions";
 import PricingTable from "@/components/PricingTable";
+import FormationBookingWidget from "@/components/FormationBookingWidget";
+import { galleryForCategory } from "@/constants/formationAssets";
 import {
   CaretRight, ShieldCheck, CalendarBlank, Certificate, Car, ChatCircleText,
   Clock, CurrencyEur, UsersThree, CheckCircle,
@@ -20,7 +21,18 @@ import {
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
 
-const { TopBar, StageNav, FeatureStrip, StepsSection, TrustBar, FaqGrid, GOLD } = Kit;
+const { TopBar, StageNav, FeatureStrip, StepsSection, TrustBar, FaqGrid, ModulesAccordion, StickyToc, StickyPriceCard, GOLD } = Kit;
+
+const TOC_SECTIONS = [
+  { id: "tarifs", label: "Les prix" },
+  { id: "dates", label: "Dates et centres" },
+  { id: "centres", label: "Nos centres" },
+  { id: "galerie", label: "Projetez-vous" },
+  { id: "contact", label: "Votre projet" },
+  { id: "programme", label: "Programme" },
+];
+
+const GALLERY = galleryForCategory("VTC_TAXI");
 
 const FEATURES = [
   { icon: ShieldCheck, label: "Accompagnement administratif" },
@@ -65,16 +77,11 @@ const FAQ = [
 ];
 
 const FORMATIONS = ["Formation VTC initiale", "Formation continue VTC", "Passerelle Taxi vers VTC", "Formation VTC en ligne"];
-const FINANCEMENTS = ["CPF", "France Travail", "Employeur", "Personnel"];
 
 const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
 const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 
 export default function VtcFormationLanding() {
-  const [form, setForm] = useState({ prenom: "", nom: "", email: "", telephone: "", formation: FORMATIONS[0], financement: "", message: "" });
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [privacyConsent, setPrivacyConsent] = useState(false);
   const [heroForm, setHeroForm] = useState({ prenom: "", telephone: "" });
   const [heroSending, setHeroSending] = useState(false);
   const [heroSent, setHeroSent] = useState(false);
@@ -83,9 +90,10 @@ export default function VtcFormationLanding() {
   const [siblingFormations, setSiblingFormations] = useState([]);
   const formRef = useRef(null);
   const revealRef = useReveal();
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const { sessions } = useUpcomingSessions(formationId);
   const nextSession = sessions[0];
+  const priceLabel = formation?.price ? `${formation.price.toLocaleString("fr-FR")} €` : "1 490 €";
+  const facts = FACTS.map((f) => (f.label === "Tarif" ? { ...f, value: `${priceLabel} TTC` } : f));
 
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } }).then(({ data }) => {
@@ -139,35 +147,6 @@ export default function VtcFormationLanding() {
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const submit = async (e) => {
-    e.preventDefault();
-    if (!privacyConsent) {
-      return toast.error("Merci d'accepter l'utilisation de vos données pour continuer");
-    }
-    if (!form.prenom.trim() || !form.nom.trim() || !form.telephone.trim()) {
-      return toast.error("Merci de remplir tous les champs obligatoires");
-    }
-    if (!isValidPhone(form.telephone)) {
-      return toast.error("Merci de vérifier votre numéro de téléphone (10 chiffres, ex : 06 12 34 56 78)");
-    }
-    setSending(true);
-    try {
-      const message = [form.financement && `Financement envisagé : ${form.financement}`, form.message].filter(Boolean).join("\n");
-      const eventId = newEventId();
-      await api.post("/callback-requests", {
-        prenom: form.prenom, nom: form.nom, telephone: form.telephone, email: form.email,
-        session: form.formation, message, center: "Épinay-sur-Seine (93)", source: "meta_formation_vtc",
-        page_url: window.location.href, event_id: eventId, ...getFbCookies(),
-      });
-      setSent(true);
-      trackLead({ content_name: "formation_vtc", session: form.formation }, eventId);
-    } catch {
-      toast.error("Erreur lors de l'envoi, merci de réessayer ou de nous appeler directement.");
-    } finally {
-      setSending(false);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-white" data-testid="vtc-landing-page" ref={revealRef}>
       <TopBar />
@@ -202,7 +181,7 @@ export default function VtcFormationLanding() {
               Formation intensive pour devenir chauffeur VTC professionnel et obtenir votre carte VTC : suivi pédagogique personnalisé, examens blancs et mises en situation réelles, jusqu'à la carte professionnelle.
             </p>
             <div className="flex flex-wrap gap-3 mt-8">
-              {FACTS.map((f) => (
+              {facts.map((f) => (
                 <div key={f.label} className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border border-white/15 bg-white/5 backdrop-blur-sm">
                   <f.icon size={18} weight="bold" style={{ color: GOLD }} />
                   <div className="leading-tight">
@@ -270,99 +249,80 @@ export default function VtcFormationLanding() {
 
       <FeatureStrip items={FEATURES} />
 
-      {/* Programme */}
-      <section id="programme" className="py-16 lg:py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>Contenu pédagogique</p>
-          <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-10 max-w-xl">
-            Un programme pensé pour l'examen et le métier.
-          </h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {MODULES.map((m) => (
-              <div key={m.n} className="bg-white border border-gray-200 rounded-md p-6" data-reveal>
-                <span className="font-display text-3xl font-extrabold text-gray-300">{m.n}</span>
-                <h3 className="font-bold text-sm mt-2 mb-1">{m.title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed">{m.desc}</p>
+      <div className="lg:grid lg:grid-cols-[1fr_300px] lg:gap-8 lg:items-start">
+        <div className="min-w-0">
+          <StepsSection title="De l'inscription à la carte professionnelle." steps={STEPS} />
+
+          {/* Tarifs réels (backend) */}
+          {formation && (
+            <section id="tarifs" className="py-16 lg:py-20 bg-white scroll-mt-20">
+              <div className="max-w-7xl mx-auto px-6 lg:px-8">
+                <PricingTable formation={formation} others={siblingFormations} ctaHref="#contact" />
               </div>
-            ))}
-          </div>
+            </section>
+          )}
+
+          {/* Dates réelles */}
+          {formationId && (
+            <section id="dates" className="py-16 lg:py-20 bg-white scroll-mt-20">
+              <div className="max-w-7xl mx-auto px-6 lg:px-8">
+                <UpcomingSessionsSection formationId={formationId} />
+              </div>
+            </section>
+          )}
+
+          {/* Centres */}
+          <section id="centres" className="py-16 lg:py-20 bg-gray-50 scroll-mt-20">
+            <div className="max-w-7xl mx-auto px-6 lg:px-8">
+              <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>Où se former</p>
+              <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-8 max-w-xl">
+                2 centres agréés, au nord de Paris.
+              </h2>
+              <GoogleCentersMap centreIds={["epinay", "creil"]} />
+            </div>
+          </section>
+
+          {/* Galerie */}
+          {GALLERY.length > 0 && (
+            <section id="galerie" className="py-16 lg:py-20 bg-white scroll-mt-20">
+              <div className="max-w-7xl mx-auto px-6 lg:px-8">
+                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>En immersion</p>
+                <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-8 max-w-xl">Projetez-vous.</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {GALLERY.map((src, i) => (
+                    <div key={src} data-reveal className={`reveal reveal-delay-${(i % 4) + 1} aspect-square bg-gray-100 rounded-md overflow-hidden`}>
+                      <img
+                        src={src}
+                        alt={`Formation VTC — illustration ${i + 1}`}
+                        className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
         </div>
-      </section>
 
-      <StepsSection title="De l'inscription à la carte professionnelle." steps={STEPS} />
-
-      {/* Tarifs réels (backend) */}
-      {formation && (
-        <section id="tarifs" className="py-16 lg:py-20 bg-white scroll-mt-20">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
-            <PricingTable formation={formation} others={siblingFormations} ctaHref="#contact" />
-          </div>
-        </section>
-      )}
-
-      {/* Dates réelles */}
-      {formationId && (
-        <section id="dates" className="py-16 lg:py-20 bg-white scroll-mt-20">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
-            <UpcomingSessionsSection formationId={formationId} />
-          </div>
-        </section>
-      )}
-
-      {/* Centres */}
-      <section id="centres" className="py-16 lg:py-20 bg-gray-50 scroll-mt-20">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
-          <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>Où se former</p>
-          <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-8 max-w-xl">
-            2 centres agréés, au nord de Paris.
-          </h2>
-          <GoogleCentersMap centreIds={["epinay", "creil"]} />
+        <div className="hidden lg:flex lg:flex-col lg:gap-5 lg:sticky lg:top-24 lg:pr-4">
+          <StickyPriceCard
+            price={`${priceLabel} TTC`}
+            priceNote="CPF, France Travail, OPCO, paiement en plusieurs fois"
+            facts={facts.slice(0, 4)}
+            nextSessionLabel={nextSession ? `${sessionLabel(nextSession)} — ${nextSession.lieu_ville}` : NEXT_SESSION_LABEL}
+          />
+          <StickyToc sections={TOC_SECTIONS} />
         </div>
-      </section>
+      </div>
 
       <GoogleReviewsCarousel />
 
       {/* Contact / devis */}
-      <section id="contact" ref={formRef} className="py-16 lg:py-20 bg-white scroll-mt-20">
-        <div className="max-w-lg mx-auto px-6">
-          <div className="text-center mb-8">
-            <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>Votre projet</p>
-            <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight mb-2">Prêt à passer à l'action ?</h2>
-            <p className="text-gray-500 text-sm">Recevez le programme et les prochaines dates. Un conseiller vous recontacte pour étudier votre projet et votre financement.</p>
-          </div>
+      <div id="contact" ref={formRef} className="scroll-mt-20">
+        <FormationBookingWidget formationId={formationId} source="meta_formation_vtc" className="bg-white" />
+      </div>
 
-          {sent ? (
-            <div className="text-center bg-gray-50 border border-gray-200 rounded-md p-8" data-testid="vtc-form-sent">
-              <ChatCircleText size={32} className="mx-auto mb-3" style={{ color: GOLD }} weight="fill" />
-              <p className="font-bold mb-1">Demande envoyée !</p>
-              <p className="text-sm text-gray-500">Un conseiller TDL Formation vous recontacte sous 24h ouvrées.</p>
-            </div>
-          ) : (
-            <form onSubmit={submit} className="space-y-3" data-testid="vtc-form">
-              <div className="grid grid-cols-2 gap-3">
-                <input value={form.prenom} onChange={(e) => set("prenom", e.target.value)} placeholder="Prénom" className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
-                <input value={form.nom} onChange={(e) => set("nom", e.target.value)} placeholder="Nom" className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
-              </div>
-              <input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="E-mail" className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
-              <input value={form.telephone} onChange={(e) => set("telephone", e.target.value)} placeholder="Téléphone" className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
-              <div className="grid grid-cols-2 gap-3">
-                <select value={form.formation} onChange={(e) => { set("formation", e.target.value); trackSchedule({ content_name: e.target.value }); }} className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm bg-white">
-                  {FORMATIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                </select>
-                <select value={form.financement} onChange={(e) => set("financement", e.target.value)} className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm bg-white">
-                  <option value="">Financement envisagé</option>
-                  {FINANCEMENTS.map((f) => <option key={f} value={f}>{f}</option>)}
-                </select>
-              </div>
-              <textarea value={form.message} onChange={(e) => set("message", e.target.value)} placeholder="Parlez-nous brièvement de votre projet (facultatif)" rows={3} className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm" />
-              <PrivacyConsentCheckbox checked={privacyConsent} onChange={setPrivacyConsent} testId="vtc-privacy-consent" />
-              <Button type="submit" disabled={sending || !privacyConsent} style={{ backgroundColor: GOLD }} className="w-full text-black font-bold uppercase text-xs tracking-wide py-6">
-                {sending ? "Envoi..." : "Recevoir le programme"} <CaretRight size={12} className="ml-1" weight="bold" />
-              </Button>
-            </form>
-          )}
-        </div>
-      </section>
+      <ModulesAccordion title="Un programme pensé pour l'examen et le métier." modules={MODULES} />
 
       <TrustBar rating={4.9} totalReviews={705} />
       <FaqGrid items={FAQ} />

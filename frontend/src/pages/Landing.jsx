@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { trackLead, newEventId, getFbCookies } from "@/lib/metaPixel";
 import HeroSlideshow from "@/components/HeroSlideshow";
+import FormationBookingWidget from "@/components/FormationBookingWidget";
 import SiteFooter from "@/components/SiteFooter";
 import FormationCard from "@/components/FormationCard";
 import { HOME_HERO_SLIDES, heroForCategory } from "@/constants/formationAssets";
@@ -816,6 +817,8 @@ export default function Landing() {
       </script>
 
       {/* Contact */}
+      <FormationBookingWidget source="home_booking_widget" className="bg-gray-50 border-t border-gray-200" />
+
       <section className="py-16 lg:py-24 border-t border-gray-200" id="contact">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 grid lg:grid-cols-2 gap-12">
           <div>

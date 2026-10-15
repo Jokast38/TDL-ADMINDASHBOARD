@@ -164,7 +164,7 @@ export default function Blog() {
         </div>
       </section>
 
-      <SiteFooter className="border-t border-gray-200 py-8 bg-gray-50" />
+      <SiteFooter />
       <ChatWidget />
       <ContactBubble />
     </div>

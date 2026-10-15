@@ -15,6 +15,7 @@ from core.config import PUBLIC_FRONTEND_URL, GOOGLE_PLACE_ID
 from services.email import send_email
 from services.email_template import render_branded_email
 from services.pdf import generate_attestation_pdf
+from services.sms import send_sms
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
 CONTACT_PHONE = "01 XX XX XX XX"  # à ajuster depuis Paramètres si besoin
@@ -95,6 +96,18 @@ def convocation_message(stage: dict, insc: dict) -> str:
     )
 
 
+def convocation_sms(stage: dict, insc: dict) -> str:
+    """Version courte de la convocation pour SMS — secours quand l'email
+    n'est pas ouvert ou arrive en spam, voir services/sms.py."""
+    date_debut = format_date_long_fr(stage.get("date_debut", ""))
+    heure_debut = stage.get("heure_debut") or "09:00"
+    lieu = stage.get("lieu_ville", "")
+    return (
+        f"TDL Formation : convocation confirmée pour {stage.get('formation_titre', '')} "
+        f"le {date_debut} à {_hhmm_to_h(heure_debut)} — {lieu}. Pièce d'identité requise."
+    )
+
+
 async def send_convocations() -> int:
     """Envoie la convocation 7 jours avant le début de chaque session, à
     tout candidat actif affecté et pas encore convoqué."""
@@ -112,6 +125,8 @@ async def send_convocations() -> int:
                 continue
             message = convocation_message(stage, insc)
             await send_email(insc["student_email"], f"📋 Convocation — {stage.get('formation_titre', '')}", render_branded_email(message))
+            if insc.get("student_phone"):
+                await send_sms(insc["student_phone"], convocation_sms(stage, insc), extra={"inscription_id": insc["id"]})
             await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"convocation_sent_at": now_iso()}})
             count += 1
     return count

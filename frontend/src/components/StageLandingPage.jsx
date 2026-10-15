@@ -55,8 +55,32 @@ const NAV_LINKS = [
 
 function StageNav({ ctaLabel = "Réserver une session", ctaHref = "#form" }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrollRatio, setScrollRatio] = useState(0);
+
+  useEffect(() => {
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setScrollRatio(max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+
   return (
-    <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <header className="bg-white border-b border-gray-200 sticky top-0 z-50 relative">
+      <div
+        className="absolute left-0 right-0 bottom-[-1px] h-[3px] origin-left pointer-events-none"
+        style={{ backgroundColor: GOLD, transform: `scaleX(${scrollRatio})`, transition: "transform 80ms linear" }}
+      />
       <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 shrink-0">
           <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" width="40" height="40" className="w-10 h-10 rounded object-contain bg-black" />
@@ -564,24 +588,83 @@ function FeatureStrip({ items }) {
   );
 }
 
-// ─── Étapes ───────────────────────────────────────────────────────────────────
+// ─── Étapes (carte dynamique cliquable, avec détail et barre de progression) ──
 function StepsSection({ title, steps, id }) {
+  const [active, setActive] = useState(0);
+  const current = steps[active] || steps[0];
+  const progress = steps.length > 1 ? active / (steps.length - 1) : 0;
+
   return (
     <section id={id} className="py-16 lg:py-20 bg-gray-50 scroll-mt-20">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight leading-tight mb-10 max-w-sm">{title}</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-          {steps.map((s, i) => (
-            <div key={i} className="relative" data-reveal>
-              <p className="font-display text-4xl font-extrabold text-black">{String(i + 1).padStart(2, "0")}</p>
-              <span className="block h-[3px] w-10 mt-1 mb-3" style={{ backgroundColor: GOLD }} />
-              <h3 className="font-bold text-sm mb-1">{s.title}</h3>
-              <p className="text-sm text-gray-500 leading-relaxed">{s.desc}</p>
-              {i < steps.length - 1 && (
-                <CaretRight size={18} weight="bold" className="hidden lg:block absolute top-2 -right-6 text-gray-300" />
-              )}
-            </div>
-          ))}
+
+        <div className="relative">
+          <div className="hidden sm:block absolute left-[10%] right-[10%] top-6 h-[3px] bg-gray-200 rounded-full">
+            <span
+              className="absolute inset-0 rounded-full origin-left transition-transform duration-500"
+              style={{ backgroundColor: GOLD, transform: `scaleX(${progress})` }}
+            />
+          </div>
+          <ol className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-2 relative">
+            {steps.map((s, i) => (
+              <li key={i} className="flex sm:flex-col items-center sm:text-center gap-3 sm:gap-1">
+                <button
+                  type="button"
+                  onClick={() => setActive(i)}
+                  aria-pressed={i === active}
+                  data-testid={`landing-step-btn-${i}`}
+                  className="w-full flex sm:flex-col items-center sm:text-center gap-3 sm:gap-1 bg-transparent border-0 cursor-pointer p-0 text-left sm:text-center"
+                >
+                  <span
+                    className="shrink-0 w-11 h-11 sm:w-[52px] sm:h-[52px] rounded-full flex items-center justify-center font-display text-base font-extrabold border-[3px] transition-all"
+                    style={
+                      i === active
+                        ? { backgroundColor: NAVY, borderColor: NAVY, color: GOLD, transform: "scale(1.1)" }
+                        : i < active
+                          ? { backgroundColor: GOLD, borderColor: GOLD, color: NAVY }
+                          : { backgroundColor: "#fff", borderColor: "#e5e5e5", color: NAVY }
+                    }
+                  >
+                    {i + 1}
+                  </span>
+                  <span className="sm:mt-2">
+                    <span className="block font-bold text-sm leading-tight">{s.title}</span>
+                    {s.short && <span className="hidden sm:block text-xs text-gray-400 mt-0.5">{s.short}</span>}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="mt-6 bg-white rounded-xl p-6 lg:p-7" data-reveal>
+          <p className="font-display font-extrabold text-lg mb-2">
+            Étape {active + 1} · {current.title}
+          </p>
+          <p className="text-sm text-gray-600 leading-relaxed mb-5">{current.desc}</p>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={active === 0}
+              onClick={() => setActive((a) => Math.max(0, a - 1))}
+              className="text-xs font-bold uppercase tracking-wide"
+              data-testid="landing-step-prev"
+            >
+              Étape précédente
+            </Button>
+            <Button
+              type="button"
+              disabled={active === steps.length - 1}
+              onClick={() => setActive((a) => Math.min(steps.length - 1, a + 1))}
+              style={{ backgroundColor: NAVY }}
+              className="text-xs font-bold uppercase tracking-wide text-white"
+              data-testid="landing-step-next"
+            >
+              Étape suivante <CaretRight size={12} className="ml-1" weight="bold" />
+            </Button>
+          </div>
         </div>
       </div>
     </section>
@@ -1021,10 +1104,134 @@ function BookingForm({
   );
 }
 
+// ─── Modules en accordéon (programme détaillé) ────────────────────────────────
+function ModulesAccordion({ title, modules }) {
+  const [open, setOpen] = useState(0);
+  return (
+    <section id="programme" className="py-16 lg:py-20 bg-gray-50 scroll-mt-20">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
+        <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-10 max-w-xl mx-auto text-center">{title}</h2>
+        <div className="flex flex-col gap-3 max-w-3xl mx-auto">
+          {modules.map((m, i) => {
+            const isOpen = open === i;
+            return (
+              <div
+                key={m.title}
+                className={`bg-white border rounded-xl transition-colors ${isOpen ? "border-black" : "border-gray-200"}`}
+                data-reveal
+              >
+                <button
+                  type="button"
+                  onClick={() => setOpen(isOpen ? -1 : i)}
+                  aria-expanded={isOpen}
+                  className="w-full flex items-center gap-4 px-5 py-4 text-left"
+                  data-testid={`module-toggle-${i}`}
+                >
+                  <span className="font-display text-sm font-extrabold text-gray-400 shrink-0">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="flex-1 font-bold text-sm">{m.title}</span>
+                  {m.hours && <span className="hidden sm:inline text-xs font-bold text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">{m.hours}</span>}
+                  <Plus size={16} weight="bold" className={`shrink-0 transition-transform ${isOpen ? "rotate-45" : ""}`} />
+                </button>
+                {isOpen && (
+                  <div className="px-5 pb-5 pl-[52px]">
+                    {m.desc && <p className="text-sm text-gray-500 mb-2">{m.desc}</p>}
+                    {m.points && (
+                      <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                        {m.points.map((p) => <li key={p}>{p}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── Sommaire collant (table des matières de la page) ─────────────────────────
+function StickyToc({ sections }) {
+  const [active, setActive] = useState(sections[0]?.id);
+  useEffect(() => {
+    if (!("IntersectionObserver" in window)) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActive(visible[0].target.id);
+      },
+      { rootMargin: "-120px 0px -60% 0px" }
+    );
+    sections.forEach((s) => {
+      const el = document.getElementById(s.id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [sections]);
+
+  return (
+    <nav className="hidden lg:block" aria-label="Sommaire">
+      <p className="text-[11px] font-bold uppercase tracking-widest text-gray-400 mb-2">Sur cette page</p>
+      <ul className="border-l-2 border-gray-200 flex flex-col">
+        {sections.map((s) => (
+          <li key={s.id}>
+            <a
+              href={`#${s.id}`}
+              className={`block py-1.5 pl-3.5 -ml-0.5 border-l-2 text-sm transition-colors ${
+                active === s.id ? "border-black font-bold text-black" : "border-transparent text-gray-500 hover:text-black"
+              }`}
+            >
+              {s.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
+// ─── Carte de prix collante (sidebar) ──────────────────────────────────────────
+function StickyPriceCard({ price, priceNote, facts, nextSessionLabel, ctaHref = "#contact", ctaLabel = "Je m'inscris", phone = "01 80 90 72 44" }) {
+  return (
+    <div className="hidden lg:block bg-white rounded-xl border-t-4 p-6 shadow-lg" style={{ borderTopColor: GOLD }}>
+      <p className="font-display font-extrabold text-3xl">{price}</p>
+      {priceNote && <p className="text-xs text-gray-500 mt-1 mb-4">{priceNote}</p>}
+      {facts && (
+        <ul className="flex flex-col gap-2 text-sm mb-4">
+          {facts.map((f) => (
+            <li key={f.label} className="flex items-center gap-2">
+              <f.icon size={16} style={{ color: "#8A6400" }} weight="bold" />
+              <span>{f.label} : <b>{f.value}</b></span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {nextSessionLabel && (
+        <div className="bg-gray-50 rounded-lg p-3 mb-4">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Prochaine session</p>
+          <p className="text-sm font-bold">{nextSessionLabel}</p>
+        </div>
+      )}
+      <a href={ctaHref}>
+        <Button style={{ backgroundColor: GOLD }} className="w-full text-black font-bold uppercase text-xs tracking-wide py-5">
+          {ctaLabel}
+        </Button>
+      </a>
+      <a href={`tel:${phone.replace(/\s/g, "")}`} className="block mt-2">
+        <Button variant="outline" className="w-full font-bold uppercase text-xs tracking-wide">
+          <Phone size={14} className="mr-1.5" /> {phone}
+        </Button>
+      </a>
+    </div>
+  );
+}
+
 export { TopBar };
 
 export default {
   TopBar, StageNav, Hero, FeatureStrip, StepsSection, SessionBanner, TrustBar, FaqGrid, BookingForm,
+  ModulesAccordion, StickyToc, StickyPriceCard,
   GOLD, NAVY,
 };
 

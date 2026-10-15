@@ -20,6 +20,12 @@ class SettingsIn(BaseModel):
     smtp_tls: Optional[bool] = None
     resend_fallback_api_key: Optional[str] = None
     brevo_fallback_api_key: Optional[str] = None
+    # SMS transactionnel (Brevo) — canal de secours pour les liens de paiement
+    # et relances importantes quand l'email n'arrive pas. Réutilise la clé API
+    # Brevo déjà configurée pour l'email (email_api_key si provider="brevo",
+    # sinon brevo_fallback_api_key) — voir services/sms.py.
+    sms_enabled: Optional[bool] = None
+    sms_sender: Optional[str] = None
     n8n_webhook_inscription: Optional[str] = None
     n8n_webhook_dossier: Optional[str] = None
     n8n_webhook_payment: Optional[str] = None

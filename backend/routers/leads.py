@@ -13,6 +13,7 @@ from services.email import send_email
 from services.activity import log_action
 from services.lead_followup import send_no_response_followup, NO_RESPONSE_QUALIFICATION
 from services.push import send_push_to_users
+from services.sms import send_sms
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -923,6 +924,14 @@ async def request_documents(lid: str, payload: DocumentRequestIn, user: dict = D
     log = await send_email(lead["email"], "Documents à nous transmettre — TDL Formation", body, extra={"lead_id": lid})
     if log["status"] not in ("sent", "mocked"):
         raise HTTPException(status_code=502, detail="Échec de l'envoi de l'email")
+
+    if lead.get("phone"):
+        docs_line = ", ".join(payload.documents)
+        await send_sms(
+            lead["phone"],
+            f"TDL Formation : merci de nous transmettre ces documents pour finaliser votre dossier : {docs_line}.",
+            extra={"lead_id": lid},
+        )
 
     await db.leads.update_one({"id": lid}, {"$set": {
         "documents_requested": payload.documents,

@@ -412,22 +412,14 @@ async def send_document_reminders(min_gap_hours: int = 72) -> int:
         await db.dossiers.update_one({"id": d["id"]}, {"$set": {"doc_reminder_last_sent_at": now_iso()}})
         notified += 1
 
+        # Notification à l'équipe : uniquement en push, pas par email — une
+        # relance automatique peut concerner beaucoup de candidats par jour,
+        # et un email par relance par membre d'équipe noie vite la boîte mail
+        # pour une simple information (voir demande du 2026-10-15).
         category = d.get("category")
         if category not in staff_cache:
             staff_cache[category] = await _assigned_staff(category, None, ROLES_DOSSIERS_MGMT)
         staff = staff_cache[category]
-        for member in staff:
-            if member.get("email"):
-                await send_email(
-                    member["email"],
-                    f"📎 Relance documents envoyée — {d.get('student_name', '')}",
-                    (
-                        f"<p>Une relance automatique a été envoyée à <b>{d.get('student_name', '')}</b> "
-                        f"pour les documents manquants (<b>{manquants_label}</b>) — formation "
-                        f"<b>{d.get('formation_title', '')}</b>.</p>"
-                        f"<p>Vous pouvez aussi le recontacter vous-même si besoin.</p>"
-                    ),
-                )
         if staff:
             await send_push_to_users(
                 [m["id"] for m in staff], "Relance documents envoyée",

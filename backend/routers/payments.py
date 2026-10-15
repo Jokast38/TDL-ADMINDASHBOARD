@@ -11,6 +11,7 @@ from services.meta_capi import send_capi_event
 from services.pdf import generate_payment_receipt_pdf
 from services.email import send_email
 from services.email_template import render_branded_email
+from services.sms import send_sms
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 log = logging.getLogger(__name__)
@@ -92,6 +93,12 @@ async def _mark_paid_and_notify(inscription_id: str, amount_paid: float, payment
             )
         except Exception as e:
             log.warning(f"_mark_paid_and_notify : reçu de paiement non envoyé pour {inscription_id} — {e}")
+    if inscription.get("student_phone"):
+        await send_sms(
+            inscription["student_phone"],
+            f"TDL Formation : paiement de {amount_paid:.2f} € reçu pour {inscription.get('formation_title', '')}. Merci !",
+            extra={"inscription_id": inscription_id},
+        )
 
 
 async def sync_pending_stripe_payments() -> int:

@@ -6,11 +6,12 @@ import { trackSchedule, trackLead, trackInitiateCheckout, trackPurchase, newEven
 import { generateUpcomingSessions } from "@/lib/upcomingSessions";
 import Kit from "@/components/StageLandingPage";
 import GoogleReviewsCarousel from "@/components/GoogleReviewsCarousel";
+import SiteFooter from "@/components/SiteFooter";
 import { api } from "@/lib/api";
 import "@/styles/stage-recuperation-points.css";
 import heroTrainingImage from "@/assets/hero-training.jpeg";
-import logoTdlImage from "@/assets/logo-tdl.png";
 import StripeCheckout from "@/components/StripeCheckout";
+import CentresIllustrationMap from "@/components/CentresIllustrationMap";
 import {
   Check, CreditCard, Star, UsersThree, Envelope, Briefcase, Hourglass, CalendarBlank,
   Car, Warning, MapPin, Handshake, CurrencyEur, Phone, ArrowRight,
@@ -601,7 +602,7 @@ export default function StageRecuperationPointsLanding() {
           "quand puis-je faire mon stage ?" — montrer les dates disponibles
           avant tout argumentaire réduit la friction et le temps avant
           conversion (inspiré d'une landing PAP à fort taux de conversion). */}
-      <section className="py-10 sm:py-14 border-b border-gray-100" style={{ background: "linear-gradient(180deg,#fff8e6 0%,#ffffff 100%)" }} data-testid="top-sessions-section">
+      <section id="dates" className="py-10 sm:py-14 border-b border-gray-100 scroll-mt-20" style={{ background: "linear-gradient(180deg,#fff8e6 0%,#ffffff 100%)" }} data-testid="top-sessions-section">
         <div className="max-w-6xl mx-auto px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-8">
             <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#d4af37" }}>Prochaines sessions</p>
@@ -838,40 +839,29 @@ export default function StageRecuperationPointsLanding() {
         </div>
       </section>
 
-      <section className="location-section" id="acces">
-        <div className="container">
-          <div className="section-heading location-heading">
-            <div>
-              <p className="eyebrow">Notre avantage local</p>
-              <h2>Un centre.<br />Trois départements.</h2>
-            </div>
-            <p>Idéalement situé entre le <strong>93</strong>, le <strong>95</strong> et le <strong>92</strong>, le centre TDL d'Épinay-sur-Seine est facile d'accès depuis le nord et l'ouest parisien.</p>
-          </div>
+      <section className="py-16 lg:py-20 bg-white scroll-mt-20" id="acces">
+        <div className="max-w-6xl mx-auto px-6 lg:px-8 grid lg:grid-cols-2 gap-12 items-center">
+          <CentresIllustrationMap />
 
-          <div className="location-grid">
-            <div className="local-map" style={{ position: "relative", overflow: "hidden" }}>
-              <iframe
-                title="Carte Google Maps — TDL Formation Épinay-sur-Seine"
-                src="https://www.google.com/maps?q=59+avenue+Joffre,+93800+%C3%89pinay-sur-Seine&output=embed"
-                width="100%"
-                height="100%"
-                style={{ border: 0, position: "absolute", inset: 0 }}
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#d4af37" }}>Nos centres</p>
+            <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight mb-4">
+              Votre <span style={{ color: "#d4af37" }}>stage de récupération de points</span> au nord de Paris
+            </h2>
+            <p className="text-gray-600 mb-3">
+              TDL Formation est un centre agréé par la préfecture et certifié Qualiopi. Nous organisons le <strong>stage de récupération de points</strong> dans nos deux centres, à <strong>Épinay-sur-Seine (93)</strong> et à <strong>Creil (60)</strong>, pour les stagiaires de Paris, de l'Île-de-France et de l'Oise.
+            </p>
+            <p className="text-gray-600 mb-6">
+              Inscription rapide, convocation envoyée avant le stage et accompagnement pour vérifier votre solde de points avant de vous inscrire.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <a href="#dates" style={{ backgroundColor: "#d4af37" }} className="inline-flex items-center text-black font-bold uppercase text-xs tracking-wide px-6 py-3.5 rounded-md">
+                Voir les dates par centre
+              </a>
+              <a href="#form" className="inline-flex items-center border border-gray-300 font-bold uppercase text-xs tracking-wide px-6 py-3.5 rounded-md hover:border-gray-500 transition-colors">
+                Je m'inscris
+              </a>
             </div>
-
-            <aside className="access-card">
-              <p className="eyebrow">Venir au centre</p>
-              <h3>59 avenue Joffre<br />93800 Épinay-sur-Seine</h3>
-              <ul>
-                <li><span>RER</span><div><strong>RER C</strong><small>Gare d'Épinay-sur-Seine</small></div></li>
-                <li><span>BUS</span><div><strong>Bus 154 et 239</strong><small>À proximité du centre</small></div></li>
-                <li><span>Ⓟ</span><div><strong>Stationnement sur place</strong><small>Accès facilité en voiture</small></div></li>
-                <li><span>♿</span><div><strong>Places adaptées et réservées</strong><small>Accueil accessible</small></div></li>
-              </ul>
-              <a className="button button-outline" href="https://www.google.com/maps/search/?api=1&query=59+avenue+Joffre+93800+Epinay-sur-Seine" target="_blank" rel="noopener">Ouvrir l'itinéraire <span>↗</span></a>
-            </aside>
           </div>
         </div>
       </section>
@@ -1067,34 +1057,7 @@ export default function StageRecuperationPointsLanding() {
 
       />
 
-      <footer className="site-footer">
-        <div className="container footer-grid">
-          <div className="footer-brand">
-            <img src={logoTdlImage} alt="TDL Formation" />
-            <p>Formation, prévention routière et accompagnement des conducteurs.</p>
-          </div>
-          <div>
-            <h3>Le stage</h3>
-            <a href="#avantages">Les avantages</a>
-            <a href="#etapes">Comment ça marche ?</a>
-            <a href="#faq">Questions fréquentes</a>
-          </div>
-          <div>
-            <h3>Notre centre</h3>
-            <p>59 avenue Joffre<br />93800 Épinay-sur-Seine</p>
-            <a href="#acces">Accès et stationnement</a>
-          </div>
-          <div>
-            <h3>Nous contacter</h3>
-            <a href="tel:+33180907249">01 80 90 72 49</a>
-            <a href="mailto:contact@tdl-formation.fr">contact@tdl-formation.fr</a>
-          </div>
-        </div>
-        <div className="container footer-bottom">
-          <span>© 2026 TDL Formation</span>
-          <span>Mentions légales • Politique de confidentialité</span>
-        </div>
-      </footer>
+      <SiteFooter />
 
       <style jsx>{`
         .calendar-dropdown {

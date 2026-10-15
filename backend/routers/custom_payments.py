@@ -20,6 +20,7 @@ from services import stripe_service
 from services.email import send_email
 from services.email_template import render_branded_email
 from services.activity import log_action
+from services.sms import send_sms
 
 router = APIRouter(prefix="/custom-payments", tags=["custom-payments"])
 
@@ -81,6 +82,21 @@ async def create_custom_payment(payload: CustomPaymentIn, user: dict = Depends(r
         "Payer maintenant", session.url,
     )
     await send_email(payload.recipient_email, f"Paiement — {payload.title}", body)
+
+    # Secours SMS : certains clients ne reçoivent jamais l'email (filtres
+    # anti-spam, adresse mal surveillée...) — un lien de paiement manqué veut
+    # dire une inscription qui n'aboutit pas, donc on double le canal quand un
+    # téléphone est connu (via le lead d'origine).
+    phone = None
+    if payload.lead_id:
+        src_lead = await db.leads.find_one({"id": payload.lead_id}, {"_id": 0, "phone": 1})
+        phone = src_lead.get("phone") if src_lead else None
+    if phone:
+        await send_sms(
+            phone,
+            f"TDL Formation : voici votre lien de paiement pour {payload.title} ({payload.price:.2f} €) : {session.url}",
+            extra={"lead_id": payload.lead_id, "custom_payment_id": payment_id},
+        )
 
     doc.pop("_id", None)
     return doc
