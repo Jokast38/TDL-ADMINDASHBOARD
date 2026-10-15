@@ -988,7 +988,7 @@ function MetaEventsTab() {
   useEffect(() => {
     const id = setInterval(load, 15000);
     return () => clearInterval(id);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, qualifFilter, accountFilter, campaignFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Meta Lead Ads ne fournit ni champ "intérêt" structuré ni champ ville —
   // on les déduit au mieux du nom du formulaire/de la campagne (qui mentionne
