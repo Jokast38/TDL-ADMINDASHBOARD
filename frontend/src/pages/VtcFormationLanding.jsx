@@ -21,9 +21,25 @@ import {
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
 
-const { TopBar, StageNav, FeatureStrip, StepsSection, TrustBar, FaqGrid, ModulesAccordion, StickyToc, StickyPriceCard, GOLD } = Kit;
+const { TopBar, StageNav, FeatureStrip, StepsSection, TrustBar, FaqGrid, ModulesAccordion, AccessConditions, StickyToc, StickyPriceCard, GOLD } = Kit;
+
+const ACCESS_CONDITIONS = [
+  "Permis B depuis plus de 3 ans (2 ans en cas de conduite accompagnée)",
+  "Casier judiciaire compatible avec l'exercice de la profession",
+  "Bonne compréhension du français écrit et oral",
+  "Aptitude physique à la conduite professionnelle",
+];
+
+const ACCESS_DOCUMENTS = [
+  "Pièce d'identité ou titre de séjour en cours de validité",
+  "Justificatif de domicile de moins de 3 mois",
+  "Copie recto-verso du permis de conduire",
+  "Photo d'identité récente",
+  "Relevé d'information intégral (preuve du permis B depuis 3 ans)",
+];
 
 const TOC_SECTIONS = [
+  { id: "conditions", label: "Conditions d'accès" },
   { id: "tarifs", label: "Les prix" },
   { id: "dates", label: "Dates et centres" },
   { id: "centres", label: "Nos centres" },
@@ -252,6 +268,8 @@ export default function VtcFormationLanding() {
       <div className="lg:grid lg:grid-cols-[1fr_300px] lg:gap-8 lg:items-start">
         <div className="min-w-0">
           <StepsSection title="De l'inscription à la carte professionnelle." steps={STEPS} />
+
+          <AccessConditions conditions={ACCESS_CONDITIONS} documents={ACCESS_DOCUMENTS} />
 
           {/* Tarifs réels (backend) */}
           {formation && (

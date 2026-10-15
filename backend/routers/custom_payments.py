@@ -62,10 +62,11 @@ async def create_custom_payment(payload: CustomPaymentIn, user: dict = Depends(r
     doc = {
         "id": payment_id, "title": payload.title, "price": payload.price,
         "recipient_name": payload.recipient_name, "recipient_email": payload.recipient_email,
+        "recipient_phone": payload.recipient_phone,
         "session_label": payload.session_label, "lead_id": payload.lead_id,
         "stripe_session_id": session.id, "stripe_url": session.url,
         "status": "pending", "created_by": user["id"], "created_at": now_iso(),
-        "paid_at": None,
+        "paid_at": None, "sms_status": None,
     }
     await db.custom_payments.insert_one(doc)
     # Traçabilité pour le bilan d'activité par employé (EmployeeAudit.jsx) —
@@ -86,17 +87,19 @@ async def create_custom_payment(payload: CustomPaymentIn, user: dict = Depends(r
     # Secours SMS : certains clients ne reçoivent jamais l'email (filtres
     # anti-spam, adresse mal surveillée...) — un lien de paiement manqué veut
     # dire une inscription qui n'aboutit pas, donc on double le canal quand un
-    # téléphone est connu (via le lead d'origine).
-    phone = None
-    if payload.lead_id:
+    # téléphone est connu (saisi à la main, ou à défaut celui du lead d'origine).
+    phone = (payload.recipient_phone or "").strip() or None
+    if not phone and payload.lead_id:
         src_lead = await db.leads.find_one({"id": payload.lead_id}, {"_id": 0, "phone": 1})
         phone = src_lead.get("phone") if src_lead else None
     if phone:
-        await send_sms(
+        sms_log = await send_sms(
             phone,
             f"TDL Formation : voici votre lien de paiement pour {payload.title} ({payload.price:.2f} €) : {session.url}",
             extra={"lead_id": payload.lead_id, "custom_payment_id": payment_id},
         )
+        doc["sms_status"] = sms_log["status"]
+        await db.custom_payments.update_one({"id": payment_id}, {"$set": {"sms_status": sms_log["status"]}})
 
     doc.pop("_id", None)
     return doc

@@ -13,6 +13,9 @@ class CustomPaymentIn(BaseModel):
     price: float
     recipient_name: Optional[str] = None
     recipient_email: EmailStr
+    # Facultatif — secours SMS quand l'email n'arrive pas (voir services/sms.py).
+    # À défaut, le téléphone du lead d'origine est utilisé si lead_id est fourni.
+    recipient_phone: Optional[str] = None
     # Session choisie (date/lieu), facultative — affichée dans l'email pour
     # que le destinataire sache précisément à quelle session ce paiement se
     # rapporte (voir GET /stages/public/available, réutilisé par la page).

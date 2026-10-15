@@ -1151,6 +1151,47 @@ function ModulesAccordion({ title, modules }) {
   );
 }
 
+// ─── Conditions d'accès et pièces à fournir ────────────────────────────────────
+function AccessConditions({ conditions, documents, id = "conditions" }) {
+  return (
+    <section id={id} className="py-16 lg:py-20 bg-white scroll-mt-20">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
+        <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-10 max-w-2xl">
+          Conditions d'accès et dossier d'inscription
+        </h2>
+        <div className="grid sm:grid-cols-2 gap-6">
+          <div className="border border-gray-200 rounded-xl p-6">
+            <h3 className="font-bold text-lg mb-4">Conditions d'accès</h3>
+            <ul className="flex flex-col gap-3">
+              {conditions.map((c) => (
+                <li key={c} className="flex items-start gap-2.5 text-sm text-gray-700">
+                  <span className="mt-0.5 shrink-0 rounded-full p-0.5" style={{ backgroundColor: GOLD }}>
+                    <Check size={12} weight="bold" className="text-black" />
+                  </span>
+                  {c}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="bg-black text-white rounded-xl p-6">
+            <h3 className="font-bold text-lg mb-4">Pièces à fournir</h3>
+            <ul className="flex flex-col gap-3">
+              {documents.map((d) => (
+                <li key={d} className="flex items-start gap-2.5 text-sm">
+                  <span className="mt-0.5 shrink-0 rounded-full p-0.5" style={{ backgroundColor: GOLD }}>
+                    <Check size={12} weight="bold" className="text-black" />
+                  </span>
+                  {d}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ─── Sommaire collant (table des matières de la page) ─────────────────────────
 function StickyToc({ sections }) {
   const [active, setActive] = useState(sections[0]?.id);
@@ -1231,7 +1272,7 @@ export { TopBar };
 
 export default {
   TopBar, StageNav, Hero, FeatureStrip, StepsSection, SessionBanner, TrustBar, FaqGrid, BookingForm,
-  ModulesAccordion, StickyToc, StickyPriceCard,
+  ModulesAccordion, AccessConditions, StickyToc, StickyPriceCard,
   GOLD, NAVY,
 };
 

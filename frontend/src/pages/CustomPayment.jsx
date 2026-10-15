@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CreditCard, PaperPlaneTilt, LinkSimple, MagnifyingGlass } from "@phosphor-icons/react";
+import { CreditCard, PaperPlaneTilt, LinkSimple, MagnifyingGlass, ChatCircleText } from "@phosphor-icons/react";
 import { formatDateFR } from "@/lib/dateFormat";
 
 const fmtSessionLabel = (s) => `${s.date_debut} → ${s.date_fin}${s.lieu_ville ? ` — ${s.lieu_ville}` : ""}`;
+
+const PHONE_RE = /^(0[1-9]\d{8}|\+33[1-9]\d{8})$/;
+const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 
 // Page dédiée (pas un onglet) : envoi d'un lien de paiement Stripe à prix
 // libre — distincte du tunnel d'inscription standard, toujours au tarif
@@ -22,6 +25,7 @@ export default function CustomPayment() {
   const [price, setPrice] = useState("");
   const [recipientName, setRecipientName] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipientPhone, setRecipientPhone] = useState("");
   const [sending, setSending] = useState(false);
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -61,6 +65,7 @@ export default function CustomPayment() {
   const pickPerson = (p) => {
     setRecipientName(p.name || "");
     setRecipientEmail(p.email || "");
+    setRecipientPhone(p.phone || "");
     setPersonQuery("");
     setPersonResults([]);
   };
@@ -90,15 +95,19 @@ export default function CustomPayment() {
     if (!title) return toast.error("Choisissez ou saisissez un intitulé");
     if (!price || Number(price) <= 0) return toast.error("Le prix doit être supérieur à 0");
     if (!recipientEmail.trim()) return toast.error("Email du destinataire requis");
+    if (recipientPhone.trim() && !isValidPhone(recipientPhone)) {
+      return toast.error("Numéro de téléphone invalide (ex : 06 12 34 56 78)");
+    }
     setSending(true);
     try {
       const session = sessions.find((s) => s.id === sessionId);
       await api.post("/custom-payments", {
         title, price: Number(price), recipient_name: recipientName.trim() || null, recipient_email: recipientEmail.trim(),
+        recipient_phone: recipientPhone.trim() || null,
         session_label: session ? fmtSessionLabel(session) : null,
       });
-      toast.success("Lien de paiement envoyé par email");
-      setPrice(""); setRecipientName(""); setRecipientEmail(""); setCustomTitle(""); setFormationId(""); setSessionId("");
+      toast.success(recipientPhone.trim() ? "Lien de paiement envoyé par email et SMS" : "Lien de paiement envoyé par email");
+      setPrice(""); setRecipientName(""); setRecipientEmail(""); setRecipientPhone(""); setCustomTitle(""); setFormationId(""); setSessionId("");
       loadHistory();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur lors de l'envoi");
@@ -201,6 +210,22 @@ export default function CustomPayment() {
             <label className="text-sm font-medium block mb-1">Email du destinataire</label>
             <Input type="email" value={recipientEmail} onChange={(e) => setRecipientEmail(e.target.value)} data-testid="custom-payment-email" />
           </div>
+          <div>
+            <label className="text-sm font-medium block mb-1">Téléphone (facultatif)</label>
+            <Input
+              type="tel"
+              value={recipientPhone}
+              onChange={(e) => setRecipientPhone(e.target.value)}
+              placeholder="06 12 34 56 78"
+              data-testid="custom-payment-phone"
+            />
+            {recipientPhone.trim() && !isValidPhone(recipientPhone) && (
+              <p className="text-xs text-red-500 mt-1">Format invalide (ex : 06 12 34 56 78 ou +33612345678)</p>
+            )}
+            {recipientPhone.trim() && isValidPhone(recipientPhone) && (
+              <p className="text-xs text-gray-400 mt-1">Le lien sera aussi envoyé par SMS.</p>
+            )}
+          </div>
         </div>
 
         <Button onClick={send} disabled={sending} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white w-full" data-testid="custom-payment-send">
@@ -220,6 +245,7 @@ export default function CustomPayment() {
                 <th className="py-2.5 px-4 overline">Destinataire</th>
                 <th className="py-2.5 px-4 overline text-right">Prix</th>
                 <th className="py-2.5 px-4 overline">Statut</th>
+                <th className="py-2.5 px-4 overline">SMS</th>
                 <th className="py-2.5 px-4 overline">Envoyé le</th>
                 <th className="py-2.5 px-4 overline">Envoyé par</th>
                 <th className="py-2.5 px-4 overline text-right">Lien</th>
@@ -227,7 +253,7 @@ export default function CustomPayment() {
             </thead>
             <tbody>
               {!loadingHistory && !history.length && (
-                <tr><td colSpan="7" className="py-10 text-center text-gray-400">Aucun paiement personnalisé envoyé.</td></tr>
+                <tr><td colSpan="8" className="py-10 text-center text-gray-400">Aucun paiement personnalisé envoyé.</td></tr>
               )}
               {history.map((h) => (
                 <tr key={h.id} className="border-b border-gray-100">
@@ -244,6 +270,15 @@ export default function CustomPayment() {
                     <Badge className={h.status === "paid" ? "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10" : "bg-[#F5A623]/10 text-[#F5A623] hover:bg-[#F5A623]/10"}>
                       {h.status === "paid" ? "Payé" : "En attente"}
                     </Badge>
+                  </td>
+                  <td className="py-2.5 px-4">
+                    {h.sms_status === "sent" ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-[#0B7238]"><ChatCircleText size={13} weight="fill" /> Envoyé</span>
+                    ) : h.sms_status && h.sms_status !== "disabled" ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-red-500" title={h.sms_status}><ChatCircleText size={13} /> Échec</span>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
                     {h.created_at ? formatDateFR(h.created_at) : "—"}
