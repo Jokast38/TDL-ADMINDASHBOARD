@@ -490,7 +490,12 @@ async def list_leads(
     if status: query["status"] = status
     if source: query["source"] = source
     if campaign: query["campaign"] = campaign
-    if ville: query["ville"] = ville
+    # Recherche partielle (pas une égalité stricte) : tolère les variantes
+    # d'orthographe du champ ville importé par Excel (ex: "Épinay",
+    # "Épinay-sur-Seine", "ÉPINAY SUR SEINE (93)" matchent tous "epinay"),
+    # utile pour le filtre Centre (Centre d'appel) qui ne connaît que les
+    # deux mots-clés "Epinay"/"Creil" plutôt que la valeur exacte stockée.
+    if ville: query["ville"] = {"$regex": re.escape(ville), "$options": "i"}
     if qualification: query["qualification"] = qualification
     if pipeline_status: query["pipeline_status"] = pipeline_status
     if assigned_to: query["assigned_to"] = assigned_to

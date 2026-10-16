@@ -75,6 +75,7 @@ export default function CentreAppel() {
   // core.utils._category_for_interest côté backend), plutôt que tout
   // mélanger par défaut.
   const [filterFormationCategory, setFilterFormationCategory] = useState("all");
+  const [filterCenter, setFilterCenter] = useState("all");
 
   const [docDialogLead, setDocDialogLead] = useState(null);
   const [docSelection, setDocSelection] = useState([]);
@@ -125,6 +126,7 @@ export default function CentreAppel() {
     if (isAdminLike && filterAgent !== "all") params.assigned_to = filterAgent;
     if (filterOrigin !== "all") params.origin = filterOrigin;
     if (filterFormationCategory !== "all") params.category = filterFormationCategory;
+    if (filterCenter !== "all") params.ville = filterCenter === "epinay" ? "pinay" : "creil";
     return api.get("/leads", { params })
       .then((r) => setItems(r.data.items || []))
       .catch(() => setItems([]))
@@ -132,7 +134,7 @@ export default function CentreAppel() {
   };
   const loadOrigins = () => api.get("/leads/origins").then((r) => setOrigins(r.data || [])).catch(() => setOrigins([]));
 
-  useEffect(() => { load(); }, [filterAgent, filterOrigin, filterFormationCategory]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [filterAgent, filterOrigin, filterFormationCategory, filterCenter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     loadOrigins();
@@ -255,6 +257,14 @@ export default function CentreAppel() {
             {formationOptions.map((f) => <SelectItem key={f.category} value={f.category}>{f.title}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={filterCenter} onValueChange={setFilterCenter}>
+          <SelectTrigger className="w-full sm:w-48 h-9 text-xs" data-testid="centre-appel-filter-center"><SelectValue placeholder="Centre" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les centres</SelectItem>
+            <SelectItem value="epinay">Épinay-sur-Seine (93)</SelectItem>
+            <SelectItem value="creil">Creil (60)</SelectItem>
+          </SelectContent>
+        </Select>
         {isAdminLike && (
           <Select value={filterAgent} onValueChange={setFilterAgent}>
             <SelectTrigger className="w-full sm:w-56 h-9 text-xs" data-testid="centre-appel-filter-agent"><SelectValue placeholder="Agent" /></SelectTrigger>
@@ -314,12 +324,14 @@ export default function CentreAppel() {
                 className="bg-gray-50 p-4 rounded-lg flex flex-col gap-3 w-72 shrink-0"
                 data-testid={`centre-appel-col-${col.key}`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ background: col.color }} />
-                    <h3 className="font-semibold text-xs leading-tight">{col.label}</h3>
-                  </div>
-                  <Badge variant="outline" className="font-mono text-xs shrink-0">{colAllItems.length}</Badge>
+                <div className="flex items-center justify-between gap-2">
+                  <h3
+                    className="font-bold text-sm leading-tight px-2.5 py-1 rounded-md text-white"
+                    style={{ backgroundColor: col.color }}
+                  >
+                    {col.label}
+                  </h3>
+                  <Badge variant="outline" className="font-mono text-sm shrink-0">{colAllItems.length}</Badge>
                 </div>
                 <div className="flex flex-col gap-3 overflow-y-auto pr-0.5" style={{ maxHeight: "calc(100vh - 320px)" }} onScroll={onColScroll}>
                   {colItems.map((l) => (
@@ -332,10 +344,10 @@ export default function CentreAppel() {
                       style={{ borderLeftColor: (COLUMN_BY_KEY[l.pipeline_status || DEFAULT_COLUMN] || {}).color }}
                       data-testid={`centre-appel-card-${l.id}`}
                     >
-                      <p className="font-semibold text-sm leading-tight">{l.name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">{l.interest || "—"}</p>
+                      <p className="font-semibold text-base leading-tight">{l.name}</p>
+                      <p className="text-sm text-gray-500 mt-0.5">{l.interest || "—"}</p>
                       {l.created_at && (
-                        <p className="text-[10px] text-gray-400 mt-0.5">Arrivé le {l.created_at.slice(0, 10)}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Arrivé le {l.created_at.slice(0, 10)}</p>
                       )}
                       {isAdminLike && (
                         <div onClick={(e) => e.stopPropagation()}>
