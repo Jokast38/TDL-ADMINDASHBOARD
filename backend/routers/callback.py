@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from core.database import db
 from core.security import require_role
 from core.utils import now_iso
-from core.config import ROLES_DOSSIERS_MGMT
+from core.config import ROLES_DOSSIERS_MGMT, effective_assigned_categories
 from models.callback import CallbackRequestIn, CallbackRequestUpdate
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS, check_dossier_milestone
 from services.meta_capi import send_capi_event
@@ -116,10 +116,10 @@ async def create_callback_request(payload: CallbackRequestIn, request: Request):
 @router.get("")
 async def list_callback_requests(user: dict = Depends(require_role(*(ROLES_DOSSIERS_MGMT + _NOTIFY_ROLES)))):
     query = {}
-    assigned = user.get("assigned_categories") or []
+    assigned = effective_assigned_categories(user)
     centers = user.get("assigned_centers") or []
     assignments = user.get("assigned_training_assignments") or []
-    if user["role"] in ("commercial", "responsable_commercial", "responsable_admission", "agent_admin"):
+    if user["role"] in ("commercial", "responsable_commercial", "responsable_admission", "agent_admin", "agent_telephonique"):
         filters = []
         if assignments:
             pair_filters = [{"interest": a.get("category"), "center": a.get("center")} for a in assignments]

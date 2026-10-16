@@ -12,7 +12,7 @@ from fastapi.responses import Response
 from core.database import db
 from core.security import hash_password, get_current_user, get_optional_user, require_role
 from core.utils import now_iso, format_date_long_fr
-from core.config import ROLES_DOSSIERS_MGMT, PUBLIC_FRONTEND_URL
+from core.config import ROLES_DOSSIERS_MGMT, PUBLIC_FRONTEND_URL, effective_assigned_categories
 from models.inscription import InscriptionIn, InscriptionUpdate, DossierUpdate, StageAssignIn
 from services.trello import TrelloService
 from services.n8n import trigger_n8n
@@ -289,6 +289,13 @@ async def list_students(finalized_only: bool = True, user: dict = Depends(requir
         )
         if finalized_only and not is_finalized:
             continue
+        # Un agent téléphonique ne gère pas le SSIAP (équipe dédiée séparée) —
+        # voir effective_assigned_categories. On exclut sur la catégorie de la
+        # dernière inscription, celle affichée dans la colonne "Catégorie".
+        student_categories = {i.get("category") for i in my_inscriptions if i.get("category")}
+        allowed = effective_assigned_categories(user)
+        if allowed and not (student_categories & set(allowed)):
+            continue
         result.append({
             **s,
             "inscriptions_count": len(my_inscriptions),
@@ -459,7 +466,11 @@ async def bulk_download_attestations(dossier_ids: str, user: dict = Depends(requ
 
 @router.get("/inscriptions")
 async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
-    items = await db.inscriptions.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    query = {}
+    allowed = effective_assigned_categories(user)
+    if allowed:
+        query["category"] = {"$in": allowed}
+    items = await db.inscriptions.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     dossiers = await db.dossiers.find(
         {"inscription_id": {"$in": [i["id"] for i in items]}},
         {"_id": 0, "id": 1, "inscription_id": 1, "status": 1},

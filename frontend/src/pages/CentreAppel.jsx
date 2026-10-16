@@ -292,17 +292,26 @@ export default function CentreAppel() {
       {loading ? (
         <Card className="p-12 text-center border-dashed"><p className="text-gray-500">Chargement...</p></Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4" data-testid="centre-appel-kanban">
+        <div className="flex gap-4 overflow-x-auto pb-2" data-testid="centre-appel-kanban">
           {COLUMNS.map((col) => {
             const colAllItems = filteredItems.filter((l) => (l.pipeline_status || DEFAULT_COLUMN) === col.key);
             const visible = visibleCounts[col.key] || PAGE_SIZE;
             const colItems = colAllItems.slice(0, visible);
+            // Scroll interne à la colonne : charge la suite au lieu de laisser
+            // la colonne grandir sans fin (et casser l'alignement horizontal
+            // des autres colonnes à côté).
+            const onColScroll = (e) => {
+              const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+              if (scrollHeight - scrollTop - clientHeight < 80 && colAllItems.length > visible) {
+                showMore(col.key);
+              }
+            };
             return (
               <div
                 key={col.key}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => { if (dragging) { moveTo(dragging, col.key); setDragging(null); } }}
-                className="bg-gray-50 p-4 rounded-lg flex flex-col gap-3 min-h-[200px]"
+                className="bg-gray-50 p-4 rounded-lg flex flex-col gap-3 w-72 shrink-0"
                 data-testid={`centre-appel-col-${col.key}`}
               >
                 <div className="flex items-center justify-between">
@@ -312,7 +321,7 @@ export default function CentreAppel() {
                   </div>
                   <Badge variant="outline" className="font-mono text-xs shrink-0">{colAllItems.length}</Badge>
                 </div>
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-3 overflow-y-auto pr-0.5" style={{ maxHeight: "calc(100vh - 320px)" }} onScroll={onColScroll}>
                   {colItems.map((l) => (
                     <div
                       key={l.id}
@@ -325,6 +334,9 @@ export default function CentreAppel() {
                     >
                       <p className="font-semibold text-sm leading-tight">{l.name}</p>
                       <p className="text-xs text-gray-500 mt-0.5">{l.interest || "—"}</p>
+                      {l.created_at && (
+                        <p className="text-[10px] text-gray-400 mt-0.5">Arrivé le {l.created_at.slice(0, 10)}</p>
+                      )}
                       {isAdminLike && (
                         <div onClick={(e) => e.stopPropagation()}>
                           <Select value={l.assigned_to || "__none__"} onValueChange={(v) => assignTo(l.id, v === "__none__" ? null : v)}>

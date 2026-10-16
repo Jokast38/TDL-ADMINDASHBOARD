@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, Optional
 
-from core.config import ROLES_DOSSIERS_MGMT, ROLES_ALL_STAFF
+from core.config import ROLES_DOSSIERS_MGMT, ROLES_ALL_STAFF, effective_assigned_categories
 from core.database import db
 from core.utils import now_iso, format_date_long_fr, format_date_fr
 from services.email import send_email
@@ -62,7 +62,7 @@ CATEGORY_LABELS = {
 async def _assigned_staff(category: Optional[str], center: Optional[str], roles: Iterable[str]) -> list:
     staff = await db.users.find(
         {"active": True, "role": {"$in": list(roles)}},
-        {"_id": 0, "id": 1, "email": 1, "name": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1},
+        {"_id": 0, "id": 1, "email": 1, "name": 1, "role": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1},
     ).to_list(100)
     result = []
     for member in staff:
@@ -72,7 +72,7 @@ async def _assigned_staff(category: Optional[str], center: Optional[str], roles:
                 a.get("category") == category and a.get("center") == center for a in assignments
             )
         else:
-            categories = member.get("assigned_categories") or []
+            categories = effective_assigned_categories(member)
             centers = member.get("assigned_centers") or []
             matches = (not categories or not category or category in categories) and (not centers or not center or center in centers)
         if matches:
@@ -123,12 +123,12 @@ async def send_pending_callback_reminders() -> int:
 
     staff = await db.users.find(
         {"active": True, "role": {"$in": list(CALLBACK_NOTIFY_ROLES)}},
-        {"_id": 0, "id": 1, "email": 1, "name": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1},
+        {"_id": 0, "id": 1, "email": 1, "name": 1, "role": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1},
     ).to_list(200)
 
     notified = 0
     for member in staff:
-        assigned = member.get("assigned_categories") or []
+        assigned = effective_assigned_categories(member)
         assigned_centers = member.get("assigned_centers") or []
         assignments = member.get("assigned_training_assignments") or []
         # Sans catégorie assignée, cette personne voit déjà toutes les demandes
@@ -218,13 +218,13 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
 
     staff = await db.users.find(
         {"active": True, "role": {"$in": list(ROLES_DOSSIERS_MGMT)}},
-        {"_id": 0, "id": 1, "email": 1, "name": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1},
+        {"_id": 0, "id": 1, "email": 1, "name": 1, "role": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1},
     ).to_list(200)
 
     notified = 0
     for member in staff:
         assignments = member.get("assigned_training_assignments") or []
-        categories = member.get("assigned_categories") or []
+        categories = effective_assigned_categories(member)
         centers = member.get("assigned_centers") or []
 
         mine = []

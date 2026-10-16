@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.database import db
 from core.security import require_role
-from core.config import ROLES_LEADS, ROLES_TEAM_MGMT
+from core.config import ROLES_LEADS, ROLES_TEAM_MGMT, effective_assigned_categories
 from core.utils import now_iso
 from models.commercial_call import CallLogIn, CallScriptIn, CallScriptUpdate
 from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate
@@ -47,7 +47,7 @@ _RECALL_OUTCOMES = {"a_relancer", "pas_de_reponse", "injoignable"}
 def _scope_query(user: dict) -> dict:
     """Même règle que GET /leads : un commercial avec des catégories assignées
     ne voit/n'appelle que ses leads (+ ceux sans catégorie déduite)."""
-    assigned = user.get("assigned_categories") or []
+    assigned = effective_assigned_categories(user)
     if user["role"] in ("commercial", "responsable_commercial") and assigned:
         return {"$or": [{"category": {"$in": assigned}}, {"category": None}, {"category": {"$exists": False}}]}
     return {}

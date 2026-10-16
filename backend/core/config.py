@@ -121,6 +121,28 @@ ROLES_LEADS = ("admin", "employe", "responsable_admission", "agent_admin", "comm
 # et ce groupe pour l'accès à la page et aux stats dédiées.
 ROLES_CALL_CENTER = ("admin", "responsable_admission", "agent_telephonique")
 
+# Les agents téléphoniques gèrent VTC/Taxi, Récupération de points, ECSR et
+# CACES — jamais le SSIAP (équipe dédiée séparée). Règle métier appliquée
+# même si `assigned_categories` n'est pas configuré sur le profil employé
+# (voir effective_assigned_categories ci-dessous) — demande du 2026-10-16.
+AGENT_TEL_ALLOWED_CATEGORIES = ("VTC_TAXI", "PERMIS", "ECSR", "CACES")
+
+
+def effective_assigned_categories(user: dict) -> list:
+    """Catégories de formation que cet utilisateur est autorisé à voir
+    (leads, apprenants, notifications...). Liste vide = pas de restriction
+    (voit tout), SAUF pour un agent_telephonique qui ne doit jamais voir le
+    SSIAP : si son profil n'a pas de restriction explicite, on lui applique
+    quand même le périmètre par défaut du rôle plutôt que de le laisser tout
+    voir ; s'il a une restriction explicite, elle est recoupée avec le
+    périmètre autorisé pour ne jamais laisser passer SSIAP par erreur."""
+    assigned = user.get("assigned_categories") or []
+    if user.get("role") == "agent_telephonique":
+        if assigned:
+            return [c for c in assigned if c in AGENT_TEL_ALLOWED_CATEGORIES]
+        return list(AGENT_TEL_ALLOWED_CATEGORIES)
+    return assigned
+
 # Colonnes du kanban du Centre d'appel, dans l'ordre d'affichage — doit rester
 # synchronisé avec frontend/src/pages/CentreAppel.jsx (PIPELINE_COLUMNS).
 # Regroupement des valeurs brutes de `lead.source` (très nombreuses — un

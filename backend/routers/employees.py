@@ -7,7 +7,7 @@ from core.database import db
 from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
-from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT
+from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT, effective_assigned_categories
 from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn, AllowedPagesIn, MatriculeIn, RoleIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 from services.pdf import generate_formateur_convention_pdf
@@ -561,7 +561,7 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
         calls_today = await db.commercial_calls.count_documents({"agent_id": uid, "at": {"$regex": f"^{today}"}})
         calls_total = await db.commercial_calls.count_documents({"agent_id": uid})
 
-        assigned = s.get("assigned_categories") or []
+        assigned = effective_assigned_categories(s)
         pending_workload = None
         if assigned:
             pending_workload = await db.leads.count_documents({
@@ -767,7 +767,7 @@ async def my_stats(user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
     callbacks_handled = await db.callback_requests.count_documents({"handled_by": uid})
     calls_today = await db.commercial_calls.count_documents({"agent_id": uid, "at": {"$regex": f"^{today}"}})
 
-    assigned = user.get("assigned_categories") or []
+    assigned = effective_assigned_categories(user)
     pending_workload = None
     if assigned:
         pending_workload = await db.leads.count_documents({"category": {"$in": assigned}, "contacted": {"$ne": True}})

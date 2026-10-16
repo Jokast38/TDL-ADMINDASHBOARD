@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from core.database import db
 from core.security import require_role
 from core.utils import now_iso
-from core.config import ROLES_LEADS, canonicalize_lead_origin, ORIGIN_LABELS
+from core.config import ROLES_LEADS, canonicalize_lead_origin, ORIGIN_LABELS, effective_assigned_categories
 from models.lead import LeadIn, LeadUpdate, LeadImportJsonIn, LeadRelanceIn, LeadRelanceSingleIn, LeadBroadcastIn, DocumentRequestIn
 from services.email import send_email
 from services.activity import log_action
@@ -549,7 +549,7 @@ async def list_leads(
     # agent tant que personne n'avait fait d'affectation manuelle. L'agent a
     # donc accès au pool de prospects de ses catégories assignées, comme un
     # commercial, et peut ensuite se les répartir avec `assigned_to`.
-    assigned = user.get("assigned_categories") or []
+    assigned = effective_assigned_categories(user)
     scoped = user["role"] in ("commercial", "responsable_commercial", "agent_telephonique") and assigned
     if scoped:
         query["$and"] = query.get("$and", []) + [
@@ -606,7 +606,7 @@ async def list_lead_origins(user: dict = Depends(require_role(*ROLES_LEADS))):
     """Origines regroupées (voir core.config.canonicalize_lead_origin) avec
     décompte — alimente les onglets d'origine du Centre d'appel
     (CentreAppel.jsx), sur TOUTE la base (pas seulement la page chargée)."""
-    assigned = user.get("assigned_categories") or []
+    assigned = effective_assigned_categories(user)
     scoped = user["role"] in ("commercial", "responsable_commercial", "agent_telephonique") and assigned
     query: Dict[str, Any] = {}
     if scoped:

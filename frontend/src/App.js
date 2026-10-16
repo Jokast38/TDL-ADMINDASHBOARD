@@ -207,10 +207,10 @@ function App() {
               <ProtectedRoute roles={["admin", "responsable_admission"]}><AdminLayout><Stages /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/agenda" element={
-              <ProtectedRoute roles={["admin", "responsable_admission", "animateur"]}><AdminLayout><Agenda /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique", "animateur"]}><AdminLayout><Agenda /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/agenda-appel" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><CallAgenda /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"]}><AdminLayout><CallAgenda /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/paiement-personnalise" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><CustomPayment /></AdminLayout></ProtectedRoute>

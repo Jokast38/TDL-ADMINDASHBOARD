@@ -235,6 +235,31 @@ async def update_stage(sid: str, payload: StageUpdate, user: dict = Depends(requ
             if formateurs:
                 await send_push_to_users([f["id"] for f in formateurs], "Session annulée", existing.get("formation_titre", ""), "/espace-animateur")
 
+    # Verrou manuel "complet" (voir plus haut) : prévient toute l'équipe
+    # immédiatement, pour que personne ne continue à promettre une place sur
+    # une session déjà pleine (notamment en vente externe, type Groupon).
+    if update.get("statut") == "complet" and existing.get("statut") != "complet":
+        lieu = ", ".join(filter(None, [existing.get("lieu_adresse"), existing.get("lieu_ville")])) or "lieu non précisé"
+        staff = await db.users.find(
+            {"role": {"$in": ROLES_ALL_STAFF}, "email": {"$exists": True, "$ne": ""}}, {"_id": 0, "id": 1, "email": 1, "name": 1},
+        ).to_list(500)
+        for member in staff:
+            await send_email(
+                member["email"], f"🔒 Session complète — {existing.get('formation_titre', '')}",
+                (
+                    f"<p>Bonjour {member.get('name', '')},</p>"
+                    f"<p>La session <b>{existing.get('formation_titre', '')}</b> du "
+                    f"<b>{format_date_long_fr(existing.get('date_debut', ''))}</b> à <b>{lieu}</b> vient d'être marquée complète — "
+                    f"plus aucune inscription ne doit y être ajoutée.</p><p>TDL Formation</p>"
+                ),
+            )
+        if staff:
+            await send_push_to_users(
+                [m["id"] for m in staff], "🔒 Session complète",
+                f"{existing.get('formation_titre', '')} — {format_date_long_fr(existing.get('date_debut', ''))} ({lieu})",
+                "/admin/stages",
+            )
+
     return updated
 
 
