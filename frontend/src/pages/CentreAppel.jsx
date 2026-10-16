@@ -521,7 +521,7 @@ export default function CentreAppel() {
 
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Historique des emails ({emails.length})</p>
-                  <div className="max-h-32 overflow-y-auto space-y-1">
+                  <div className="max-h-40 overflow-y-auto space-y-1 border border-gray-100 rounded-md p-2">
                     {emails.slice(0, 10).map((e, i) => (
                       <p key={i} className="text-xs text-gray-500 truncate">
                         {e.created_at?.slice(0, 10)} — {e.subject}
@@ -533,7 +533,7 @@ export default function CentreAppel() {
 
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Historique ({history.length})</p>
-                  <div className="max-h-40 overflow-y-auto space-y-1.5">
+                  <div className="max-h-56 overflow-y-auto space-y-1.5 border border-gray-100 rounded-md p-2">
                     {history.map((h, i) => (
                       <div key={i} className="text-xs text-gray-600 border-l-2 border-gray-200 pl-2">
                         <span className="text-gray-400">{h.at ? formatDateTimeFR(h.at) : ""}</span>
