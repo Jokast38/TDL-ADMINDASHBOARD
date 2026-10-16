@@ -33,6 +33,37 @@ function colorFor(key) {
   return PALETTE[h % PALETTE.length];
 }
 
+// Libellé court pour les cases du mini-calendrier (mois/semaine) — le titre
+// complet (module_nom + formation_titre + lieu_ville) reste affiché tel quel
+// dans la fenêtre de détail au clic (voir dayDialog), seule la miniature est
+// raccourcie pour rester lisible avec des titres de formation longs.
+const TITLE_ABBR = [
+  [/récupération de points/i, "Stage Récup"],
+  [/passerelle/i, "Passerelle"],
+  [/mobilité taxi/i, "Mobilité Taxi"],
+  [/\bvtc\b/i, "VTC"],
+  [/\btaxi\b/i, "Taxi"],
+  [/\bcaces\b/i, "CACES"],
+  [/\bssiap\b/i, "SSIAP"],
+  [/\becsr\b/i, "ECSR"],
+];
+function shortCity(ville) {
+  if (!ville) return "";
+  if (/pinay/i.test(ville)) return "Épinay";
+  if (/creil/i.test(ville)) return "Creil";
+  return ville.split(/[\s(]/)[0];
+}
+function shortTitle(titre) {
+  if (!titre) return "Session";
+  for (const [re, label] of TITLE_ABBR) if (re.test(titre)) return label;
+  return titre.length > 16 ? `${titre.slice(0, 15)}…` : titre;
+}
+function miniLabel(ev) {
+  const title = shortTitle(ev.module_nom || ev.formation_titre);
+  const city = shortCity(ev.lieu_ville);
+  return city ? `${title} ${city}` : title;
+}
+
 // Évite toISOString() (conversion UTC) qui décale la date d'un jour selon le
 // fuseau horaire et l'heure locale — on formate directement les composants
 // de la date locale.
@@ -75,6 +106,7 @@ export default function Agenda() {
   const [filterStage, setFilterStage] = useState("all");
   const [filterAnimateur, setFilterAnimateur] = useState("all");
   const [filterModule, setFilterModule] = useState("all");
+  const [filterVille, setFilterVille] = useState("all");
   const [bookOpen, setBookOpen] = useState(false);
 
   const weekStart = useMemo(() => startOfWeek(anchor), [anchor]);
@@ -122,9 +154,10 @@ export default function Agenda() {
     return events.filter((ev) =>
       (filterStage === "all" || ev.stage_id === filterStage) &&
       (filterAnimateur === "all" || ev.animateur_id === filterAnimateur) &&
-      (filterModule === "all" || ev.module_nom === filterModule)
+      (filterModule === "all" || ev.module_nom === filterModule) &&
+      (filterVille === "all" || shortCity(ev.lieu_ville) === filterVille)
     );
-  }, [events, filterStage, filterAnimateur, filterModule]);
+  }, [events, filterStage, filterAnimateur, filterModule, filterVille]);
 
   const eventsByDay = useMemo(() => {
     const map = new Map();
@@ -204,10 +237,18 @@ export default function Agenda() {
             {moduleOptions.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
           </SelectContent>
         </Select>
-        {(filterStage !== "all" || filterAnimateur !== "all" || filterModule !== "all") && (
+        <Select value={filterVille} onValueChange={setFilterVille}>
+          <SelectTrigger className="w-44 h-8 text-xs"><SelectValue placeholder="Centre" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tous les centres</SelectItem>
+            <SelectItem value="Épinay">Épinay-sur-Seine (93)</SelectItem>
+            <SelectItem value="Creil">Creil (60)</SelectItem>
+          </SelectContent>
+        </Select>
+        {(filterStage !== "all" || filterAnimateur !== "all" || filterModule !== "all" || filterVille !== "all") && (
           <button
             className="text-xs text-gray-400 hover:text-red-600 underline"
-            onClick={() => { setFilterStage("all"); setFilterAnimateur("all"); setFilterModule("all"); }}
+            onClick={() => { setFilterStage("all"); setFilterAnimateur("all"); setFilterModule("all"); setFilterVille("all"); }}
           >Réinitialiser</button>
         )}
       </div>
@@ -248,9 +289,9 @@ export default function Agenda() {
                           key={ev.id}
                           className="text-[10px] leading-tight px-1.5 py-0.5 rounded truncate border-l-2"
                           style={{ background: c.bg, borderColor: c.border, color: c.text }}
-                          title={`${ev.heure_debut}-${ev.heure_fin} · ${ev.module_nom} · ${ev.formation_titre}`}
+                          title={`${ev.heure_debut}-${ev.heure_fin} · ${ev.module_nom} · ${ev.formation_titre}${ev.lieu_ville ? ` · ${ev.lieu_ville}` : ""}`}
                         >
-                          {ev.heure_debut} {ev.module_nom}
+                          {ev.heure_debut} {miniLabel(ev)}
                         </div>
                       );
                     })}
@@ -304,11 +345,11 @@ export default function Agenda() {
                         className="absolute left-0.5 right-0.5 rounded-md px-1.5 py-1 overflow-hidden border-l-2 shadow-sm cursor-pointer"
                         style={{ top, height: Math.max(height, 22), background: c.bg, borderColor: c.border, color: c.text }}
                         onClick={() => setDayDialog({ iso, events: [ev] })}
-                        title={`${ev.heure_debut}-${ev.heure_fin} · ${ev.module_nom}`}
+                        title={`${ev.heure_debut}-${ev.heure_fin} · ${ev.module_nom} · ${ev.formation_titre}${ev.lieu_ville ? ` · ${ev.lieu_ville}` : ""}`}
                         data-testid={`agenda-event-${ev.id}`}
                       >
-                        <p className="text-[10px] font-semibold leading-tight truncate">{ev.module_nom}</p>
-                        <p className="text-[9px] leading-tight truncate">{ev.heure_debut}–{ev.heure_fin} · {ev.formation_titre}</p>
+                        <p className="text-[10px] font-semibold leading-tight truncate">{miniLabel(ev)}</p>
+                        <p className="text-[9px] leading-tight truncate">{ev.heure_debut}–{ev.heure_fin}</p>
                       </div>
                     );
                   })}
