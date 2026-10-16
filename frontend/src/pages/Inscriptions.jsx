@@ -422,10 +422,11 @@ export default function Inscriptions() {
       paymentFilter === "all" ? true :
       paymentFilter === "paid" ? PAYMENT_PAID_LIKE.includes(i.payment_status) :
       !PAYMENT_PAID_LIKE.includes(i.payment_status);
+    const isTraite = i.contact_status === "finalisee" || (!!i.dossier_status && i.dossier_status !== "nouveau");
     const matchesTraitement =
       traitementFilter === "all" ? true :
-      traitementFilter === "traite" ? !!i.dossier_status && i.dossier_status !== "nouveau" :
-      !i.dossier_status || i.dossier_status === "nouveau";
+      traitementFilter === "traite" ? isTraite :
+      !isTraite;
     const matchesStatus =
       statusFilter === "all" ? true :
       statusFilter === "cloturee" ? i.status === "annulee" :
@@ -800,7 +801,9 @@ export default function Inscriptions() {
                       </Badge>
                     </td>
                     <td className="py-3 px-4">
-                      {i.dossier_status === "nouveau" ? (
+                      {i.contact_status === "finalisee" || ["complet", "soumis_ants", "termine"].includes(i.dossier_status) ? (
+                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-xs">Traité</Badge>
+                      ) : i.dossier_status === "nouveau" ? (
                         <Button
                           size="sm" variant="outline"
                           onClick={() => startProcessing(i.dossier_id)}
