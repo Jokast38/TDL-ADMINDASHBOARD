@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -654,9 +654,17 @@ function CosmosiaTab() {
   const [paymentLinkTarget, setPaymentLinkTarget] = useState(null);
   const [relanceDueCount, setRelanceDueCount] = useState(0);
 
-  const load = () => {
+  // Numéro de séquence de requête — ignore une réponse réseau arrivée après
+  // qu'une requête plus récente a déjà été lancée (voir même correctif sur
+  // Leads.jsx, demande du 2026-10-19 : sans ça, un changement de filtre qui
+  // déclenchait coup sur coup un rechargement "page actuelle" puis "page 1"
+  // pouvait laisser la pagination figée si les réponses arrivaient dans le
+  // désordre).
+  const requestSeq = useRef(0);
+  const load = (pageOverride) => {
+    const myRequestId = ++requestSeq.current;
     setLoading(true);
-    const params = { source: "cosmosia", page, page_size: COSMOSIA_PAGE_SIZE };
+    const params = { source: "cosmosia", page: pageOverride ?? page, page_size: COSMOSIA_PAGE_SIZE };
     if (search.trim()) params.q = search.trim();
     if (campaignFilter) params.campaign = campaignFilter;
     if (villeFilter) params.ville = villeFilter;
@@ -666,12 +674,19 @@ function CosmosiaTab() {
       params.interest_in = (rawValues.length ? rawValues : [interestFilter]).join("|");
     }
     api.get("/leads", { params })
-      .then(({ data }) => { setItems(data.items); setTotal(data.total); })
-      .catch(() => toast.error("Erreur de chargement des leads Cosmosia"))
-      .finally(() => setLoading(false));
+      .then(({ data }) => {
+        if (myRequestId !== requestSeq.current) return;
+        setItems(data.items); setTotal(data.total);
+      })
+      .catch(() => { if (myRequestId === requestSeq.current) toast.error("Erreur de chargement des leads Cosmosia"); })
+      .finally(() => { if (myRequestId === requestSeq.current) setLoading(false); });
   };
-  useEffect(load, [search, campaignFilter, villeFilter, qualifFilter, interestFilter, page]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { setPage(1); }, [search, campaignFilter, villeFilter, qualifFilter, interestFilter]);
+  useEffect(load, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  const isFirstCosmosiaFilterRun = useRef(true);
+  useEffect(() => {
+    if (isFirstCosmosiaFilterRun.current) { isFirstCosmosiaFilterRun.current = false; return; }
+    if (page === 1) load(1); else setPage(1);
+  }, [search, campaignFilter, villeFilter, qualifFilter, interestFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     api.get("/leads/campaigns", { params: { source: "cosmosia" } }).then(({ data }) => setCampaignOptions(data)).catch(() => {});
     api.get("/leads/villes").then(({ data }) => setVilleOptions(data)).catch(() => {});

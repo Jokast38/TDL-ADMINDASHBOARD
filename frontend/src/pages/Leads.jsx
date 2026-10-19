@@ -533,10 +533,15 @@ export default function Leads() {
   const [relanceDueCount, setRelanceDueCount] = useState(0);
   const [showRelancePopup, setShowRelancePopup] = useState(false);
 
-  const load = async () => {
+  // Numéro de séquence de requête — une réponse qui arrive après qu'une
+  // requête plus récente a déjà été lancée (filtre changé, page changée) est
+  // ignorée, même si le réseau la fait arriver en dernier ("race condition").
+  const requestSeq = useRef(0);
+  const load = async (pageOverride) => {
+    const myRequestId = ++requestSeq.current;
     setLoading(true);
     try {
-      const params = { page, page_size: PAGE_SIZE };
+      const params = { page: pageOverride ?? page, page_size: PAGE_SIZE };
       if (q) params.q = q;
       if (statusFilter !== "all") params.status = statusFilter;
       if (contactedFilter !== "all") params.contacted = contactedFilter === "yes";
@@ -552,23 +557,29 @@ export default function Leads() {
         params.interest_in = (rawValues.length ? rawValues : [interestFilter]).join("|");
       }
       const { data } = await api.get("/leads", { params });
+      if (myRequestId !== requestSeq.current) return; // réponse obsolète, une requête plus récente est déjà en cours
       setItems(data.items);
       setTotal(data.total);
       setPages(data.pages);
     } catch {
-      toast.error("Erreur de chargement des leads");
+      if (myRequestId === requestSeq.current) toast.error("Erreur de chargement des leads");
     } finally {
-      setLoading(false);
+      if (myRequestId === requestSeq.current) setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, [page, statusFilter, contactedFilter, callOnlyFilter, interestFilter, villeFilter, dateFrom, dateTo]);
-  // Un changement de filtre (statut/contacté/à appeler/intérêt/date) doit revenir à la page 1.
+  useEffect(() => { load(); }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Un changement de filtre (statut/contacté/à appeler/intérêt/date) doit
+  // revenir à la page 1 — un seul chemin de rechargement selon que la page
+  // est déjà 1 ou non, pour ne jamais lancer deux requêtes concurrentes
+  // (page actuelle + page 1) qui pouvaient se doubler et, selon l'ordre
+  // d'arrivée des réponses réseau, laisser la pagination affichée figée sur
+  // un total/nombre de pages obsolète (voir demande du 2026-10-19).
   const isFirstFilterRun = useRef(true);
   useEffect(() => {
     if (isFirstFilterRun.current) { isFirstFilterRun.current = false; return; }
-    setPage(1);
-  }, [statusFilter, contactedFilter, callOnlyFilter, interestFilter, villeFilter, dateFrom, dateTo]);
+    if (page === 1) load(1); else setPage(1);
+  }, [statusFilter, contactedFilter, callOnlyFilter, interestFilter, villeFilter, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
   // Recherche texte : debounce, et retour à la page 1 (sinon "page 3" pourrait
   // se retrouver vide après une nouvelle recherche plus étroite).
   useEffect(() => {
