@@ -205,6 +205,7 @@ async def get_agenda(date_from: Optional[str] = None, date_to: Optional[str] = N
                     "lieu_ville": s.get("lieu_ville"),
                     "animateur_id": m.get("animateur_id"),
                     "animateur_nom": animateur_names.get(m.get("animateur_id"), ""),
+                    "stage_statut": s.get("statut"),
                 })
         else:
             # Pas de calendrier détaillé : un bloc par jour de la session,
@@ -237,6 +238,7 @@ async def get_agenda(date_from: Optional[str] = None, date_to: Optional[str] = N
                     "animateur_id": stage_animateur_ids[0] if stage_animateur_ids else None,
                     "animateur_nom": animateur_nom,
                     "is_session_fallback": True,
+                    "stage_statut": s.get("statut"),
                 })
                 cur += timedelta(days=1)
 

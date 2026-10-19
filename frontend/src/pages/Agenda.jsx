@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, MapPin, GraduationCap, PenNib, CaretLeft, CaretRight, Funnel, Plus } from "@phosphor-icons/react";
+import { Clock, MapPin, GraduationCap, PenNib, CaretLeft, CaretRight, Funnel, Plus, LockSimple } from "@phosphor-icons/react";
 import { formatDateFR } from "@/lib/dateFormat";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
 
@@ -287,11 +287,12 @@ export default function Agenda() {
                       return (
                         <div
                           key={ev.id}
-                          className="text-[10px] leading-tight px-1.5 py-0.5 rounded truncate border-l-2"
+                          className="flex items-center gap-1 text-[10px] leading-tight px-1.5 py-0.5 rounded truncate border-l-2"
                           style={{ background: c.bg, borderColor: c.border, color: c.text }}
-                          title={`${ev.heure_debut}-${ev.heure_fin} · ${ev.module_nom} · ${ev.formation_titre}${ev.lieu_ville ? ` · ${ev.lieu_ville}` : ""}`}
+                          title={`${ev.heure_debut}-${ev.heure_fin} · ${ev.module_nom} · ${ev.formation_titre}${ev.lieu_ville ? ` · ${ev.lieu_ville}` : ""}${ev.stage_statut === "complet" ? " · Session complète (verrouillée)" : ""}`}
                         >
-                          {ev.heure_debut} {miniLabel(ev)}
+                          {ev.stage_statut === "complet" && <LockSimple size={9} weight="bold" className="shrink-0" />}
+                          <span className="truncate">{ev.heure_debut} {miniLabel(ev)}</span>
                         </div>
                       );
                     })}
@@ -345,10 +346,13 @@ export default function Agenda() {
                         className="absolute left-0.5 right-0.5 rounded-md px-1.5 py-1 overflow-hidden border-l-2 shadow-sm cursor-pointer"
                         style={{ top, height: Math.max(height, 22), background: c.bg, borderColor: c.border, color: c.text }}
                         onClick={() => setDayDialog({ iso, events: [ev] })}
-                        title={`${ev.heure_debut}-${ev.heure_fin} · ${ev.module_nom} · ${ev.formation_titre}${ev.lieu_ville ? ` · ${ev.lieu_ville}` : ""}`}
+                        title={`${ev.heure_debut}-${ev.heure_fin} · ${ev.module_nom} · ${ev.formation_titre}${ev.lieu_ville ? ` · ${ev.lieu_ville}` : ""}${ev.stage_statut === "complet" ? " · Session complète (verrouillée)" : ""}`}
                         data-testid={`agenda-event-${ev.id}`}
                       >
-                        <p className="text-[10px] font-semibold leading-tight truncate">{miniLabel(ev)}</p>
+                        <p className="text-[10px] font-semibold leading-tight truncate flex items-center gap-1">
+                          {ev.stage_statut === "complet" && <LockSimple size={9} weight="bold" className="shrink-0" />}
+                          <span className="truncate">{miniLabel(ev)}</span>
+                        </p>
                         <p className="text-[9px] leading-tight truncate">{ev.heure_debut}–{ev.heure_fin}</p>
                       </div>
                     );
@@ -372,7 +376,14 @@ export default function Agenda() {
               const c = colorFor(ev.module_nom || "");
               return (
                 <div key={ev.id} className="rounded-md border-l-4 p-3 text-sm" style={{ background: c.bg, borderColor: c.border }}>
-                  <p className="font-semibold" style={{ color: c.text }}>{ev.module_nom}</p>
+                  <p className="font-semibold flex items-center gap-1.5" style={{ color: c.text }}>
+                    {ev.module_nom}
+                    {ev.stage_statut === "complet" && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-black/80 text-white rounded-full px-2 py-0.5">
+                        <LockSimple size={10} weight="bold" /> Complète
+                      </span>
+                    )}
+                  </p>
                   <div className="text-xs text-gray-600 mt-1 space-y-0.5">
                     <p className="flex items-center gap-1.5"><Clock size={12} /> {ev.heure_debut} – {ev.heure_fin}</p>
                     <p className="flex items-center gap-1.5"><GraduationCap size={12} /> {ev.formation_titre}</p>

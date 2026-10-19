@@ -29,7 +29,7 @@ export const navAll = [
   // dans son menu, contrairement aux autres rôles).
   { to: "/espace-animateur", label: "Accueil", icon: House, roles: ["animateur"], end: true },
   { to: "/admin/formations", label: "Formations", icon: GraduationCap, roles: ["admin", "employe", "responsable_admission"] },
-  { to: "/admin/stages", label: "Sessions de formation", icon: CalendarCheck, roles: ["admin", "responsable_admission"] },
+  { to: "/admin/stages", label: "Sessions de formation", icon: CalendarCheck, roles: ["admin", "responsable_admission", "agent_telephonique"] },
   { to: "/admin/agenda", label: "Agenda", icon: CalendarBlank, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique", "animateur"] },
   { to: "/admin/agenda-appel", label: "Agenda d'appel", icon: Headset, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
   { to: "/admin/centre-appel", label: "Centre d'appel", icon: PhoneCall, roles: ["admin", "responsable_admission", "agent_telephonique"] },

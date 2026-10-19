@@ -204,7 +204,7 @@ function App() {
               <ProtectedRoute roles={["admin", "employe", "responsable_admission"]}><AdminLayout><Formations /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/stages" element={
-              <ProtectedRoute roles={["admin", "responsable_admission"]}><AdminLayout><Stages /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "responsable_admission", "agent_telephonique"]}><AdminLayout><Stages /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/agenda" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique", "animateur"]}><AdminLayout><Agenda /></AdminLayout></ProtectedRoute>
