@@ -1,29 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Calendar, MapPin, Plus, Users, PencilSimple, Trash, CaretDown, CaretRight, UploadSimple, Sun, Moon, FolderOpen, Books, Lock, LockOpen } from "@phosphor-icons/react";
+import { Plus, Trash, UploadSimple, Books, MagnifyingGlass, SquaresFour, ListBullets, FunnelSimple } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
+import { normalizeLocation } from "@/lib/normalizeLocation";
+import { colorForFormation } from "@/constants/formationColors";
+import FormationTabs from "@/components/stages/FormationTabs";
+import LocationFilter from "@/components/stages/LocationFilter";
+import MonthNavigator from "@/components/stages/MonthNavigator";
+import SessionCard from "@/components/stages/SessionCard";
+import SessionDrawer from "@/components/stages/SessionDrawer";
+import CalendarView from "@/components/stages/CalendarView";
+import {
+  monthKey, monthLabelShort, monthLabelLong, todayIso, extractCreneau, fillRatio,
+} from "@/components/stages/stageHelpers";
 
-const MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
-
-function monthLabel(dateStr) {
-  if (!dateStr) return "Sans date";
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "Sans date";
-  return `${MOIS_FR[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-// Le créneau JOUR/SOIR n'a pas son propre champ sur le stage — il est
-// encodé dans les notes à la création (voir vtc_import.py et Stages.jsx
-// "Créneau : JOUR"/"Créneau : SOIR"). Extrait ici pour l'affichage.
 async function downloadStageAntsBundle(s) {
   try {
     const res = await api.get(`/stages/${s.id}/ants-bundle`, { responseType: "blob" });
@@ -36,30 +34,6 @@ async function downloadStageAntsBundle(s) {
   }
 }
 
-function extractCreneau(notes) {
-  const m = /Créneau\s*:\s*(JOUR|SOIR)/i.exec(notes || "");
-  return m ? m[1].toUpperCase() : null;
-}
-
-function monthKey(dateStr) {
-  if (!dateStr) return "0000-00";
-  const d = new Date(dateStr);
-  if (Number.isNaN(d.getTime())) return "0000-00";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-// Sous-groupe une liste de sessions (déjà triées) par mois calendaire de
-// date_debut, en conservant l'ordre chronologique passé en entrée.
-function groupByMonth(sessions) {
-  const groups = new Map();
-  for (const s of sessions) {
-    const key = monthKey(s.date_debut);
-    if (!groups.has(key)) groups.set(key, { key, label: monthLabel(s.date_debut), sessions: [] });
-    groups.get(key).sessions.push(s);
-  }
-  return Array.from(groups.values());
-}
-
 const empty = {
   formation_id: "", date_debut: "", date_fin: "",
   lieu_adresse: "", lieu_ville: "", capacite_max: 20,
@@ -67,23 +41,19 @@ const empty = {
   heure_debut: "09:00", heure_fin: "17:00", external_reserved: 0,
 };
 
-const CRENEAU_LABEL = { JOUR: "Jour", SOIR: "Soir" };
-// Horaires par défaut selon le rythme choisi — le soir est toujours
-// 18h00-21h30 (horaire fixe des sessions VTC/Taxi en soirée).
-const CRENEAU_HOURS = { JOUR: { heure_debut: "09:00", heure_fin: "17:00" }, SOIR: { heure_debut: "18:00", heure_fin: "21:30" } };
-
-// "complet" verrouille manuellement les inscriptions AVANT d'atteindre
-// capacite_max (ex: des places sont vendues en parallèle sur Groupon pour
-// les stages de récupération de points, et le total réel ne doit jamais
-// dépasser le nombre de places physiques) — backend : GET
-// /stages/public/available l'exclut, et POST /inscriptions + PUT
-// /inscriptions/{id}/stage le refusent explicitement (voir routers/stages.py
-// et routers/inscriptions.py).
 const STATUTS = ["planifie", "en_cours", "complet", "termine", "annule"];
 const STATUT_LABELS = {
   planifie: "Planifié", en_cours: "En cours", complet: "Complet (verrouillé)",
   termine: "Terminé", annule: "Annulé",
 };
+const CRENEAU_HOURS = { JOUR: { heure_debut: "09:00", heure_fin: "17:00" }, SOIR: { heure_debut: "18:00", heure_fin: "21:30" } };
+
+function addDaysIso(dateStr, days) {
+  if (!dateStr) return dateStr;
+  const d = new Date(`${dateStr}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 export default function Stages() {
   const [items, setItems] = useState([]);
@@ -92,37 +62,29 @@ export default function Stages() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(empty);
   const [editingId, setEditingId] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
-  const [collapsed, setCollapsed] = useState(() => new Set());
   const [importing, setImporting] = useState(false);
-  const [rosterTarget, setRosterTarget] = useState(null);
-  const [roster, setRoster] = useState([]);
-  const [loadingRoster, setLoadingRoster] = useState(false);
   const [stageModules, setStageModules] = useState([]);
   const [sessionTemplates, setSessionTemplates] = useState([]);
   const [moduleLib, setModuleLib] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [drawerStage, setDrawerStage] = useState(null);
+  const [search, setSearch] = useState("");
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const searchRef = useRef(null);
 
-  const openRoster = async (s) => {
-    setRosterTarget(s);
-    setLoadingRoster(true);
-    try {
-      const { data } = await api.get(`/stages/${s.id}/roster`);
-      setRoster(data);
-    } catch {
-      toast.error("Erreur de chargement des inscrits");
-      setRoster([]);
-    } finally {
-      setLoadingRoster(false);
-    }
-  };
+  const [params, setParams] = useSearchParams();
+  const activeFormation = params.get("formation") || "all";
+  const selectedLocations = useMemo(() => (params.get("lieu") ? params.get("lieu").split(",").filter(Boolean) : []), [params]);
+  const period = params.get("periode") || "upcoming";
+  const rythme = params.get("rythme") || "all";
+  const view = params.get("vue") || "list";
+  const activeMonthParam = params.get("mois");
 
-  const toggleCollapsed = (formationId) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(formationId)) next.delete(formationId); else next.add(formationId);
-      return next;
-    });
+  const setParam = (key, value) => {
+    const next = new URLSearchParams(params);
+    if (!value || value === "all" || (Array.isArray(value) && !value.length)) next.delete(key);
+    else next.set(key, Array.isArray(value) ? value.join(",") : value);
+    setParams(next, { replace: true });
   };
 
   const load = () => api.get("/stages").then((r) => setItems(r.data));
@@ -133,24 +95,29 @@ export default function Stages() {
   }, []);
 
   // Redirection depuis l'Agenda général ("Voir la session") — ?stage=<id>
-  // dans l'URL ouvre directement la liste des inscrits de cette session dès
-  // que les stages sont chargés, sans que l'utilisateur ait à la rechercher.
+  // dans l'URL ouvre directement le panneau de détail dès que les stages
+  // sont chargés, sans que l'utilisateur ait à la rechercher.
   useEffect(() => {
     if (!items.length) return;
-    const params = new URLSearchParams(window.location.search);
     const stageId = params.get("stage");
     if (!stageId) return;
     const target = items.find((s) => s.id === stageId);
     if (target) {
-      openRoster(target);
-      params.delete("stage");
-      const qs = params.toString();
-      window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+      setDrawerStage(target);
+      const next = new URLSearchParams(params);
+      next.delete("stage");
+      setParams(next, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
-  const openCreate = () => { setEditingId(null); setForm(empty); setStageModules([]); setSelectedTemplateId(""); setOpen(true); };
+  const openCreate = (prefill = {}) => {
+    setEditingId(null);
+    setForm({ ...empty, ...prefill });
+    setStageModules([]);
+    setSelectedTemplateId("");
+    setOpen(true);
+  };
   const openEdit = (s) => {
     setEditingId(s.id);
     const ids = s.animateur_ids?.length ? s.animateur_ids : (s.animateur_id ? [s.animateur_id] : []);
@@ -170,7 +137,20 @@ export default function Stages() {
     } else {
       setSessionTemplates([]); setModuleLib([]);
     }
+    setDrawerStage(null);
     setOpen(true);
+  };
+
+  // Dupliquer : pré-remplit le formulaire de création avec les mêmes
+  // paramètres que la session d'origine, dates décalées d'une semaine.
+  const duplicateStage = (s) => {
+    openCreate({
+      formation_id: s.formation_id || "", date_debut: addDaysIso(s.date_debut, 7), date_fin: addDaysIso(s.date_fin, 7),
+      lieu_adresse: s.lieu_adresse || "", lieu_ville: s.lieu_ville || "", capacite_max: s.capacite_max ?? 20,
+      animateur_ids: s.animateur_ids?.length ? s.animateur_ids : (s.animateur_id ? [s.animateur_id] : []),
+      creneau: s.creneau || extractCreneau(s.notes) || "", notes: "",
+      heure_debut: s.heure_debut || "09:00", heure_fin: s.heure_fin || "17:00", external_reserved: 0,
+    });
   };
 
   const applyTemplate = async () => {
@@ -190,11 +170,7 @@ export default function Stages() {
       date: form.date_debut || "", heure_debut: "09:00", heure_fin: "17:00", animateur_id: null,
     }]);
   };
-
-  const updateModuleRow = (idx, patch) => {
-    setStageModules((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
-  };
-
+  const updateModuleRow = (idx, patch) => setStageModules((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
   const removeModuleRow = (idx) => setStageModules((prev) => prev.filter((_, i) => i !== idx));
 
   const saveModules = async () => {
@@ -208,10 +184,7 @@ export default function Stages() {
   };
 
   const toggleAnimateur = (id) => {
-    setForm((f) => ({
-      ...f,
-      animateur_ids: f.animateur_ids.includes(id) ? f.animateur_ids.filter((a) => a !== id) : [...f.animateur_ids, id],
-    }));
+    setForm((f) => ({ ...f, animateur_ids: f.animateur_ids.includes(id) ? f.animateur_ids.filter((a) => a !== id) : [...f.animateur_ids, id] }));
   };
 
   const save = async () => {
@@ -232,79 +205,13 @@ export default function Stages() {
     }
   };
 
-  const groupedByFormation = useMemo(() => {
-    // Évite toISOString() (conversion UTC) qui décale la date d'un jour
-    // selon le fuseau horaire et l'heure locale.
-    const now = new Date();
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    const groups = new Map();
-    for (const s of items) {
-      const key = s.formation_id || "sans-formation";
-      if (!groups.has(key)) groups.set(key, { formation_id: key, formation_titre: s.formation_titre || "Autre", sessions: [] });
-      groups.get(key).sessions.push(s);
-    }
-    const result = Array.from(groups.values()).map((g) => {
-      const upcoming = g.sessions
-        .filter((s) => (s.date_fin || s.date_debut) >= today)
-        .sort((a, b) => (a.date_debut || "").localeCompare(b.date_debut || ""));
-      const past = g.sessions
-        .filter((s) => (s.date_fin || s.date_debut) < today)
-        .sort((a, b) => (b.date_debut || "").localeCompare(a.date_debut || ""));
-      return { ...g, upcoming, past };
-    });
-    // Groupes avec des sessions à venir en premier (triés par la plus proche
-    // échéance) ; groupes uniquement passés ensuite (triés par la session la
-    // plus récente) — pour remonter les formations actives en priorité.
-    result.sort((a, b) => {
-      if (a.upcoming.length && b.upcoming.length) {
-        return a.upcoming[0].date_debut.localeCompare(b.upcoming[0].date_debut);
-      }
-      if (a.upcoming.length !== b.upcoming.length) return b.upcoming.length - a.upcoming.length;
-      const aDate = a.past[0]?.date_debut || "";
-      const bDate = b.past[0]?.date_debut || "";
-      return bDate.localeCompare(aDate);
-    });
-    return result;
-  }, [items]);
-
-  const importFileRef = useRef(null);
-
-  const importExcel = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const fd = new FormData();
-    fd.append("file", file);
-    setImporting(true);
-    try {
-      const { data } = await api.post("/vtc-import/vtc-taxi-sessions", fd, {
-        headers: { "Content-Type": "multipart/form-data" }, timeout: 120000,
-      });
-      const warn = Object.keys(data.unmatched_metiers || {}).length
-        ? ` · ${Object.keys(data.unmatched_metiers).length} métier(s) non reconnu(s), voir console`
-        : "";
-      if (warn) console.warn("Métiers non reconnus lors de l'import :", data.unmatched_metiers);
-      toast.success(
-        `${data.sessions_created} session(s) créée(s), ${data.inscriptions_created} inscription(s) importée(s)${warn}`
-      );
-      load();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Erreur lors de l'import du fichier Excel");
-    } finally {
-      setImporting(false);
-      e.target.value = "";
-    }
-  };
-
-  // Verrouillage rapide depuis la carte — bascule statut "complet" (ferme les
-  // inscriptions publiques et l'affectation manuelle, voir STATUTS plus haut)
-  // sans ouvrir le formulaire complet, pour fermer une session en un clic
-  // quand les places sont épuisées côté Groupon ou autre canal externe.
   const toggleLock = async (s) => {
     const next = s.statut === "complet" ? "planifie" : "complet";
     try {
       await api.put(`/stages/${s.id}`, { statut: next });
       toast.success(next === "complet" ? "Session verrouillée (complet)" : "Session déverrouillée");
       load();
+      setDrawerStage((d) => (d && d.id === s.id ? { ...d, statut: next } : d));
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
     }
@@ -314,15 +221,166 @@ export default function Stages() {
     try {
       await api.delete(`/stages/${id}`);
       toast.success("Session supprimée");
+      setDrawerStage(null);
       load();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur lors de la suppression");
     }
-    setDeletingId(null);
   };
 
+  const importFileRef = useRef(null);
+  const importExcel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    setImporting(true);
+    try {
+      const { data } = await api.post("/vtc-import/vtc-taxi-sessions", fd, { headers: { "Content-Type": "multipart/form-data" }, timeout: 120000 });
+      const warn = Object.keys(data.unmatched_metiers || {}).length ? ` · ${Object.keys(data.unmatched_metiers).length} métier(s) non reconnu(s), voir console` : "";
+      if (warn) console.warn("Métiers non reconnus lors de l'import :", data.unmatched_metiers);
+      toast.success(`${data.sessions_created} session(s) créée(s), ${data.inscriptions_created} inscription(s) importée(s)${warn}`);
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur lors de l'import du fichier Excel");
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  };
+
+  // ── Onglets par formation ────────────────────────────────────────────────
+  const formationTabs = useMemo(() => {
+    const today = todayIso();
+    const byId = new Map();
+    for (const s of items) {
+      const id = s.formation_id || "sans-formation";
+      if (!byId.has(id)) byId.set(id, { id, label: s.formation_titre || "Autre", upcomingCount: 0, category: null });
+      if ((s.date_fin || s.date_debut) >= today && s.statut !== "annule") byId.get(id).upcomingCount++;
+    }
+    for (const g of byId.values()) {
+      g.category = formations.find((f) => f.id === g.id)?.category;
+      g.color = colorForFormation(g.category, g.label);
+    }
+    return Array.from(byId.values()).sort((a, b) => b.upcomingCount - a.upcomingCount);
+  }, [items, formations]);
+
+  const activeColor = activeFormation === "all" ? null : formationTabs.find((t) => t.id === activeFormation)?.color;
+
+  // Suggestions de ville (datalist du formulaire) — évite de semer de
+  // nouvelles variantes d'orthographe en plus de celles déjà en base.
+  const knownLocations = useMemo(() => {
+    const set = new Set(["Épinay-sur-Seine", "Creil"]);
+    for (const s of items) set.add(normalizeLocation(s.lieu_ville));
+    set.delete("Sans lieu");
+    return Array.from(set).sort();
+  }, [items]);
+
+  // ── Pipeline de filtrage (tab -> lieu -> rythme -> recherche) ───────────
+  const baseFiltered = useMemo(() => {
+    let list = items;
+    if (activeFormation !== "all") list = list.filter((s) => s.formation_id === activeFormation);
+    if (selectedLocations.length) list = list.filter((s) => selectedLocations.includes(normalizeLocation(s.lieu_ville)));
+    if (rythme !== "all") list = list.filter((s) => (s.creneau || extractCreneau(s.notes)) === rythme);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((s) => {
+        const animNames = (s.animateur_ids?.length ? s.animateur_ids : (s.animateur_id ? [s.animateur_id] : []))
+          .map((id) => animateurs.find((a) => a.id === id)?.name || "").join(" ");
+        return (s.lieu_ville || "").toLowerCase().includes(q)
+          || (s.date_debut || "").includes(q)
+          || animNames.toLowerCase().includes(q)
+          || (s.formation_titre || "").toLowerCase().includes(q);
+      });
+    }
+    return list;
+  }, [items, activeFormation, selectedLocations, rythme, search, animateurs]);
+
+  const hasSoirInTab = useMemo(
+    () => baseFiltered.some((s) => (s.creneau || extractCreneau(s.notes)) === "SOIR"),
+    [baseFiltered]
+  );
+
+  const locationOptions = useMemo(() => {
+    const counts = new Map();
+    for (const s of baseFiltered) {
+      const loc = normalizeLocation(s.lieu_ville);
+      counts.set(loc, (counts.get(loc) || 0) + 1);
+    }
+    return Array.from(counts.entries()).map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count);
+  }, [baseFiltered]);
+
+  const today = todayIso();
+  const upcomingSet = useMemo(() => baseFiltered.filter((s) => (s.date_fin || s.date_debut) >= today && s.statut !== "annule"), [baseFiltered, today]);
+  const pastSet = useMemo(() => baseFiltered.filter((s) => (s.date_fin || s.date_debut) < today), [baseFiltered, today]);
+
+  const periodList = useMemo(() => {
+    if (period === "upcoming") return [...upcomingSet].sort((a, b) => (a.date_debut || "").localeCompare(b.date_debut || ""));
+    if (period === "past") return [...pastSet].sort((a, b) => (b.date_debut || "").localeCompare(a.date_debut || ""));
+    return [...baseFiltered].sort((a, b) => (a.date_debut || "").localeCompare(b.date_debut || ""));
+  }, [period, upcomingSet, pastSet, baseFiltered]);
+
+  const monthGroups = useMemo(() => {
+    const groups = new Map();
+    for (const s of periodList) {
+      const key = monthKey(s.date_debut);
+      if (!groups.has(key)) groups.set(key, { key, sessions: [] });
+      groups.get(key).sessions.push(s);
+    }
+    const arr = Array.from(groups.values()).map((g) => {
+      const totalCap = g.sessions.reduce((n, s) => n + (s.capacite_max || 0), 0);
+      const totalTaken = g.sessions.reduce((n, s) => n + (s.nb_inscrits || 0) + (s.external_reserved || 0), 0);
+      return { ...g, label: monthLabelShort(g.key), labelLong: monthLabelLong(g.key), count: g.sessions.length, fillPct: totalCap ? Math.round((totalTaken / totalCap) * 100) : 0 };
+    });
+    arr.sort((a, b) => period === "past" ? b.key.localeCompare(a.key) : a.key.localeCompare(b.key));
+    return arr;
+  }, [periodList, period]);
+
+  const currentMonthKey = monthKey(new Date().toISOString().slice(0, 10));
+  const activeMonth = activeMonthParam && monthGroups.some((m) => m.key === activeMonthParam)
+    ? activeMonthParam
+    : (monthGroups.find((m) => m.key === currentMonthKey)?.key || monthGroups[0]?.key);
+
+  const scrollToMonth = (key) => {
+    setParam("mois", key);
+    const el = document.getElementById(`stage-month-${key}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  // ── Indicateurs d'en-tête (sur la sélection tab/lieu/rythme, hors période) ─
+  const indicators = useMemo(() => {
+    const vendues = upcomingSet.reduce((n, s) => n + (s.nb_inscrits || 0), 0);
+    const restantes = upcomingSet.reduce((n, s) => n + Math.max(0, (s.capacite_max || 0) - (s.nb_inscrits || 0) - (s.external_reserved || 0)), 0);
+    const avgFill = upcomingSet.length ? Math.round((upcomingSet.reduce((n, s) => n + fillRatio(s), 0) / upcomingSet.length) * 100) : 0;
+    return { upcoming: upcomingSet.length, vendues, restantes, avgFill };
+  }, [upcomingSet]);
+
+  const hasActiveFilters = activeFormation !== "all" || selectedLocations.length > 0 || rythme !== "all" || period !== "upcoming";
+  const resetFilters = () => setParams(new URLSearchParams(), { replace: true });
+
+  // ── Raccourcis clavier ───────────────────────────────────────────────────
+  const shiftMonth = useCallback((dir) => {
+    const idx = monthGroups.findIndex((m) => m.key === activeMonth);
+    const next = monthGroups[idx + dir];
+    if (next) scrollToMonth(next.key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthGroups, activeMonth]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || open) return;
+      if (e.key === "n" || e.key === "N") { e.preventDefault(); openCreate(); }
+      else if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); }
+      else if (e.key === "ArrowLeft") shiftMonth(-1);
+      else if (e.key === "ArrowRight") shiftMonth(1);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, shiftMonth]);
+
   return (
-    <div className="space-y-6" data-testid="stages-page">
+    <div className="space-y-5" data-testid="stages-page">
       <div className="flex items-end justify-between flex-wrap gap-4">
         <div>
           <p className="overline">Planification</p>
@@ -331,390 +389,307 @@ export default function Stages() {
         </div>
         <div className="flex flex-wrap gap-2">
           <input ref={importFileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} data-testid="stages-import-excel" />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={importing}
-            onClick={() => importFileRef.current?.click()}
-            title="Importe les sessions VTC/Taxi/Passerelle depuis un fichier Excel (1 onglet par mois)"
-          >
+          <Button type="button" variant="outline" disabled={importing} onClick={() => importFileRef.current?.click()} title="Importe les sessions VTC/Taxi/Passerelle depuis un fichier Excel (1 onglet par mois)">
             <UploadSimple size={16} className="mr-1" /> {importing ? "Import..." : "Importer Excel VTC/Taxi"}
           </Button>
-        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditingId(null); setForm(empty); } }}>
-          <DialogTrigger asChild>
-            <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="new-stage-btn" onClick={openCreate}>
-              <Plus size={16} className="mr-1" /> Planifier une session
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>{editingId ? "Modifier la session" : "Nouvelle session de stage"}</DialogTitle></DialogHeader>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-              <div className="sm:col-span-2">
-                <label className="text-sm font-medium">Formation</label>
-                <Select
-                  value={form.formation_id}
-                  onValueChange={(v) => {
-                    // Capacité par défaut à 25 pour les formations VTC/Taxi —
-                    // seulement à la création, et seulement si l'utilisateur
-                    // n'a pas déjà modifié la capacité par défaut (20).
-                    const formation = formations.find((f) => f.id === v);
-                    const bump = !editingId && form.capacite_max === 20 && formation?.category === "VTC_TAXI";
-                    setForm({ ...form, formation_id: v, ...(bump ? { capacite_max: 25 } : {}) });
-                  }}
-                >
-                  <SelectTrigger data-testid="stage-formation"><SelectValue placeholder="Choisir une formation" /></SelectTrigger>
-                  <SelectContent>{formations.map((f) => <SelectItem key={f.id} value={f.id}>{f.title}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Date début</label>
-                <Input type="date" value={form.date_debut} onChange={(e) => setForm({ ...form, date_debut: e.target.value })} data-testid="stage-debut" />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Date fin</label>
-                <Input type="date" value={form.date_fin} onChange={(e) => setForm({ ...form, date_fin: e.target.value })} data-testid="stage-fin" />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Adresse</label>
-                <AddressAutocomplete
-                  value={form.lieu_adresse}
-                  onChange={(v) => setForm((f) => ({ ...f, lieu_adresse: v }))}
-                  onSelect={(ville) => setForm((f) => ({ ...f, lieu_ville: ville || f.lieu_ville }))}
-                  placeholder="Numéro, rue..."
-                  testId="stage-adresse"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Ville</label>
-                <Input value={form.lieu_ville} onChange={(e) => setForm({ ...form, lieu_ville: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Capacité max</label>
-                <Input type="number" value={form.capacite_max} onChange={(e) => setForm({ ...form, capacite_max: e.target.value })} data-testid="stage-capacite-max" />
-              </div>
-              <div>
-                <label className="text-sm font-medium" title="Places déjà prises par une plateforme externe (Groupon...) qui ne passe pas par nos inscriptions — vient en déduction des places restantes affichées et proposées à la réservation.">
-                  Places réservées ailleurs (Groupon...)
-                </label>
-                <Input
-                  type="number" min="0" value={form.external_reserved}
-                  onChange={(e) => setForm({ ...form, external_reserved: e.target.value })}
-                  data-testid="stage-external-reserved"
-                />
-                {editingId && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Places restantes réelles : {Math.max(0, (+form.capacite_max || 0) - (items.find((i) => i.id === editingId)?.nb_inscrits || 0) - (+form.external_reserved || 0))}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="text-sm font-medium">Rythme</label>
-                <Select
-                  value={form.creneau || "aucun"}
-                  onValueChange={(v) => {
-                    const creneau = v === "aucun" ? "" : v;
-                    setForm((f) => ({ ...f, creneau, ...(CRENEAU_HOURS[creneau] || {}) }));
-                  }}
-                >
-                  <SelectTrigger data-testid="stage-creneau"><SelectValue placeholder="Aucun rythme précis" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="aucun">Aucun rythme précis</SelectItem>
-                    <SelectItem value="JOUR">Jour</SelectItem>
-                    <SelectItem value="SOIR">Soir</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Heure de début</label>
-                <Input type="time" value={form.heure_debut} onChange={(e) => setForm({ ...form, heure_debut: e.target.value })} data-testid="stage-heure-debut" />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Heure de fin</label>
-                <Input type="time" value={form.heure_fin} onChange={(e) => setForm({ ...form, heure_fin: e.target.value })} data-testid="stage-heure-fin" />
-              </div>
-              {editingId && (
-                <div>
-                  <label className="text-sm font-medium">Statut</label>
-                  <Select value={form.statut} onValueChange={(v) => setForm({ ...form, statut: v })}>
-                    <SelectTrigger data-testid="stage-statut"><SelectValue /></SelectTrigger>
-                    <SelectContent>{STATUTS.map((s) => <SelectItem key={s} value={s}>{STATUT_LABELS[s] || s}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="sm:col-span-2">
-                <label className="text-sm font-medium">Formateurs / animateurs assignés</label>
-                <p className="text-xs text-gray-400 mb-1">Plusieurs formateurs peuvent être assignés à la même session — chacun apparaîtra avec sa propre signature sur l'attestation générée.</p>
-                <div className="flex flex-wrap gap-2 border border-gray-200 rounded-md p-2" data-testid="stage-animateurs">
-                  {animateurs.map((a) => {
-                    const checked = form.animateur_ids.includes(a.id);
-                    return (
-                      <label
-                        key={a.id}
-                        className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border cursor-pointer ${checked ? "border-[#d4af37] bg-[#d4af37]/10" : "border-gray-200"}`}
-                      >
-                        <input type="checkbox" checked={checked} onChange={() => toggleAnimateur(a.id)} className="hidden" />
-                        {a.name} ({a.role})
-                      </label>
-                    );
-                  })}
-                  {!animateurs.length && <span className="text-xs text-gray-400">Aucun formateur — créez-en un depuis la page Formateurs.</span>}
-                </div>
-              </div>
-              <div className="sm:col-span-2">
-                <label className="text-sm font-medium">Notes</label>
-                <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-              </div>
-
-              {editingId && (
-                <div className="sm:col-span-2 border-t border-gray-200 pt-4 mt-1">
-                  <label className="text-sm font-medium flex items-center gap-1.5"><Books size={14} /> Calendrier pédagogique</label>
-                  <p className="text-xs text-gray-400 mb-2">Modules étudiés par jour pour cette session — appliquez un modèle pré-enregistré ou éditez manuellement.</p>
-                  <div className="flex gap-2 mb-3">
-                    <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
-                      <SelectTrigger className="flex-1"><SelectValue placeholder="Choisir un modèle de session..." /></SelectTrigger>
-                      <SelectContent>{sessionTemplates.map((t) => <SelectItem key={t.id} value={t.id}>{t.nom}</SelectItem>)}</SelectContent>
-                    </Select>
-                    <Button type="button" variant="outline" disabled={!selectedTemplateId} onClick={applyTemplate}>Appliquer</Button>
-                  </div>
-                  {!sessionTemplates.length && (
-                    <p className="text-xs text-gray-400 mb-2">Aucun modèle pour cette catégorie de formation — gérez-les depuis la page Modules.</p>
-                  )}
-                  <div className="space-y-2 max-h-56 overflow-y-auto">
-                    {stageModules.map((m, idx) => (
-                      <div key={m.id || idx} className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-md p-2">
-                        <Input type="date" className="w-36" value={m.date || ""} onChange={(e) => updateModuleRow(idx, { date: e.target.value })} />
-                        <Input type="time" className="w-24" value={m.heure_debut || ""} onChange={(e) => updateModuleRow(idx, { heure_debut: e.target.value })} />
-                        <span className="text-xs text-gray-400">-</span>
-                        <Input type="time" className="w-24" value={m.heure_fin || ""} onChange={(e) => updateModuleRow(idx, { heure_fin: e.target.value })} />
-                        <Input className="flex-1 min-w-[140px]" value={m.module_nom || ""} onChange={(e) => updateModuleRow(idx, { module_nom: e.target.value })} placeholder="Nom du module" />
-                        <Select value={m.animateur_id || "none"} onValueChange={(v) => updateModuleRow(idx, { animateur_id: v === "none" ? null : v })}>
-                          <SelectTrigger className="w-40"><SelectValue placeholder="Formateur" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Sans formateur</SelectItem>
-                            {animateurs.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <button type="button" onClick={() => removeModuleRow(idx)} className="text-gray-300 hover:text-red-600"><Trash size={14} /></button>
-                      </div>
-                    ))}
-                    {!stageModules.length && <p className="text-xs text-gray-400 text-center py-3">Aucun module planifié pour cette session.</p>}
-                  </div>
-                  <div className="flex justify-between mt-2">
-                    <Button type="button" variant="outline" size="sm" onClick={addModuleRow}><Plus size={14} className="mr-1" /> Ajouter un module</Button>
-                    <Button type="button" size="sm" onClick={saveModules} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Enregistrer le calendrier</Button>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
-              <Button onClick={save} className="bg-[#d4af37] text-black hover:bg-[#b8941f]" data-testid="stage-save">
-                {editingId ? "Enregistrer" : "Planifier"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+          <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="new-stage-btn" onClick={() => openCreate()}>
+            <Plus size={16} className="mr-1" /> Planifier une session <span className="hidden sm:inline text-[10px] opacity-60 ml-1 border border-white/30 rounded px-1">N</span>
+          </Button>
         </div>
       </div>
 
-      {!items.length && <Card className="p-12 text-center border-dashed"><p className="text-gray-500">Aucune session.</p></Card>}
+      {/* Indicateurs */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Sessions à venir", value: indicators.upcoming },
+          { label: "Places vendues", value: indicators.vendues },
+          { label: "Places restantes", value: indicators.restantes },
+          { label: "Remplissage moyen", value: `${indicators.avgFill}%` },
+        ].map((kpi) => (
+          <Card key={kpi.label} className="p-3.5 border border-gray-200 rounded-md shadow-none">
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide">{kpi.label}</p>
+            <p className="font-display text-2xl font-extrabold mt-0.5">{kpi.value}</p>
+          </Card>
+        ))}
+      </div>
 
-      {items.length > 0 && (
-        <div className="flex justify-end gap-3 -mb-4">
-          <button className="text-xs text-gray-500 hover:text-[#d4af37]" onClick={() => setCollapsed(new Set(groupedByFormation.map((g) => g.formation_id)))}>
-            Tout replier
-          </button>
-          <button className="text-xs text-gray-500 hover:text-[#d4af37]" onClick={() => setCollapsed(new Set())}>
-            Tout déplier
-          </button>
+      <FormationTabs tabs={formationTabs} active={activeFormation} onChange={(v) => setParam("formation", v === "all" ? null : v)} />
+
+      {/* Filtres */}
+      <div className="hidden sm:flex items-center flex-wrap gap-3">
+        <LocationFilter options={locationOptions} selected={selectedLocations} onChange={(v) => setParam("lieu", v)} />
+        <div className="flex border border-gray-200 rounded-md overflow-hidden shrink-0">
+          {[["upcoming", "À venir"], ["past", "Passées"], ["all", "Tout"]].map(([k, label]) => (
+            <button key={k} className={`px-2.5 py-1.5 text-xs font-medium ${period === k ? "bg-[#0a0a0a] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`} onClick={() => setParam("periode", k === "upcoming" ? null : k)}>
+              {label}
+            </button>
+          ))}
         </div>
+        {hasSoirInTab && (
+          <Select value={rythme} onValueChange={(v) => setParam("rythme", v === "all" ? null : v)}>
+            <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Jour & Soir</SelectItem>
+              <SelectItem value="JOUR">Jour</SelectItem>
+              <SelectItem value="SOIR">Soir</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+        <div className="relative">
+          <MagnifyingGlass size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
+          <Input ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher (ville, date, formateur)... [/]" className="pl-8 h-8 text-xs w-64" />
+        </div>
+        <div className="flex border border-gray-200 rounded-md overflow-hidden shrink-0 ml-auto">
+          <button className={`p-1.5 ${view === "list" ? "bg-[#0a0a0a] text-white" : "bg-white text-gray-500"}`} onClick={() => setParam("vue", null)} title="Vue liste"><ListBullets size={15} /></button>
+          <button className={`p-1.5 ${view === "calendar" ? "bg-[#0a0a0a] text-white" : "bg-white text-gray-500"}`} onClick={() => setParam("vue", "calendar")} title="Vue calendrier"><SquaresFour size={15} /></button>
+        </div>
+        {hasActiveFilters && (
+          <button className="text-xs text-gray-400 hover:text-red-600 underline shrink-0" onClick={resetFilters}>Réinitialiser</button>
+        )}
+      </div>
+
+      {/* Filtres mobile */}
+      <div className="sm:hidden">
+        <button className="flex items-center gap-1.5 text-xs font-medium border border-gray-200 rounded-md px-3 py-1.5" onClick={() => setMobileFiltersOpen((v) => !v)}>
+          <FunnelSimple size={14} /> Filtres {hasActiveFilters ? `(${[activeFormation !== "all", !!selectedLocations.length, rythme !== "all", period !== "upcoming"].filter(Boolean).length})` : ""}
+        </button>
+        {mobileFiltersOpen && (
+          <div className="mt-2 space-y-2">
+            <LocationFilter options={locationOptions} selected={selectedLocations} onChange={(v) => setParam("lieu", v)} />
+            <div className="flex border border-gray-200 rounded-md overflow-hidden w-fit">
+              {[["upcoming", "À venir"], ["past", "Passées"], ["all", "Tout"]].map(([k, label]) => (
+                <button key={k} className={`px-2.5 py-1.5 text-xs font-medium ${period === k ? "bg-[#0a0a0a] text-white" : "bg-white text-gray-600"}`} onClick={() => setParam("periode", k === "upcoming" ? null : k)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher..." className="h-8 text-xs" />
+          </div>
+        )}
+      </div>
+
+      {!periodList.length && (
+        <Card className="p-12 text-center border-dashed">
+          <p className="text-gray-500 mb-3">
+            Aucune session{activeFormation !== "all" ? "" : ""}{selectedLocations.length ? ` à ${selectedLocations.join(", ")}` : ""}.
+          </p>
+          <Button variant="outline" onClick={() => openCreate({
+            formation_id: activeFormation !== "all" ? activeFormation : "",
+            lieu_ville: selectedLocations[0] || "",
+          })}>
+            <Plus size={14} className="mr-1" /> Planifier ici
+          </Button>
+        </Card>
       )}
 
-      <div className="space-y-10">
-        {groupedByFormation.map((g) => {
-          const isCollapsed = collapsed.has(g.formation_id);
-          return (
-          <div key={g.formation_id}>
-            <button
-              type="button"
-              onClick={() => toggleCollapsed(g.formation_id)}
-              className="flex items-center gap-2 w-full text-left mb-3 pb-2 border-b border-gray-200"
-              data-testid={`stage-group-toggle-${g.formation_id}`}
-            >
-              {isCollapsed ? <CaretRight size={16} className="text-gray-400" /> : <CaretDown size={16} className="text-gray-400" />}
-              <h2 className="font-display text-xl font-bold">{g.formation_titre}</h2>
-              <span className="text-xs text-gray-400">{g.sessions.length} session(s)</span>
-            </button>
+      {periodList.length > 0 && view === "calendar" && activeMonth && (
+        <CalendarView
+          sessions={periodList.filter((s) => monthKey(s.date_debut) === activeMonth)}
+          monthKey={activeMonth}
+          colorFor={(s) => activeColor || colorForFormation(formations.find((f) => f.id === s.formation_id)?.category, s.formation_titre)}
+          onOpen={setDrawerStage}
+        />
+      )}
 
-            {!isCollapsed && (
-            <>
-            {g.upcoming.length > 0 && (
-              <div className="mb-6 space-y-4">
-                <p className="overline text-[#0B7238]">À venir</p>
-                {groupByMonth(g.upcoming).map((mg) => (
-                  <div key={mg.key}>
-                    <p className="text-xs font-semibold text-gray-500 capitalize mb-2">{mg.label}</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {mg.sessions.map((s) => (
-                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} onViewRoster={openRoster} onToggleLock={toggleLock} />
-                      ))}
-                    </div>
-                  </div>
-                ))}
+      {periodList.length > 0 && view === "list" && (
+        <>
+          <MonthNavigator months={monthGroups} active={activeMonth} onSelect={scrollToMonth} />
+          <div className="space-y-8">
+            {monthGroups.map((mg) => (
+              <div key={mg.key} id={`stage-month-${mg.key}`} className="scroll-mt-16">
+                <p className="text-sm font-bold capitalize mb-3">
+                  {mg.labelLong} — {mg.count} session{mg.count > 1 ? "s" : ""} · {mg.fillPct}% rempli
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {mg.sessions.map((s) => (
+                    <SessionCard
+                      key={s.id}
+                      s={s}
+                      color={colorForFormation(formations.find((f) => f.id === s.formation_id)?.category, s.formation_titre)}
+                      showFormation={activeFormation === "all"}
+                      animateurs={animateurs}
+                      onOpen={setDrawerStage}
+                      muted={(s.date_fin || s.date_debut) < today}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      <SessionDrawer
+        stage={drawerStage}
+        onClose={() => setDrawerStage(null)}
+        animateurs={animateurs}
+        onEdit={openEdit}
+        onToggleLock={toggleLock}
+        onDelete={remove}
+        onDuplicate={duplicateStage}
+        onDownloadAnts={downloadStageAntsBundle}
+      />
+
+      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditingId(null); setForm(empty); } }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editingId ? "Modifier la session" : "Nouvelle session de stage"}</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+            <div className="sm:col-span-2">
+              <label className="text-sm font-medium">Formation</label>
+              <Select
+                value={form.formation_id}
+                onValueChange={(v) => {
+                  const formation = formations.find((f) => f.id === v);
+                  const bump = !editingId && form.capacite_max === 20 && formation?.category === "VTC_TAXI";
+                  setForm({ ...form, formation_id: v, ...(bump ? { capacite_max: 25 } : {}) });
+                }}
+              >
+                <SelectTrigger data-testid="stage-formation"><SelectValue placeholder="Choisir une formation" /></SelectTrigger>
+                <SelectContent>{formations.map((f) => <SelectItem key={f.id} value={f.id}>{f.title}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Date début</label>
+              <Input type="date" value={form.date_debut} onChange={(e) => setForm({ ...form, date_debut: e.target.value })} data-testid="stage-debut" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Date fin</label>
+              <Input type="date" value={form.date_fin} onChange={(e) => setForm({ ...form, date_fin: e.target.value })} data-testid="stage-fin" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Adresse</label>
+              <AddressAutocomplete
+                value={form.lieu_adresse}
+                onChange={(v) => setForm((f) => ({ ...f, lieu_adresse: v }))}
+                onSelect={(ville) => setForm((f) => ({ ...f, lieu_ville: ville || f.lieu_ville }))}
+                placeholder="Numéro, rue..."
+                testId="stage-adresse"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Ville</label>
+              <Input value={form.lieu_ville} onChange={(e) => setForm({ ...form, lieu_ville: e.target.value })} list="stage-ville-suggestions" />
+              <datalist id="stage-ville-suggestions">
+                {knownLocations.map((l) => <option key={l} value={l} />)}
+              </datalist>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Capacité max</label>
+              <Input type="number" value={form.capacite_max} onChange={(e) => setForm({ ...form, capacite_max: e.target.value })} data-testid="stage-capacite-max" />
+            </div>
+            <div>
+              <label className="text-sm font-medium" title="Places déjà prises par une plateforme externe (Groupon...) qui ne passe pas par nos inscriptions — vient en déduction des places restantes affichées et proposées à la réservation.">
+                Places réservées ailleurs (Groupon...)
+              </label>
+              <Input type="number" min="0" value={form.external_reserved} onChange={(e) => setForm({ ...form, external_reserved: e.target.value })} data-testid="stage-external-reserved" />
+              {editingId && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Places restantes réelles : {Math.max(0, (+form.capacite_max || 0) - (items.find((i) => i.id === editingId)?.nb_inscrits || 0) - (+form.external_reserved || 0))}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium">Rythme</label>
+              <Select
+                value={form.creneau || "aucun"}
+                onValueChange={(v) => {
+                  const creneau = v === "aucun" ? "" : v;
+                  setForm((f) => ({ ...f, creneau, ...(CRENEAU_HOURS[creneau] || {}) }));
+                }}
+              >
+                <SelectTrigger data-testid="stage-creneau"><SelectValue placeholder="Aucun rythme précis" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="aucun">Aucun rythme précis</SelectItem>
+                  <SelectItem value="JOUR">Jour</SelectItem>
+                  <SelectItem value="SOIR">Soir</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Heure de début</label>
+              <Input type="time" value={form.heure_debut} onChange={(e) => setForm({ ...form, heure_debut: e.target.value })} data-testid="stage-heure-debut" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Heure de fin</label>
+              <Input type="time" value={form.heure_fin} onChange={(e) => setForm({ ...form, heure_fin: e.target.value })} data-testid="stage-heure-fin" />
+            </div>
+            {editingId && (
+              <div>
+                <label className="text-sm font-medium">Statut</label>
+                <Select value={form.statut} onValueChange={(v) => setForm({ ...form, statut: v })}>
+                  <SelectTrigger data-testid="stage-statut"><SelectValue /></SelectTrigger>
+                  <SelectContent>{STATUTS.map((s) => <SelectItem key={s} value={s}>{STATUT_LABELS[s] || s}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
             )}
-
-            {g.past.length > 0 && (
-              <div className="space-y-4">
-                <p className="overline text-gray-400">Sessions passées</p>
-                {groupByMonth(g.past).map((mg) => (
-                  <div key={mg.key}>
-                    <p className="text-xs font-semibold text-gray-400 capitalize mb-2">{mg.label}</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {mg.sessions.map((s) => (
-                        <StageCard key={s.id} s={s} animateurs={animateurs} onEdit={openEdit} deletingId={deletingId} setDeletingId={setDeletingId} onDelete={remove} onViewRoster={openRoster} onToggleLock={toggleLock} muted />
-                      ))}
-                    </div>
-                  </div>
-                ))}
+            <div className="sm:col-span-2">
+              <label className="text-sm font-medium">Formateurs / animateurs assignés</label>
+              <p className="text-xs text-gray-400 mb-1">Plusieurs formateurs peuvent être assignés à la même session — chacun apparaîtra avec sa propre signature sur l'attestation générée.</p>
+              <div className="flex flex-wrap gap-2 border border-gray-200 rounded-md p-2" data-testid="stage-animateurs">
+                {animateurs.map((a) => {
+                  const checked = form.animateur_ids.includes(a.id);
+                  return (
+                    <label key={a.id} className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border cursor-pointer ${checked ? "border-[#d4af37] bg-[#d4af37]/10" : "border-gray-200"}`}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleAnimateur(a.id)} className="hidden" />
+                      {a.name} ({a.role})
+                    </label>
+                  );
+                })}
+                {!animateurs.length && <span className="text-xs text-gray-400">Aucun formateur — créez-en un depuis la page Formateurs.</span>}
               </div>
-            )}
-            </>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-sm font-medium">Notes</label>
+              <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+
+            {editingId && (
+              <div className="sm:col-span-2 border-t border-gray-200 pt-4 mt-1">
+                <label className="text-sm font-medium flex items-center gap-1.5"><Books size={14} /> Calendrier pédagogique</label>
+                <p className="text-xs text-gray-400 mb-2">Modules étudiés par jour pour cette session — appliquez un modèle pré-enregistré ou éditez manuellement.</p>
+                <div className="flex gap-2 mb-3">
+                  <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                    <SelectTrigger className="flex-1"><SelectValue placeholder="Choisir un modèle de session..." /></SelectTrigger>
+                    <SelectContent>{sessionTemplates.map((t) => <SelectItem key={t.id} value={t.id}>{t.nom}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Button type="button" variant="outline" disabled={!selectedTemplateId} onClick={applyTemplate}>Appliquer</Button>
+                </div>
+                {!sessionTemplates.length && <p className="text-xs text-gray-400 mb-2">Aucun modèle pour cette catégorie de formation — gérez-les depuis la page Modules.</p>}
+                <div className="space-y-2 max-h-56 overflow-y-auto">
+                  {stageModules.map((m, idx) => (
+                    <div key={m.id || idx} className="flex flex-wrap items-center gap-2 bg-gray-50 border border-gray-200 rounded-md p-2">
+                      <Input type="date" className="w-36" value={m.date || ""} onChange={(e) => updateModuleRow(idx, { date: e.target.value })} />
+                      <Input type="time" className="w-24" value={m.heure_debut || ""} onChange={(e) => updateModuleRow(idx, { heure_debut: e.target.value })} />
+                      <span className="text-xs text-gray-400">-</span>
+                      <Input type="time" className="w-24" value={m.heure_fin || ""} onChange={(e) => updateModuleRow(idx, { heure_fin: e.target.value })} />
+                      <Input className="flex-1 min-w-[140px]" value={m.module_nom || ""} onChange={(e) => updateModuleRow(idx, { module_nom: e.target.value })} placeholder="Nom du module" />
+                      <Select value={m.animateur_id || "none"} onValueChange={(v) => updateModuleRow(idx, { animateur_id: v === "none" ? null : v })}>
+                        <SelectTrigger className="w-40"><SelectValue placeholder="Formateur" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sans formateur</SelectItem>
+                          {animateurs.map((a) => <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <button type="button" onClick={() => removeModuleRow(idx)} className="text-gray-300 hover:text-red-600"><Trash size={14} /></button>
+                    </div>
+                  ))}
+                  {!stageModules.length && <p className="text-xs text-gray-400 text-center py-3">Aucun module planifié pour cette session.</p>}
+                </div>
+                <div className="flex justify-between mt-2">
+                  <Button type="button" variant="outline" size="sm" onClick={addModuleRow}><Plus size={14} className="mr-1" /> Ajouter un module</Button>
+                  <Button type="button" size="sm" onClick={saveModules} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Enregistrer le calendrier</Button>
+                </div>
+              </div>
             )}
           </div>
-          );
-        })}
-      </div>
-
-      <Dialog open={!!rosterTarget} onOpenChange={(v) => !v && setRosterTarget(null)}>
-        <DialogContent data-testid="stage-roster-dialog">
-          <DialogHeader>
-            <DialogTitle>
-              Inscrits — {rosterTarget?.formation_titre}
-              {rosterTarget && (
-                <span className="block text-xs font-normal text-gray-400 mt-1">
-                  {rosterTarget.date_debut} → {rosterTarget.date_fin}
-                  {(rosterTarget.creneau || extractCreneau(rosterTarget.notes)) ? ` · ${rosterTarget.creneau || extractCreneau(rosterTarget.notes)}` : ""}
-                  {" · "}{rosterTarget.nb_inscrits || 0}/{rosterTarget.capacite_max} places
-                </span>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="max-h-96 overflow-y-auto space-y-1 mt-2">
-            {loadingRoster ? (
-              <p className="text-sm text-gray-400 text-center py-8">Chargement...</p>
-            ) : roster.length ? (
-              roster.map((r) => (
-                <div key={r.id} className="flex items-center justify-between text-sm bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{r.student_name}</p>
-                    <p className="text-xs text-gray-500 truncate">{r.student_email}</p>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] shrink-0 ml-2">{r.payment_status}</Badge>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-gray-400 text-center py-8">Aucun candidat affecté à cette session pour l'instant.</p>
-            )}
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
+            <Button onClick={save} className="bg-[#d4af37] text-black hover:bg-[#b8941f]" data-testid="stage-save">
+              {editingId ? "Enregistrer" : "Planifier"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function StageCard({ s, animateurs, onEdit, deletingId, setDeletingId, onDelete, onViewRoster, onToggleLock, muted }) {
-  const creneau = s.creneau || extractCreneau(s.notes);
-  const placesRestantes = s.places_restantes ?? Math.max(0, (s.capacite_max || 0) - (s.nb_inscrits || 0) - (s.external_reserved || 0));
-  const full = placesRestantes <= 0;
-  const locked = s.statut === "complet";
-  return (
-    <Card
-      className={`p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg transition-all cursor-pointer relative group ${muted ? "opacity-70" : ""}`}
-      data-testid={`stage-card-${s.id}`}
-      onClick={() => onEdit(s)}
-    >
-      {/* Deux lignes distinctes plutôt qu'une seule rangée qui poussait les
-          boutons hors de la carte sur les grilles à 2-3 colonnes : les
-          badges de statut (qui peuvent déjà être longs) ont leur propre
-          ligne avec flex-wrap, les actions (places/verrou/modifier/
-          supprimer) sont sur une seconde ligne dédiée, groupées à droite. */}
-      <div className="flex items-center flex-wrap gap-1.5 mb-2">
-        <Badge variant="outline" className={locked ? "border-red-300 text-red-700" : undefined}>{STATUT_LABELS[s.statut] || s.statut}</Badge>
-        {creneau && (
-          <Badge variant="outline" className="text-[10px] gap-1">
-            {creneau === "JOUR" ? <Sun size={10} /> : <Moon size={10} />} {creneau}
-          </Badge>
-        )}
-        {s.heure_debut && s.heure_fin && (
-          <span className="text-[10px] text-gray-400 whitespace-nowrap">{s.heure_debut}–{s.heure_fin}</span>
-        )}
-      </div>
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <button
-          onClick={(e) => { e.stopPropagation(); onViewRoster(s); }}
-          className={`text-xs flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-gray-100 min-w-0 shrink ${full ? "text-red-600 font-semibold" : "text-gray-500"}`}
-          title={`${s.nb_inscrits || 0} inscrit(s)${s.external_reserved ? ` + ${s.external_reserved} réservée(s) ailleurs` : ""} sur ${s.capacite_max} — ${placesRestantes} place(s) restante(s)`}
-          data-testid={`stage-roster-${s.id}`}
-        >
-          <Users size={12} className="shrink-0" />
-          <span className="truncate">{placesRestantes} rest. <span className="text-gray-400 font-normal">/{s.capacite_max}</span></span>
-        </button>
-        <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            onClick={(e) => { e.stopPropagation(); onToggleLock(s); }}
-            className={`transition-colors ${locked ? "text-red-600 hover:text-red-700" : "text-gray-300 hover:text-[#0a0a0a]"}`}
-            title={locked ? "Déverrouiller (réouvrir les inscriptions)" : "Déclarer complet (verrouiller les inscriptions)"}
-            data-testid={`stage-lock-${s.id}`}
-          >
-            {locked ? <Lock size={14} weight="fill" /> : <LockOpen size={14} />}
-          </button>
-          <PencilSimple size={14} className="text-gray-300 group-hover:text-[#d4af37] transition-colors shrink-0" />
-          <AlertDialog open={deletingId === s.id} onOpenChange={(v) => !v && setDeletingId(null)}>
-            <AlertDialogTrigger asChild>
-              <button
-                onClick={(e) => { e.stopPropagation(); setDeletingId(s.id); }}
-                className="text-gray-300 hover:text-red-600 transition-colors"
-                data-testid={`stage-delete-${s.id}`}
-              >
-                <Trash size={14} />
-              </button>
-            </AlertDialogTrigger>
-            <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Supprimer cette session ?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Cette action est irréversible et supprimera aussi les émargements liés à cette session.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel onClick={() => setDeletingId(null)}>Annuler</AlertDialogCancel>
-                <AlertDialogAction onClick={() => onDelete(s.id)} className="bg-red-600 hover:bg-red-700">Supprimer</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </div>
-      <h3 className="font-display font-bold leading-tight">{s.formation_titre}</h3>
-      <div className="text-xs text-gray-500 mt-3 space-y-1">
-        <p className="flex items-center gap-1"><Calendar size={12} /> {s.date_debut} → {s.date_fin}</p>
-        <p className="flex items-center gap-1"><MapPin size={12} /> {s.lieu_ville}</p>
-        {(() => {
-          const ids = s.animateur_ids?.length ? s.animateur_ids : (s.animateur_id ? [s.animateur_id] : []);
-          const names = ids.map((id) => animateurs.find((a) => a.id === id)?.name).filter(Boolean);
-          return names.length ? <p className="text-[10px]">Formateur(s) : {names.join(", ")}</p> : null;
-        })()}
-      </div>
-      {muted && (
-        <button
-          onClick={(e) => { e.stopPropagation(); downloadStageAntsBundle(s); }}
-          className="mt-3 text-xs flex items-center gap-1 text-gray-500 hover:text-[#d4af37]"
-          title="Feuilles d'émargement signées de cette session, prêtes pour l'ANTS"
-          data-testid={`stage-ants-bundle-${s.id}`}
-        >
-          <FolderOpen size={12} /> Télécharger le dossier ANTS
-        </button>
-      )}
-    </Card>
   );
 }
