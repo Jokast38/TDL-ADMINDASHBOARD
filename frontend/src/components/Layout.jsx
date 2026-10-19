@@ -33,7 +33,7 @@ export const navAll = [
   { to: "/admin/agenda", label: "Agenda", icon: CalendarBlank, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique", "animateur"] },
   { to: "/admin/agenda-appel", label: "Agenda d'appel", icon: Headset, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
   { to: "/admin/centre-appel", label: "Centre d'appel", icon: PhoneCall, roles: ["admin", "responsable_admission", "agent_telephonique"] },
-  { to: "/admin/paiement-personnalise", label: "Paiement personnalisé", icon: CreditCard, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
+  { to: "/admin/paiement-personnalise", label: "Paiement personnalisé", icon: CreditCard, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
   { to: "/admin/modules", label: "Modules de formation", icon: Books, roles: ["admin", "responsable_admission"] },
   { to: "/admin/formateurs", label: "Formateurs", icon: PenNib, roles: ["admin", "responsable_admission", "agent_admin"] },
   { to: "/admin/inscriptions", label: "Inscriptions", icon: IdentificationCard, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },

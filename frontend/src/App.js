@@ -213,7 +213,7 @@ function App() {
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"]}><AdminLayout><CallAgenda /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/paiement-personnalise" element={
-              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"]}><AdminLayout><CustomPayment /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"]}><AdminLayout><CustomPayment /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/modules" element={
               <ProtectedRoute roles={["admin", "responsable_admission"]}><AdminLayout><Modules /></AdminLayout></ProtectedRoute>
