@@ -73,8 +73,29 @@ def _statut_to_qualification(lead: dict) -> str:
         if motif in ("plus_interesse", "non_qualifie"):
             return motif
         return "non_qualifie"
+    if statut == "a_relancer":
+        # "a_relancer" seul est ambigu : map_legacy_status y fait atterrir
+        # "interesse" (chaleur=chaud) et "a_relancer_1_an" (relancer_le à
+        # ~1 an) tout autant qu'un simple "a_relancer" classique. Sans
+        # regarder chaleur/relancer_le ici, un lead passé en "Intéressé"
+        # retombait systématiquement en "À relancer" au rechargement — la
+        # ligne semblait "disparaître" du filtre et l'appel se recomptait
+        # à chaque fois qu'on retentait de le qualifier.
+        if lead.get("chaleur") == "chaud":
+            return "interesse"
+        relancer_le = lead.get("relancer_le")
+        if relancer_le:
+            try:
+                target = datetime.fromisoformat(relancer_le.replace("Z", "+00:00"))
+                if target.tzinfo is None:
+                    target = target.replace(tzinfo=timezone.utc)
+                if (target - datetime.now(timezone.utc)).days > 300:
+                    return "a_relancer_1_an"
+            except (ValueError, AttributeError):
+                pass
+        return "a_relancer"
     return {
-        "a_contacter": "a_contacter", "a_relancer": "a_relancer", "rendez_vous": "a_relancer",
+        "a_contacter": "a_contacter", "rendez_vous": "a_relancer",
         "inscrit": "inscrit", "paye": "inscrit", "injoignable": "pas_de_reponse",
     }.get(statut, "a_contacter")
 
