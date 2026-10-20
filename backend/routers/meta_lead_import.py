@@ -18,7 +18,7 @@ import io
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 
@@ -35,6 +35,21 @@ from services.lead_followup import send_no_response_followup, NO_RESPONSE_QUALIF
 from services.activity import log_action
 from services.push import send_push_to_users
 from routers.leads import _category_for_interest
+from services.lead_migration import map_legacy_status
+
+
+async def _get_lead_or_meta(lead_id: str):
+    """Un `lead_id` de cet onglet peut désormais vivre dans l'une ou l'autre
+    collection selon qu'il a été importé avant ou après la Phase 1
+    d'unification (2026-10-20) — voir _statut_to_qualification. Renvoie
+    (nom_collection, document) ou (None, None)."""
+    doc = await db.meta_lead_imports.find_one({"id": lead_id})
+    if doc:
+        return "meta_lead_imports", doc
+    doc = await db.leads.find_one({"id": lead_id})
+    if doc:
+        return "leads", doc
+    return None, None
 
 router = APIRouter(prefix="/meta-lead-import", tags=["meta-lead-import"])
 
@@ -45,6 +60,25 @@ router = APIRouter(prefix="/meta-lead-import", tags=["meta-lead-import"])
 # 2026-10-20) : les nouveaux imports Meta doivent atterrir directement dans
 # Prospects avec ville/catégorie déjà déduites, pas seulement dans l'ancienne
 # collection db.meta_lead_imports qui devient legacy.
+# Correspondance inverse approximative statut (unifié, db.leads) ->
+# qualification (vocabulaire historique affiché dans cet onglet) — stop-gap
+# le temps de la refonte de la page Prospects (voir demande du 2026-10-21) :
+# les nouveaux imports Meta écrivent directement dans db.leads (statut
+# unifié) depuis la Phase 1, mais cet onglet encore utilisé quotidiennement
+# par les employés doit continuer à les afficher avec le même vocabulaire.
+def _statut_to_qualification(lead: dict) -> str:
+    statut = lead.get("statut")
+    motif = lead.get("motif_cloture")
+    if statut == "non_interesse":
+        if motif in ("plus_interesse", "non_qualifie"):
+            return motif
+        return "non_qualifie"
+    return {
+        "a_contacter": "a_contacter", "a_relancer": "a_relancer", "rendez_vous": "a_relancer",
+        "inscrit": "inscrit", "paye": "inscrit", "injoignable": "pas_de_reponse",
+    }.get(statut, "a_contacter")
+
+
 def _meta_ville(form_name: str, campaign_name: str) -> Optional[str]:
     text = f"{form_name or ''} {campaign_name or ''}".upper()
     if "EPINAY" in text or "ÉPINAY" in text:
@@ -248,6 +282,39 @@ async def list_meta_leads(
             {"phone": {"$regex": search, "$options": "i"}},
         ]
     docs = await db.meta_lead_imports.find(query, {"_id": 0}).sort("created_time", -1).to_list(5000)
+
+    # Depuis la Phase 1 (2026-10-20), les NOUVEAUX imports Meta écrivent
+    # directement dans db.leads plutôt que dans cette collection legacy —
+    # sans ce bloc, l'onglet "Prospects Meta" (toujours utilisé au quotidien)
+    # cesserait de montrer les imports les plus récents. On les rapatrie ici
+    # avec les mêmes noms de champs que l'ancien format.
+    leads_query: Dict[str, Any] = {"$or": [{"source": "meta"}, {"sources": "meta"}]}
+    if meta_account:
+        leads_query["$and"] = leads_query.get("$and", []) + [{"$or": [{"meta_account": meta_account}, {"compte_meta": meta_account}]}]
+    if campaign_name:
+        leads_query["$and"] = leads_query.get("$and", []) + [{"$or": [{"campaign_name": campaign_name}, {"campagne": campaign_name}]}]
+    if search:
+        leads_query["$and"] = leads_query.get("$and", []) + [{"$or": [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"email": {"$regex": search, "$options": "i"}},
+            {"phone": {"$regex": search, "$options": "i"}},
+        ]}]
+    from_leads = await db.leads.find(leads_query, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    for lead in from_leads:
+        lead_qualification = _statut_to_qualification(lead)
+        if qualification and lead_qualification != qualification:
+            continue
+        docs.append({
+            **lead,
+            "qualification": lead_qualification,
+            "meta_account": lead.get("meta_account") or lead.get("compte_meta"),
+            "campaign_name": lead.get("campaign_name") or lead.get("campagne"),
+            "created_time": lead.get("created_at"),
+            "relance_count": lead.get("relance_count") or 0,
+            "_from_leads": True,
+        })
+    docs.sort(key=lambda d: d.get("created_time") or "", reverse=True)
+
     for d in docs:
         # Même logique que routers/leads.py::list_leads — un lead déjà
         # qualifié avant la mise en place du compteur a forcément été traité
@@ -307,8 +374,17 @@ async def list_meta_leads(
             d["inscription_id"] = insc["id"]
             d["inscription_formation_title"] = insc.get("formation_title")
 
-    accounts = sorted([a for a in await db.meta_lead_imports.distinct("meta_account") if a])
-    campaigns = sorted([c for c in await db.meta_lead_imports.distinct("campaign_name") if c])
+    leads_meta_filter = {"$or": [{"source": "meta"}, {"sources": "meta"}]}
+    accounts = sorted({
+        *[a for a in await db.meta_lead_imports.distinct("meta_account") if a],
+        *[a for a in await db.leads.distinct("meta_account", leads_meta_filter) if a],
+        *[a for a in await db.leads.distinct("compte_meta", leads_meta_filter) if a],
+    })
+    campaigns = sorted({
+        *[c for c in await db.meta_lead_imports.distinct("campaign_name") if c],
+        *[c for c in await db.leads.distinct("campaign_name", leads_meta_filter) if c],
+        *[c for c in await db.leads.distinct("campagne", leads_meta_filter) if c],
+    })
     return {
         "items": docs, "total": len(docs),
         "qualification_options": QUALIFICATION_LABELS,
@@ -319,9 +395,16 @@ async def list_meta_leads(
 
 @router.patch("/{lead_id}")
 async def update_meta_lead(lead_id: str, payload: MetaLeadUpdate, user: dict = Depends(require_role(*ROLES_LEADS))):
-    doc = await db.meta_lead_imports.find_one({"id": lead_id})
+    collection_name, doc = await _get_lead_or_meta(lead_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Lead introuvable")
+    collection = db[collection_name]
+    if collection_name == "leads":
+        # Vocabulaire affiché ("qualification") -> champs unifiés réels sur
+        # le lead (statut/chaleur/motif_cloture) — voir services.
+        # lead_migration.map_legacy_status, même correspondance que la
+        # migration initiale.
+        doc = {**doc, "qualification": _statut_to_qualification(doc)}
     updates = {k: v for k, v in payload.model_dump(exclude_unset=True).items()}
     if not updates:
         return {**doc, "_id": None}
@@ -361,29 +444,40 @@ async def update_meta_lead(lead_id: str, payload: MetaLeadUpdate, user: dict = D
             "$each": [{"text": updates["notes"], "at": updates["notes_updated_at"], "by_name": user.get("name", "")}],
             "$slice": -20,
         }}
-    await db.meta_lead_imports.update_one({"id": lead_id}, mongo_update)
+    if collection_name == "leads" and "qualification" in updates:
+        # Traduit le vocabulaire affiché vers les champs unifiés réels —
+        # sans ça, "qualification" s'écrirait sur le lead sans jamais être
+        # relu (_statut_to_qualification ne regarde que statut/motif_cloture).
+        mapped = map_legacy_status(updates.pop("qualification"))
+        updates["statut"] = mapped["statut"]
+        updates["chaleur"] = mapped["chaleur"]
+        updates["motif_cloture"] = mapped["motif_cloture"]
+    await collection.update_one({"id": lead_id}, mongo_update)
     if notes_changed:
-        await log_action(user, "lead_note", "meta_lead", lead_id, {"name": doc.get("name"), "note": updates["notes"]})
+        await log_action(user, "lead_note", "meta_lead", lead_id, {"name": doc.get("name"), "note": updates.get("notes")})
     if updates.get("qualification") == NO_RESPONSE_QUALIFICATION and doc.get("qualification") != NO_RESPONSE_QUALIFICATION:
         await send_no_response_followup(doc.get("name"), doc.get("email"))
     if qualification_changed:
         await log_action(user, "lead_qualifie", "meta_lead", lead_id, {
-            "name": doc.get("name"), "qualification": updates["qualification"],
+            "name": doc.get("name"), "qualification": payload.qualification,
         })
-        if updates["qualification"] == "inscrit":
+        if payload.qualification == "inscrit":
             await send_push_to_users(
                 [user["id"]], "🎉 Lead converti !",
                 f"{doc.get('name') or 'Un prospect'} vient d'être marqué Inscrit — bravo !", "/admin/marketing",
             )
-    doc = await db.meta_lead_imports.find_one({"id": lead_id}, {"_id": 0})
+    doc = await collection.find_one({"id": lead_id}, {"_id": 0})
+    if collection_name == "leads" and doc:
+        doc["qualification"] = _statut_to_qualification(doc)
     return doc
 
 
 @router.delete("/{lead_id}")
 async def delete_meta_lead(lead_id: str, user: dict = Depends(require_role(*ROLES_LEADS))):
-    result = await db.meta_lead_imports.delete_one({"id": lead_id})
-    if not result.deleted_count:
+    collection_name, doc = await _get_lead_or_meta(lead_id)
+    if not doc:
         raise HTTPException(status_code=404, detail="Lead introuvable")
+    await db[collection_name].delete_one({"id": lead_id})
     return {"ok": True}
 
 
@@ -395,7 +489,7 @@ async def enroll_meta_lead(lead_id: str, payload: MetaLeadEnrollIn, request: Req
     carte Trello, email de confirmation générique). On envoie ensuite un
     second email, court, qui précise la session retenue (dates/lieu) —
     l'email générique de create_inscription ne les mentionne pas."""
-    doc = await db.meta_lead_imports.find_one({"id": lead_id})
+    collection_name, doc = await _get_lead_or_meta(lead_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Lead introuvable")
     if not doc.get("email"):
@@ -434,9 +528,14 @@ async def enroll_meta_lead(lead_id: str, payload: MetaLeadEnrollIn, request: Req
         )
         await send_email(doc["email"], "📅 Votre session est confirmée — TDL Formation", render_branded_email(body))
 
-    await db.meta_lead_imports.update_one(
-        {"id": lead_id},
-        {"$set": {"qualification": "inscrit", "inscription_id": inscription.get("id") if isinstance(inscription, dict) else None, "updated_at": now_iso()}},
-    )
-    doc = await db.meta_lead_imports.find_one({"id": lead_id}, {"_id": 0})
+    inscription_id = inscription.get("id") if isinstance(inscription, dict) else None
+    update_fields = {"inscription_id": inscription_id, "updated_at": now_iso()}
+    if collection_name == "leads":
+        update_fields["statut"] = "inscrit"
+    else:
+        update_fields["qualification"] = "inscrit"
+    await db[collection_name].update_one({"id": lead_id}, {"$set": update_fields})
+    doc = await db[collection_name].find_one({"id": lead_id}, {"_id": 0})
+    if collection_name == "leads" and doc:
+        doc["qualification"] = _statut_to_qualification(doc)
     return doc
