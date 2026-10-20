@@ -309,6 +309,13 @@ async def list_meta_leads(
             "qualification": lead_qualification,
             "meta_account": lead.get("meta_account") or lead.get("compte_meta"),
             "campaign_name": lead.get("campaign_name") or lead.get("campagne"),
+            # Le filtre ville côté frontend (Marketing.jsx::metaVille) déduit
+            # la ville de `form_name` — sur db.leads ce champ n'existe qu'à
+            # l'intérieur de meta_details, jamais à plat. Sans ce remontage,
+            # les leads importés via la Phase 1 (db.leads) perdent leur
+            # différenciation par ville dans l'onglet Prospects Meta, alors
+            # que `ville` est pourtant déjà correctement renseigné en base.
+            "form_name": (lead.get("meta_details") or {}).get("form_name"),
             "created_time": lead.get("created_at"),
             "relance_count": lead.get("relance_count") or 0,
             "_from_leads": True,
