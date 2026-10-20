@@ -203,3 +203,41 @@ def merge_duplicate_docs(docs_in_priority_order: list) -> dict:
     merged["sources"] = sorted({s for d in docs_in_priority_order for s in (d.get("sources") or [])})
     merged["legacy_ids"] = {d.get("_origin", "unknown"): d.get("id") for d in docs_in_priority_order if d.get("id")}
     return merged
+
+
+def statut_to_qualification(lead: dict) -> str:
+    """Correspondance inverse statut unifié -> vocabulaire "qualification"
+    historique — seule source de vérité partagée entre Leads.jsx, l'onglet
+    Cosmosia et l'onglet Meta (demande du 2026-10-21 : les trois pages
+    affichaient/écrivaient chacune un champ différent — `status` legacy sur
+    Leads.jsx, `qualification` legacy sur Cosmosia, `statut` unifié traduit
+    côté Meta — donc qualifier un prospect sur une page ne se reflétait
+    jamais sur les deux autres. Toutes les pages doivent maintenant lire ET
+    écrire via cette seule fonction/le même champ `statut`."""
+    statut = lead.get("statut")
+    motif = lead.get("motif_cloture")
+    if statut == "non_interesse":
+        if motif in ("plus_interesse", "non_qualifie"):
+            return motif
+        return "non_qualifie"
+    if statut == "a_relancer":
+        # "a_relancer" seul est ambigu : map_legacy_status y fait atterrir
+        # "interesse" (chaleur=chaud) et "a_relancer_1_an" (relancer_le à
+        # ~1 an) tout autant qu'un simple "a_relancer" classique.
+        if lead.get("chaleur") == "chaud":
+            return "interesse"
+        relancer_le = lead.get("relancer_le")
+        if relancer_le:
+            try:
+                target = datetime.fromisoformat(relancer_le.replace("Z", "+00:00"))
+                if target.tzinfo is None:
+                    target = target.replace(tzinfo=timezone.utc)
+                if (target - datetime.now(timezone.utc)).days > 300:
+                    return "a_relancer_1_an"
+            except (ValueError, AttributeError):
+                pass
+        return "a_relancer"
+    return {
+        "a_contacter": "a_contacter", "rendez_vous": "a_relancer",
+        "inscrit": "inscrit", "paye": "inscrit", "injoignable": "pas_de_reponse",
+    }.get(statut, "a_contacter")

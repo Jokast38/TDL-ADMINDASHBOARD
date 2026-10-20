@@ -41,6 +41,18 @@ class InscriptionIn(BaseModel):
     # d'inscription (formulaire public générique, agent sur place...) ne
     # l'envoient pas et se voient appliquer le prix catalogue de la formation.
     price: Optional[float] = None
+    # Paramètres d'URL déposés par la campagne publicitaire (ex: Meta Ads,
+    # champ "Paramètres d'URL" au niveau de l'annonce) — captés côté
+    # frontend (lib/utm.js) et renvoyés tels quels ici pour pouvoir
+    # distinguer, dans les statistiques, plusieurs campagnes qui pointent
+    # toutes vers la même "money page" du site public (contrairement à
+    # `source`/`fbc` qui ne distinguent que la page et le canal Meta, pas
+    # la campagne/l'annonce précise).
+    utm_source: Optional[str] = None
+    utm_medium: Optional[str] = None
+    utm_campaign: Optional[str] = None
+    utm_content: Optional[str] = None
+    utm_term: Optional[str] = None
 
 
 class InscriptionUpdate(BaseModel):

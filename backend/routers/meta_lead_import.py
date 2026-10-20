@@ -35,7 +35,7 @@ from services.lead_followup import send_no_response_followup, NO_RESPONSE_QUALIF
 from services.activity import log_action
 from services.push import send_push_to_users
 from routers.leads import _category_for_interest
-from services.lead_migration import map_legacy_status
+from services.lead_migration import map_legacy_status, statut_to_qualification as _statut_to_qualification
 
 
 async def _get_lead_or_meta(lead_id: str):
@@ -60,44 +60,11 @@ router = APIRouter(prefix="/meta-lead-import", tags=["meta-lead-import"])
 # 2026-10-20) : les nouveaux imports Meta doivent atterrir directement dans
 # Prospects avec ville/catégorie déjà déduites, pas seulement dans l'ancienne
 # collection db.meta_lead_imports qui devient legacy.
-# Correspondance inverse approximative statut (unifié, db.leads) ->
-# qualification (vocabulaire historique affiché dans cet onglet) — stop-gap
-# le temps de la refonte de la page Prospects (voir demande du 2026-10-21) :
-# les nouveaux imports Meta écrivent directement dans db.leads (statut
-# unifié) depuis la Phase 1, mais cet onglet encore utilisé quotidiennement
-# par les employés doit continuer à les afficher avec le même vocabulaire.
-def _statut_to_qualification(lead: dict) -> str:
-    statut = lead.get("statut")
-    motif = lead.get("motif_cloture")
-    if statut == "non_interesse":
-        if motif in ("plus_interesse", "non_qualifie"):
-            return motif
-        return "non_qualifie"
-    if statut == "a_relancer":
-        # "a_relancer" seul est ambigu : map_legacy_status y fait atterrir
-        # "interesse" (chaleur=chaud) et "a_relancer_1_an" (relancer_le à
-        # ~1 an) tout autant qu'un simple "a_relancer" classique. Sans
-        # regarder chaleur/relancer_le ici, un lead passé en "Intéressé"
-        # retombait systématiquement en "À relancer" au rechargement — la
-        # ligne semblait "disparaître" du filtre et l'appel se recomptait
-        # à chaque fois qu'on retentait de le qualifier.
-        if lead.get("chaleur") == "chaud":
-            return "interesse"
-        relancer_le = lead.get("relancer_le")
-        if relancer_le:
-            try:
-                target = datetime.fromisoformat(relancer_le.replace("Z", "+00:00"))
-                if target.tzinfo is None:
-                    target = target.replace(tzinfo=timezone.utc)
-                if (target - datetime.now(timezone.utc)).days > 300:
-                    return "a_relancer_1_an"
-            except (ValueError, AttributeError):
-                pass
-        return "a_relancer"
-    return {
-        "a_contacter": "a_contacter", "rendez_vous": "a_relancer",
-        "inscrit": "inscrit", "paye": "inscrit", "injoignable": "pas_de_reponse",
-    }.get(statut, "a_contacter")
+# _statut_to_qualification est désormais importée de services.lead_migration
+# (statut_to_qualification) — déplacée là-bas pour être réutilisée par
+# routers/leads.py aussi (demande du 2026-10-21 : Leads.jsx, Cosmosia et
+# Meta doivent tous les trois lire/écrire via la même fonction/le même champ
+# `statut`, au lieu de chacun son propre champ qualification/status legacy).
 
 
 def _meta_ville(form_name: str, campaign_name: str) -> Optional[str]:

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { captureUtmParams, getUtmParams } from "@/lib/utm";
 
 /* =========================
    CONFIG AXIOS UNIQUE
@@ -13,6 +14,10 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+// Capté une seule fois, au premier chargement de ce module (donc avant tout
+// appel API, quelle que soit la page d'entrée) — voir lib/utm.js.
+captureUtmParams();
+
 /* =========================
    AUTH INTERCEPTOR
 ========================= */
@@ -22,6 +27,17 @@ api.interceptors.request.use((config) => {
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  // Attribution de campagne (utm_source/utm_campaign/...) — injectée
+  // automatiquement sur toute création d'inscription publique plutôt que
+  // dans chaque landing page une à une, pour que la mise en place côté
+  // Meta Ads (ajout de paramètres d'URL) profite immédiatement à TOUTES
+  // les "money pages" existantes et futures. N'écrase jamais une valeur que
+  // l'appelant aurait déjà explicitement fournie.
+  if (config.method === "post" && config.url === "/inscriptions" && config.data) {
+    const utm = getUtmParams();
+    config.data = { ...utm, ...config.data };
   }
 
   return config;

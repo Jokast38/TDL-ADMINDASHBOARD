@@ -26,25 +26,21 @@ import { canonicalizeInterest } from "@/lib/leadInterest";
 
 
 // ─── Statuts ──────────────────────────────────────────────────────────────────
-const STATUS_LABEL = {
-  nouveau:       "Nouveau",
-  contacte:      "Contacté",
-  interesse:     "Intéressé",
-  pas_interesse: "Pas intéressé",
-  a_relancer:    "À relancer",
-  // Cas spécifique récupération de points : la réglementation n'autorise
-  // qu'un stage par an, donc un lead qui vient d'en faire un ne peut pas être
-  // réinscrit avant un an — distinct de "À relancer" (délai court, qualif.
-  // commerciale classique) pour ne pas le mélanger dans les relances du jour.
-  a_relancer_1_an: "À relancer dans 1 an",
-};
-const STATUS_COLOR = {
-  nouveau:       "bg-gray-100 text-gray-600",
-  contacte:      "bg-blue-100 text-blue-700",
-  interesse:     "bg-green-100 text-green-700",
-  pas_interesse: "bg-red-100 text-red-700",
-  a_relancer:    "bg-amber-100 text-amber-700",
+// Qualification unifiée (champ `statut`, voir services.lead_migration côté
+// backend) — même vocabulaire et mêmes couleurs que Marketing.jsx (onglets
+// Cosmosia/Meta, META_LEAD_QUALIF_COLORS), pour que le même prospect
+// qualifié depuis n'importe laquelle des 3 pages s'affiche identiquement
+// partout (demande du 2026-10-21 : avant ça, Leads.jsx lisait/écrivait un
+// champ `status` legacy complètement déconnecté des deux autres pages).
+const QUALIF_COLOR = {
+  a_contacter: "bg-gray-100 text-gray-600",
+  non_qualifie: "bg-gray-200 text-gray-500",
+  interesse: "bg-[#0B7238]/10 text-[#0B7238]",
+  pas_de_reponse: "bg-amber-100 text-amber-700",
+  a_relancer: "bg-blue-100 text-blue-700",
   a_relancer_1_an: "bg-purple-100 text-purple-700",
+  plus_interesse: "bg-red-100 text-red-700",
+  inscrit: "bg-green-600 text-white",
 };
 
 // ─── URLs TDL ─────────────────────────────────────────────────────────────────
@@ -416,7 +412,6 @@ export default function Leads() {
   // Redirection depuis le bilan détaillé d'un employé (EmployeeAudit.jsx) —
   // pré-remplit la recherche avec l'email/nom du lead concerné.
   const [q, setQ] = useState(location.state?.prefillSearch || "");
-  const [statusFilter, setStatusFilter] = useState("all");
   const [contactedFilter, setContactedFilter] = useState("all");
   const [callOnlyFilter, setCallOnlyFilter] = useState(false);
   const [interestFilter, setInterestFilter] = useState("all");
@@ -525,6 +520,33 @@ export default function Leads() {
   const [allInterests, setAllInterests] = useState([]);
   const [villeOptions, setVilleOptions] = useState([]);
   const [villeFilter, setVilleFilter] = useState("all");
+  // Vocabulaire de qualification unifié (voir QUALIF_COLOR) — mêmes options
+  // que les onglets Cosmosia/Meta de Marketing.jsx.
+  const [qualifOptions, setQualifOptions] = useState({});
+
+  // Onglets par origine (Pub Meta / Cosmosia / Site public / Sur place /
+  // Excel...) — réutilise le même regroupement serveur que CentreAppel.jsx
+  // (GET /leads/origins + core.config.canonicalize_lead_origin), car il
+  // existe des dizaines de valeurs brutes différentes de `source` (chaque
+  // import Excel crée une valeur par onglet mensuel).
+  const [origins, setOrigins] = useState([]);
+  const [originFilter, setOriginFilter] = useState("all");
+  const loadOrigins = () => api.get("/leads/origins").then(({ data }) => setOrigins(data || [])).catch(() => {});
+
+  // Cartes KPI + CA potentiel (maquette fournie par l'équipe) — rechargées
+  // à chaque changement du filtre ville, comme le reste du tableau.
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    const params = villeFilter !== "all" ? { ville: villeFilter } : {};
+    api.get("/leads/stats", { params }).then(({ data }) => setStats(data)).catch(() => {});
+  }, [villeFilter]);
+
+  // Filtre qualification (cartes KPI + menu déroulant + raccourci "À
+  // relancer") — sur le champ unifié `statut` (voir services.lead_migration
+  // côté backend), la SEULE source de vérité partagée avec l'onglet
+  // Cosmosia et l'onglet Meta depuis le 2026-10-21 (avant ça, Leads.jsx
+  // filtrait sur un champ `status` legacy disjoint des deux autres pages).
+  const [statutQuickFilter, setStatutQuickFilter] = useState("");
 
   // Rappel visuel des leads "à relancer" — popup animée à l'ouverture de la
   // page (une fois par session, pas à chaque re-render) plutôt qu'une
@@ -543,12 +565,13 @@ export default function Leads() {
     try {
       const params = { page: pageOverride ?? page, page_size: PAGE_SIZE };
       if (q) params.q = q;
-      if (statusFilter !== "all") params.status = statusFilter;
+      if (statutQuickFilter) params.statut = statutQuickFilter;
       if (contactedFilter !== "all") params.contacted = contactedFilter === "yes";
       if (callOnlyFilter) params.has_email = false;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       if (villeFilter !== "all") params.ville = villeFilter;
+      if (originFilter !== "all") params.origin = originFilter;
       if (interestFilter !== "all") {
         // Le regroupement (VTC, Taxi, ...) est calculé côté client via
         // canonicalizeInterest() ; on envoie au backend les valeurs brutes
@@ -579,7 +602,7 @@ export default function Leads() {
   useEffect(() => {
     if (isFirstFilterRun.current) { isFirstFilterRun.current = false; return; }
     if (page === 1) load(1); else setPage(1);
-  }, [statusFilter, contactedFilter, callOnlyFilter, interestFilter, villeFilter, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [statutQuickFilter, contactedFilter, callOnlyFilter, interestFilter, villeFilter, originFilter, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
   // Recherche texte : debounce, et retour à la page 1 (sinon "page 3" pourrait
   // se retrouver vide après une nouvelle recherche plus étroite).
   useEffect(() => {
@@ -601,9 +624,11 @@ export default function Leads() {
   useEffect(() => {
     api.get("/leads/interests").then(({ data }) => setAllInterests(data)).catch(() => {});
     api.get("/leads/villes").then(({ data }) => setVilleOptions(data)).catch(() => {});
-  }, []);
+    api.get("/meta-lead-import/qualification-options").then(({ data }) => setQualifOptions(data)).catch(() => {});
+    loadOrigins();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    api.get("/leads", { params: { status: "a_relancer", page: 1, page_size: 1 } })
+    api.get("/leads", { params: { statut: "a_relancer", page: 1, page_size: 1 } })
       .then(({ data }) => {
         setRelanceDueCount(data.total || 0);
         // Une seule popup par jour/session (sessionStorage) — sinon elle
@@ -1125,7 +1150,7 @@ export default function Leads() {
                 <Button
                   size="sm"
                   className="h-7 text-xs bg-amber-500 hover:bg-amber-600 text-white"
-                  onClick={() => { setStatusFilter("a_relancer"); setShowRelancePopup(false); }}
+                  onClick={() => { setStatutQuickFilter("a_relancer"); setShowRelancePopup(false); }}
                 >
                   Voir la liste
                 </Button>
@@ -1607,6 +1632,69 @@ export default function Leads() {
         </div>
       </div>
 
+      {/* ── Onglets d'origine (Pub Meta / Cosmosia / Site public / Sur
+          place / Excel...) — même regroupement serveur que
+          CentreAppel.jsx. ── */}
+      <div className="flex items-center gap-1.5 flex-wrap" data-testid="leads-origin-tabs">
+        <button
+          onClick={() => setOriginFilter("all")}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium border ${originFilter === "all" ? "bg-[#0a0a0a] text-white border-[#0a0a0a]" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"}`}
+        >
+          Toutes origines
+        </button>
+        {origins.map((o) => (
+          <button
+            key={o.key}
+            onClick={() => setOriginFilter(o.key)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border ${originFilter === o.key ? "bg-[#0a0a0a] text-white border-[#0a0a0a]" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"}`}
+            data-testid={`leads-origin-${o.key}`}
+          >
+            {o.label} <span className="opacity-60">({o.count})</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Cartes KPI + CA potentiel ── */}
+      {stats && (
+        <div data-testid="leads-stats">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {stats.buckets.map((b) => (
+              <Card
+                key={b.statut}
+                className={`p-4 cursor-pointer hover:border-gray-300 transition-colors ${statutQuickFilter === b.statut ? "border-gray-400 ring-1 ring-gray-300" : ""}`}
+                onClick={() => setStatutQuickFilter((cur) => (cur === b.statut ? "" : b.statut))}
+              >
+                <p className="text-sm text-gray-500 flex items-center gap-1.5">
+                  <span
+                    className="h-2 w-2 rounded-full inline-block"
+                    style={{
+                      backgroundColor: { a_contacter: "#9ca3af", a_relancer: "#3b82f6", rendez_vous: "#f59e0b", inscrit: "#22c55e" }[b.statut],
+                    }}
+                  />
+                  {b.label}
+                </p>
+                <p className="font-display text-2xl font-bold mt-1">{b.montant.toLocaleString("fr-FR")} €</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {b.count} {b.statut === "inscrit" ? (b.count > 1 ? "inscrits" : "inscrit") : (b.count > 1 ? "prospects" : "prospect")}
+                </p>
+              </Card>
+            ))}
+          </div>
+          {stats.ca_potentiel > 0 && (
+            <div className="mt-3 rounded-md bg-blue-50 border border-blue-100 px-4 py-2.5 flex items-center justify-between flex-wrap gap-2 text-sm">
+              <p>
+                <span className="font-semibold">{stats.ca_potentiel.toLocaleString("fr-FR")} €</span> de CA potentiel à travailler sur les leads non inscrits
+              </p>
+              {stats.grille_permis?.length > 0 && (
+                <p className="text-gray-500">
+                  {stats.grille_permis.map((g) => `${g.ville} : ${g.prix} €`).join(" · ")}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Filtres ── */}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative w-64">
@@ -1637,11 +1725,11 @@ export default function Leads() {
           )}
         </div>
 
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statutQuickFilter || "all"} onValueChange={(v) => setStatutQuickFilter(v === "all" ? "" : v)}>
           <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tous les statuts</SelectItem>
-            {Object.entries(STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+            <SelectItem value="all">Toutes qualifications</SelectItem>
+            {Object.entries(qualifOptions).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
 
@@ -1860,8 +1948,8 @@ export default function Leads() {
           (les deux pilotent le même état `interestFilter`). */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1" data-testid="leads-interest-tabs">
         <button
-          onClick={() => setStatusFilter(statusFilter === "a_relancer" ? "all" : "a_relancer")}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors inline-flex items-center gap-1.5 ${statusFilter === "a_relancer" ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"}`}
+          onClick={() => setStatutQuickFilter((cur) => (cur === "a_relancer" ? "" : "a_relancer"))}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-colors inline-flex items-center gap-1.5 ${statutQuickFilter === "a_relancer" ? "bg-amber-500 text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"}`}
           data-testid="leads-tab-relance"
         >
           <Phone size={12} /> À relancer{relanceDueCount > 0 ? ` (${relanceDueCount})` : ""}
@@ -1945,12 +2033,12 @@ export default function Leads() {
                     </div>
                   </td>
                   <td className="py-3 px-4">
-                    <Select value={l.status} onValueChange={(v) => updateLead(l.id, { status: v })}>
-                      <SelectTrigger className={`h-7 text-xs w-32 border-0 ${STATUS_COLOR[l.status] || ""}`}>
+                    <Select value={l.qualification || "a_contacter"} onValueChange={(v) => updateLead(l.id, { qualification: v })}>
+                      <SelectTrigger className={`h-7 text-xs w-32 border-0 ${QUALIF_COLOR[l.qualification] || ""}`}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Object.entries(STATUS_LABEL).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                        {Object.entries(qualifOptions).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </td>

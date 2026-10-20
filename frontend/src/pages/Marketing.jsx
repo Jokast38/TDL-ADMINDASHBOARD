@@ -654,6 +654,22 @@ function CosmosiaTab() {
   const [paymentLinkTarget, setPaymentLinkTarget] = useState(null);
   const [relanceDueCount, setRelanceDueCount] = useState(0);
 
+  // Cartes KPI + CA potentiel (même maquette que Leads.jsx) — mêmes
+  // statuts unifiés puisque la migration Phase 1 a renseigné `statut` sur
+  // tous les leads, y compris ceux d'origine Cosmosia.
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    const params = { source: "cosmosia" };
+    if (villeFilter) params.ville = villeFilter;
+    api.get("/leads/stats", { params }).then(({ data }) => setStats(data)).catch(() => {});
+  }, [villeFilter]);
+
+  // Filtre "vue rapide" déclenché par un clic sur une carte KPI — distinct de
+  // `qualifFilter` (vocabulaire legacy a_contacter/interesse/pas_de_reponse/
+  // a_relancer_1_an...) : les cartes utilisent le champ unifié `statut`, pas
+  // la même vocabulaire ni le même champ (voir même distinction sur Leads.jsx).
+  const [statutQuickFilter, setStatutQuickFilter] = useState("");
+
   // Numéro de séquence de requête — ignore une réponse réseau arrivée après
   // qu'une requête plus récente a déjà été lancée (voir même correctif sur
   // Leads.jsx, demande du 2026-10-19 : sans ça, un changement de filtre qui
@@ -669,6 +685,7 @@ function CosmosiaTab() {
     if (campaignFilter) params.campaign = campaignFilter;
     if (villeFilter) params.ville = villeFilter;
     if (qualifFilter) params.qualification = qualifFilter;
+    if (statutQuickFilter) params.statut = statutQuickFilter;
     if (interestFilter !== "all") {
       const rawValues = allInterests.filter((raw) => canonicalizeInterest(raw) === interestFilter);
       params.interest_in = (rawValues.length ? rawValues : [interestFilter]).join("|");
@@ -686,7 +703,7 @@ function CosmosiaTab() {
   useEffect(() => {
     if (isFirstCosmosiaFilterRun.current) { isFirstCosmosiaFilterRun.current = false; return; }
     if (page === 1) load(1); else setPage(1);
-  }, [search, campaignFilter, villeFilter, qualifFilter, interestFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, campaignFilter, villeFilter, qualifFilter, statutQuickFilter, interestFilter]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     api.get("/leads/campaigns", { params: { source: "cosmosia" } }).then(({ data }) => setCampaignOptions(data)).catch(() => {});
     api.get("/leads/villes").then(({ data }) => setVilleOptions(data)).catch(() => {});
@@ -791,6 +808,47 @@ function CosmosiaTab() {
           <input type="file" accept=".csv" className="hidden" onChange={pickImportFile} disabled={importing} data-testid="cosmosia-import-input" />
         </label>
       </div>
+
+      {/* ── Cartes KPI + CA potentiel (même maquette que Leads.jsx) ── */}
+      {stats && (
+        <div data-testid="cosmosia-stats">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {stats.buckets.map((b) => (
+              <Card
+                key={b.statut}
+                className={`p-4 cursor-pointer hover:border-gray-300 transition-colors ${statutQuickFilter === b.statut ? "border-gray-400 ring-1 ring-gray-300" : ""}`}
+                onClick={() => setStatutQuickFilter((cur) => (cur === b.statut ? "" : b.statut))}
+              >
+                <p className="text-sm text-gray-500 flex items-center gap-1.5">
+                  <span
+                    className="h-2 w-2 rounded-full inline-block"
+                    style={{
+                      backgroundColor: { a_contacter: "#9ca3af", a_relancer: "#3b82f6", rendez_vous: "#f59e0b", inscrit: "#22c55e" }[b.statut],
+                    }}
+                  />
+                  {b.label}
+                </p>
+                <p className="font-display text-2xl font-bold mt-1">{b.montant.toLocaleString("fr-FR")} €</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {b.count} {b.statut === "inscrit" ? (b.count > 1 ? "inscrits" : "inscrit") : (b.count > 1 ? "prospects" : "prospect")}
+                </p>
+              </Card>
+            ))}
+          </div>
+          {stats.ca_potentiel > 0 && (
+            <div className="mt-3 rounded-md bg-blue-50 border border-blue-100 px-4 py-2.5 flex items-center justify-between flex-wrap gap-2 text-sm">
+              <p>
+                <span className="font-semibold">{stats.ca_potentiel.toLocaleString("fr-FR")} €</span> de CA potentiel à travailler sur les leads non inscrits
+              </p>
+              {stats.grille_permis?.length > 0 && (
+                <p className="text-gray-500">
+                  {stats.grille_permis.map((g) => `${g.ville} : ${g.prix} €`).join(" · ")}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-3 flex-wrap">
         <Input

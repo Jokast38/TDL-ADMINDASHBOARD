@@ -152,6 +152,9 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         "session": payload.session or "", "center": payload.center or "",
         "stage_id": payload.stage_id, "stage_titre": stage_titre,
         "financing_mode": payload.financing_mode or "",
+        "utm_source": payload.utm_source or "", "utm_medium": payload.utm_medium or "",
+        "utm_campaign": payload.utm_campaign or "", "utm_content": payload.utm_content or "",
+        "utm_term": payload.utm_term or "",
     }
     if acting_staff:
         # Posé dès la création (pas seulement au premier changement de tag

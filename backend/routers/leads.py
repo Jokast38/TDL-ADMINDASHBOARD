@@ -14,6 +14,7 @@ from services.activity import log_action
 from services.lead_followup import send_no_response_followup, NO_RESPONSE_QUALIFICATION
 from services.push import send_push_to_users
 from services.sms import send_sms
+from services.lead_migration import map_legacy_status, statut_to_qualification
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -474,6 +475,7 @@ async def list_leads(
     campaign: Optional[str] = None,
     ville: Optional[str] = None,
     qualification: Optional[str] = None,
+    statut: Optional[str] = None,
     pipeline_status: Optional[str] = None,
     assigned_to: Optional[str] = None,
     origin: Optional[str] = None,
@@ -497,6 +499,16 @@ async def list_leads(
     # deux mots-clés "Epinay"/"Creil" plutôt que la valeur exacte stockée.
     if ville: query["ville"] = {"$regex": re.escape(ville), "$options": "i"}
     if qualification: query["qualification"] = qualification
+    if statut:
+        # Filtre sur le champ unifié (voir services.lead_migration) —
+        # distinct du legacy `status`/`qualification` : les cartes KPI
+        # (vue "Vue rapide" au-dessus du tableau) utilisent ce vocabulaire,
+        # pas l'ancien, pour fonctionner aussi sur les leads créés après la
+        # migration qui n'ont jamais eu de `status` legacy renseigné.
+        if statut == "inscrit":
+            query["statut"] = {"$in": ["inscrit", "paye"]}
+        else:
+            query["statut"] = statut
     if pipeline_status: query["pipeline_status"] = pipeline_status
     if assigned_to: query["assigned_to"] = assigned_to
     # Filtre par formation côté Centre d'appel (CentreAppel.jsx) — `category`
@@ -562,7 +574,7 @@ async def list_leads(
         ]
 
     cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, source, campaign, ville, qualification,
-                 pipeline_status, assigned_to, origin, category, page, page_size,
+                 statut, pipeline_status, assigned_to, origin, category, page, page_size,
                  tuple(sorted(assigned)) if scoped else None)
     cached = _leads_cache_get(cache_key)
     if cached is not None:
@@ -600,6 +612,15 @@ async def list_leads(
         if count == 0 and already_handled:
             count = 1
         i["relance_count"] = count
+        # Qualification affichée/éditable — calculée depuis le champ unifié
+        # `statut` (services.lead_migration.statut_to_qualification), la
+        # SEULE source de vérité partagée avec l'onglet Cosmosia et l'onglet
+        # Meta (voir demande du 2026-10-21 : qualifier un prospect sur une
+        # page ne se reflétait pas sur les deux autres car chacune lisait/
+        # écrivait un champ différent). Écrase l'ancien champ `qualification`
+        # legacy éventuellement encore présent sur le doc, qui ne doit plus
+        # être lu nulle part côté affichage.
+        i["qualification"] = statut_to_qualification(i)
 
     result = {"items": items, "total": total, "page": page, "page_size": page_size, "pages": max((total + page_size - 1) // page_size, 1)}
     _leads_cache_set(cache_key, result)
@@ -650,6 +671,71 @@ async def list_distinct_villes(user: dict = Depends(require_role(*ROLES_LEADS)))
     values = await db.leads.distinct("ville", {"ville": {"$nin": [None, ""]}})
     _leads_cache_set(cache_key, values)
     return values
+
+
+_STATS_BUCKETS = [
+    ("a_contacter", "À contacter"),
+    ("a_relancer", "À relancer"),
+    ("rendez_vous", "Rendez-vous"),
+    ("inscrit", "Inscrits"),
+]
+
+
+@router.get("/stats")
+async def leads_stats(ville: Optional[str] = None, source: Optional[str] = None, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Cartes KPI + CA potentiel du tableau de bord Prospects (maquette
+    fournie par l'équipe) : nombre de prospects et valeur potentielle par
+    statut, et un total de CA potentiel sur les leads pas encore inscrits.
+
+    Portée volontairement limitée pour la valeur monétaire : seule la
+    catégorie PERMIS (Récupération de points) a une grille de prix fiable et
+    sans ambiguïté par ville (db.prix_formation_ville, Creil 220€ /
+    Épinay-sur-Seine 179€ — voir services.lead_migration.compute_prix_effectif).
+    Les autres catégories (VTC_TAXI, CACES, SSIAP...) ont plusieurs formations
+    à des prix très différents sous la même catégorie en base : on ne peut
+    pas deviner laquelle s'applique à un lead donné sans lien explicite
+    formation_id sur le lead, donc leur valeur n'est comptée que si
+    `prix_personnalise` a été saisi à la main sur la fiche."""
+    from services.lead_migration import compute_prix_effectif
+
+    query: Dict[str, Any] = {"is_test": {"$ne": True}}
+    if ville:
+        query["ville"] = ville
+    if source:
+        query["source"] = source
+    leads = await db.leads.find(query, {"_id": 0, "statut": 1, "chaleur": 1, "category": 1, "ville": 1, "prix_personnalise": 1}).to_list(20000)
+
+    permis_formation_id = "e22bcca0-6656-4335-b6a6-8a06235a2770"
+    permis_catalogue = 200.0
+    grille_rows = await db.prix_formation_ville.find({"formation_id": permis_formation_id}, {"_id": 0}).to_list(100)
+    grille = {row["ville"]: row["prix"] for row in grille_rows}
+
+    def _montant(lead: dict) -> float:
+        if lead.get("category") == "PERMIS":
+            return compute_prix_effectif(lead.get("prix_personnalise"), grille.get(lead.get("ville")), permis_catalogue)
+        if lead.get("prix_personnalise") is not None:
+            return lead["prix_personnalise"]
+        return 0.0
+
+    buckets = {key: {"count": 0, "montant": 0.0} for key, _ in _STATS_BUCKETS}
+    for lead in leads:
+        statut = lead.get("statut") or "a_contacter"
+        key = "inscrit" if statut in ("inscrit", "paye") else statut
+        if key not in buckets:
+            continue
+        buckets[key]["count"] += 1
+        buckets[key]["montant"] += _montant(lead)
+
+    ca_potentiel = sum(buckets[k]["montant"] for k in ("a_contacter", "a_relancer", "rendez_vous"))
+
+    return {
+        "buckets": [
+            {"statut": key, "label": label, "count": buckets[key]["count"], "montant": round(buckets[key]["montant"])}
+            for key, label in _STATS_BUCKETS
+        ],
+        "ca_potentiel": round(ca_potentiel),
+        "grille_permis": [{"ville": v, "prix": p} for v, p in grille.items()],
+    }
 
 
 @router.get("/campaigns")
@@ -714,7 +800,23 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
         update["notes_updated_by_name"] = user.get("name", "")
     # Qui a traité ce lead en dernier — colonne "Traité par" côté dashboard
     # (Marketing.jsx, onglet Cosmosia) + traçage dans le journal d'activité.
-    qualification_changed = "qualification" in update and update["qualification"] != existing.get("qualification")
+    #
+    # La "qualification" envoyée ici (vocabulaire historique : a_contacter/
+    # interesse/a_relancer/a_relancer_1_an/inscrit/...) n'est PLUS stockée
+    # telle quelle — elle est traduite vers les champs unifiés statut/
+    # chaleur/motif_cloture (services.lead_migration.map_legacy_status),
+    # la SEULE source de vérité partagée avec l'onglet Cosmosia et l'onglet
+    # Meta (voir demande du 2026-10-21 : qualifier un prospect sur une page
+    # ne se reflétait pas sur les deux autres car chacune lisait/écrivait un
+    # champ différent — `status` ici, `qualification` legacy côté Cosmosia,
+    # `statut` côté Meta).
+    new_qualification = update.get("qualification")
+    qualification_changed = new_qualification is not None and new_qualification != statut_to_qualification(existing)
+    if "qualification" in update:
+        mapped = map_legacy_status(update.pop("qualification"))
+        update["statut"] = mapped["statut"]
+        update["chaleur"] = mapped["chaleur"]
+        update["motif_cloture"] = mapped["motif_cloture"]
     if qualification_changed:
         update["qualified_by"] = user["id"]
         update["qualified_by_name"] = user.get("name", "")
@@ -761,13 +863,13 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
     _leads_cache_clear()
     if notes_changed:
         await log_action(user, "lead_note", "lead", lid, {"name": existing.get("name"), "note": update["notes"]})
-    if update.get("qualification") == NO_RESPONSE_QUALIFICATION and existing.get("qualification") != NO_RESPONSE_QUALIFICATION:
+    if new_qualification == NO_RESPONSE_QUALIFICATION and statut_to_qualification(existing) != NO_RESPONSE_QUALIFICATION:
         await send_no_response_followup(existing.get("name"), existing.get("email"))
     if qualification_changed:
         await log_action(user, "lead_qualifie", "lead", lid, {
-            "name": existing.get("name"), "qualification": update["qualification"],
+            "name": existing.get("name"), "qualification": new_qualification,
         })
-        if update["qualification"] == "inscrit":
+        if new_qualification == "inscrit":
             await send_push_to_users(
                 [user["id"]], "🎉 Lead converti !",
                 f"{existing.get('name') or 'Un prospect'} vient d'être marqué Inscrit — bravo !", "/admin/marketing",
@@ -781,7 +883,10 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
         await log_action(user, "lead_assigne", "lead", lid, {
             "name": existing.get("name"), "assigned_to_name": assignee.get("name") if assignee else None,
         })
-    return await db.leads.find_one({"id": lid}, {"_id": 0})
+    result = await db.leads.find_one({"id": lid}, {"_id": 0})
+    if result:
+        result["qualification"] = statut_to_qualification(result)
+    return result
 
 
 @router.delete("/{lid}")
