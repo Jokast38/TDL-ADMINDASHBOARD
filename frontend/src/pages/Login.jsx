@@ -69,20 +69,6 @@ export default function Login() {
             CACES, Permis, Auto-école, SSIAP, VTC/Taxi, KAMI STREET — tout est centralisé.
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-4 text-xs">
-          <div className="border-l-2 border-white/30 pl-3">
-            <p className="overline text-white/60">Workflow</p>
-            <p className="font-semibold mt-1">Inscription → ANTS</p>
-          </div>
-          <div className="border-l-2 border-white/30 pl-3">
-            <p className="overline text-white/60">Suivi</p>
-            <p className="font-semibold mt-1">Trello Kanban</p>
-          </div>
-          <div className="border-l-2 border-white/30 pl-3">
-            <p className="overline text-white/60">Agent IA</p>
-            <p className="font-semibold mt-1">Claude Sonnet 4.5</p>
-          </div>
-        </div>
         <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-[#d4af37]/20 rounded-full blur-3xl" />
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#d4af37]/20 rounded-full blur-3xl" />
       </div>

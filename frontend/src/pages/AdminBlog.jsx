@@ -12,6 +12,43 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, PencilSimple, Trash, Sparkle, Eye, ArrowSquareOut, MagicWand, UploadSimple, Image as ImageIcon, CloudArrowDown, CheckCircle, CloudArrowUp, ArrowCounterClockwise, X, ArrowLineDown, ArrowsClockwise } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import CoverImage from "@/components/CoverImage";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
+import { blogSanitizeSchema } from "@/lib/blogMarkdown";
+
+// Même pipeline de rendu que la page publique (BlogPost.jsx) — l'aperçu
+// doit montrer fidèlement ce que verra le lecteur, pas une approximation.
+function BlogContentPreview({ content }) {
+  if (!content?.trim()) {
+    return <p className="text-sm text-gray-400 border border-dashed border-gray-200 rounded-md p-6 text-center">Rien à prévisualiser pour l'instant.</p>;
+  }
+  return (
+    <div className="border border-gray-200 rounded-md p-5 max-h-[500px] overflow-y-auto">
+      <div className="prose prose-sm max-w-none
+        prose-headings:font-display prose-headings:font-bold prose-headings:tracking-tight
+        prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-3
+        prose-h3:text-lg prose-h3:mt-6 prose-h3:mb-2
+        prose-p:text-gray-700 prose-p:leading-relaxed
+        prose-a:text-[#d4af37] prose-a:font-medium prose-a:no-underline hover:prose-a:underline
+        prose-strong:text-gray-900
+        prose-ul:my-3 prose-li:my-0.5
+        prose-blockquote:border-l-[#d4af37] prose-blockquote:bg-gray-50 prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:not-italic
+      ">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeRaw, [rehypeSanitize, blogSanitizeSchema]]}
+          components={{
+            img: ({ node, ...props }) => <img {...props} loading="lazy" className="rounded-md" />,
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+    </div>
+  );
+}
 
 const CATEGORIES = ["actualites", "conseils", "formations", "kami", "seo"];
 const CONTENT_IMAGE_RE = /!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/g;
@@ -50,6 +87,8 @@ export default function AdminBlog() {
   // s'ouvrait jamais (observé en prod — le bouton "Choisir" ne faisait rien).
   const coverInputRef = useRef(null);
   const galleryInputRef = useRef(null);
+  const contentRef = useRef(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [fixingImages, setFixingImages] = useState(false);
   const [wpOpen, setWpOpen] = useState(false);
@@ -154,8 +193,32 @@ export default function AdminBlog() {
     setForm((f) => ({ ...f, images: (f.images || []).filter((u) => u !== url) }));
   };
 
+  // Insère au curseur plutôt qu'en fin de contenu — avant ce correctif,
+  // chaque image insérée via la galerie atterrissait systématiquement à la
+  // toute fin de l'article, quel que soit l'endroit où l'autrice avait
+  // positionné son curseur (voir signalement du 2026-10-20).
   const insertImageInContent = (url) => {
-    setForm((f) => ({ ...f, content: `${f.content}${f.content.endsWith("\n") || !f.content ? "" : "\n\n"}![](${url})\n` }));
+    const textarea = contentRef.current;
+    const markdown = `![](${url})`;
+    if (!textarea) {
+      setForm((f) => ({ ...f, content: `${f.content}${f.content.endsWith("\n") || !f.content ? "" : "\n\n"}${markdown}\n` }));
+      toast.success("Image insérée dans le contenu");
+      return;
+    }
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? start;
+    const before = form.content.slice(0, start);
+    const after = form.content.slice(end);
+    const needsLeadingBreak = before && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : "";
+    const needsTrailingBreak = after && !after.startsWith("\n") ? "\n\n" : "\n";
+    const insertion = `${needsLeadingBreak}${markdown}${needsTrailingBreak}`;
+    const nextContent = `${before}${insertion}${after}`;
+    setForm((f) => ({ ...f, content: nextContent }));
+    const caret = (before + insertion).length;
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(caret, caret);
+    });
     toast.success("Image insérée dans le contenu");
   };
 
@@ -498,8 +561,29 @@ export default function AdminBlog() {
                   )}
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="text-sm font-medium">Contenu (Markdown) *</label>
-                  <Textarea rows={14} value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} className="font-mono text-sm" data-testid="post-content" />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-sm font-medium">Contenu (Markdown) *</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowPreview((v) => !v)}
+                      className="text-xs font-medium text-gray-500 hover:text-[#d4af37] inline-flex items-center gap-1"
+                      data-testid="post-content-preview-toggle"
+                    >
+                      <Eye size={13} /> {showPreview ? "Revenir à l'édition" : "Aperçu avant publication"}
+                    </button>
+                  </div>
+                  {showPreview ? (
+                    <BlogContentPreview content={form.content} />
+                  ) : (
+                    <Textarea
+                      ref={contentRef}
+                      rows={14}
+                      value={form.content}
+                      onChange={(e) => setForm({ ...form, content: e.target.value })}
+                      className="font-mono text-sm"
+                      data-testid="post-content"
+                    />
+                  )}
                 </div>
                 <div className="sm:col-span-2">
                   <label className="text-sm font-medium">Tags (virgule)</label>

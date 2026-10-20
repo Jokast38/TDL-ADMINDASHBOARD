@@ -34,8 +34,24 @@ from services.email_template import render_branded_email
 from services.lead_followup import send_no_response_followup, NO_RESPONSE_QUALIFICATION
 from services.activity import log_action
 from services.push import send_push_to_users
+from routers.leads import _category_for_interest
 
 router = APIRouter(prefix="/meta-lead-import", tags=["meta-lead-import"])
+
+# Déduction de la ville depuis le nom du formulaire/de la campagne Meta (qui
+# mentionne généralement la ville) — même logique que l'ancien calcul client
+# (Marketing.jsx:metaVille), reprise ici côté serveur depuis que l'import
+# écrit directement dans db.leads (Phase 1 d'unification des prospects,
+# 2026-10-20) : les nouveaux imports Meta doivent atterrir directement dans
+# Prospects avec ville/catégorie déjà déduites, pas seulement dans l'ancienne
+# collection db.meta_lead_imports qui devient legacy.
+def _meta_ville(form_name: str, campaign_name: str) -> Optional[str]:
+    text = f"{form_name or ''} {campaign_name or ''}".upper()
+    if "EPINAY" in text or "ÉPINAY" in text:
+        return "Épinay-sur-Seine"
+    if "CREIL" in text:
+        return "Creil"
+    return None
 
 QUALIFICATION_LABELS = {
     "a_contacter": "À contacter",
@@ -122,7 +138,16 @@ async def import_meta_leads_csv(
     """Importe un export CSV du Gestionnaire d'événements Meta. `meta_account`
     identifie le compte publicitaire d'où vient l'export (saisi à la main —
     Meta ne met pas cette info dans le CSV lui-même, elle dépend du compte
-    depuis lequel on a exporté)."""
+    depuis lequel on a exporté).
+
+    Écrit directement dans db.leads (Prospects) depuis la Phase 1
+    d'unification du 2026-10-20 — auparavant écrivait dans la collection à
+    part db.meta_lead_imports, désormais legacy (toujours lisible via GET
+    ci-dessous pour les anciens imports, mais plus alimentée). Ville et
+    catégorie de formation sont déduites du nom du formulaire/de la
+    campagne, comme le faisait l'ancien calcul client (voir _meta_ville/
+    _category_for_interest) — même dynamique, juste calculée à l'import
+    plutôt qu'à l'affichage."""
     if not meta_account.strip():
         raise HTTPException(status_code=400, detail="Le compte Meta est requis")
     data = await file.read()
@@ -131,7 +156,7 @@ async def import_meta_leads_csv(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"CSV illisible : {e}")
 
-    imported, updated, skipped_duplicate_prospect, skipped_no_contact, skipped_already_enrolled = 0, 0, 0, 0, 0
+    imported, updated, skipped_already_enrolled, skipped_no_contact = 0, 0, 0, 0
     for row in rows:
         if not row["email"] and not row["phone"]:
             skipped_no_contact += 1
@@ -153,44 +178,48 @@ async def import_meta_leads_csv(
             skipped_already_enrolled += 1
             continue
 
-        # Déjà un prospect connu (Prospects/db.leads) ? On ne le réimporte
-        # pas ici — une seule personne, un seul endroit où la gérer.
-        if await db.leads.find_one(contact_filter):
-            skipped_duplicate_prospect += 1
-            continue
-
-        existing = await db.meta_lead_imports.find_one(
-            {"$or": [
-                *([{"meta_lead_id": row["meta_lead_id"]}] if row["meta_lead_id"] else []),
-                *contact_filter["$or"],
-            ]}
-        )
-        fields = {
-            "meta_lead_id": row["meta_lead_id"], "name": row["name"],
-            "email": row["email"], "phone": row["phone"],
-            "created_time": row["created_time"], "campaign_name": row["campaign_name"],
+        ville = _meta_ville(row["form_name"], row["campaign_name"])
+        category = _category_for_interest(row["form_name"]) or _category_for_interest(row["campaign_name"])
+        meta_details = {
+            "meta_lead_id": row["meta_lead_id"], "created_time": row["created_time"],
             "adset_name": row["adset_name"], "ad_name": row["ad_name"],
-            "form_name": row["form_name"], "platform": row["platform"],
-            "answers": row["answers"], "meta_account": meta_account.strip(),
-            "updated_at": now_iso(),
+            "form_name": row["form_name"], "platform": row["platform"], "answers": row["answers"],
         }
+
+        # Déjà un prospect connu (Prospects/db.leads, même email ou
+        # téléphone) ? Un seul endroit où le gérer — on enrichit sa fiche
+        # (compte/campagne Meta, ville/catégorie si absentes) au lieu de le
+        # réimporter à côté.
+        existing = await db.leads.find_one(contact_filter, {"_id": 0})
         if existing:
-            # Garde la qualification/les notes déjà saisies — un réimport
-            # (même export relancé, ou export qui chevauche le précédent)
-            # ne doit jamais effacer le travail de qualification déjà fait.
-            await db.meta_lead_imports.update_one({"id": existing["id"]}, {"$set": fields})
+            update_fields = {
+                "meta_account": meta_account.strip(), "campaign_name": row["campaign_name"],
+                "meta_details": meta_details, "updated_at": now_iso(),
+            }
+            if ville and not existing.get("ville"):
+                update_fields["ville"] = ville
+            if category and not existing.get("category"):
+                update_fields["category"] = category
+            if "meta" not in (existing.get("sources") or []):
+                update_fields["sources"] = list({*(existing.get("sources") or []), "meta"})
+            await db.leads.update_one({"id": existing["id"]}, {"$set": update_fields})
             updated += 1
         else:
-            fields.update({
-                "id": str(uuid.uuid4()), "qualification": "a_contacter",
-                "notes": "", "inscription_id": None, "created_at": now_iso(),
-            })
-            await db.meta_lead_imports.insert_one(fields)
+            lead = {
+                "id": str(uuid.uuid4()), "name": row["name"] or row["email"] or row["phone"] or "Lead Meta",
+                "email": row["email"] or None, "phone": row["phone"] or None,
+                "interest": row["form_name"], "notes": "", "tags": [], "contacted": False,
+                "source": "meta", "sources": ["meta"], "category": category, "ville": ville,
+                "meta_account": meta_account.strip(), "campagne": row["campaign_name"], "campaign_name": row["campaign_name"],
+                "meta_details": meta_details, "from_meta_ads": True,
+                "statut": "a_contacter", "chaleur": "froid", "motif_cloture": None, "relancer_le": None,
+                "is_test": False, "created_at": now_iso(), "updated_at": now_iso(),
+            }
+            await db.leads.insert_one(lead)
             imported += 1
 
     return {
         "imported": imported, "updated": updated,
-        "skipped_duplicate_prospect": skipped_duplicate_prospect,
         "skipped_already_enrolled": skipped_already_enrolled,
         "skipped_no_contact": skipped_no_contact,
         "total_rows": len(rows),

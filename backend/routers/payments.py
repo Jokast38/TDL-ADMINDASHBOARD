@@ -12,6 +12,7 @@ from services.pdf import generate_payment_receipt_pdf
 from services.email import send_email
 from services.email_template import render_branded_email
 from services.sms import send_sms
+from services.lead_payment_sync import sync_lead_payment
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 log = logging.getLogger(__name__)
@@ -99,6 +100,11 @@ async def _mark_paid_and_notify(inscription_id: str, amount_paid: float, payment
             f"TDL Formation : paiement de {amount_paid:.2f} € reçu pour {inscription.get('formation_title', '')}. Merci !",
             extra={"inscription_id": inscription_id},
         )
+
+    # Unification des prospects (Phase 1) : le prospect d'origine (retrouvé
+    # par email/téléphone) passe en statut "payé" avec le montant réellement
+    # encaissé — best-effort, ne doit jamais faire échouer le webhook.
+    await sync_lead_payment(email=inscription.get("student_email"), phone=inscription.get("student_phone"))
 
 
 async def sync_pending_stripe_payments() -> int:
@@ -286,6 +292,12 @@ async def stripe_webhook(request: Request):
                 await db.custom_payments.update_one(
                     {"id": custom_payment_id}, {"$set": {"status": "paid", "paid_at": now_iso()}},
                 )
+                custom_payment = await db.custom_payments.find_one({"id": custom_payment_id}, {"_id": 0, "lead_id": 1, "recipient_email": 1, "recipient_phone": 1})
+                if custom_payment:
+                    await sync_lead_payment(
+                        lead_id=custom_payment.get("lead_id"),
+                        email=custom_payment.get("recipient_email"), phone=custom_payment.get("recipient_phone"),
+                    )
         elif not inscription_id:
             log.warning(f"Stripe webhook {event_type} : metadata.inscription_id absent (session {session.get('id')}) — aucune mise à jour possible")
         elif event_type == "checkout.session.completed" and session.get("payment_status") != "paid":

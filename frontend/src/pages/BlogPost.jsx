@@ -3,6 +3,9 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { TopBar } from "@/components/StageLandingPage";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
+import { blogSanitizeSchema } from "@/lib/blogMarkdown";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -124,6 +127,7 @@ export default function BlogPost() {
         " data-testid="post-content">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeRaw, [rehypeSanitize, blogSanitizeSchema]]}
             components={{
               img: ({ node, ...props }) => (
                 <img

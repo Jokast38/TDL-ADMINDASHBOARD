@@ -37,6 +37,49 @@ class LeadUpdate(BaseModel):
     # scoping dans GET /leads), les autres rôles voient tout.
     assigned_to: Optional[str] = None
 
+    # ─── Unification des prospects (Phase 1, 2026-10-20) ───────────────────
+    # Nouveau vocabulaire de statut unique, qui remplace à terme status/
+    # qualification/pipeline_status (coexistent pendant la transition — voir
+    # services/lead_migration.py). Valeurs : a_contacter, a_relancer,
+    # rendez_vous, inscrit, paye, injoignable, non_interesse.
+    statut: Optional[str] = None
+    # froid, tiede, chaud — indépendant du statut (ex: a_relancer peut être
+    # froid ou chaud selon l'historique de contact).
+    chaleur: Optional[str] = None
+    # Raison de clôture quand statut=non_interesse : non_qualifie,
+    # plus_interesse, poubelle, refus, injoignable.
+    motif_cloture: Optional[str] = None
+    # Date (ISO, YYYY-MM-DD) à laquelle relancer ce prospect — remplace les
+    # statuts "lead_tiede"/"a_relancer_1_an" par une vraie date planifiable.
+    relancer_le: Optional[str] = None
+    # Prix négocié au cas par cas, prioritaire sur la grille formation×ville
+    # et sur le prix catalogue (voir services/lead_migration.compute_prix_effectif).
+    prix_personnalise: Optional[float] = None
+    # Obligatoire côté UI quand prix_personnalise est renseigné — pas de
+    # contrainte Pydantic ici (le champ reste optionnel pour un PUT partiel
+    # qui ne touche pas au prix), la validation se fait côté frontend/endpoint.
+    motif_prix: Optional[str] = None
+    # Dernier prix effectif calculé (cache, recalculé à la mise à jour du
+    # prix personnalisé/de la grille — voir compute_prix_effectif).
+    prix_effectif: Optional[float] = None
+    # Somme des paiements Stripe réussis liés à ce prospect (custom_payments +
+    # inscriptions), recalculée par le webhook Stripe à chaque paiement reçu —
+    # voir services/lead_payment_sync.sync_lead_payment.
+    montant_encaisse: Optional[float] = None
+    # Canaux d'origine cumulés (un prospect peut arriver par plusieurs canaux
+    # au fil du temps) : meta, cosmosia, site_web, landing_rappel,
+    # import_excel, manuel.
+    sources: Optional[List[str]] = None
+    compte_meta: Optional[str] = None
+    campagne: Optional[str] = None
+    # Identifiants d'origine dans les anciennes collections fusionnées
+    # (meta_lead_imports, callback_requests) — permet de revenir en arrière
+    # et de retrouver la fiche d'origine en cas de doute.
+    legacy_ids: Optional[Dict[str, str]] = None
+    # Fiche de test (recette/développement) détectée à la migration ou
+    # manuellement — exclue des statistiques et du CA, jamais supprimée.
+    is_test: Optional[bool] = None
+
 
 class DocumentRequestIn(BaseModel):
     # Libellés libres des pièces demandées (ex: "Pièce d'identité", "Permis de
