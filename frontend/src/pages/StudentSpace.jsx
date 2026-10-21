@@ -4,6 +4,7 @@ import SignatureCanvas from "react-signature-canvas";
 import { api, API } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/card";
+import PhotoCapture from "@/components/PhotoCapture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -760,6 +761,16 @@ export default function StudentSpace() {
                       <Badge className={`${STATUS_COLOR[d.status] || ""} hover:${STATUS_COLOR[d.status] || ""} text-[10px] shrink-0`}>{STATUS_LABEL[d.status] || d.status}</Badge>
                     </div>
                     <DocumentChecklist dossier={d} docs={docsByDossier[d.id] || []} onUpload={(file, docType) => uploadFile(file, d.id, docType)} />
+                    {d.category === "CACES" && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <PhotoCapture
+                          label="Photo pour votre carte CACES"
+                          uploadUrl={`/caces/me/dossiers/${d.id}/photo`}
+                          fetchUrl={`/caces/me/dossiers/${d.id}/photo`}
+                          testId={`caces-photo-${d.id}`}
+                        />
+                      </div>
+                    )}
                   </Card>
                 )) : <p className="text-sm text-gray-400">Aucun dossier</p>}
               </div>

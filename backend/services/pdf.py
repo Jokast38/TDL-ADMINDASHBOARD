@@ -865,3 +865,259 @@ def render_html_pdf(html: str) -> bytes:
     if result.err:
         raise HTTPException(status_code=500, detail="Erreur lors de la génération du PDF (HTML invalide dans le modèle)")
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Carte CACES® R.489 — recto/verso, format A5 paysage, conforme au modèle
+# fourni par l'équipe (4.6.2 modele_certificat_CACES_R489_TDL_Formation_V2) et
+# aux mentions obligatoires de l'annexe 6 de la recommandation R.489.
+# ---------------------------------------------------------------------------
+
+# Toutes les catégories R.489, dans l'ordre d'affichage du tableau verso —
+# seules celles effectivement détenues par le titulaire sont remplies, les
+# autres lignes restent vides (comme sur le modèle papier).
+_CACES_CATEGORY_ROWS = [
+    ("1A", "Transpalette / Préparateur — haut. ≤ 1,20 m"),
+    ("1B", "Gerbeur — haut. > 1,20 m"),
+    ("2A", "Porteur — capacité ≤ 2 t"),
+    ("2B", "Tracteur — capacité ≤ 25 t"),
+    ("3", "Frontal — capacité ≤ 6 t"),
+    ("4", "Frontal — capacité > 6 t"),
+    ("5", "À mât rétractable"),
+    ("6", "Poste de cond. élevable — haut. > 1,20 m"),
+    ("7", "Hors production"),
+]
+
+
+def _qr_image_reader(data: str):
+    """Génère un QR code en mémoire (aucun fichier disque) et le rend
+    utilisable par reportlab via ImageReader — mêmes conventions que les
+    images base64 déjà dessinées ailleurs dans ce fichier (drawImage avec
+    mask='auto')."""
+    import qrcode
+    import io as _io
+    from reportlab.lib.utils import ImageReader
+
+    qr = qrcode.QRCode(border=1, box_size=8)
+    qr.add_data(data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = _io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return ImageReader(buf)
+
+
+def generate_caces_card_pdf(certificate: dict, public_verif_url_base: str, photo_bytes: Optional[bytes] = None) -> bytes:
+    """Carte CACES® recto/verso (2 pages A5 paysage) pour UN titulaire —
+    `certificate` est un document de db.caces_certificates (voir
+    services/caces.py). Le QR code de chaque face pointe vers la page de
+    vérification publique de la carte (pas d'une seule catégorie), pour
+    rester valide même si une catégorie est ajoutée plus tard. `photo_bytes`
+    est la photo d'identité du dossier (voir routers/caces.py), optionnelle."""
+    from reportlab.lib.pagesizes import A5, landscape
+    from reportlab.pdfgen import canvas as rl_canvas
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.lib.utils import ImageReader
+    import io as _io
+
+    page_size = landscape(A5)
+    w, h = page_size
+    buf = _io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=page_size)
+    gold = colors.HexColor("#d4af37")
+    black = colors.HexColor("#0a0a0a")
+    grey = colors.HexColor("#666666")
+
+    categories = certificate.get("categories", [])
+    by_cat = {cat["category"]: cat for cat in categories}
+    verif_url = f"{public_verif_url_base}/{certificate['id']}"
+
+    # ── RECTO ──────────────────────────────────────────────────────────
+    c.setFillColor(black)
+    c.setFont("Helvetica-Bold", 13)
+    c.drawCentredString(w / 2, h - 1 * cm, "Certificat CACES® R.489 — TDL Formation")
+    c.setStrokeColor(gold)
+    c.setLineWidth(1.2)
+    c.line(1 * cm, h - 1.3 * cm, w - 1 * cm, h - 1.3 * cm)
+
+    y = h - 2.2 * cm
+    c.setFont("Helvetica-Oblique", 9)
+    c.setFillColor(black)
+    c.drawString(1 * cm, y, "Titulaire :")
+    y -= 0.55 * cm
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(1 * cm, y, certificate.get("student_name") or "—")
+
+    y -= 0.9 * cm
+    c.setFont("Helvetica-Oblique", 9)
+    c.drawString(1 * cm, y, "CACES® numéro(s) :")
+    for cat_code, _ in _CACES_CATEGORY_ROWS:
+        entry = by_cat.get(cat_code)
+        if not entry:
+            continue
+        y -= 0.5 * cm
+        c.setFont("Helvetica-Bold", 10)
+        c.setFillColor(colors.HexColor("#1a4fd4"))
+        c.drawString(1 * cm, y, f"- C{cat_code}. {entry['numero_caces'].split('.', 1)[-1] if '.' in entry['numero_caces'] else entry['numero_caces']}")
+    c.setFillColor(black)
+
+    y -= 1 * cm
+    c.setFont("Helvetica-Oblique", 9)
+    c.drawString(1 * cm, y, "Délivré par :")
+    y -= 0.5 * cm
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(1 * cm, y, "TDL FORMATION")
+    y -= 0.45 * cm
+    c.setFont("Helvetica", 9)
+    c.drawString(1 * cm, y, "59 Avenue Joffre")
+    y -= 0.4 * cm
+    c.drawString(1 * cm, y, "93800 Épinay-sur-Seine")
+    y -= 0.5 * cm
+    c.drawString(1 * cm, y, "Tél. : 01 80 90 72 49 – tdl-formation.fr")
+
+    # Colonne droite : identité visuelle + QR
+    rx = w - 6.2 * cm
+    c.setFont("Helvetica-Bold", 14)
+    c.setFillColor(black)
+    c.drawCentredString(rx + 2.6 * cm, h - 2.2 * cm, "TDL FORMATION")
+    c.setFont("Helvetica", 8)
+    c.setFillColor(grey)
+    c.drawCentredString(rx + 2.6 * cm, h - 2.7 * cm, "Organisme Testeur Certifié CACES®")
+    c.drawCentredString(rx + 2.6 * cm, h - 3.1 * cm, "59 Avenue Joffre, 93800 Épinay-sur-Seine")
+
+    c.setFillColor(black)
+    c.setFont("Helvetica-Bold", 20)
+    c.drawCentredString(rx + 2.6 * cm, h - 4.3 * cm, "CACES®")
+
+    qr_size = 2.6 * cm
+    qr_img = _qr_image_reader(verif_url)
+    c.drawImage(qr_img, rx + 1.3 * cm, h - 7.3 * cm, width=qr_size, height=qr_size, mask="auto")
+    c.setFont("Helvetica", 6.5)
+    c.setFillColor(grey)
+    c.drawCentredString(rx + 2.6 * cm, h - 7.6 * cm, "Vérifier l'authenticité — scanner ce QR code")
+
+    c.setFont("Helvetica", 6)
+    c.drawCentredString(rx + 2.6 * cm, 1.3 * cm, "La marque CACES® est protégée par un dépôt à l'INPI sous le numéro 03.3237295")
+
+    c.setStrokeColor(colors.HexColor("#cccccc"))
+    c.rect(1 * cm, 0.6 * cm, w - 2 * cm, 1.3 * cm, stroke=1, fill=0)
+    c.setFont("Helvetica", 7)
+    c.setFillColor(black)
+    c.drawString(1.2 * cm, 1.5 * cm, "Pour vérifier la validité de ce(s) CACES®, scannez le QR code ou consultez :")
+    c.setFont("Helvetica-Bold", 7)
+    c.drawString(1.2 * cm, 1.0 * cm, verif_url)
+
+    c.showPage()
+
+    # ── VERSO ──────────────────────────────────────────────────────────
+    c.setFillColor(black)
+    c.setFont("Helvetica-Bold", 13)
+    c.drawCentredString(w / 2, h - 1 * cm, "Certificat CACES® R.489 — TDL Formation")
+    c.setStrokeColor(gold)
+    c.line(1 * cm, h - 1.3 * cm, w - 1 * cm, h - 1.3 * cm)
+
+    # Photo d'identité — voir routers/caces.py (photo du dossier, captée
+    # depuis l'espace apprenant ou sur place) ; simple cadre si absente.
+    photo_x, photo_y, photo_w, photo_h = 1 * cm, h - 4.9 * cm, 2.8 * cm, 3.5 * cm
+    if photo_bytes:
+        try:
+            photo_img = ImageReader(_io.BytesIO(photo_bytes))
+            c.drawImage(photo_img, photo_x, photo_y, width=photo_w, height=photo_h, mask="auto")
+        except Exception:
+            photo_bytes = None
+    if not photo_bytes:
+        c.setStrokeColor(colors.HexColor("#cccccc"))
+        c.rect(photo_x, photo_y, photo_w, photo_h, stroke=1, fill=0)
+        c.setFont("Helvetica-Oblique", 7)
+        c.setFillColor(grey)
+        c.drawCentredString(photo_x + photo_w / 2, photo_y + photo_h / 2, "Photo")
+
+    # Bloc identité (gauche, sous la photo)
+    c.setFont("Helvetica-Oblique", 8)
+    c.setFillColor(black)
+    c.drawString(1 * cm, h - 5.3 * cm, "Titulaire (en toutes lettres) :")
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(1 * cm, h - 5.8 * cm, certificate.get("student_name") or "—")
+
+    c.setFont("Helvetica-Oblique", 8)
+    c.drawString(1 * cm, h - 6.5 * cm, "Date de naissance :")
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(1 * cm, h - 7 * cm, certificate.get("date_naissance") or "—")
+
+    c.setFont("Helvetica-Oblique", 8)
+    c.setFillColor(black)
+    c.drawString(1 * cm, h - 7.9 * cm, f"Fait à Épinay-sur-Seine, le : {certificate.get('created_at', '')[:10]}")
+
+    c.setFont("Helvetica-Oblique", 8)
+    c.drawString(1 * cm, h - 8.8 * cm, "Signataire (en toutes lettres) :")
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(1 * cm, h - 9.3 * cm, certificate.get("signataire_name") or "—")
+    c.setFont("Helvetica", 8)
+    c.drawString(1 * cm, h - 9.7 * cm, certificate.get("signataire_qualite") or "")
+    c.setStrokeColor(grey)
+    c.line(1 * cm, h - 10.3 * cm, 4.5 * cm, h - 10.3 * cm)
+    c.setFont("Helvetica", 7)
+    c.drawString(1 * cm, h - 10.6 * cm, "(signature)")
+
+    # Tableau des catégories (droite)
+    table_x = 4.9 * cm
+    table_w = w - table_x - 0.8 * cm
+    col_widths = [0.7 * cm, 3.2 * cm, 1.9 * cm, 1.9 * cm, table_w - 0.7 - 3.2 - 1.9 - 1.9]
+    headers = ["Cat.", "Type", "N° CACES®", "Testeur", "Obt. / Éch."]
+
+    c.setFillColor(black)
+    c.rect(table_x, h - 2 * cm, table_w, 0.6 * cm, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 7)
+    cx = table_x
+    for i, header in enumerate(headers):
+        c.drawString(cx + 0.05 * cm, h - 1.85 * cm, header)
+        cx += col_widths[i]
+
+    row_h = (h - 3.3 * cm - 2.2 * cm) / len(_CACES_CATEGORY_ROWS)
+    row_h = min(row_h, 0.95 * cm)
+    ry = h - 2 * cm
+    c.setFont("Helvetica", 6.5)
+    for cat_code, label in _CACES_CATEGORY_ROWS:
+        ry -= row_h
+        entry = by_cat.get(cat_code)
+        c.setStrokeColor(colors.HexColor("#dddddd"))
+        c.rect(table_x, ry, table_w, row_h, stroke=1, fill=0)
+        cx = table_x
+        c.setFillColor(black)
+        c.setFont("Helvetica-Bold", 7)
+        c.drawString(cx + 0.08 * cm, ry + row_h / 2 - 0.1 * cm, cat_code)
+        cx += col_widths[0]
+        c.setFont("Helvetica", 6.3)
+        c.drawString(cx + 0.08 * cm, ry + row_h / 2 - 0.1 * cm, label[:38])
+        cx += col_widths[1]
+        if entry:
+            c.setFont("Helvetica-Bold", 7)
+            c.setFillColor(colors.HexColor("#1a4fd4"))
+            c.drawString(cx + 0.08 * cm, ry + row_h / 2 - 0.1 * cm, entry["numero_caces"])
+            cx += col_widths[2]
+            c.setFillColor(black)
+            c.setFont("Helvetica", 6.3)
+            c.drawString(cx + 0.08 * cm, ry + row_h / 2 - 0.1 * cm, (entry.get("testeur_name") or "—")[:18])
+            cx += col_widths[3]
+            c.setFont("Helvetica-Bold", 6.3)
+            obtention = entry.get("date_obtention", "")
+            echeance = certificate.get("expiration_date", "")
+            c.drawString(cx + 0.08 * cm, ry + row_h / 2, obtention)
+            c.drawString(cx + 0.08 * cm, ry + row_h / 2 - 0.35 * cm, echeance)
+
+    c.setFillColor(black)
+    c.rect(table_x, ry - 0.7 * cm, table_w, 0.6 * cm, fill=1, stroke=0)
+    c.setFillColor(gold)
+    c.setFont("Helvetica-Bold", 6.5)
+    c.drawCentredString(table_x + table_w / 2, ry - 0.5 * cm, "Ce(s) CACES® ne permet(tent) pas la délivrance d'une AIPR")
+
+    c.setFillColor(grey)
+    c.setFont("Helvetica-Oblique", 6)
+    c.drawCentredString(w / 2, 0.5 * cm, "Document recto / verso. Toute copie doit comporter les deux faces.")
+
+    c.showPage()
+    c.save()
+    return buf.getvalue()
