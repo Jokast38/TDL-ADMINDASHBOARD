@@ -4,6 +4,7 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { ChatCircleDots, PaperPlaneRight, X, Robot } from "@phosphor-icons/react";
 import { WELCOME_MESSAGE, QUICK_REPLIES, getBotReply } from "@/constants/chatbotScript";
+import LimovaChatWidget from "@/components/LimovaChatWidget";
 
 // Chatbot public — branché sur le modèle réel (Ollama, voir backend
 // routers/chatbot.py) via POST /api/chat/message. Si l'appel échoue
@@ -54,6 +55,10 @@ export default function ChatWidget() {
 
   return (
     <>
+      {/* Bulle WhatsApp Business (Limova) — empilée au-dessus de la bulle
+          ci-dessous, voir LimovaChatWidget.jsx. */}
+      <LimovaChatWidget />
+
       {/* Bulle flottante */}
       <button
         onClick={() => setOpen((v) => !v)}
