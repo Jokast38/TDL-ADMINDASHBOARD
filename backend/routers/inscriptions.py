@@ -74,6 +74,31 @@ async def create_inscription(payload: InscriptionIn, request: Request):
     if recent_duplicate:
         return recent_duplicate
 
+    # Pour les formations SANS session à choisir à l'inscription (ex:
+    # récupération de points — voir StageLandingPage.jsx, `stage_id` y est
+    # toujours None, la session n'est qu'un texte libre) : une personne qui
+    # resoumet le formulaire public un autre jour (doute, oubli d'avoir déjà
+    # rempli, relance...) créait un dossier ENTIÈREMENT NEUF à chaque fois —
+    # observé en prod : jusqu'à 9 dossiers dupliqués pour la même personne
+    # en 2 mois (demande du 2026-10-23), avec les documents déjà envoyés
+    # restant attachés à un vieux dossier devenu invisible parmi les
+    # doublons. Le garde-fou des 30 secondes ci-dessus ne couvre que le
+    # double-clic immédiat, pas une resoumission à distance.
+    #
+    # On réutilise donc l'inscription active existante pour (même email +
+    # même formation) tant que son dossier n'est pas dans un état terminal
+    # (termine/rejete) — sinon une vraie réinscription légitime (ex: stage
+    # à refaire l'année suivante) resterait bloquée indéfiniment.
+    if not payload.stage_id:
+        existing_active = await db.inscriptions.find_one(
+            {"student_email": payload.student_email.lower(), "formation_id": payload.formation_id, "status": "active"},
+            {"_id": 0}, sort=[("created_at", -1)],
+        )
+        if existing_active:
+            linked_dossier = await db.dossiers.find_one({"inscription_id": existing_active["id"]}, {"_id": 0, "status": 1})
+            if not linked_dossier or linked_dossier.get("status") not in ("termine", "rejete"):
+                return existing_active
+
     # Doublon = même personne, même formation ET même session — un
     # réinscription sur une AUTRE session (ex: repassage d'examen VTC sur un
     # nouveau créneau) n'est jamais bloquée, seule l'inscription à une
