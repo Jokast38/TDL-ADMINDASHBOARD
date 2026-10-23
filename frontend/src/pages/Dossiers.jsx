@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,8 +65,19 @@ export default function Dossiers() {
   const [filterCategory, setFilterCategory] = useState("all");
   const [visibleCounts, setVisibleCounts] = useState({});
 
+  const location = useLocation();
+
   const load = () => api.get("/dossiers").then((r) => setItems(r.data));
   useEffect(() => { load(); }, []);
+
+  // Arrivée depuis le panneau d'une session (SessionDrawer.jsx, clic sur un
+  // inscrit) — ouvre directement son dossier au lieu de laisser chercher à
+  // la main dans la liste (demande du 2026-10-23).
+  useEffect(() => {
+    const dossierId = location.state?.openDossierId;
+    if (dossierId) openDossier({ id: dossierId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   const formationOptions = useMemo(
     () => Array.from(new Set(items.map((d) => d.formation_title).filter(Boolean))).sort(),

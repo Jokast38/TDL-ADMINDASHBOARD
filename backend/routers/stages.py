@@ -119,10 +119,23 @@ async def stage_roster(sid: str, user: dict = Depends(require_role(*ROLES_ALL_ST
         raise HTTPException(status_code=404, detail="Stage introuvable")
     if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
         raise HTTPException(status_code=403, detail="Accès refusé")
-    return await db.inscriptions.find(
+    roster = await db.inscriptions.find(
         {"stage_id": sid, "status": "active"},
         {"_id": 0, "id": 1, "student_name": 1, "student_email": 1, "student_phone": 1, "payment_status": 1, "contact_status": 1},
     ).sort("student_name", 1).to_list(200)
+    # Jointure vers le dossier correspondant — pour pouvoir, depuis le panneau
+    # de session (SessionDrawer.jsx), cliquer un inscrit et être redirigé
+    # directement sur son dossier (demande du 2026-10-23) plutôt que de devoir
+    # le rechercher à la main dans /admin/dossiers.
+    insc_ids = [r["id"] for r in roster]
+    if insc_ids:
+        dossiers = await db.dossiers.find(
+            {"inscription_id": {"$in": insc_ids}}, {"_id": 0, "id": 1, "inscription_id": 1}
+        ).to_list(len(insc_ids))
+        dossier_by_insc = {d["inscription_id"]: d["id"] for d in dossiers}
+        for r in roster:
+            r["dossier_id"] = dossier_by_insc.get(r["id"])
+    return roster
 
 
 @router.post("")

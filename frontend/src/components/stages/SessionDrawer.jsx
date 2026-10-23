@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -15,6 +16,7 @@ const STATUT_LABELS = { planifie: "Planifié", en_cours: "En cours", complet: "C
 // Le bouton "Modifier" délègue au formulaire existant (onEdit), qui reste la
 // même Dialog qu'avant (aucune logique métier réécrite).
 export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onToggleLock, onDelete, onDuplicate, onDownloadAnts }) {
+  const navigate = useNavigate();
   const [roster, setRoster] = useState([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -107,7 +109,13 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
                 <p className="text-xs text-gray-400 text-center py-4">Chargement...</p>
               ) : roster.length ? (
                 roster.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between text-xs bg-gray-50 border border-gray-200 rounded-md px-2.5 py-1.5">
+                  <div
+                    key={r.id}
+                    className={`flex items-center justify-between text-xs bg-gray-50 border border-gray-200 rounded-md px-2.5 py-1.5 ${r.dossier_id ? "cursor-pointer hover:border-[#0a0a0a] hover:bg-white transition-colors" : ""}`}
+                    onClick={() => r.dossier_id && navigate("/admin/dossiers", { state: { openDossierId: r.dossier_id } })}
+                    title={r.dossier_id ? "Ouvrir son dossier" : "Aucun dossier lié"}
+                    data-testid={`stage-roster-row-${r.id}`}
+                  >
                     <div className="min-w-0">
                       <p className="font-medium truncate">{r.student_name}</p>
                       <p className="text-gray-400 truncate">{r.student_email}</p>
