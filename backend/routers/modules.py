@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -257,10 +258,28 @@ async def get_agenda(date_from: Optional[str] = None, date_to: Optional[str] = N
         rdvs = await db.call_appointments.find(rdv_q, {"_id": 0}).to_list(500)
         for r in rdvs:
             sched = r.get("scheduled_at") or ""
+            # `scheduled_at` est stocké en UTC (voir CallAgenda.jsx, qui crée
+            # le RDV via `new Date(...).toISOString()`). Découper les
+            # caractères 11:16 de la chaîne donnait l'heure UTC brute au lieu
+            # de l'heure de Paris, d'où un écart avec /call-center/appointments
+            # (qui, lui, laisse le navigateur convertir via `new Date(iso)`,
+            # donc déjà en heure locale) — même rendez-vous, deux heures
+            # différentes selon l'agenda (demande du 2026-10-23).
+            sched_date, heure_debut = sched[:10], None
+            if sched:
+                try:
+                    dt = datetime.fromisoformat(sched.replace("Z", "+00:00"))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    dt_paris = dt.astimezone(ZoneInfo("Europe/Paris"))
+                    sched_date = dt_paris.date().isoformat()
+                    heure_debut = dt_paris.strftime("%H:%M")
+                except (ValueError, AttributeError):
+                    pass
             events.append({
                 "id": f"rdv_{r['id']}",
-                "date": sched[:10],
-                "heure_debut": sched[11:16] if len(sched) >= 16 else None,
+                "date": sched_date,
+                "heure_debut": heure_debut,
                 "heure_fin": None,
                 "module_nom": f"RDV — {r.get('lead_name') or 'Prospect'}",
                 "formation_titre": r.get("formation_titre"),

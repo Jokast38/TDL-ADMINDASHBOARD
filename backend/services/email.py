@@ -1,8 +1,10 @@
 import asyncio
 import re
+import time
 import uuid
 import logging
 import urllib.parse
+from collections import deque
 import requests
 
 from core.database import db
@@ -12,6 +14,35 @@ from core.config import PUBLIC_BACKEND_URL
 logger = logging.getLogger(__name__)
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# O2switch (hébergeur de la boîte SMTP admin@tdl-formation.fr) limite
+# l'envoi sortant à 30 emails/minute et suspend le domaine entier en cas de
+# dépassement (confirmé par leur support, demande du 2026-10-23 — l'envoi a
+# déjà été coupé une fois pour ce motif). Une campagne ou une relance en
+# masse qui boucle sur `send_email` enverrait sinon tout en quelques
+# secondes. On étale donc les envois SMTP à la source, dans un
+# process-global (pas par campagne) pour que PLUSIEURS envois en masse
+# lancés en parallèle restent, ensemble, sous la limite réelle de
+# l'hébergeur — avec une marge de sécurité (28 au lieu de 30) pour absorber
+# l'imprécision du minutage.
+_SMTP_RATE_LIMIT = 28
+_SMTP_RATE_WINDOW_S = 60
+_smtp_send_times: deque = deque()
+_smtp_rate_lock = asyncio.Lock()
+
+
+async def _throttle_smtp_rate():
+    async with _smtp_rate_lock:
+        while True:
+            now = time.monotonic()
+            while _smtp_send_times and now - _smtp_send_times[0] >= _SMTP_RATE_WINDOW_S:
+                _smtp_send_times.popleft()
+            if len(_smtp_send_times) < _SMTP_RATE_LIMIT:
+                _smtp_send_times.append(now)
+                return
+            wait_s = _SMTP_RATE_WINDOW_S - (now - _smtp_send_times[0]) + 0.1
+            logger.info(f"Débit SMTP O2switch atteint ({_SMTP_RATE_LIMIT}/min) — pause {wait_s:.1f}s avant le prochain envoi")
+            await asyncio.sleep(max(wait_s, 0.1))
 
 
 def _with_tracking_pixel(body: str, log_id: str) -> str:
@@ -164,6 +195,7 @@ async def _send_via_smtp(s: dict, to: str, subject: str, body: str, attachment: 
     last_error = None
     for attempt in range(1, max_attempts + 1):
         try:
+            await _throttle_smtp_rate()
             await asyncio.to_thread(
                 _smtp_send,
                 s.get("smtp_host", "smtp.gmail.com"),
