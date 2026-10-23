@@ -286,6 +286,15 @@ export default function Dossiers() {
                     <p className="text-xs text-gray-500 mb-1">{d.category}</p>
                     <p className="font-semibold text-sm leading-tight pr-4">{d.student_name}</p>
                     <p className="text-xs text-gray-600 mt-1 truncate">{d.formation_title}</p>
+                    {d.stage ? (
+                      <p className="text-[11px] text-[#0a0a0a] mt-1.5 flex items-center gap-1 font-medium">
+                        <Calendar size={11} /> {d.stage.date_debut} → {d.stage.date_fin}{d.stage.lieu_ville ? ` · ${d.stage.lieu_ville}` : ""}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-gray-400 mt-1.5 flex items-center gap-1">
+                        <Calendar size={11} /> Aucune session affectée
+                      </p>
+                    )}
                     {d.nb_documents_manquants > 0 && (
                       <p className="text-[10px] text-amber-700 mt-2 flex items-center gap-1">
                         <Warning size={10} weight="fill" /> {d.nb_documents_manquants} doc(s) manquant(s)
