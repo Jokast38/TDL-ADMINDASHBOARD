@@ -12,6 +12,31 @@ import { extractCreneau, placesRestantes, fillRatio, displayStatus } from "./sta
 
 const STATUT_LABELS = { planifie: "Planifié", en_cours: "En cours", complet: "Complet", termine: "Terminé", annule: "Annulé" };
 
+// Même code couleur que les colonnes du Kanban dossiers (voir
+// frontend/src/pages/Dossiers.jsx::COLUMNS) — demande du 2026-10-23 :
+// repérer d'un coup d'œil, depuis la liste des inscrits d'une session, où en
+// est le dossier de chacun (vert = terminé).
+const DOSSIER_STATUS_LABELS = {
+  nouveau: "Nouveau", en_verification: "En vérification", complet: "Complet",
+  soumis_ants: "Soumis ANTS", termine: "Terminé", rejete: "Rejeté",
+};
+const DOSSIER_STATUS_STYLE = {
+  nouveau: "bg-gray-50 border-gray-300",
+  en_verification: "bg-amber-50 border-amber-300",
+  complet: "bg-blue-50 border-blue-300",
+  soumis_ants: "bg-gray-200 border-gray-400",
+  termine: "bg-green-50 border-green-400",
+  rejete: "bg-red-50 border-red-300",
+};
+const DOSSIER_STATUS_BADGE = {
+  nouveau: "border-gray-300 text-gray-600",
+  en_verification: "border-amber-400 text-amber-700",
+  complet: "border-blue-400 text-blue-700",
+  soumis_ants: "border-gray-500 text-gray-700",
+  termine: "border-green-500 text-green-700",
+  rejete: "border-red-400 text-red-700",
+};
+
 // Panneau latéral de détail d'une session — récap, jauge, inscrits, actions.
 // Le bouton "Modifier" délègue au formulaire existant (onEdit), qui reste la
 // même Dialog qu'avant (aucune logique métier réécrite).
@@ -111,7 +136,7 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
                 roster.map((r) => (
                   <div
                     key={r.id}
-                    className={`flex items-center justify-between text-xs bg-gray-50 border border-gray-200 rounded-md px-2.5 py-1.5 ${r.dossier_id ? "cursor-pointer hover:border-[#0a0a0a] hover:bg-white transition-colors" : ""}`}
+                    className={`flex items-center justify-between text-xs border rounded-md px-2.5 py-1.5 ${DOSSIER_STATUS_STYLE[r.dossier_status] || "bg-gray-50 border-gray-200"} ${r.dossier_id ? "cursor-pointer hover:brightness-95 transition-[filter]" : ""}`}
                     onClick={() => r.dossier_id && navigate("/admin/dossiers", { state: { openDossierId: r.dossier_id } })}
                     title={r.dossier_id ? "Ouvrir son dossier" : "Aucun dossier lié"}
                     data-testid={`stage-roster-row-${r.id}`}
@@ -120,7 +145,14 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
                       <p className="font-medium truncate">{r.student_name}</p>
                       <p className="text-gray-400 truncate">{r.student_email}</p>
                     </div>
-                    <Badge variant="outline" className="text-[10px] shrink-0 ml-2">{r.payment_status}</Badge>
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      {r.dossier_status && (
+                        <Badge variant="outline" className={`text-[10px] ${DOSSIER_STATUS_BADGE[r.dossier_status] || ""}`}>
+                          {DOSSIER_STATUS_LABELS[r.dossier_status] || r.dossier_status}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-[10px]">{r.payment_status}</Badge>
+                    </div>
                   </div>
                 ))
               ) : (

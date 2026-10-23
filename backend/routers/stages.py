@@ -130,11 +130,13 @@ async def stage_roster(sid: str, user: dict = Depends(require_role(*ROLES_ALL_ST
     insc_ids = [r["id"] for r in roster]
     if insc_ids:
         dossiers = await db.dossiers.find(
-            {"inscription_id": {"$in": insc_ids}}, {"_id": 0, "id": 1, "inscription_id": 1}
+            {"inscription_id": {"$in": insc_ids}}, {"_id": 0, "id": 1, "inscription_id": 1, "status": 1}
         ).to_list(len(insc_ids))
-        dossier_by_insc = {d["inscription_id"]: d["id"] for d in dossiers}
+        dossier_by_insc = {d["inscription_id"]: d for d in dossiers}
         for r in roster:
-            r["dossier_id"] = dossier_by_insc.get(r["id"])
+            linked = dossier_by_insc.get(r["id"])
+            r["dossier_id"] = linked["id"] if linked else None
+            r["dossier_status"] = linked["status"] if linked else None
     return roster
 
 
