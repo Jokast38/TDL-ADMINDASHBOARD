@@ -12,8 +12,9 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, FileText, UploadSimple, Trash, Calendar, PencilSimple, Signature, CheckCircle, Clock, WarningCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import FormateurTitrePicker from "@/components/FormateurTitrePicker";
 
-const emptyForm = { name: "", email: "", phone: "", titre: "", matricule: "" };
+const emptyForm = { nom: "", prenom: "", email: "", phone: "", titre: "", matricule: "", assigned_categories: [] };
 
 // Doit rester synchronisé avec FORMATEUR_DOC_TYPES côté backend
 // (routers/employees.py) et STAFF_DOC_TYPE_LABELS dans AnimateurSpace.jsx.
@@ -47,6 +48,11 @@ function DossierBadge({ u }) {
 // (POST/GET /employees, role="animateur") + les endpoints staff_profiles.
 export default function Formateurs() {
   const [items, setItems] = useState([]);
+  const [planningOverview, setPlanningOverview] = useState(null);
+  const [identiteDraft, setIdentiteDraft] = useState({ nom: "", prenom: "" });
+  const [savingIdentite, setSavingIdentite] = useState(false);
+  const [quotaDraft, setQuotaDraft] = useState("");
+  const [savingQuota, setSavingQuota] = useState(false);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -55,6 +61,7 @@ export default function Formateurs() {
   const [sessions, setSessions] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [titreDraft, setTitreDraft] = useState("");
+  const [categoriesDraft, setCategoriesDraft] = useState([]);
   const [savingTitre, setSavingTitre] = useState(false);
   const [matriculeDraft, setMatriculeDraft] = useState("");
   const [savingMatricule, setSavingMatricule] = useState(false);
@@ -62,16 +69,23 @@ export default function Formateurs() {
   const [uploadDocType, setUploadDocType] = useState(Object.keys(DOC_TYPE_LABELS)[0]);
 
   const load = () => api.get("/employees").then((r) => setItems(r.data.filter((u) => u.role === "animateur")));
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.get("/formateurs/planning-overview").then((r) => setPlanningOverview(r.data)).catch(() => {});
+  }, []);
 
   const save = async () => {
-    if (!form.name.trim() || !form.email.trim()) {
-      return toast.error("Nom et email sont requis");
+    const nom = form.nom.trim();
+    const prenom = form.prenom.trim();
+    if (!nom || !prenom || !form.email.trim()) {
+      return toast.error("Nom, prénom et email sont requis");
+    }
+    if (!form.assigned_categories.length || !form.titre) {
+      return toast.error("Choisissez au moins un type de formation et un titre");
     }
     setSaving(true);
     try {
-      const { password, ...rest } = form;
-      await api.post("/employees", { ...rest, role: "animateur" });
+      await api.post("/employees", { ...form, nom, prenom, name: `${prenom} ${nom}`, role: "animateur" });
       toast.success("Formateur créé — ses identifiants (mot de passe généré automatiquement) lui ont été envoyés par email");
       setOpen(false); setForm(emptyForm);
       load();
@@ -85,6 +99,9 @@ export default function Formateurs() {
   const openDetail = async (u) => {
     setDetail(u);
     setTitreDraft(u.titre || "");
+    setCategoriesDraft(u.assigned_categories || []);
+    setIdentiteDraft({ nom: u.nom || "", prenom: u.prenom || "" });
+    setQuotaDraft(u.quota_jours_annuel ?? "");
     setMatriculeDraft(u.matricule || "");
     setProfile(null);
     setSessions([]);
@@ -104,14 +121,45 @@ export default function Formateurs() {
     if (!detail) return;
     setSavingTitre(true);
     try {
-      const { data } = await api.put(`/employees/${detail.id}/titre`, { titre: titreDraft || null });
-      toast.success("Intitulé enregistré");
-      setDetail(data);
+      const { data } = await api.put(`/employees/${detail.id}/titre`, { titre: titreDraft || null, assigned_categories: categoriesDraft });
+      toast.success("Titre enregistré");
+      setDetail({ ...detail, ...data });
       load();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur");
     } finally {
       setSavingTitre(false);
+    }
+  };
+
+  const saveIdentite = async () => {
+    if (!detail) return;
+    if (!identiteDraft.nom.trim() || !identiteDraft.prenom.trim()) return toast.error("Nom et prénom sont requis");
+    setSavingIdentite(true);
+    try {
+      const { data } = await api.put(`/employees/${detail.id}/identite`, identiteDraft);
+      toast.success("Nom et prénom enregistrés");
+      setDetail({ ...detail, ...data });
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSavingIdentite(false);
+    }
+  };
+
+  const saveQuota = async () => {
+    if (!detail) return;
+    setSavingQuota(true);
+    try {
+      const { data } = await api.put(`/employees/${detail.id}/quota`, { quota_jours_annuel: quotaDraft === "" ? null : Number(quotaDraft) });
+      toast.success("Quota enregistré");
+      setDetail({ ...detail, ...data });
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSavingQuota(false);
     }
   };
 
@@ -180,7 +228,7 @@ export default function Formateurs() {
         <div>
           <p className="overline">Équipe pédagogique</p>
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Formateurs</h1>
-          <p className="text-gray-500 mt-2">{items.length} formateur(s). Documents, intitulés et sessions assignées.</p>
+          <p className="text-gray-500 mt-2">{items.length} formateur(s). Documents, titres et sessions assignées.</p>
         </div>
         <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setForm(emptyForm); }}>
           <DialogTrigger asChild>
@@ -191,9 +239,15 @@ export default function Formateurs() {
           <DialogContent>
             <DialogHeader><DialogTitle>Nouveau formateur</DialogTitle></DialogHeader>
             <div className="space-y-3 mt-2">
-              <div>
-                <label className="text-sm font-medium">Nom complet</label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="formateur-name" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium">Nom</label>
+                  <Input value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} data-testid="formateur-nom" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Prénom</label>
+                  <Input value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} data-testid="formateur-prenom" />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -205,10 +259,11 @@ export default function Formateurs() {
                   <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Intitulé (affiché sur les documents)</label>
-                <Input value={form.titre} onChange={(e) => setForm({ ...form, titre: e.target.value })} placeholder="Ex: Formateur BAFM, Moniteur auto-école" data-testid="formateur-titre" />
-              </div>
+              <FormateurTitrePicker
+                categories={form.assigned_categories}
+                titre={form.titre}
+                onChange={({ categories, titre }) => setForm({ ...form, assigned_categories: categories, titre })}
+              />
               <div>
                 <label className="text-sm font-medium">Matricule</label>
                 <Input value={form.matricule} onChange={(e) => setForm({ ...form, matricule: e.target.value })} placeholder="Ex: F-0042" data-testid="formateur-matricule" />
@@ -244,6 +299,12 @@ export default function Formateurs() {
             <p className="text-xs text-gray-400 font-mono mt-1">{u.email}</p>
             {u.matricule && <p className="text-xs text-gray-400 font-mono mt-0.5">Matricule : {u.matricule}</p>}
             {u.agrement_bafm_numero && <p className="text-xs text-gray-400 mt-1">BAFM : {u.agrement_bafm_numero}</p>}
+            {planningOverview && (
+              <p className="text-xs text-gray-400 mt-1" data-testid={`formateur-planning-${u.id}`}>
+                Planning {planningOverview.year} : {planningOverview.jours[u.id] || 0} jour(s)
+                {u.quota_jours_annuel != null ? ` / ${u.quota_jours_annuel}` : ""}
+              </p>
+            )}
             <div className="mt-2"><DossierBadge u={u} /></div>
           </Card>
         ))}
@@ -261,13 +322,43 @@ export default function Formateurs() {
               <DialogHeader><DialogTitle>{detail.name}</DialogTitle></DialogHeader>
               <div className="space-y-6 mt-2">
                 <div>
-                  <label className="text-sm font-medium">Intitulé (affiché sur les attestations générées)</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-sm font-medium">Nom</label>
+                      <Input value={identiteDraft.nom} onChange={(e) => setIdentiteDraft({ ...identiteDraft, nom: e.target.value })} className="mt-1" data-testid="formateur-nom-edit" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Prénom</label>
+                      <Input value={identiteDraft.prenom} onChange={(e) => setIdentiteDraft({ ...identiteDraft, prenom: e.target.value })} className="mt-1" data-testid="formateur-prenom-edit" />
+                    </div>
+                  </div>
+                  <Button onClick={saveIdentite} disabled={savingIdentite} variant="outline" className="mt-2" data-testid="formateur-identite-save">
+                    <PencilSimple size={14} className="mr-1" /> {savingIdentite ? "..." : "Enregistrer"}
+                  </Button>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Quota de jours par an</label>
                   <div className="flex gap-2 mt-1">
-                    <Input value={titreDraft} onChange={(e) => setTitreDraft(e.target.value)} placeholder="Ex: Formateur BAFM" data-testid="formateur-titre-edit" />
-                    <Button onClick={saveTitre} disabled={savingTitre} variant="outline">
-                      <PencilSimple size={14} className="mr-1" /> {savingTitre ? "..." : "Enregistrer"}
+                    <Input type="number" min="0" value={quotaDraft} onChange={(e) => setQuotaDraft(e.target.value)} placeholder="Pas de limite" data-testid="formateur-quota-edit" />
+                    <Button onClick={saveQuota} disabled={savingQuota} variant="outline">
+                      <PencilSimple size={14} className="mr-1" /> {savingQuota ? "..." : "Enregistrer"}
                     </Button>
                   </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Limite les dates que le formateur choisit lui-même. Pour le placer au-delà, assignez-le depuis la page Sessions de formation.
+                  </p>
+                </div>
+
+                <div>
+                  <FormateurTitrePicker
+                    categories={categoriesDraft}
+                    titre={titreDraft}
+                    onChange={({ categories, titre }) => { setCategoriesDraft(categories); setTitreDraft(titre); }}
+                  />
+                  <Button onClick={saveTitre} disabled={savingTitre} variant="outline" className="mt-2" data-testid="formateur-titre-save">
+                    <PencilSimple size={14} className="mr-1" /> {savingTitre ? "..." : "Enregistrer"}
+                  </Button>
                   <p className="text-xs text-gray-400 mt-2">
                     Agrément BAFM et signature manuscrite sont gérés par le formateur lui-même depuis son espace ("Ma signature").
                     {detail.agrement_bafm_numero ? ` Actuellement : ${detail.agrement_bafm_numero}.` : " Aucun numéro renseigné pour l'instant."}
@@ -322,7 +413,9 @@ export default function Formateurs() {
                     })}
                   </div>
                   <p className="text-xs text-gray-400 mt-2">
-                    {detail.convention_signed
+                    {detail.convention_required === false
+                      ? "Pas de convention : elle ne concerne que les stages de récupération de points."
+                      : detail.convention_signed
                       ? "Convention de collaboration signée par le formateur."
                       : "Convention pas encore signée — le formateur la signe depuis son espace (\"Mon dossier\")."}
                   </p>

@@ -8,7 +8,8 @@ from core.security import hash_password, get_current_user, require_role
 from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT, effective_assigned_categories
-from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn, AllowedPagesIn, MatriculeIn, RoleIn
+from core.placement_rules import PERMIS_ONLY_DOC_TYPES, formateur_is_permis
+from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn, AllowedPagesIn, MatriculeIn, RoleIn, IdentiteIn, QuotaIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 from services.pdf import generate_formateur_convention_pdf
 from services.email import send_email
@@ -56,25 +57,36 @@ FORMATEUR_DOC_TYPES = {
 FORMATEUR_DOSSIER_SLA = timedelta(hours=24)
 
 
-async def _formateur_dossier_status(uid: str, created_at: str, convention_signed_at: str = None) -> dict:
+def _required_doc_types(user: dict) -> dict:
+    if formateur_is_permis(user):
+        return FORMATEUR_DOC_TYPES
+    return {k: v for k, v in FORMATEUR_DOC_TYPES.items() if k not in PERMIS_ONLY_DOC_TYPES}
+
+
+async def _formateur_dossier_status(formateur: dict, convention_signed_at: str = None) -> dict:
+    uid = formateur["id"]
+    created_at = formateur.get("created_at") or now_iso()
+    convention_required = formateur_is_permis(formateur)
     profile = await db.staff_profiles.find_one({"user_id": uid}, {"_id": 0}) or {}
     docs = await db.documents.find(
         {"id": {"$in": profile.get("documents", [])}, "is_deleted": False}, {"_id": 0, "doc_type": 1}
     ).to_list(200)
     present_types = {d.get("doc_type") for d in docs}
-    missing = [k for k in FORMATEUR_DOC_TYPES if k not in present_types]
+    missing = [k for k in _required_doc_types(formateur) if k not in present_types]
+    convention_ok = bool(convention_signed_at) or not convention_required
     deadline = None
     overdue = False
     try:
         deadline = (datetime.fromisoformat(created_at.replace("Z", "+00:00")) + FORMATEUR_DOSSIER_SLA)
-        overdue = datetime.now(timezone.utc) > deadline and (bool(missing) or not convention_signed_at)
+        overdue = datetime.now(timezone.utc) > deadline and (bool(missing) or not convention_ok)
     except Exception:
         pass
     return {
         "missing_documents": missing,
         "documents_complete": not missing,
+        "convention_required": convention_required,
         "convention_signed": bool(convention_signed_at),
-        "dossier_complete": not missing and bool(convention_signed_at),
+        "dossier_complete": not missing and convention_ok,
         "dossier_deadline": deadline.isoformat() if deadline else None,
         "dossier_overdue": overdue,
     }
@@ -122,7 +134,7 @@ async def list_employees(user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "ag
     ).to_list(500)
     for s in staff:
         if s.get("role") == "animateur":
-            status = await _formateur_dossier_status(s["id"], s.get("created_at") or now_iso(), s.get("convention_signed_at"))
+            status = await _formateur_dossier_status(s, s.get("convention_signed_at"))
             s.update(status)
     return staff
 
@@ -141,6 +153,7 @@ async def create_employee(payload: EmployeeIn, user: dict = Depends(require_role
     password = payload.password or _generate_simple_password()
     doc = {
         "id": str(uuid.uuid4()), "email": payload.email.lower(), "name": payload.name,
+        "nom": payload.nom, "prenom": payload.prenom,
         "role": role, "phone": payload.phone, "department": payload.department,
         "assigned_categories": payload.assigned_categories,
         "assigned_centers": payload.assigned_centers,
@@ -271,7 +284,10 @@ async def update_employee_titre(uid: str, payload: EmployeeTitreIn, user: dict =
         raise HTTPException(status_code=404, detail="Utilisateur introuvable")
     if user["role"] != "admin" and target.get("role") not in _manageable_roles(user["role"]):
         raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes de votre périmètre")
-    await db.users.update_one({"id": uid}, {"$set": {"titre": payload.titre, "updated_at": now_iso()}})
+    update = {"titre": payload.titre, "updated_at": now_iso()}
+    if payload.assigned_categories is not None:
+        update["assigned_categories"] = payload.assigned_categories
+    await db.users.update_one({"id": uid}, {"$set": update})
     return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
 
 
@@ -285,6 +301,33 @@ async def update_employee_matricule(uid: str, payload: MatriculeIn, user: dict =
     if user["role"] != "admin" and target.get("role") not in _manageable_roles(user["role"]):
         raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes de votre périmètre")
     await db.users.update_one({"id": uid}, {"$set": {"matricule": payload.matricule, "updated_at": now_iso()}})
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+
+
+@router.put("/employees/{uid}/identite")
+async def update_employee_identite(uid: str, payload: IdentiteIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin", "responsable_admission"))):
+    """Nom et prénom séparés d'un compte créé avec un seul "nom complet" —
+    `name` reste le "Prénom Nom" affiché partout ailleurs."""
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user["role"] != "admin" and target.get("role") not in _manageable_roles(user["role"]):
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes de votre périmètre")
+    nom, prenom = payload.nom.strip(), payload.prenom.strip()
+    await db.users.update_one({"id": uid}, {"$set": {"nom": nom, "prenom": prenom, "name": f"{prenom} {nom}", "updated_at": now_iso()}})
+    return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
+
+
+@router.put("/employees/{uid}/quota")
+async def update_employee_quota(uid: str, payload: QuotaIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin", "responsable_admission"))):
+    """Quota annuel de jours qu'un formateur peut choisir lui-même — réservé
+    aux agents, c'est ce qui lui permet de se placer sur des dates en plus."""
+    target = await db.users.find_one({"id": uid}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user["role"] != "admin" and target.get("role") not in _manageable_roles(user["role"]):
+        raise HTTPException(status_code=403, detail="Vous ne pouvez gérer que des comptes de votre périmètre")
+    await db.users.update_one({"id": uid}, {"$set": {"quota_jours_annuel": payload.quota_jours_annuel, "updated_at": now_iso()}})
     return await db.users.find_one({"id": uid}, {"_id": 0, "password_hash": 0})
 
 
@@ -429,12 +472,12 @@ async def get_my_formateur_dossier(user: dict = Depends(require_role("animateur"
     u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     profile = await _get_or_create_staff_profile(user["id"])
     docs = await db.documents.find({"id": {"$in": profile.get("documents", [])}, "is_deleted": False}, {"_id": 0}).to_list(200)
-    status = await _formateur_dossier_status(user["id"], u.get("created_at") or now_iso(), u.get("convention_signed_at"))
+    status = await _formateur_dossier_status(u, u.get("convention_signed_at"))
     next_stage = None
-    if not status["convention_signed"]:
+    if status["convention_required"] and not status["convention_signed"]:
         next_stage = await _next_upcoming_stage_for_animateur(user["id"])
     return {
-        **status, "documents_details": docs, "document_types": FORMATEUR_DOC_TYPES,
+        **status, "documents_details": docs, "document_types": _required_doc_types(u),
         "convention_pdf_available": bool(u.get("convention_pdf_path")), "next_upcoming_stage": next_stage,
     }
 
@@ -445,6 +488,8 @@ async def preview_my_convention(user: dict = Depends(require_role("animateur")))
     le document complet (texte d'engagement, annexe des sessions) avant de
     poser sa signature manuscrite via POST /me/convention/sign."""
     u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    if not formateur_is_permis(u):
+        raise HTTPException(status_code=400, detail="La convention ne concerne que les stages de récupération de points")
     pdf_bytes = await generate_preview_pdf(u)
     return Response(content=pdf_bytes, media_type="application/pdf")
 
@@ -458,6 +503,8 @@ async def sign_my_convention(payload: ConventionSignIn, user: dict = Depends(req
     if not payload.signature_data_url.startswith("data:image"):
         raise HTTPException(status_code=400, detail="Signature invalide")
     u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    if not formateur_is_permis(u):
+        raise HTTPException(status_code=400, detail="La convention ne concerne que les stages de récupération de points")
     if u.get("convention_signed_at"):
         raise HTTPException(status_code=400, detail="Convention déjà signée")
 
@@ -495,7 +542,7 @@ async def sign_my_convention(payload: ConventionSignIn, user: dict = Depends(req
         {"id": user["id"]}, {"$set": {"convention_pdf_path": result["path"], "convention_signed_at": signed_at, "updated_at": signed_at}}
     )
 
-    status = await _formateur_dossier_status(user["id"], u.get("created_at") or now_iso(), signed_at)
+    status = await _formateur_dossier_status(u, signed_at)
     agents = await db.users.find(
         {"active": True, "role": {"$in": ["admin", "responsable_admission", "agent_admin"]}}, {"_id": 0, "id": 1, "email": 1, "name": 1}
     ).to_list(100)

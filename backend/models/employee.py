@@ -5,6 +5,11 @@ from pydantic import BaseModel, EmailStr, Field
 class EmployeeIn(BaseModel):
     email: EmailStr
     name: str
+    # Nom et prénom saisis séparément (formateurs, voir Formateurs.jsx) pour
+    # toujours savoir les distinguer — `name` reste le "Prénom Nom" complet
+    # affiché partout ailleurs (documents, emails...).
+    nom: Optional[str] = None
+    prenom: Optional[str] = None
     role: str = "employe"
     phone: Optional[str] = None
     department: Optional[str] = None
@@ -36,10 +41,24 @@ class EmployeeIn(BaseModel):
 
 class EmployeeTitreIn(BaseModel):
     titre: Optional[str] = None
+    # Types de formations du formateur, dont dépendent les titres proposés —
+    # None = ne pas y toucher.
+    assigned_categories: Optional[List[str]] = None
 
 
 class MatriculeIn(BaseModel):
     matricule: Optional[str] = None
+
+
+class IdentiteIn(BaseModel):
+    nom: str = Field(min_length=1)
+    prenom: str = Field(min_length=1)
+
+
+class QuotaIn(BaseModel):
+    # Jours par an qu'un formateur peut choisir lui-même (voir
+    # core/placement_rules.py) — None = pas de limite.
+    quota_jours_annuel: Optional[int] = Field(default=None, ge=0)
 
 
 class RoleIn(BaseModel):

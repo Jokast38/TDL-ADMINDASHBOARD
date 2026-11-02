@@ -3,6 +3,7 @@ from typing import Dict, Iterable, Optional
 
 from core.config import ROLES_DOSSIERS_MGMT, ROLES_ALL_STAFF, effective_assigned_categories
 from core.database import db
+from core.placement_rules import formateur_is_permis, planning_deadline, planning_year, reminder_window_open
 from core.utils import now_iso, format_date_long_fr, format_date_fr
 from services.email import send_email
 from services.email_template import render_branded_email
@@ -11,6 +12,7 @@ from services.push import send_push_to_users
 CONTACT_EMAIL = "contact@tdl-formation.fr"
 CEO_EMAIL = "r.tafial@curbee.fr"
 DOSSIER_MILESTONE_STEP = 50
+PLANNING_REMINDER_INTERVAL_DAYS = 7
 
 # Rôles concernés par les demandes de rappel (mêmes que _NOTIFY_ROLES dans
 # routers/callback.py — dupliqué ici pour éviter un import circulaire).
@@ -796,7 +798,7 @@ async def send_formateur_dossier_reminders() -> int:
     animateurs = await db.users.find({"role": "animateur", "active": True}, {"_id": 0}).to_list(500)
     notified = 0
     for a in animateurs:
-        status = await _formateur_dossier_status(a["id"], a.get("created_at") or now_iso(), a.get("convention_signed_at"))
+        status = await _formateur_dossier_status(a, a.get("convention_signed_at"))
         if status["dossier_complete"]:
             continue
         try:
@@ -856,6 +858,8 @@ async def send_convention_session_reminders() -> int:
     ).to_list(500)
     notified = 0
     for a in animateurs:
+        if not formateur_is_permis(a):
+            continue
         stage = await _next_upcoming_stage_for_animateur(a["id"])
         if not stage or stage["days_until"] > 10 or stage["days_until"] < 0:
             continue
@@ -878,6 +882,59 @@ async def send_convention_session_reminders() -> int:
         await db.users.update_one({"id": a["id"]}, {"$set": {"convention_reminder_stage_id": stage["id"]}})
         notified += 1
     return notified
+
+
+async def send_formateur_planning_reminders() -> int:
+    """Rappel hebdomadaire, du 1er août au 30 novembre, aux formateurs qui n'ont
+    choisi aucune date pour l'année suivante, avec un récapitulatif aux agents
+    (voir core/placement_rules.py). Rien n'est envoyé tant qu'aucune date de
+    cette année n'est ouverte à un formateur : il ne pourrait rien choisir."""
+    from services.formateur_placement import planning_for, planning_overview
+
+    today = datetime.now(timezone.utc).date()
+    if not reminder_window_open(today):
+        return 0
+    settings = await db.settings.find_one({"id": "global"}, {"_id": 0, "planning_reminder_last_sent_on": 1}) or {}
+    last_sent = settings.get("planning_reminder_last_sent_on")
+    if last_sent and (today - datetime.fromisoformat(last_sent).date()) < timedelta(days=PLANNING_REMINDER_INTERVAL_DAYS):
+        return 0
+
+    year = planning_year(today)
+    deadline_fr = format_date_long_fr(planning_deadline(year).isoformat())
+    jours = await planning_overview(year)
+    animateurs = await db.users.find({"role": "animateur", "active": True}, {"_id": 0}).to_list(500)
+
+    relances = []
+    for a in animateurs:
+        if jours.get(a["id"]):
+            continue
+        planning = await planning_for(a, year)
+        if not any(s["peut_choisir"] for s in planning["sessions"]):
+            continue
+        relances.append(a)
+        if a.get("email"):
+            message = (
+                f"Bonjour {a.get('name', '')},\n\n"
+                f"Vous n'avez pas encore choisi vos dates pour l'année {year}.\n\n"
+                f"Merci de vous placer avant le {deadline_fr}, depuis votre espace formateur (onglet « Planning »)."
+            )
+            await send_email(a["email"], f"📅 Choisissez vos dates {year}", render_branded_email(message))
+        await send_push_to_users([a["id"]], f"Choisissez vos dates {year}", f"Avant le {deadline_fr}", "/espace-animateur")
+
+    if not relances:
+        return 0
+    noms = "".join(f"<li>{a.get('name', '')}</li>" for a in relances)
+    agents = await db.users.find(
+        {"active": True, "role": {"$in": ["admin", "responsable_admission", "agent_admin"]}}, {"_id": 0, "id": 1, "email": 1}
+    ).to_list(100)
+    for agent in agents:
+        if agent.get("email"):
+            await send_email(
+                agent["email"], f"📅 Planning {year} — {len(relances)} formateur(s) sans date",
+                f"<p>Ces formateurs n'ont encore choisi aucune date pour {year} (date limite : {deadline_fr}) :</p><ul>{noms}</ul>",
+            )
+    await db.settings.update_one({"id": "global"}, {"$set": {"planning_reminder_last_sent_on": today.isoformat()}}, upsert=True)
+    return len(relances)
 
 
 async def send_appointment_reminders() -> int:

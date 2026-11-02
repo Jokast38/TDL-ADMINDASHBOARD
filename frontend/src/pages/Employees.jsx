@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { navAll } from "@/components/Layout";
+import FormateurTitrePicker from "@/components/FormateurTitrePicker";
 import { Plus, Trash, Pause, Play, Archive, Warning, Key, Tag, Lock } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
-const empty = { email: "", name: "", role: "employe", phone: "", department: "", password: "", assigned_categories: [], assigned_centers: [], assigned_training_assignments: [], allowed_pages: [] };
+const empty = { email: "", nom: "", prenom: "", titre: "", role: "employe", phone: "", department: "", password: "", assigned_categories: [], assigned_centers: [], assigned_training_assignments: [], allowed_pages: [] };
 
 const ROLE_LABEL = {
   employe: "Employé", animateur: "Animateur / Formateur",
@@ -76,11 +77,17 @@ export default function Employees() {
   useEffect(() => { load(); }, []);
 
   const save = async () => {
+    const nom = form.nom.trim();
+    const prenom = form.prenom.trim();
+    if (!nom || !prenom) return toast.error("Nom et prénom sont requis");
+    if (form.role === "animateur" && (!form.assigned_categories.length || !form.titre)) {
+      return toast.error("Choisissez au moins un type de formation et un titre");
+    }
     if (form.assigned_training_assignments.some((assignment) => !assignment.category || !assignment.center)) {
       return toast.error("Complétez ou supprimez chaque attribution incomplète");
     }
     try {
-      await api.post("/employees", form);
+      await api.post("/employees", { ...form, nom, prenom, name: `${prenom} ${nom}` });
       toast.success("Employé créé");
       setOpen(false); setForm(empty);
       load();
@@ -215,9 +222,13 @@ export default function Employees() {
           <DialogContent>
             <DialogHeader><DialogTitle>Nouvel employé</DialogTitle></DialogHeader>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-              <div className="sm:col-span-2">
-                <label className="text-sm font-medium">Nom complet</label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} data-testid="emp-name" />
+              <div>
+                <label className="text-sm font-medium">Nom</label>
+                <Input value={form.nom} onChange={(e) => setForm({ ...form, nom: e.target.value })} data-testid="emp-nom" />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Prénom</label>
+                <Input value={form.prenom} onChange={(e) => setForm({ ...form, prenom: e.target.value })} data-testid="emp-prenom" />
               </div>
               <div>
                 <label className="text-sm font-medium">Email</label>
@@ -229,7 +240,7 @@ export default function Employees() {
               </div>
               <div>
                 <label className="text-sm font-medium">Rôle</label>
-                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v, allowed_pages: defaultPagesForRole(v) })}>
+                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v, titre: "", assigned_categories: [], allowed_pages: defaultPagesForRole(v) })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {isAdmin ? (
@@ -257,6 +268,15 @@ export default function Employees() {
                 <label className="text-sm font-medium">Mot de passe initial</label>
                 <PasswordInput value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} data-testid="emp-password" />
               </div>
+              {form.role === "animateur" && (
+                <div className="sm:col-span-2">
+                  <FormateurTitrePicker
+                    categories={form.assigned_categories}
+                    titre={form.titre}
+                    onChange={({ categories, titre }) => setForm((f) => ({ ...f, assigned_categories: categories, titre }))}
+                  />
+                </div>
+              )}
               {ROLES_WITH_ASSIGNMENT.includes(form.role) && (
                 <div className="sm:col-span-2">
                   <label className="text-sm font-medium mb-1 block">Cours et centre attribués</label>

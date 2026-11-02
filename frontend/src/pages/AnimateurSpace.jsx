@@ -12,6 +12,7 @@ import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import { toast } from "sonner";
 import { useTour } from "@/contexts/TourContext";
 import { HELP_CATEGORIES } from "@/constants/helpTours";
+import FormateurPlanningTab from "@/components/FormateurPlanningTab";
 
 // Pièces justifiant le droit d'exercer — doit rester synchronisé avec
 // FORMATEUR_DOC_TYPES côté backend (routers/employees.py). Dossier à
@@ -189,10 +190,10 @@ function DossierTab() {
     <div className="space-y-6 max-w-2xl">
       {dossier.dossier_overdue && (
         <div className="border border-red-300 bg-red-50 text-red-700 rounded-md p-3 text-sm">
-          ⏰ Le délai de 24h pour compléter votre dossier est dépassé — merci de finaliser au plus vite les documents et la convention manquants.
+          ⏰ Le délai de 24h pour compléter votre dossier est dépassé — merci de finaliser au plus vite les éléments manquants.
         </div>
       )}
-      {!dossier.convention_signed && dossier.next_upcoming_stage && (
+      {dossier.convention_required && !dossier.convention_signed && dossier.next_upcoming_stage && (
         <div className={`border rounded-md p-3 text-sm ${dossier.next_upcoming_stage.days_until <= 10 ? "border-red-300 bg-red-50 text-red-700" : "border-amber-300 bg-amber-50 text-amber-800"}`} data-testid="convention-session-alert">
           ✏️ Vous animez <b>{dossier.next_upcoming_stage.formation_titre}</b> le {formatDateFR(dossier.next_upcoming_stage.date_debut)}
           {" "}(dans {dossier.next_upcoming_stage.days_until} jour{dossier.next_upcoming_stage.days_until > 1 ? "s" : ""}) — merci de signer votre convention avant le début de la session.
@@ -200,12 +201,12 @@ function DossierTab() {
       )}
       {!dossier.dossier_complete && !dossier.dossier_overdue && dossier.dossier_deadline && (
         <div className="border border-amber-300 bg-amber-50 text-amber-800 rounded-md p-3 text-sm">
-          À compléter avant le {formatDateTimeFR(dossier.dossier_deadline)} (documents + convention).
+          À compléter avant le {formatDateTimeFR(dossier.dossier_deadline)} ({dossier.convention_required ? "documents + convention" : "documents"}).
         </div>
       )}
       {dossier.dossier_complete && (
         <div className="border border-[#0B7238]/30 bg-[#0B7238]/5 text-[#0B7238] rounded-md p-3 text-sm">
-          ✅ Dossier complet — documents et convention en règle.
+          ✅ Dossier complet — {dossier.convention_required ? "documents et convention en règle" : "documents en règle"}.
         </div>
       )}
 
@@ -213,7 +214,7 @@ function DossierTab() {
         <p className="overline mb-1">Mon dossier</p>
         <h2 className="font-display text-xl font-bold mb-4">Documents justifiant mon droit d'exercer</h2>
         <div className="space-y-2">
-          {Object.entries(STAFF_DOC_TYPE_LABELS).map(([type, label]) => {
+          {Object.entries(dossier.document_types || STAFF_DOC_TYPE_LABELS).map(([type, label]) => {
             const doc = byType[type];
             return (
               <div key={type} className="flex items-center justify-between border border-gray-200 rounded-md p-3 text-sm">
@@ -238,7 +239,7 @@ function DossierTab() {
         </div>
       </Card>
 
-      <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+      {dossier.convention_required && <Card className="p-6 border border-gray-200 rounded-md shadow-none">
         <p className="overline mb-1">Engagement</p>
         <h2 className="font-display text-xl font-bold mb-4">Convention de collaboration</h2>
         {dossier.convention_signed ? (
@@ -266,7 +267,7 @@ function DossierTab() {
             </div>
           </>
         )}
-      </Card>
+      </Card>}
     </div>
   );
 }
@@ -274,7 +275,7 @@ function DossierTab() {
 export default function AnimateurSpace() {
   const { user } = useAuth();
   const { startTour } = useTour();
-  const [tab, setTab] = useState("sessions"); // sessions | dossier | signature
+  const [tab, setTab] = useState("sessions"); // sessions | planning | dossier | signature
   const [stages, setStages] = useState([]);
   const [selected, setSelected] = useState(null);
   const [jours, setJours] = useState([]);
@@ -421,13 +422,16 @@ export default function AnimateurSpace() {
         <div>
           <p className="overline">Espace animateur</p>
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">
-            {tab === "sessions" ? "Mes sessions" : tab === "dossier" ? "Mon dossier" : "Ma signature"}
+            {tab === "sessions" ? "Mes sessions" : tab === "planning" ? "Mon planning" : tab === "dossier" ? "Mon dossier" : "Ma signature"}
           </h1>
           <p className="text-gray-500 mt-2">Bienvenue {user?.name}. {stages.length} session(s) attribuée(s).</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant={tab === "sessions" ? "default" : "outline"} size="sm" onClick={() => setTab("sessions")} className={tab === "sessions" ? "bg-[#0a0a0a] text-white" : ""}>
             <Calendar size={14} className="mr-1" /> Sessions
+          </Button>
+          <Button variant={tab === "planning" ? "default" : "outline"} size="sm" onClick={() => setTab("planning")} className={tab === "planning" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-planning">
+            <Calendar size={14} className="mr-1" /> Planning
           </Button>
           <Button variant={tab === "dossier" ? "default" : "outline"} size="sm" onClick={() => setTab("dossier")} className={tab === "dossier" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-dossier">
             <UserCircle size={14} className="mr-1" /> Mon dossier
@@ -438,6 +442,7 @@ export default function AnimateurSpace() {
         </div>
       </div>
 
+      {tab === "planning" && <FormateurPlanningTab />}
       {tab === "dossier" && <DossierTab />}
       {tab === "signature" && <SignatureTab user={user} />}
 

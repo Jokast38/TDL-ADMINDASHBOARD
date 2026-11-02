@@ -24,7 +24,7 @@ from routers import (
     exams, appointments, stage_attestations, modules, satisfaction, french_tests,
     mailbox, meta_leads, flash_offer, ocr_test, meta_lead_import,
     call_center, cosmosia_import, custom_payments, meta_crm_test, stats,
-    pricing, caces,
+    pricing, caces, formateur_planning,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import (
@@ -32,6 +32,7 @@ from services.staff_notify import (
     send_weekly_admin_report, send_daily_leads_digest, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
     send_call_appointment_reminders,
     send_convention_session_reminders,
+    send_formateur_planning_reminders,
     send_emargement_reminders,
     send_understaffed_session_alerts,
 )
@@ -98,6 +99,7 @@ app.include_router(limova.router,         prefix=_PREFIX)
 app.include_router(payments.router,       prefix=_PREFIX)
 app.include_router(push.router,           prefix=_PREFIX)
 app.include_router(reminders.router,      prefix=_PREFIX)
+app.include_router(formateur_planning.router, prefix=_PREFIX)
 app.include_router(company_documents.router, prefix=_PREFIX)
 app.include_router(mailbox.router, prefix=_PREFIX)
 app.include_router(flash_offer.router,    prefix=_PREFIX)
@@ -519,6 +521,21 @@ async def _convention_session_reminders_loop():
         await asyncio.sleep(24 * 3600)
 
 
+async def _formateur_planning_reminders_loop():
+    """Toutes les 24h, relance les formateurs qui n'ont choisi aucune date
+    pour l'année suivante (voir services/staff_notify.py) — l'envoi lui-même
+    reste hebdomadaire et limité au 1er août - 30 novembre."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_formateur_planning_reminders()
+            if notified:
+                log.info(f"Rappels planning formateurs : {notified} notification(s) envoyée(s)")
+        except Exception as e:
+            log.warning(f"Rappels planning formateurs : erreur — {e}")
+        await asyncio.sleep(24 * 3600)
+
+
 async def _wordpress_auto_sync_loop():
     """Toutes les 15 min, si la synchro auto du blog est activée (bouton
     on/off dans AdminBlog.jsx, réglage wp_blog_auto_sync_enabled), importe en
@@ -556,6 +573,7 @@ async def startup():
     asyncio.create_task(_call_appointment_reminders_loop())
     asyncio.create_task(_formateur_dossier_reminders_loop())
     asyncio.create_task(_convention_session_reminders_loop())
+    asyncio.create_task(_formateur_planning_reminders_loop())
     asyncio.create_task(_convocations_loop())
     asyncio.create_task(_auto_attestations_loop())
     asyncio.create_task(_satisfaction_chaud_loop())

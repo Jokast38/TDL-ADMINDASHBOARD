@@ -4,7 +4,7 @@ from core.security import require_role
 from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
-    send_emargement_reminders, send_convention_session_reminders,
+    send_emargement_reminders, send_convention_session_reminders, send_formateur_planning_reminders,
     send_understaffed_session_alerts, send_daily_leads_digest,
 )
 from services.candidate_automation import (
@@ -112,6 +112,15 @@ async def run_convention_session_reminders(user: dict = Depends(require_role("ad
     à venir (≤10 jours, test ou cron externe) — la boucle de fond (voir
     server.py) les envoie automatiquement chaque jour."""
     notified = await send_convention_session_reminders()
+    return {"notified": notified}
+
+
+@router.post("/formateur-planning/run")
+async def run_formateur_planning_reminders(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel du rappel de choix des dates — la boucle de fond
+    (voir server.py) le vérifie chaque jour et l'envoie au plus une fois par
+    semaine, du 1er août au 30 novembre."""
+    notified = await send_formateur_planning_reminders()
     return {"notified": notified}
 
 
