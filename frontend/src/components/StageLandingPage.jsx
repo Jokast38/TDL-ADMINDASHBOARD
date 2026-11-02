@@ -10,6 +10,7 @@ import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import StripeCheckout from "@/components/StripeCheckout";
+import { CAS_STAGE_OPTIONS } from "@/constants/casStage";
 
 const GOLD = "#d4af37";
 const NAVY = "#0a0a0a";
@@ -799,6 +800,11 @@ function BookingForm({
       return;
     }
 
+    if (!form.cas_stage) {
+      toast.error("Merci d'indiquer votre situation (stage volontaire ou obligatoire)");
+      return;
+    }
+
     if (!form.privacyConsent) {
       toast.error("Merci d'accepter l'utilisation de vos données");
       return;
@@ -829,6 +835,7 @@ function BookingForm({
         student_email: form.email?.trim() || `${form.prenom.toLowerCase()}${form.nom.toLowerCase()}@temp.fr`,
         price: price,
         category: "PERMIS",
+        cas_stage: form.cas_stage,
         session: session,
         center: center || "Non spécifié",
         source: "stage_recuperation_points",
@@ -959,6 +966,33 @@ function BookingForm({
                   className="w-full border border-gray-300 rounded-md px-4 py-2.5 text-sm"
                   data-testid="booking-email"
                 />
+
+                <div className="space-y-2" data-testid="booking-cas-stage">
+                  <p className="text-sm font-semibold text-gray-700">Votre situation *</p>
+                  {CAS_STAGE_OPTIONS.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={`flex items-start gap-2.5 border rounded-md px-3.5 py-2.5 text-xs cursor-pointer transition-colors ${
+                        form.cas_stage === opt.value ? "border-black bg-gray-50" : "border-gray-300"
+                      }`}
+                      data-testid={`booking-cas-stage-${opt.value}`}
+                    >
+                      <input
+                        type="radio"
+                        name="cas_stage"
+                        value={opt.value}
+                        checked={form.cas_stage === opt.value}
+                        onChange={() => setForm({ ...form, cas_stage: opt.value })}
+                        className="mt-0.5 shrink-0"
+                      />
+                      <span>
+                        <span className="font-semibold text-gray-900 block mb-0.5">{opt.shortName}</span>
+                        <span className="text-gray-500">{opt.description}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
                 <PrivacyConsentCheckbox
                   checked={!!form.privacyConsent}
                   onChange={(v) => setForm({ ...form, privacyConsent: v })}
@@ -977,7 +1011,7 @@ function BookingForm({
                   <Button
                     type="button"
                     onClick={openRecap}
-                    disabled={!form.privacyConsent}
+                    disabled={!form.privacyConsent || !form.cas_stage}
                     style={{ backgroundColor: GOLD }}
                     className="w-full text-black font-bold uppercase text-xs tracking-wide py-6"
                     data-testid="booking-open-recap"
@@ -1010,6 +1044,12 @@ function BookingForm({
                       <span className="font-semibold text-right">{center}</span>
                     </div>
                   )}
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">Situation</span>
+                    <span className="font-semibold text-right">
+                      {CAS_STAGE_OPTIONS.find((o) => o.value === form.cas_stage)?.shortName || "—"}
+                    </span>
+                  </div>
                   <div className="flex justify-between gap-3">
                     <span className="text-gray-500">Stagiaire</span>
                     <span className="font-semibold text-right">{form.prenom} {form.nom}</span>

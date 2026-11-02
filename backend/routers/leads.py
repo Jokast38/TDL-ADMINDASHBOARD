@@ -505,10 +505,11 @@ async def list_leads(
         # (vue "Vue rapide" au-dessus du tableau) utilisent ce vocabulaire,
         # pas l'ancien, pour fonctionner aussi sur les leads créés après la
         # migration qui n'ont jamais eu de `status` legacy renseigné.
-        if statut == "inscrit":
-            query["statut"] = {"$in": ["inscrit", "paye"]}
-        else:
-            query["statut"] = statut
+        # "paye" a sa propre carte KPI distincte depuis le 2026-11-02 (voir
+        # _STATS_BUCKETS) — ne plus le confondre avec "inscrit" ici, sinon
+        # cliquer la carte "Inscrits" (ou "Payé") remontait les deux
+        # mélangés au lieu de filtrer précisément l'un ou l'autre.
+        query["statut"] = statut
     if pipeline_status: query["pipeline_status"] = pipeline_status
     if assigned_to: query["assigned_to"] = assigned_to
     # Filtre par formation côté Centre d'appel (CentreAppel.jsx) — `category`
@@ -678,6 +679,10 @@ _STATS_BUCKETS = [
     ("a_relancer", "À relancer"),
     ("rendez_vous", "Rendez-vous"),
     ("inscrit", "Inscrits"),
+    # Carte distincte depuis le 2026-11-02 (demande équipe) — le CA réellement
+    # encaissé (montant_encaisse) ne doit pas se mélanger avec le CA des
+    # simples inscrits pas encore payés.
+    ("paye", "Payé"),
 ]
 
 
@@ -703,7 +708,9 @@ async def leads_stats(ville: Optional[str] = None, source: Optional[str] = None,
         query["ville"] = ville
     if source:
         query["source"] = source
-    leads = await db.leads.find(query, {"_id": 0, "statut": 1, "chaleur": 1, "category": 1, "ville": 1, "prix_personnalise": 1}).to_list(20000)
+    leads = await db.leads.find(
+        query, {"_id": 0, "statut": 1, "chaleur": 1, "category": 1, "ville": 1, "prix_personnalise": 1, "montant_encaisse": 1}
+    ).to_list(20000)
 
     permis_formation_id = "e22bcca0-6656-4335-b6a6-8a06235a2770"
     permis_catalogue = 200.0
@@ -711,6 +718,12 @@ async def leads_stats(ville: Optional[str] = None, source: Optional[str] = None,
     grille = {row["ville"]: row["prix"] for row in grille_rows}
 
     def _montant(lead: dict) -> float:
+        # Pour un lead payé, le CA réellement encaissé (synchronisé par le
+        # webhook Stripe, voir services.lead_payment_sync) est connu avec
+        # certitude — préféré à l'estimation catalogue utilisée pour les
+        # qualifications encore "potentielles".
+        if lead.get("statut") == "paye" and lead.get("montant_encaisse"):
+            return lead["montant_encaisse"]
         if lead.get("category") == "PERMIS":
             return compute_prix_effectif(lead.get("prix_personnalise"), grille.get(lead.get("ville")), permis_catalogue)
         if lead.get("prix_personnalise") is not None:
@@ -720,7 +733,7 @@ async def leads_stats(ville: Optional[str] = None, source: Optional[str] = None,
     buckets = {key: {"count": 0, "montant": 0.0} for key, _ in _STATS_BUCKETS}
     for lead in leads:
         statut = lead.get("statut") or "a_contacter"
-        key = "inscrit" if statut in ("inscrit", "paye") else statut
+        key = statut
         if key not in buckets:
             continue
         buckets[key]["count"] += 1

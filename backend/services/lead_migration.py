@@ -42,6 +42,7 @@ _LEGACY_MAP = {
     "a_relancer_1_an": ("a_relancer", None, None, 365),
     "plus_interesse": ("non_interesse", None, "plus_interesse", None),
     "inscrit": ("inscrit", None, None, None),
+    "paye": ("paye", None, None, None),
     # pipeline_status (Centre d'appel)
     "formulaire_rempli": ("a_contacter", "froid", None, None),
     "lead_entrant_sans_rdv": ("a_contacter", "froid", None, None),
@@ -239,5 +240,9 @@ def statut_to_qualification(lead: dict) -> str:
         return "a_relancer"
     return {
         "a_contacter": "a_contacter", "rendez_vous": "a_relancer",
-        "inscrit": "inscrit", "paye": "inscrit", "injoignable": "pas_de_reponse",
+        # "paye" a sa propre qualification distincte d'"inscrit" depuis la
+        # demande du 2026-11-02 — avant, un lead payé retombait sur
+        # "Inscrit" au rechargement, mélangeant son CA avec celui des
+        # simples inscrits non encore payés dans les cartes KPI.
+        "inscrit": "inscrit", "paye": "paye", "injoignable": "pas_de_reponse",
     }.get(statut, "a_contacter")

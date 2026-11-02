@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CAS_STAGE_OPTIONS } from "@/constants/casStage";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -295,7 +296,14 @@ export default function Dossiers() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                    <p className="text-xs text-gray-500 mb-1">{d.category}</p>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <p className="text-xs text-gray-500">{d.category}</p>
+                      {d.cas_stage && (
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 leading-tight" title={CAS_STAGE_OPTIONS.find((o) => o.value === d.cas_stage)?.shortName}>
+                          Cas {CAS_STAGE_OPTIONS.findIndex((o) => o.value === d.cas_stage) + 1}
+                        </Badge>
+                      )}
+                    </div>
                     <p className="font-semibold text-sm leading-tight pr-4">{d.student_name}</p>
                     <p className="text-xs text-gray-600 mt-1 truncate">{d.formation_title}</p>
                     {d.stage ? (

@@ -470,7 +470,7 @@ FEUILLE_EMARGEMENT = {
     <h2 style="font-family:Helvetica-Bold;font-size:12pt;color:#0a0a0a;">Émargement des apprenants</h2>
     <hr/>
     <table width="100%" style="border:1px solid #dddddd;font-family:Helvetica;font-size:9.5pt;">
-      <tr style="background-color:#f0f0f0;"><td style="padding:6px;"><b>Apprenant</b></td><td style="padding:6px;text-align:right;"><b>Signature</b></td></tr>
+      <tr style="background-color:#f0f0f0;"><td style="padding:6px;"><b>Apprenant</b></td><td style="padding:6px;text-align:center;"><b>Cas</b></td><td style="padding:6px;text-align:right;"><b>Signature</b></td></tr>
       {{apprenants_list}}
     </table>
 

@@ -14,6 +14,7 @@ from models.attestation import AttestationIdentityIn, AttestationSignIn
 from services.email import send_email
 from services.push import send_push_to_user
 from services.pdf import generate_stage_recup_points_attestation
+from core.stage_recup_points import cas_stage_label
 from services.staff_notify import notify_new_contact
 from services import identity_extraction
 from routers.stages import _stage_days, _stage_animateur_ids
@@ -272,6 +273,7 @@ async def sign_attestation(dossier_id: str, payload: AttestationSignIn, user: di
         formateur_signature_data_url=formateur_signature_data_url,
         psychologue_signature_data_url=psychologue_signature_data_url,
         cachet_data_url=cachet_data_url,
+        cas_stage_label=cas_stage_label(dossier.get("cas_stage")),
         lieu_signature=stage.get("lieu_ville") or centre["ville"],
         date_signature=today,
     )

@@ -486,13 +486,10 @@ export default function CentreAppel() {
 
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Notes</p>
-                  {detailLead.notes && (
-                    <p className="whitespace-pre-line bg-gray-50 rounded-md p-2 text-xs mb-2">{detailLead.notes}</p>
-                  )}
                   <Textarea
                     value={noteDraft}
                     onChange={(e) => setNoteDraft(e.target.value)}
-                    placeholder="Ajouter une note..."
+                    placeholder="Ajouter une note — les précédentes restent visibles ci-dessous"
                     className="text-xs"
                     rows={2}
                     data-testid="centre-appel-note-input"
@@ -506,6 +503,24 @@ export default function CentreAppel() {
                   >
                     {savingNote ? "Enregistrement..." : "Enregistrer la note"}
                   </Button>
+                  {/* Historique complet des notes (la plus récente en
+                      premier) — avant, seule la toute dernière note
+                      (detailLead.notes) était affichée, donnant l'impression
+                      qu'une nouvelle note effaçait les précédentes alors
+                      qu'elles étaient déjà conservées côté backend
+                      (notes_history) sans jamais être montrées (demande du
+                      2026-11-02). */}
+                  {detailLead.notes_history?.length > 0 && (
+                    <div className="mt-2 max-h-40 overflow-y-auto space-y-1.5 border border-gray-100 rounded-md p-2 bg-gray-50">
+                      {[...detailLead.notes_history].reverse().map((n, i) => (
+                        <div key={i} className="text-xs text-gray-600 border-l-2 border-gray-300 pl-2">
+                          <span className="text-gray-400">{n.at ? formatDateTimeFR(n.at) : ""}</span>
+                          {n.by_name && <span className="font-medium"> — {n.by_name}</span>}
+                          <p className="whitespace-pre-line">{n.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {detailLead.documents_requested?.length > 0 && (

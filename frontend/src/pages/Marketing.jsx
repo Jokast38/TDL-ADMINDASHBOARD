@@ -624,6 +624,7 @@ const META_LEAD_QUALIF_COLORS = {
   // Vert franc (distinct de "interesse", vert plus clair) — pour que le
   // passage en "Inscrit" (lead converti) saute aux yeux dans le tableau.
   inscrit: "bg-green-600 text-white hover:bg-green-600",
+  paye: "bg-emerald-700 text-white hover:bg-emerald-700",
 };
 const META_LEADS_PAGE_SIZE = 25;
 
@@ -823,14 +824,14 @@ function CosmosiaTab() {
                   <span
                     className="h-2 w-2 rounded-full inline-block"
                     style={{
-                      backgroundColor: { a_contacter: "#9ca3af", a_relancer: "#3b82f6", rendez_vous: "#f59e0b", inscrit: "#22c55e" }[b.statut],
+                      backgroundColor: { a_contacter: "#9ca3af", a_relancer: "#3b82f6", rendez_vous: "#f59e0b", inscrit: "#22c55e", paye: "#047857" }[b.statut],
                     }}
                   />
                   {b.label}
                 </p>
                 <p className="font-display text-2xl font-bold mt-1">{b.montant.toLocaleString("fr-FR")} €</p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {b.count} {b.statut === "inscrit" ? (b.count > 1 ? "inscrits" : "inscrit") : (b.count > 1 ? "prospects" : "prospect")}
+                  {b.count} {b.statut === "inscrit" ? (b.count > 1 ? "inscrits" : "inscrit") : b.statut === "paye" ? (b.count > 1 ? "clients payés" : "client payé") : (b.count > 1 ? "prospects" : "prospect")}
                 </p>
               </Card>
             ))}
@@ -1413,13 +1414,18 @@ function MetaEventsTab() {
 // Clic -> popover d'édition avec Textarea + bouton Enregistrer.
 function MetaLeadNotesCell({ lead, onSave }) {
   const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(lead.notes || "");
+  // Vide par défaut (et non préchargé avec lead.notes) : ce champ sert à
+  // SAISIR une nouvelle note, qui s'ajoute à l'historique ci-dessous sans
+  // écraser les précédentes — avant, le texte existant était préchargé ici,
+  // donc sauvegarder sans y penser remplaçait silencieusement l'affichage
+  // de la note précédente (demande du 2026-11-02).
+  const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
   const hasNotes = !!(lead.notes || "").trim();
 
   const handleOpenChange = (v) => {
     setOpen(v);
-    if (v) setDraft(lead.notes || "");
+    if (v) setDraft("");
   };
 
   const save = async () => {
@@ -1476,27 +1482,17 @@ function MetaLeadNotesCell({ lead, onSave }) {
         <PopoverContent className="w-80" align="start">
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-medium text-gray-600">Note sur {lead.name || lead.email || "ce prospect"}</p>
-            {hasNotes && (
-              <button
-                type="button"
-                onClick={() => setDraft("")}
-                className="text-[11px] text-[#0052CC] hover:underline flex items-center gap-1"
-                data-testid={`meta-lead-notes-new-${lead.id}`}
-              >
-                + Nouvelle note
-              </button>
-            )}
           </div>
           <Textarea
             rows={4}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Laisser une note sur ce prospect..."
+            placeholder="Ajouter une nouvelle note — les précédentes restent visibles ci-dessous"
             data-testid={`meta-lead-notes-textarea-${lead.id}`}
           />
           <div className="flex justify-end gap-2 mt-2">
             <Button size="sm" variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
-            <Button size="sm" onClick={save} disabled={saving} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid={`meta-lead-notes-save-${lead.id}`}>
+            <Button size="sm" onClick={save} disabled={saving || !draft.trim()} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid={`meta-lead-notes-save-${lead.id}`}>
               {saving ? "..." : "Enregistrer"}
             </Button>
           </div>

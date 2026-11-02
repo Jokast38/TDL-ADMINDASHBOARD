@@ -86,6 +86,10 @@ QUALIFICATION_LABELS = {
     "a_relancer_1_an": "À relancer dans 1 an",
     "plus_interesse": "Plus intéressé",
     "inscrit": "Inscrit",
+    # Distinct d'"Inscrit" depuis le 2026-11-02 — un prospect devenu client
+    # ET ayant réglé, pour pouvoir suivre le CA encaissé séparément du CA
+    # simplement inscrit (potentiellement pas encore payé).
+    "paye": "Payé",
 }
 
 # Colonnes "fixes" de l'export Meta (métadonnées pub, toujours présentes,

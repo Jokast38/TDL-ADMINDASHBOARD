@@ -22,6 +22,12 @@ class InscriptionIn(BaseModel):
     # créées sans session assignée, puis affectées plus tard (voir
     # PUT /inscriptions/{iid}/stage).
     stage_id: Optional[str] = None
+    # Cas de stage pour la "récupération de points" (voir
+    # core/stage_recup_points.py) — choisi par le candidat sur le formulaire
+    # public : "volontaire" (Cas 1) ou "obligatoire_probatoire" (Cas 2,
+    # lettre 48N). Détermine le libellé imprimé sur son attestation
+    # individuelle. Sans objet pour les autres formations (reste None).
+    cas_stage: Optional[str] = None
     # Choix explicite de l'étudiant sur le formulaire public, uniquement
     # affiché/requis pour une formation cpf_eligible : "cpf" (prise en
     # charge, pas de paiement en ligne, l'équipe recontacte pour finaliser

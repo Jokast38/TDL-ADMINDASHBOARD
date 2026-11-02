@@ -16,6 +16,7 @@ from services.email_template import render_branded_email
 from services.pdf import generate_attestation_pdf, render_html_pdf
 from services.push import send_push_to_user, send_push_to_users
 from routers.stages import _stage_days, _stage_animateur_ids
+from core.stage_recup_points import CAS_STAGE_CHOICES
 
 router = APIRouter(tags=["emargements"])
 
@@ -336,9 +337,19 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
     for ins in inscrits:
         em = await db.emargements.find_one({"stage_id": sid, "inscription_id": ins["id"], "session_date": session_date, "periode": periode_filter}, {"_id": 0})
         signed = "✓ Signé" if em and em.get("present") else ("Absent" if em else "—")
-        rows += f'<tr><td style="padding:6px;">{ins.get("student_name", "")}</td><td style="padding:6px;text-align:right;">{signed}</td></tr>'
+        # Cas de stage (récupération de points — voir
+        # core/stage_recup_points.py) noté en chiffre sur la liste
+        # d'émargement globale, à la demande de l'équipe (2026-11-02) :
+        # juste "1" ou "2", pas le libellé complet qui alourdirait la liste.
+        cas = ins.get("cas_stage")
+        cas_num = str(CAS_STAGE_CHOICES.index(cas) + 1) if cas in CAS_STAGE_CHOICES else ""
+        rows += (
+            f'<tr><td style="padding:6px;">{ins.get("student_name", "")}</td>'
+            f'<td style="padding:6px;text-align:center;">{cas_num}</td>'
+            f'<td style="padding:6px;text-align:right;">{signed}</td></tr>'
+        )
     if not rows:
-        rows = '<tr><td colspan="2" style="padding:6px;text-align:center;color:#999;">Aucun inscrit</td></tr>'
+        rows = '<tr><td colspan="3" style="padding:6px;text-align:center;color:#999;">Aucun inscrit</td></tr>'
 
     if animateurs_docs:
         # Le nom du formateur n'apparaît plus sur la feuille d'émargement —

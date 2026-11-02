@@ -41,6 +41,7 @@ const QUALIF_COLOR = {
   a_relancer_1_an: "bg-purple-100 text-purple-700",
   plus_interesse: "bg-red-100 text-red-700",
   inscrit: "bg-green-600 text-white",
+  paye: "bg-emerald-700 text-white",
 };
 
 // ─── URLs TDL ─────────────────────────────────────────────────────────────────
@@ -722,8 +723,11 @@ export default function Leads() {
   const openEdit = (lead) => {
     setEditLead(lead);
     setEditForm({
+      // `notes` n'est plus prérempli avec le texte existant : ce champ sert
+      // désormais à SAISIR une nouvelle note (voir notes_history ci-dessous),
+      // pas à réécrire l'historique complet à chaque sauvegarde.
       name: lead.name || "", email: lead.email || "", phone: lead.phone || "",
-      interest: lead.interest || "", notes: lead.notes || "", tags: lead.tags || [],
+      interest: lead.interest || "", notes: "", tags: lead.tags || [],
     });
     setEditOpen(true);
   };
@@ -733,10 +737,16 @@ export default function Leads() {
     if (!editForm.name.trim()) return toast.error("Le nom est requis");
     setSavingEdit(true);
     try {
-      await api.put(`/leads/${editLead.id}`, {
+      const payload = {
         name: editForm.name, email: editForm.email || null, phone: editForm.phone || null,
-        interest: editForm.interest, notes: editForm.notes,
-      });
+        interest: editForm.interest,
+      };
+      // N'envoyer `notes` que si une nouvelle note a été tapée — sinon le
+      // backend la compare à l'ancienne valeur et considère (à tort) qu'une
+      // note vide "change" le lead, poussant une entrée vide dans
+      // notes_history à chaque simple modification de nom/email/téléphone.
+      if (editForm.notes.trim()) payload.notes = editForm.notes.trim();
+      await api.put(`/leads/${editLead.id}`, payload);
       toast.success("Lead mis à jour");
       setEditOpen(false);
       load();
@@ -1668,14 +1678,14 @@ export default function Leads() {
                   <span
                     className="h-2 w-2 rounded-full inline-block"
                     style={{
-                      backgroundColor: { a_contacter: "#9ca3af", a_relancer: "#3b82f6", rendez_vous: "#f59e0b", inscrit: "#22c55e" }[b.statut],
+                      backgroundColor: { a_contacter: "#9ca3af", a_relancer: "#3b82f6", rendez_vous: "#f59e0b", inscrit: "#22c55e", paye: "#047857" }[b.statut],
                     }}
                   />
                   {b.label}
                 </p>
                 <p className="font-display text-2xl font-bold mt-1">{b.montant.toLocaleString("fr-FR")} €</p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {b.count} {b.statut === "inscrit" ? (b.count > 1 ? "inscrits" : "inscrit") : (b.count > 1 ? "prospects" : "prospect")}
+                  {b.count} {b.statut === "inscrit" ? (b.count > 1 ? "inscrits" : "inscrit") : b.statut === "paye" ? (b.count > 1 ? "clients payés" : "client payé") : (b.count > 1 ? "prospects" : "prospect")}
                 </p>
               </Card>
             ))}
@@ -2186,8 +2196,28 @@ export default function Leads() {
               <Input value={editForm.interest} onChange={(e) => setEditForm({ ...editForm, interest: e.target.value })} placeholder="ex: VTC, TAXI, Stage récupération de points…" />
             </div>
             <div>
-              <label className="text-sm font-medium">Notes</label>
-              <Textarea rows={3} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+              <label className="text-sm font-medium">Ajouter une note</label>
+              <Textarea
+                rows={2} value={editForm.notes}
+                onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                placeholder="Écrire une nouvelle note — les précédentes restent visibles ci-dessous, rien n'est écrasé"
+                data-testid="lead-edit-note-input"
+              />
+              {/* Historique des notes — la plus récente en premier, voir
+                  PUT /leads/{id} (notes_history, $push côté backend). Avant
+                  cette vue, taper une nouvelle note écrasait silencieusement
+                  l'affichage de la précédente (demande du 2026-11-02). */}
+              {editLead?.notes_history?.length > 0 && (
+                <div className="mt-2 max-h-40 overflow-y-auto space-y-1.5 border border-gray-100 rounded-md p-2 bg-gray-50">
+                  {[...editLead.notes_history].reverse().map((n, i) => (
+                    <div key={i} className="text-xs text-gray-600 border-l-2 border-gray-300 pl-2">
+                      <span className="text-gray-400">{n.at ? formatDateTimeFR(n.at) : ""}</span>
+                      {n.by_name && <span className="font-medium"> — {n.by_name}</span>}
+                      <p className="whitespace-pre-line">{n.text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-4">

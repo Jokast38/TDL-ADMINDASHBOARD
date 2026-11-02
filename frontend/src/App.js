@@ -90,6 +90,7 @@ import Layout, { navAll } from "@/components/Layout";
 import { TourProvider } from "@/contexts/TourContext";
 import TourOverlay from "@/components/TourOverlay";
 import AnalyticsLoader from "@/components/AnalyticsLoader";
+import LimovaChatWidget from "@/components/LimovaChatWidget";
 import CookieConsent from "@/components/CookieConsent";
 import { roleHome } from "@/lib/roleHome";
 
@@ -150,6 +151,7 @@ function App() {
         <AuthProvider>
           <TourProvider>
           <AnalyticsLoader />
+          <LimovaChatWidget />
           <CookieConsent />
           <TourOverlay />
           <Suspense fallback={<RouteFallback />}>
