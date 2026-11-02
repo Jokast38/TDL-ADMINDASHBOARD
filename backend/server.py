@@ -33,6 +33,7 @@ from services.staff_notify import (
     send_call_appointment_reminders,
     send_convention_session_reminders,
     send_formateur_planning_reminders,
+    send_pending_inscription_reminders,
     send_emargement_reminders,
     send_understaffed_session_alerts,
 )
@@ -536,6 +537,21 @@ async def _formateur_planning_reminders_loop():
         await asyncio.sleep(24 * 3600)
 
 
+async def _pending_inscription_reminders_loop():
+    """Toutes les heures, rappelle à l'équipe les inscriptions du site toujours
+    pas traitées (voir services/staff_notify.py) — un seul rappel par
+    inscription, envoyé aux horaires de l'équipe."""
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            notified = await send_pending_inscription_reminders()
+            if notified:
+                log.info(f"Rappels inscriptions non traitées : {notified} notification(s) envoyée(s)")
+        except Exception as e:
+            log.warning(f"Rappels inscriptions non traitées : erreur — {e}")
+        await asyncio.sleep(3600)
+
+
 async def _wordpress_auto_sync_loop():
     """Toutes les 15 min, si la synchro auto du blog est activée (bouton
     on/off dans AdminBlog.jsx, réglage wp_blog_auto_sync_enabled), importe en
@@ -574,6 +590,7 @@ async def startup():
     asyncio.create_task(_formateur_dossier_reminders_loop())
     asyncio.create_task(_convention_session_reminders_loop())
     asyncio.create_task(_formateur_planning_reminders_loop())
+    asyncio.create_task(_pending_inscription_reminders_loop())
     asyncio.create_task(_convocations_loop())
     asyncio.create_task(_auto_attestations_loop())
     asyncio.create_task(_satisfaction_chaud_loop())

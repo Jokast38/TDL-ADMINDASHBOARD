@@ -6,6 +6,8 @@ from core.database import db
 from core.utils import now_iso
 from models.chatbot import ChatMessageIn
 from services.chatbot import SYSTEM_PROMPT, build_context, call_ollama, split_reply_and_lead
+from urllib.parse import quote
+
 from services.staff_notify import notify_new_contact, CATEGORY_LABELS, CALLBACK_NOTIFY_ROLES
 from routers.leads import _category_for_interest
 
@@ -143,4 +145,6 @@ async def _upsert_lead_from_chat(session_id: str, lead_data: dict):
         push_title="Nouveau lead — Chatbot",
         push_body=f"{name} — {CATEGORY_LABELS.get(category, 'formation non précisée')}",
         push_url="/admin/leads",
+        action_label="Traiter le lead",
+        action_path=f"/admin/leads?q={quote(lead_data.get('email') or lead_data.get('telephone') or name)}",
     )

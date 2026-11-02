@@ -141,14 +141,12 @@ async def book_slot(slot_id: str, payload: SlotBookIn, user: dict = Depends(get_
     await notify_new_contact(
         category=dossier.get("category"),
         roles=ROLES_DOSSIERS_MGMT,
-        email_subject=f"📅 Nouveau rendez-vous réservé — {dossier.get('student_name', '')}",
-        email_body_html=(
-            f"<p><b>{dossier.get('student_name', '')}</b> a réservé le créneau du "
-            f"<b>{slot_date_fr}</b> à <b>{slot['heure_debut']}</b> ({slot.get('department', '')}).</p>"
-        ),
+        email_subject=f"📅 Rendez-vous réservé — {dossier.get('student_name', '')} : {slot_date_fr} à {slot['heure_debut']}",
+        email_body_html="",
         push_title="Nouveau rendez-vous",
         push_body=f"{dossier.get('student_name', '')} — {slot['date']} {slot['heure_debut']}",
         push_url="/admin/rdv",
+        email_now=False,
     )
 
     updated = await db.appointment_slots.find_one({"id": slot_id}, {"_id": 0})

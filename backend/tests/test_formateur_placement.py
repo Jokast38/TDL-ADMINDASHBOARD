@@ -26,6 +26,8 @@ def _matches(doc, query):
             continue
         value = doc.get(key)
         if isinstance(cond, dict):
+            if "$exists" in cond and (key in doc) != cond["$exists"]:
+                return False
             if "$in" in cond and not (value in cond["$in"]):
                 return False
             if "$ne" in cond and value == cond["$ne"]:

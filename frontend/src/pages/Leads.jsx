@@ -412,7 +412,7 @@ export default function Leads() {
 
   // Redirection depuis le bilan détaillé d'un employé (EmployeeAudit.jsx) —
   // pré-remplit la recherche avec l'email/nom du lead concerné.
-  const [q, setQ] = useState(location.state?.prefillSearch || "");
+  const [q, setQ] = useState(location.state?.prefillSearch || new URLSearchParams(location.search).get("q") || "");
   const [contactedFilter, setContactedFilter] = useState("all");
   const [callOnlyFilter, setCallOnlyFilter] = useState(false);
   const [interestFilter, setInterestFilter] = useState("all");

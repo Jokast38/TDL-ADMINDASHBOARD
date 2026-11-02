@@ -10,6 +10,7 @@ from services import stripe_service
 from services.meta_capi import send_capi_event
 from services.pdf import generate_payment_receipt_pdf
 from services.email import send_email
+from services.staff_notify import notify_inscription_paid
 from services.email_template import render_branded_email
 from services.sms import send_sms
 from services.lead_payment_sync import sync_lead_payment
@@ -100,6 +101,10 @@ async def _mark_paid_and_notify(inscription_id: str, amount_paid: float, payment
             f"TDL Formation : paiement de {amount_paid:.2f} € reçu pour {inscription.get('formation_title', '')}. Merci !",
             extra={"inscription_id": inscription_id},
         )
+    try:
+        await notify_inscription_paid(inscription)
+    except Exception as e:
+        log.warning(f"_mark_paid_and_notify : équipe non prévenue du paiement de {inscription_id} — {e}")
 
     # Unification des prospects (Phase 1) : le prospect d'origine (retrouvé
     # par email/téléphone) passe en statut "payé" avec le montant réellement

@@ -18,7 +18,8 @@ from services.trello import TrelloService
 from services.n8n import trigger_n8n
 from services.email import send_email
 from services.email_template import render_branded_email
-from services.staff_notify import notify_new_contact, CATEGORY_LABELS, check_dossier_milestone
+from core.notification_rules import is_public_inscription
+from services.staff_notify import notify_public_inscription, check_dossier_milestone
 from services.activity import log_action
 from services.meta_capi import send_capi_event
 from services.password_reset import create_reset_token
@@ -225,22 +226,10 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         f"Confirmation d'inscription - {formation['title']}",
         f"<p>Bonjour {payload.student_name},</p><p>Votre inscription à <b>{formation['title']}</b> a bien été enregistrée. Nous vous contactons sous 24h pour la suite.</p><p>TDL Formation</p>"
     )
-    await notify_new_contact(
-        category=formation["category"],
-        roles=ROLES_DOSSIERS_MGMT,
-        email_subject=f"📝 Nouvelle inscription — {formation['title']}",
-        email_body_html=(
-            f"<p>Nouvelle inscription reçue :</p>"
-            f"<p><b>{payload.student_name}</b> ({payload.student_email}"
-            f"{', ' + payload.student_phone if payload.student_phone else ''})</p>"
-            f"<p>Formation : <b>{formation['title']}</b> ({CATEGORY_LABELS.get(formation['category'], formation['category'])})</p>"
-            f"<p style='margin-top:16px;'>Rendez-vous sur la page Inscriptions du dashboard pour traiter ce dossier.</p>"
-        ),
-        push_title="Nouvelle inscription",
-        push_body=f"{payload.student_name} — {formation['title']}",
-        push_url="/admin/inscriptions",
-        center=payload.center or None,
-    )
+    # Une inscription faite par l'équipe (sur place, centre d'appel...) ne
+    # demande pas d'alerte : le dossier reste dans le récap du matin.
+    if is_public_inscription(inscription):
+        await notify_public_inscription(inscription)
 
     # Signal "nouveau prospect" pour Meta (Pixel côté navigateur + CAPI ici,
     # dédupliqués via le même event_id) — avant cet ajout, seul le formulaire

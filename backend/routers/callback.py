@@ -27,7 +27,7 @@ _SOURCE_TO_CATEGORY = {
 # Rappel/contact : concerne aussi bien un commercial (nouvelle vente) qu'un
 # chargé d'admission (question sur un dossier/financement) — les deux profils
 # sont notifiés, chacun uniquement si sa catégorie assignée correspond.
-_NOTIFY_ROLES = ("responsable_admission", "agent_admin", "commercial", "responsable_commercial")
+_NOTIFY_ROLES = ("responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique")
 
 
 @router.post("")
@@ -96,6 +96,7 @@ async def create_callback_request(payload: CallbackRequestIn, request: Request):
         push_body=f"{payload.prenom} {payload.nom} — {CATEGORY_LABELS.get(category, 'formation non précisée')}",
         push_url="/admin/inscriptions",
         center=payload.center,
+        action_label="Traiter la demande",
     )
 
     await send_capi_event(

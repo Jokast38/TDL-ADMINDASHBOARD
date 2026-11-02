@@ -291,15 +291,11 @@ async def sign_attestation(dossier_id: str, payload: AttestationSignIn, user: di
         category=dossier.get("category"),
         roles=ROLES_DOSSIERS_MGMT,
         email_subject=f"✍️ Attestation de stage signée — {dossier.get('student_name', '')}",
-        email_body_html=(
-            f"<p><b>{dossier.get('student_name', '')}</b> vient de signer son attestation de stage de "
-            f"récupération de points.</p>"
-            f"<p style='margin-top:16px;'>Le dossier ANTS (attestation + pièces) est téléchargeable en un "
-            f"clic depuis la page Apprenants une fois le dossier validé.</p>"
-        ),
+        email_body_html="",
         push_title="Attestation signée",
         push_body=dossier.get("student_name", ""),
         push_url="/admin/apprenants",
+        email_now=False,
     )
     return {"ok": True}
 

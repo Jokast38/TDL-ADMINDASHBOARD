@@ -14,6 +14,7 @@ from services.password_reset import create_reset_token, send_reset_link_email, s
 from services.pdf import generate_formateur_convention_pdf
 from services.email import send_email
 from services.push import send_push_to_users
+from services.staff_notify import queue_recap_event
 from services.convention import upcoming_permis_sessions_for, generate_preview_pdf
 
 router = APIRouter(tags=["employees"])
@@ -55,6 +56,7 @@ FORMATEUR_DOC_TYPES = {
 }
 
 FORMATEUR_DOSSIER_SLA = timedelta(hours=24)
+FORMATEUR_NOTIFY_ROLES = ["admin", "responsable_admission", "agent_admin"]
 
 
 def _required_doc_types(user: dict) -> dict:
@@ -390,15 +392,9 @@ async def upload_my_profile_document(
         # doivent le savoir sans avoir à revérifier la page Formateurs.
         label = FORMATEUR_DOC_TYPES.get(doc_type, doc_type)
         agents = await db.users.find(
-            {"active": True, "role": {"$in": ["admin", "responsable_admission", "agent_admin"]}}, {"_id": 0, "id": 1, "email": 1}
+            {"active": True, "role": {"$in": FORMATEUR_NOTIFY_ROLES}}, {"_id": 0, "id": 1, "email": 1}
         ).to_list(100)
-        for a in agents:
-            if a.get("email"):
-                await send_email(
-                    a["email"], f"📎 Document formateur déposé — {user.get('name', '')}",
-                    f"<p><b>{user.get('name', '')}</b> a déposé le document « {label} » pour son dossier formateur.</p>"
-                    f"<p style='margin-top:16px;'>Rendez-vous sur la page Formateurs du dashboard.</p>",
-                )
+        await queue_recap_event(None, f"📎 Document formateur déposé — {user.get('name', '')} : {label}", "/admin/formateurs", FORMATEUR_NOTIFY_ROLES)
         if agents:
             await send_push_to_users([a["id"] for a in agents], "Document formateur déposé", f"{user.get('name', '')} — {label}", "/admin/formateurs")
 
@@ -544,17 +540,10 @@ async def sign_my_convention(payload: ConventionSignIn, user: dict = Depends(req
 
     status = await _formateur_dossier_status(u, signed_at)
     agents = await db.users.find(
-        {"active": True, "role": {"$in": ["admin", "responsable_admission", "agent_admin"]}}, {"_id": 0, "id": 1, "email": 1, "name": 1}
+        {"active": True, "role": {"$in": FORMATEUR_NOTIFY_ROLES}}, {"_id": 0, "id": 1, "email": 1, "name": 1}
     ).to_list(100)
-    subject = f"✅ Convention signée — {u.get('name', '')}" + ("" if status["dossier_complete"] else " (dossier encore incomplet)")
-    body = (
-        f"<p><b>{u.get('name', '')}</b> a signé sa convention de collaboration.</p>"
-        f"<p>Dossier {'complet ✅' if status['dossier_complete'] else 'encore incomplet — documents manquants : ' + ', '.join(FORMATEUR_DOC_TYPES[k] for k in status['missing_documents'])}.</p>"
-        f"<p style='margin-top:16px;'>Rendez-vous sur la page Formateurs du dashboard.</p>"
-    )
-    for a in agents:
-        if a.get("email"):
-            await send_email(a["email"], subject, body)
+    label = f"✅ Convention signée — {u.get('name', '')}" + ("" if status["dossier_complete"] else " (dossier encore incomplet)")
+    await queue_recap_event(None, label, "/admin/formateurs", FORMATEUR_NOTIFY_ROLES)
     if agents:
         await send_push_to_users([a["id"] for a in agents], "Convention formateur signée", u.get("name", ""), "/admin/formateurs")
 

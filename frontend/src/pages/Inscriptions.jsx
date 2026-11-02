@@ -204,7 +204,7 @@ export default function Inscriptions() {
   const location = useLocation();
   const [items, setItems] = useState([]);
   // Redirection depuis le bilan détaillé d'un employé (EmployeeAudit.jsx)
-  const [q, setQ] = useState(location.state?.prefillSearch || "");
+  const [q, setQ] = useState(location.state?.prefillSearch || new URLSearchParams(location.search).get("q") || "");
   const [paymentFilter, setPaymentFilter] = useState("all"); // all | paid | unpaid
   const [traitementFilter, setTraitementFilter] = useState("all"); // all | traite | non_traite
   const [statusFilter, setStatusFilter] = useState("all"); // all | active | cloturee

@@ -97,15 +97,12 @@ async def upload_document(
         await notify_new_contact(
             category=d.get("category"),
             roles=ROLES_DOSSIERS_MGMT,
-            email_subject=f"📎 Nouveau document déposé — {d.get('student_name', '')}",
-            email_body_html=(
-                f"<p><b>{d.get('student_name', '')}</b> a déposé un document : <b>{doc_label}</b>.</p>"
-                f"<p>Formation : {d.get('formation_title', '')}</p>"
-                f"<p style='margin-top:16px;'>Rendez-vous sur la page Dossiers pour le vérifier.</p>"
-            ),
+            email_subject=f"📎 Nouveau document déposé — {d.get('student_name', '')} : {doc_label}",
+            email_body_html="",
             push_title="Nouveau document déposé",
             push_body=f"{d.get('student_name', '')} — {doc_label}",
             push_url="/admin/dossiers",
+            email_now=False,
         )
 
     doc.pop("_id", None)

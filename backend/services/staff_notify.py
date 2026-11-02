@@ -1,12 +1,17 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, Optional
+from urllib.parse import quote
 
-from core.config import ROLES_DOSSIERS_MGMT, ROLES_ALL_STAFF, effective_assigned_categories
+from core.config import ROLES_DOSSIERS_MGMT, ROLES_ALL_STAFF, PUBLIC_FRONTEND_URL, effective_assigned_categories
 from core.database import db
+from core.notification_rules import (
+    inscription_needs_reminder, is_business_hours, is_public_inscription, payment_label, reminder_age_due,
+)
 from core.placement_rules import formateur_is_permis, planning_deadline, planning_year, reminder_window_open
 from core.utils import now_iso, format_date_long_fr, format_date_fr
 from services.email import send_email
-from services.email_template import render_branded_email
+from services.email_template import render_branded_email, render_staff_notification
 from services.push import send_push_to_users
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
@@ -16,7 +21,7 @@ PLANNING_REMINDER_INTERVAL_DAYS = 7
 
 # Rôles concernés par les demandes de rappel (mêmes que _NOTIFY_ROLES dans
 # routers/callback.py — dupliqué ici pour éviter un import circulaire).
-CALLBACK_NOTIFY_ROLES = ("responsable_admission", "agent_admin", "commercial", "responsable_commercial")
+CALLBACK_NOTIFY_ROLES = ("responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique")
 
 
 async def check_dossier_milestone(user_id: str) -> None:
@@ -82,24 +87,213 @@ async def _assigned_staff(category: Optional[str], center: Optional[str], roles:
     return result
 
 
+def _member_handles_category(member: dict, category: Optional[str]) -> bool:
+    if not category:
+        return True
+    assignments = member.get("assigned_training_assignments") or []
+    if assignments:
+        return any(a.get("category") == category for a in assignments)
+    categories = effective_assigned_categories(member)
+    return not categories or category in categories
+
+
+def _member_handles_dossier(member: dict, dossier: dict) -> bool:
+    if dossier.get("assigned_to"):
+        return dossier["assigned_to"] == member["id"]
+    return _member_handles_category(member, dossier.get("category"))
+
+
+def _staff_email(body_html: str, action_label: Optional[str] = None, action_path: Optional[str] = None) -> str:
+    url = f"{PUBLIC_FRONTEND_URL}{action_path}" if action_path else None
+    return render_staff_notification(body_html, action_label, url)
+
+
+async def queue_recap_event(category: Optional[str], label: str, path: str, roles: Optional[Iterable[str]] = None) -> None:
+    """Information sans urgence, reprise dans le prochain récap du matin
+    (voir send_daily_pending_dossiers_digest) au lieu d'un email immédiat."""
+    await db.staff_recap_events.insert_one({
+        "id": str(uuid.uuid4()), "category": category, "label": label, "path": path,
+        "roles": list(roles) if roles else None, "created_at": now_iso(), "sent_at": None,
+    })
+
+
 async def notify_new_contact(
     category: Optional[str], roles: Iterable[str],
     email_subject: str, email_body_html: str,
     push_title: str, push_body: str, push_url: str = "/admin/leads",
     center: Optional[str] = None,
+    action_label: Optional[str] = None, action_path: Optional[str] = None,
+    email_now: bool = True,
 ) -> None:
-    """Route un nouveau lead/demande de rappel vers le personnel assigné à cette
-    catégorie de formation (email + push). Si personne n'est assigné à cette
-    catégorie (ou catégorie inconnue), on retombe sur l'email de contact
-    générique — comportement historique conservé, aucun lead perdu."""
+    """Route un évènement vers le personnel assigné à cette catégorie de
+    formation : push dans tous les cas, email immédiat avec bouton seulement
+    si `email_now` (voir core/notification_rules.py) — sinon il rejoint le
+    récap du matin. Si personne n'est assigné à cette catégorie (ou catégorie
+    inconnue), on retombe sur l'email de contact générique — comportement
+    historique conservé, aucun lead perdu."""
     staff = await _assigned_staff(category, center, roles)
+    if not email_now:
+        await queue_recap_event(category, email_subject, push_url, roles)
+        if staff:
+            await send_push_to_users([m["id"] for m in staff], push_title, push_body, push_url)
+        return
+    html = _staff_email(email_body_html, action_label, action_path or push_url if action_label else None)
     if not staff:
-        await send_email(CONTACT_EMAIL, email_subject, email_body_html)
+        await send_email(CONTACT_EMAIL, email_subject, html)
         return
     for member in staff:
         if member.get("email"):
-            await send_email(member["email"], email_subject, email_body_html)
+            await send_email(member["email"], email_subject, html)
     await send_push_to_users([m["id"] for m in staff], push_title, push_body, push_url)
+
+
+def _inscription_path(inscription: dict) -> str:
+    return f"/admin/inscriptions?q={quote(inscription.get('student_email') or '')}"
+
+
+async def notify_public_inscription(inscription: dict) -> None:
+    """Nouvelle inscription venue du site public : email immédiat avec son
+    statut de paiement. Une inscription faite par l'équipe (sur place, centre
+    d'appel...) n'appelle pas cette notification : elle rejoint le récap."""
+    name = inscription.get("student_name", "")
+    title = inscription.get("formation_title", "")
+    phone = inscription.get("student_phone")
+    financement = inscription.get("financing_mode")
+    body = (
+        "<p>Nouvelle inscription depuis le site :</p>"
+        f"<p><b>{name}</b> ({inscription.get('student_email', '')}{', ' + phone if phone else ''})</p>"
+        f"<p>Formation : <b>{title}</b> ({CATEGORY_LABELS.get(inscription.get('category'), inscription.get('category') or '')})</p>"
+        f"<p>Paiement : <b>{payment_label(inscription.get('payment_status'))}</b>"
+        f"{' — financement : ' + financement if financement else ''}</p>"
+    )
+    await notify_new_contact(
+        category=inscription.get("category"), roles=ROLES_DOSSIERS_MGMT,
+        email_subject=f"📝 Nouvelle inscription — {name} — {payment_label(inscription.get('payment_status'))}",
+        email_body_html=body,
+        push_title="Nouvelle inscription",
+        push_body=f"{name} — {title}",
+        push_url="/admin/inscriptions",
+        center=inscription.get("center") or None,
+        action_label="Traiter l'inscription", action_path=_inscription_path(inscription),
+    )
+
+
+async def notify_inscription_paid(inscription: dict) -> None:
+    """L'email de nouvelle inscription part avant le paiement (le visiteur est
+    ensuite envoyé sur Stripe) : il indique donc "Non payé". On prévient une
+    seule fois quand le paiement arrive, si le dossier n'est pas déjà traité."""
+    if not is_public_inscription(inscription):
+        return
+    dossier = await db.dossiers.find_one({"inscription_id": inscription["id"]}, {"_id": 0, "status": 1}) or {}
+    if dossier.get("status") != "nouveau":
+        return
+    first_time = await db.inscriptions.update_one(
+        {"id": inscription["id"], "paid_staff_notified_at": {"$exists": False}},
+        {"$set": {"paid_staff_notified_at": now_iso()}},
+    )
+    if not first_time.modified_count:
+        return
+    name = inscription.get("student_name", "")
+    title = inscription.get("formation_title", "")
+    await notify_new_contact(
+        category=inscription.get("category"), roles=ROLES_DOSSIERS_MGMT,
+        email_subject=f"💳 Paiement reçu — {name}",
+        email_body_html=f"<p><b>{name}</b> vient de payer son inscription à <b>{title}</b>.</p><p>Paiement : <b>Payé</b></p>",
+        push_title="Paiement reçu",
+        push_body=f"{name} — {title}",
+        push_url="/admin/inscriptions",
+        center=inscription.get("center") or None,
+        action_label="Traiter l'inscription", action_path=_inscription_path(inscription),
+    )
+
+
+async def notify_new_lead(lead: dict) -> None:
+    """Nouveau prospect arrivé tout seul (formulaire Meta) — les imports en
+    masse ne passent pas par ici : ils sont déjà connus de l'équipe."""
+    name = lead.get("name", "")
+    phone = lead.get("phone")
+    email = lead.get("email")
+    interest = lead.get("interest")
+    body = (
+        "<p>Nouveau prospect via Meta :</p>"
+        f"<p>Nom : <b>{name}</b>"
+        f"{'<br>Téléphone : <b>' + phone + '</b>' if phone else ''}"
+        f"{'<br>Email : <b>' + email + '</b>' if email else ''}</p>"
+        f"{'<p>Intérêt : <b>' + interest + '</b></p>' if interest else ''}"
+    )
+    await notify_new_contact(
+        category=lead.get("category"), roles=CALLBACK_NOTIFY_ROLES,
+        email_subject=f"🎯 Nouveau lead — {name}",
+        email_body_html=body,
+        push_title="Nouveau lead",
+        push_body=f"{name}{' — ' + interest if interest else ''}",
+        push_url="/admin/leads",
+        action_label="Traiter le lead", action_path=f"/admin/leads?q={quote(email or phone or name)}",
+    )
+
+
+async def send_pending_inscription_reminders(now: Optional[datetime] = None) -> int:
+    """Rappel unique pour une inscription du site toujours pas traitée après
+    4h (voir core/notification_rules.py), regroupé par employé. Une fois ce
+    rappel passé, elle reste listée dans le récap quotidien tant qu'elle n'est
+    pas traitée."""
+    now = now or datetime.now(timezone.utc)
+    if not is_business_hours(now):
+        return 0
+    dossiers = await db.dossiers.find(
+        {"status": "nouveau", "public_reminder_sent_at": {"$exists": False}}, {"_id": 0}
+    ).to_list(5000)
+    due = [d for d in dossiers if (ref := _parse_iso(d.get("created_at"))) and reminder_age_due(ref, now)]
+    if not due:
+        return 0
+    inscriptions = await db.inscriptions.find({"id": {"$in": [d.get("inscription_id") for d in due]}}, {"_id": 0}).to_list(len(due))
+    by_id = {i["id"]: i for i in inscriptions}
+    pending = [d for d in due if d.get("inscription_id") in by_id and inscription_needs_reminder(by_id[d["inscription_id"]], d)]
+    if not pending:
+        return 0
+
+    def _email(items: list) -> tuple:
+        rows = "".join(
+            "<tr>"
+            f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{d.get('student_name', '')}</td>"
+            f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{by_id[d['inscription_id']].get('student_phone') or ''}</td>"
+            f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{d.get('formation_title', '')}</td>"
+            f"<td style='padding:6px 10px;border-bottom:1px solid #eee;'>{payment_label(by_id[d['inscription_id']].get('payment_status'))}</td></tr>"
+            for d in items
+        )
+        table = (
+            "<p>Ces inscriptions venues du site n'ont pas encore été prises en charge :</p>"
+            "<table style='border-collapse:collapse;width:100%;'>"
+            "<tr><th style='text-align:left;padding:6px 10px;'>Nom</th><th style='text-align:left;padding:6px 10px;'>Téléphone</th>"
+            "<th style='text-align:left;padding:6px 10px;'>Formation</th><th style='text-align:left;padding:6px 10px;'>Paiement</th></tr>"
+            f"{rows}</table>"
+            "<p style='margin-top:16px;'>L'étudiant attend d'être recontacté sous 24h.</p>"
+        )
+        return f"⏰ {len(items)} inscription(s) du site à traiter", _staff_email(table, "Traiter les inscriptions", "/admin/inscriptions")
+
+    staff = await db.users.find(
+        {"active": True, "role": {"$in": list(ROLES_DOSSIERS_MGMT)}},
+        {"_id": 0, "id": 1, "email": 1, "name": 1, "role": 1, "assigned_categories": 1, "assigned_centers": 1, "assigned_training_assignments": 1},
+    ).to_list(200)
+    notified = 0
+    covered = set()
+    for member in staff:
+        mine = [d for d in pending if _member_handles_dossier(member, d)]
+        if not mine or not member.get("email"):
+            continue
+        subject, html = _email(mine)
+        await send_email(member["email"], subject, html)
+        await send_push_to_users([member["id"]], "Inscriptions à traiter", f"{len(mine)} inscription(s) du site en attente", "/admin/inscriptions")
+        covered.update(d["id"] for d in mine)
+        notified += 1
+
+    orphans = [d for d in pending if d["id"] not in covered]
+    if orphans:
+        subject, html = _email(orphans)
+        await send_email(CONTACT_EMAIL, subject, html)
+    for d in pending:
+        await db.dossiers.update_one({"id": d["id"]}, {"$set": {"public_reminder_sent_at": now_iso()}})
+    return notified
 
 
 def _parse_iso(value: str):
@@ -167,9 +361,8 @@ async def send_pending_callback_reminders() -> int:
             f"<table style='border-collapse:collapse;width:100%;'>"
             f"<tr><th style='text-align:left;padding:6px 10px;'>Nom</th><th style='text-align:left;padding:6px 10px;'>Téléphone</th><th style='text-align:left;padding:6px 10px;'>Intérêt</th><th style='text-align:left;padding:6px 10px;'>Centre</th></tr>"
             f"{rows}</table>"
-            f"<p style='margin-top:16px;'>Rendez-vous sur la page Inscriptions du dashboard pour les traiter.</p>"
         )
-        await send_email(member["email"], subject, body)
+        await send_email(member["email"], subject, _staff_email(body, "Traiter les demandes", "/admin/inscriptions"))
         await send_push_to_users(
             [member["id"]], "Demandes de rappel en attente",
             f"{len(mine)} demande(s) non traitée(s)", "/admin/inscriptions",
@@ -214,7 +407,9 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
     # (`handled != True`) — auparavant ce mail ne parlait que des dossiers,
     # laissant les demandes de rappel hors du récap matinal.
     pending_callbacks = await db.callback_requests.find({"handled": {"$ne": True}}, {"_id": 0}).to_list(2000)
-    if not pending and not pending_callbacks:
+    # Tout ce qui ne justifie pas un email immédiat (voir queue_recap_event).
+    recap_events = await db.staff_recap_events.find({"sent_at": None}, {"_id": 0}).to_list(2000)
+    if not pending and not pending_callbacks and not recap_events:
         await db.settings.update_one({"id": "global"}, {"$set": {"dossiers_digest_last_sent_at": now_iso()}}, upsert=True)
         return 0
 
@@ -229,21 +424,13 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
         categories = effective_assigned_categories(member)
         centers = member.get("assigned_centers") or []
 
-        mine = []
-        for d in pending:
-            if d.get("assigned_to") and d.get("assigned_to") != member["id"]:
-                # Déjà pris en charge par quelqu'un d'autre : ne pas polluer
-                # la boîte mail du reste de l'équipe avec ce dossier.
-                continue
-            if d.get("assigned_to") == member["id"]:
-                mine.append(d)
-                continue
-            if assignments:
-                matches = any(a.get("category") == d.get("category") for a in assignments)
-            else:
-                matches = not categories or d.get("category") in categories
-            if matches:
-                mine.append(d)
+        # Un dossier déjà pris en charge par quelqu'un d'autre ne pollue pas la
+        # boîte mail du reste de l'équipe.
+        mine = [d for d in pending if _member_handles_dossier(member, d)]
+        mine_events = [
+            e for e in recap_events
+            if (not e.get("roles") or member.get("role") in e["roles"]) and _member_handles_category(member, e.get("category"))
+        ]
 
         mine_callbacks = []
         for p in pending_callbacks:
@@ -260,7 +447,7 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
             if matches:
                 mine_callbacks.append(p)
 
-        if (not mine and not mine_callbacks) or not member.get("email"):
+        if (not mine and not mine_callbacks and not mine_events) or not member.get("email"):
             continue
 
         new_ids = {
@@ -313,16 +500,25 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
                 f"<tr><th style='text-align:left;padding:6px 10px;'>Nom</th><th style='text-align:left;padding:6px 10px;'>Téléphone</th><th style='text-align:left;padding:6px 10px;'>Intérêt</th></tr>"
                 f"{cb_rows}</table>"
             )
+        if mine_events:
+            event_rows = "".join(
+                f"<li style='margin-bottom:4px;'><a href='{PUBLIC_FRONTEND_URL}{e['path']}' style='color:#0a0a0a;'>{e['label']}</a> "
+                f"<span style='color:#999999;'>({format_date_fr(e.get('created_at'))})</span></li>"
+                for e in mine_events
+            )
+            sections += (
+                f"<p style='margin:16px 0 6px;'><b>🗂️ {len(mine_events)} évènement(s) depuis le dernier récap :</b></p>"
+                f"<ul style='padding-left:18px;margin:0;'>{event_rows}</ul>"
+            )
 
-        total = len(mine) + len(mine_callbacks)
-        subject = f"📋 {total} élément(s) en attente de traitement" + (f" — {len(new_ones)} nouveau(x)" if new_ones else "")
+        total = len(mine) + len(mine_callbacks) + len(mine_events)
+        subject = f"📋 {total} élément(s) à voir" + (f" — {len(new_ones)} nouveau(x)" if new_ones else "")
         body = (
             f"<p>Bonjour {member.get('name','')},</p>"
-            f"<p>Voici le récapitulatif du matin des dossiers et demandes de rappel pas encore traités.</p>"
+            f"<p>Voici le récapitulatif du matin : dossiers et demandes de rappel pas encore traités, et évènements récents.</p>"
             f"{sections}"
-            f"<p style='margin-top:16px;'>Rendez-vous sur la page Inscriptions du dashboard pour les traiter.</p>"
         )
-        await send_email(member["email"], subject, body)
+        await send_email(member["email"], subject, _staff_email(body, "Ouvrir les inscriptions", "/admin/inscriptions"))
         await send_push_to_users(
             [member["id"]], "Éléments en attente",
             f"{total} élément(s) non traité(s)" + (f", {len(new_ones)} nouveau(x)" if new_ones else ""),
@@ -330,6 +526,10 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
         )
         notified += 1
 
+    if recap_events:
+        await db.staff_recap_events.update_many(
+            {"id": {"$in": [e["id"] for e in recap_events]}}, {"$set": {"sent_at": now_iso()}}
+        )
     await db.settings.update_one({"id": "global"}, {"$set": {"dossiers_digest_last_sent_at": now_iso()}}, upsert=True)
     return notified
 
@@ -337,16 +537,14 @@ async def send_daily_pending_dossiers_digest(min_gap: Optional[timedelta] = None
 async def notify_staff_exam_theorique_result(dossier: dict, result: str) -> None:
     """Notifie le personnel assigné qu'un apprenant a déclaré son résultat à
     l'examen théorique (section 1.2 du cahier des charges — bouton "Réussi /
-    Échoué" côté apprenant). Priorité au responsable du dossier
-    (`assigned_to`) s'il y en a un, sinon routage par catégorie comme pour
-    les autres notifications staff."""
+    Échoué" côté apprenant) : push immédiat, email via le récap du matin.
+    Priorité au responsable du dossier (`assigned_to`) s'il y en a un, sinon
+    routage par catégorie comme pour les autres notifications staff."""
     decision_label = "réussi ✅" if result == "reussi" else "échoué ❌"
-    subject = f"📝 Résultat examen théorique — {dossier.get('student_name', '')} : {decision_label}"
-    body = (
-        f"<p><b>{dossier.get('student_name', '')}</b> a déclaré avoir <b>{decision_label}</b> son examen théorique.</p>"
-        f"<p>Formation : <b>{dossier.get('formation_title', '')}</b></p>"
-        f"<p style='margin-top:16px;'>Le dossier a été mis à jour automatiquement. "
-        f"Rendez-vous sur la page Dossiers du dashboard pour la suite.</p>"
+    await queue_recap_event(
+        dossier.get("category"),
+        f"📝 Résultat examen théorique — {dossier.get('student_name', '')} : {decision_label}",
+        "/admin/dossiers", ROLES_DOSSIERS_MGMT,
     )
     recipients = []
     if dossier.get("assigned_to"):
@@ -356,11 +554,7 @@ async def notify_staff_exam_theorique_result(dossier: dict, result: str) -> None
     if not recipients:
         recipients = await _assigned_staff(dossier.get("category"), None, ROLES_DOSSIERS_MGMT)
     if not recipients:
-        await send_email(CONTACT_EMAIL, subject, body)
         return
-    for member in recipients:
-        if member.get("email"):
-            await send_email(member["email"], subject, body)
     await send_push_to_users(
         [m["id"] for m in recipients], "Résultat examen théorique",
         f"{dossier.get('student_name', '')} — {decision_label}", "/admin/dossiers",
@@ -707,11 +901,12 @@ async def send_understaffed_session_alerts() -> int:
         lieu = f"{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}".strip(", ")
         date_debut_fr = format_date_long_fr(stage['date_debut'])
         subject = f"⚠️ Sous-effectif — session du {date_debut_fr} ({nb_inscrits}/{UNDERSTAFFED_ALERT_MIN_INSCRITS})"
-        body = render_branded_email(
-            f"La session <b>{stage.get('formation_titre', '')}</b> débute le <b>{date_debut_fr}</b> "
+        body = _staff_email(
+            f"<p>La session <b>{stage.get('formation_titre', '')}</b> débute le <b>{date_debut_fr}</b> "
             f"(dans {UNDERSTAFFED_ALERT_DAYS_BEFORE} jours), à <b>{lieu}</b>, avec seulement "
-            f"<b>{nb_inscrits} inscrit(s)</b> sur un minimum visé de {UNDERSTAFFED_ALERT_MIN_INSCRITS}.\n\n"
-            "Une relance commerciale ciblée peut encore permettre de compléter le groupe avant la date."
+            f"<b>{nb_inscrits} inscrit(s)</b> sur un minimum visé de {UNDERSTAFFED_ALERT_MIN_INSCRITS}.</p>"
+            "<p>Une relance commerciale ciblée peut encore permettre de compléter le groupe avant la date.</p>",
+            "Voir les sessions", "/admin/stages",
         )
         for s in staff:
             if s.get("email"):
@@ -830,9 +1025,11 @@ async def send_formateur_dossier_reminders() -> int:
                 if agent.get("email"):
                     await send_email(
                         agent["email"], f"🔴 Dossier formateur en retard — {a.get('name', '')}",
-                        f"<p>Le dossier de <b>{a.get('name', '')}</b> (créé le {format_date_long_fr(a.get('created_at'))}) "
-                        f"dépasse le délai de 24h et reste incomplet.</p>"
-                        f"<p style='margin-top:16px;'>Rendez-vous sur la page Formateurs du dashboard.</p>",
+                        _staff_email(
+                            f"<p>Le dossier de <b>{a.get('name', '')}</b> (créé le {format_date_long_fr(a.get('created_at'))}) "
+                            f"dépasse le délai de 24h et reste incomplet.</p>",
+                            "Voir les formateurs", "/admin/formateurs",
+                        ),
                     )
             if agents:
                 await send_push_to_users([ag["id"] for ag in agents], "Dossier formateur en retard", a.get("name", ""), "/admin/formateurs")
@@ -931,7 +1128,10 @@ async def send_formateur_planning_reminders() -> int:
         if agent.get("email"):
             await send_email(
                 agent["email"], f"📅 Planning {year} — {len(relances)} formateur(s) sans date",
-                f"<p>Ces formateurs n'ont encore choisi aucune date pour {year} (date limite : {deadline_fr}) :</p><ul>{noms}</ul>",
+                _staff_email(
+                    f"<p>Ces formateurs n'ont encore choisi aucune date pour {year} (date limite : {deadline_fr}) :</p><ul>{noms}</ul>",
+                    "Voir les formateurs", "/admin/formateurs",
+                ),
             )
     await db.settings.update_one({"id": "global"}, {"$set": {"planning_reminder_last_sent_on": today.isoformat()}}, upsert=True)
     return len(relances)
@@ -997,9 +1197,8 @@ async def send_call_appointment_reminders() -> int:
             f"{' (' + appt['lead_phone'] + ')' if appt.get('lead_phone') else ''}.</p>"
             f"{'<p>Intérêt : ' + appt['lead_interest'] + '</p>' if appt.get('lead_interest') else ''}"
             f"{'<p>Notes : ' + appt['notes'] + '</p>' if appt.get('notes') else ''}"
-            "<p>TDL Formation</p>"
         )
-        log = await send_email(commercial["email"], "📞 Rappel — appel programmé bientôt", render_branded_email(body))
+        log = await send_email(commercial["email"], "📞 Rappel — appel programmé bientôt", _staff_email(body, "Voir mes appels", "/admin/marketing"))
         if log["status"] in ("sent", "mocked"):
             await send_push_to_users([commercial["id"]], "Appel programmé", f"Avec {appt.get('lead_name', '')} à {appt.get('scheduled_at', '')}", "/admin/marketing")
             await db.call_appointments.update_one({"id": appt["id"]}, {"$set": {"reminder_sent": True}})

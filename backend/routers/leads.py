@@ -424,6 +424,8 @@ async def create_lead_from_contact(
     await db.leads.insert_one(lead)
     _leads_cache_clear()
     lead.pop("_id", None)
+    # Non stocké : permet à l'appelant de ne notifier que les vrais nouveaux.
+    lead["is_new"] = True
     return lead
 
 

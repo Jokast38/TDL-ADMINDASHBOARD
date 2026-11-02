@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import PasswordInput from "@/components/PasswordInput";
@@ -12,6 +12,7 @@ import { roleHome } from "@/lib/roleHome";
 export default function Login() {
   const { login, register, sessionExpired } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [tab, setTab] = useState("login");
   const [loading, setLoading] = useState(false);
 
@@ -28,7 +29,7 @@ export default function Login() {
     try {
       const u = await login(loginEmail, loginPwd);
       toast.success(`Bienvenue ${u.name}`);
-      navigate(roleHome(u.role));
+      navigate(location.state?.from || roleHome(u.role));
     } catch (e) {
       toast.error(e.message);
     } finally {

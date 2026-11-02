@@ -84,6 +84,13 @@ def _plain_text_to_html(text: str) -> str:
     return "".join(parts)
 
 
+def render_staff_notification(body_html: str, button_label: str = None, button_url: str = None) -> str:
+    """Email interne à l'équipe : corps déjà en HTML, bouton vers l'action à
+    faire, sans le bloc "appelez-nous" destiné aux clients."""
+    cta = _cta_block(button_label, button_url) if (button_label and button_url) else "\n      </td></tr>"
+    return _HEADER + body_html + cta + _FOOTER
+
+
 def render_branded_email(message: str, button_label: str = None, button_url: str = None) -> str:
     """Construit l'email complet (texte utilisateur + gabarit de marque)."""
     body_html = _plain_text_to_html(message)

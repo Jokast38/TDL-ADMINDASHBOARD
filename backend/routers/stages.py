@@ -11,9 +11,10 @@ from core.database import db
 from core.security import require_role
 from core.storage import get_object
 from core.utils import now_iso, format_date_long_fr
-from core.config import ROLES_ALL_STAFF
+from core.config import ROLES_ALL_STAFF, PUBLIC_FRONTEND_URL
 from models.stage import StageIn, StageUpdate
 from services.email import send_email
+from services.email_template import render_staff_notification
 from services.push import send_push_to_user, send_push_to_users
 from services.convention import regenerate_convention_pdf
 
@@ -261,11 +262,12 @@ async def update_stage(sid: str, payload: StageUpdate, user: dict = Depends(requ
         for member in staff:
             await send_email(
                 member["email"], f"🔒 Session complète — {existing.get('formation_titre', '')}",
-                (
+                render_staff_notification(
                     f"<p>Bonjour {member.get('name', '')},</p>"
                     f"<p>La session <b>{existing.get('formation_titre', '')}</b> du "
                     f"<b>{format_date_long_fr(existing.get('date_debut', ''))}</b> à <b>{lieu}</b> vient d'être marquée complète — "
-                    f"plus aucune inscription ne doit y être ajoutée.</p><p>TDL Formation</p>"
+                    f"plus aucune inscription ne doit y être ajoutée.</p>",
+                    "Voir les sessions", f"{PUBLIC_FRONTEND_URL}/admin/stages",
                 ),
             )
         if staff:

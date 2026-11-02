@@ -13,6 +13,7 @@ Endpoint public (pas d'authentification dashboard) — c'est Meta qui l'appelle
 directement, comme le webhook Stripe (routers/payments.py). La vérification
 se fait autrement : handshake hub.challenge (GET) puis signature
 X-Hub-Signature-256 sur chaque notification (POST)."""
+import asyncio
 import hashlib
 import hmac
 import logging
@@ -23,6 +24,7 @@ from fastapi.responses import PlainTextResponse
 
 from core.config import META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN
 from routers.leads import create_lead_from_contact
+from services.staff_notify import notify_new_lead
 
 router = APIRouter(prefix="/webhooks/meta", tags=["meta-leads"])
 logger = logging.getLogger(__name__)
@@ -130,5 +132,9 @@ async def receive_lead_notification(request: Request):
             )
             if lead:
                 created += 1
+            if lead and lead.get("is_new"):
+                # En tâche de fond : l'envoi est limité à 28 emails/minute et
+                # Meta attend une réponse rapide de ce webhook.
+                asyncio.create_task(notify_new_lead(lead))
 
     return {"ok": True, "leads_created": created}
