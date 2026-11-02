@@ -44,6 +44,38 @@ api.interceptors.request.use((config) => {
 });
 
 /* =========================
+   SESSION EXPIRÉE
+========================= */
+
+export const SESSION_EXPIRED_EVENT = "tdl:session-expired";
+
+// Uniquement les 401 levés par get_current_user (core/security.py) — d'autres
+// routes renvoient aussi un 401 sans que la session soit en cause (clés
+// WordPress/WooCommerce, mot de passe actuel incorrect...) et ne doivent
+// surtout pas déconnecter l'utilisateur.
+const SESSION_ERROR_DETAILS = ["Non authentifié", "Token expiré", "Token invalide", "Utilisateur introuvable"];
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const { response, config } = error;
+    // Sans token envoyé, il n'y a pas de session à perdre (visiteur des pages
+    // publiques) : AuthContext déclenche la redirection via ProtectedRoute,
+    // qui ne concerne que les pages protégées.
+    if (
+      response?.status === 401 &&
+      SESSION_ERROR_DETAILS.includes(response.data?.detail) &&
+      config?.headers?.Authorization
+    ) {
+      localStorage.removeItem("tdl_token");
+      response.data.detail = "Session expirée, veuillez vous reconnecter.";
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    }
+    return Promise.reject(error);
+  }
+);
+
+/* =========================
    ERROR FORMATTER
 ========================= */
 

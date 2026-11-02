@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { roleHome } from "@/lib/roleHome";
 
 export default function Login() {
-  const { login, register } = useAuth();
+  const { login, register, sessionExpired } = useAuth();
   const navigate = useNavigate();
   const [tab, setTab] = useState("login");
   const [loading, setLoading] = useState(false);
@@ -85,6 +85,12 @@ export default function Login() {
           <p className="overline mb-2">Espace sécurisé</p>
           <h2 className="font-display text-3xl font-bold tracking-tight mb-1">Connexion</h2>
           <p className="text-gray-500 mb-8 text-sm">Accédez à votre tableau de bord.</p>
+
+          {sessionExpired && (
+            <p className="mb-6 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" role="alert" data-testid="session-expired-notice">
+              Votre session a expiré, veuillez vous reconnecter.
+            </p>
+          )}
 
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="mb-6" data-testid="login-tabs">
