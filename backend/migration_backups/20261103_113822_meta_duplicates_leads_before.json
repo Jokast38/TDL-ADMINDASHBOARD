@@ -1,0 +1,742 @@
+[
+ {
+  "id": "459d1b3d-57c4-4df9-9ceb-2266f23fc07f",
+  "name": "Patrick Quenelle",
+  "email": "patrick.quenelle60@gmail.com",
+  "phone": "+33629052577",
+  "interest": "Creil | Stage points | Formulaire 01-copy-copy",
+  "notes": "Le prospect souhaite s'inscrire au stage de récupération de points du 30 et du 31 octobre. Il se rendra demain dans l'agence à Creil pour que nous puissions finaliser son inscription.",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": null,
+  "created_at": "2026-10-08T09:18:38.517920+00:00",
+  "statut": "inscrit",
+  "chaleur": null,
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "34bb8c78-a1a4-4529-ab08-16f1a7ccf1da"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-20T09:20:24.439108+00:00"
+ },
+ {
+  "id": "dceace21-5e05-4ec7-91f9-04eaec1b5a1d",
+  "name": "Joël Melenchon",
+  "email": "pakerjjo13@yahoo.fr",
+  "phone": "+33753871612",
+  "interest": "Creil | Stage points | Formulaire 01-copy-copy",
+  "notes": "mr m'a rappeler et souhaite etre rappeler à 17H aujourd'hui",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": null,
+  "created_at": "2026-10-08T09:18:38.613980+00:00",
+  "statut": "a_relancer",
+  "chaleur": "froid",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "6628c126-a628-408b-94d0-f35f36163ec3"
+  },
+  "compte_meta": "meta tdl",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-20T09:20:24.479945+00:00"
+ },
+ {
+  "id": "a0c4badc-0f66-47d4-95ff-d651b154a903",
+  "name": "Oukaci Madjid",
+  "email": "selymzaza@gmail.com",
+  "phone": "+33777300875",
+  "interest": "Creil | Stage points | Formulaire 01-copy-copy",
+  "notes": "mr souhaite faire un stage avant la fin du mois il demande que je le rappel mercredi lorsqu il aura reçu son salaire",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": null,
+  "created_at": "2026-10-08T09:18:38.953274+00:00",
+  "statut": "a_relancer",
+  "chaleur": "froid",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "2aa09920-e90f-44ac-aa8d-f2a3ea74bcf8"
+  },
+  "compte_meta": "meta tdl",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-20T09:20:24.620839+00:00"
+ },
+ {
+  "id": "353bc9d0-8621-45f0-b62c-ffff7d560c16",
+  "name": "Patrício Dasilva",
+  "email": "p.emonai@proton.me",
+  "phone": "+33699308049",
+  "interest": "Creil | Stage points | Formulaire 01-copy-copy",
+  "notes": "injoignable",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": null,
+  "created_at": "2026-10-08T09:18:39.083665+00:00",
+  "statut": "a_relancer",
+  "chaleur": "froid",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "4815ab80-6659-454b-8fe1-88eaed76f108"
+  },
+  "compte_meta": "meta tdl",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-20T09:20:24.663950+00:00"
+ },
+ {
+  "id": "d07c61f9-8c72-49cf-8528-6a951b52b67d",
+  "name": "Portier desailly audrey",
+  "email": "portieraudrey1829@gmail.com",
+  "phone": "+33769890838",
+  "interest": "Creil | Stage points | Formulaire 01-copy-copy",
+  "notes": "eu mme en ligne qui va faire le paiement aujourd'hui pour le stage du 04-05 novembre à Creil",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": "PERMIS",
+  "created_at": "2026-10-15T09:52:27.444486+00:00",
+  "statut": "injoignable",
+  "chaleur": null,
+  "motif_cloture": "injoignable",
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "5a627238-0029-4043-92c7-d93df37a14c5"
+  },
+  "compte_meta": "meta tdl",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-23T10:05:22.420806+00:00",
+  "campaign_name": "ENGHIEN +7 CREA STAT 1",
+  "meta_account": "meta tdl",
+  "meta_details": {
+   "meta_lead_id": "l:1321514943333394",
+   "created_time": "2026-10-15T10:47:39+02:00",
+   "adset_name": "adset CREIL +15KM copy",
+   "ad_name": "crea stat creil ss prix",
+   "form_name": "Creil | Stage points | Formulaire 01-copy-copy",
+   "platform": "fb",
+   "answers": {
+    "quand_avez-vous_effectué_votre_dernier_stage_de_récupération_de_points_?": "il_y_a_plus_d’un_an",
+    "avez-vous_reçu_une_lettre_48si_vous_informant_de_l’invalidation_de_votre_permis_?": "non",
+    "pouvez-vous_participer_à_deux_journées_consécutives_à_creil?": "oui"
+   }
+  },
+  "ville": "Creil"
+ },
+ {
+  "id": "0c63f16c-9dac-4c3b-86c5-caa30d882c5f",
+  "name": "Musema Nzoko Alain",
+  "email": "musemanzokoalain@gmail.com",
+  "phone": "+33780060039",
+  "interest": "Épinay | Stage points | Formulaire 01",
+  "notes": "eu mr en ligne qui souhaite faire le stage du 06-07 novembre, il demande que je le rappel mardi matin pour effectuer le paiement et lui envoyé la convocation pour la présenter à son employeur car il est chauffeur livreur",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": "PERMIS",
+  "created_at": "2026-10-19T08:12:38.363093+00:00",
+  "statut": "a_relancer",
+  "chaleur": "froid",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "605f784d-50e0-4279-baeb-e6e4280742c5"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-23T10:03:49.903681+00:00",
+  "notes_history": [
+   {
+    "text": "eu mr en ligne qui souhaite faire le stage du 06-07 novembre, il demande que je le rappel mardi matin pour effectuer le paiement et lui envoyé la convocation pour la présenter à son employeur car il est chauffeur livreur",
+    "at": "2026-10-22T09:31:42.916415+00:00",
+    "by_name": "Tchapi"
+   }
+  ],
+  "notes_updated_at": "2026-10-22T09:31:42.916415+00:00",
+  "notes_updated_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "notes_updated_by_name": "Tchapi",
+  "relance_count": 2,
+  "qualified_at": "2026-10-22T09:31:47.624661+00:00",
+  "qualified_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "qualified_by_name": "Tchapi",
+  "campaign_name": "ENGHIEN +7 CREA STAT 1",
+  "meta_account": "meta tdl",
+  "meta_details": {
+   "meta_lead_id": "l:1763147184980904",
+   "created_time": "2026-10-17T15:07:13+02:00",
+   "adset_name": "Nouvel ensemble de publicités de Prospects",
+   "ad_name": "crea stat prix",
+   "form_name": "Épinay | Stage points | Formulaire 01",
+   "platform": "fb",
+   "answers": {
+    "quand_avez-vous_effectué_votre_dernier_stage_de_récupération_de_points_?": "jamais",
+    "avez-vous_reçu_une_lettre_48si_vous_informant_de_l’invalidation_de_votre_permis_?": "non",
+    "pouvez-vous_participer_à_deux_journées_consécutives_à_épinay-sur-seine_?": "cela_dépend_des_dates"
+   }
+  },
+  "ville": "Épinay-sur-Seine"
+ },
+ {
+  "id": "6755464e-b8ff-4dcc-a69e-0683616d7083",
+  "name": "Marlie Paul",
+  "email": "paul-marlene@hotmail.fr",
+  "phone": "+33768410357",
+  "interest": "Épinay | Stage points | Formulaire 01",
+  "notes": "paye ce jour pour le 09-10 novembre",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": null,
+  "created_at": "2026-10-19T08:12:38.405116+00:00",
+  "statut": "inscrit",
+  "chaleur": null,
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "09e286f8-c301-47b4-bf45-6f6232f748ec"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-22T09:26:14.966113+00:00",
+  "qualified_at": "2026-10-22T09:23:38.658698+00:00",
+  "qualified_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "qualified_by_name": "Tchapi",
+  "relance_count": 2,
+  "notes_history": [
+   {
+    "text": "paye ce jour pour le 09-10 novembre",
+    "at": "2026-10-22T09:24:01.574344+00:00",
+    "by_name": "Tchapi"
+   }
+  ],
+  "notes_updated_at": "2026-10-22T09:24:01.574344+00:00",
+  "notes_updated_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "notes_updated_by_name": "Tchapi",
+  "inscription_id": "121a4f0a-e350-4b8b-a753-49e495023eaf"
+ },
+ {
+  "id": "8d5e9dca-b627-47bf-a235-1368a47fe65c",
+  "name": "Maodo Malick",
+  "email": "bounadiorobo@yahoo.fr",
+  "phone": "+33766226508",
+  "interest": "Épinay | Stage points | Formulaire 01",
+  "notes": "répondeur, message laissé",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": "PERMIS",
+  "created_at": "2026-10-19T08:12:38.449164+00:00",
+  "statut": "a_relancer",
+  "chaleur": "froid",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "ad3754f5-094b-4360-97ac-5d7acb93b01b"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-23T10:03:49.949789+00:00",
+  "notes_history": [
+   {
+    "text": "répondeur, message laissé",
+    "at": "2026-10-22T09:11:19.775413+00:00",
+    "by_name": "Tchapi"
+   }
+  ],
+  "notes_updated_at": "2026-10-22T09:11:19.775413+00:00",
+  "notes_updated_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "notes_updated_by_name": "Tchapi",
+  "relance_count": 3,
+  "qualified_at": "2026-10-22T09:12:13.626408+00:00",
+  "qualified_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "qualified_by_name": "Tchapi",
+  "campaign_name": "ENGHIEN +7 CREA STAT 1",
+  "meta_account": "meta tdl",
+  "meta_details": {
+   "meta_lead_id": "l:2155158575081064",
+   "created_time": "2026-10-17T12:08:57+02:00",
+   "adset_name": "Nouvel ensemble de publicités de Prospects",
+   "ad_name": "crea stat prix",
+   "form_name": "Épinay | Stage points | Formulaire 01",
+   "platform": "fb",
+   "answers": {
+    "quand_avez-vous_effectué_votre_dernier_stage_de_récupération_de_points_?": "il_y_a_plus_d’un_an",
+    "avez-vous_reçu_une_lettre_48si_vous_informant_de_l’invalidation_de_votre_permis_?": "non",
+    "pouvez-vous_participer_à_deux_journées_consécutives_à_épinay-sur-seine_?": "oui"
+   }
+  },
+  "ville": "Épinay-sur-Seine"
+ },
+ {
+  "id": "74efcf43-64d3-4aa7-b906-e23886773bbd",
+  "name": "Riad Toumi",
+  "email": "riad-t@hotmail.fr",
+  "phone": "+660477173",
+  "interest": "Épinay | Stage points | Formulaire 01",
+  "notes": "répondeur, message laissé",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": "PERMIS",
+  "created_at": "2026-10-19T08:12:38.495159+00:00",
+  "statut": "a_relancer",
+  "chaleur": "froid",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "bfc07a45-f6f1-4812-a8ad-01d096395120"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-23T10:03:49.992838+00:00",
+  "notes_history": [
+   {
+    "text": "répondeur, message laissé",
+    "at": "2026-10-22T09:08:34.530722+00:00",
+    "by_name": "Tchapi"
+   }
+  ],
+  "notes_updated_at": "2026-10-22T09:08:34.530722+00:00",
+  "notes_updated_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "notes_updated_by_name": "Tchapi",
+  "relance_count": 3,
+  "qualified_at": "2026-10-22T09:12:12.448834+00:00",
+  "qualified_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "qualified_by_name": "Tchapi",
+  "campaign_name": "ENGHIEN +7 CREA STAT 1",
+  "meta_account": "meta tdl",
+  "meta_details": {
+   "meta_lead_id": "l:1467648681939889",
+   "created_time": "2026-10-17T10:00:48+02:00",
+   "adset_name": "Nouvel ensemble de publicités de Prospects",
+   "ad_name": "crea stat prix",
+   "form_name": "Épinay | Stage points | Formulaire 01",
+   "platform": "fb",
+   "answers": {
+    "quand_avez-vous_effectué_votre_dernier_stage_de_récupération_de_points_?": "il_y_a_plus_d’un_an",
+    "avez-vous_reçu_une_lettre_48si_vous_informant_de_l’invalidation_de_votre_permis_?": "non",
+    "pouvez-vous_participer_à_deux_journées_consécutives_à_épinay-sur-seine_?": "cela_dépend_des_dates"
+   }
+  },
+  "ville": "Épinay-sur-Seine"
+ },
+ {
+  "id": "ab35fb81-96f5-45ee-b89c-3b50d0430805",
+  "name": "IBRAHIM",
+  "email": "nifaechel@gmail.com",
+  "phone": "+33766698219",
+  "interest": "Épinay | Stage points | Formulaire 01",
+  "notes": "répondeur, message envoyé",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": null,
+  "created_at": "2026-10-19T08:12:38.536089+00:00",
+  "statut": "a_relancer",
+  "chaleur": "froid",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "a58075d7-a63e-49f5-b549-a5fd4a3e287b"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-22T09:10:17.374077+00:00",
+  "notes_history": [
+   {
+    "text": "répondeur, message envoyé",
+    "at": "2026-10-22T09:07:39.142303+00:00",
+    "by_name": "Tchapi"
+   }
+  ],
+  "notes_updated_at": "2026-10-22T09:07:39.142303+00:00",
+  "notes_updated_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "notes_updated_by_name": "Tchapi",
+  "relance_count": 3,
+  "qualified_at": "2026-10-22T09:10:17.374057+00:00",
+  "qualified_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "qualified_by_name": "Tchapi"
+ },
+ {
+  "id": "1e176bb7-b871-4586-8408-a126e601e80e",
+  "name": "Emin Jlassi",
+  "email": "jelassiamine21@gmail.com",
+  "phone": "+33680652106",
+  "interest": "Épinay | Stage points | Formulaire 01",
+  "notes": "répondeur message laissé",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": "PERMIS",
+  "created_at": "2026-10-19T08:12:38.579091+00:00",
+  "statut": "a_relancer",
+  "chaleur": "froid",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "355d998e-7ee6-4e20-83f2-d439078b6205"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-23T10:03:50.039426+00:00",
+  "qualified_at": "2026-10-22T09:10:23.613494+00:00",
+  "qualified_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "qualified_by_name": "Tchapi",
+  "relance_count": 3,
+  "notes_history": [
+   {
+    "text": "répondeur message laissé",
+    "at": "2026-10-22T09:06:16.134897+00:00",
+    "by_name": "Tchapi"
+   }
+  ],
+  "notes_updated_at": "2026-10-22T09:06:16.134897+00:00",
+  "notes_updated_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "notes_updated_by_name": "Tchapi",
+  "campaign_name": "ENGHIEN +7 CREA STAT 1",
+  "meta_account": "meta tdl",
+  "meta_details": {
+   "meta_lead_id": "l:1772917097095890",
+   "created_time": "2026-10-16T21:48:32+02:00",
+   "adset_name": "Nouvel ensemble de publicités de Prospects",
+   "ad_name": "crea stat prix",
+   "form_name": "Épinay | Stage points | Formulaire 01",
+   "platform": "fb",
+   "answers": {
+    "quand_avez-vous_effectué_votre_dernier_stage_de_récupération_de_points_?": "je_ne_sais_plus",
+    "avez-vous_reçu_une_lettre_48si_vous_informant_de_l’invalidation_de_votre_permis_?": "je_ne_sais_pas",
+    "pouvez-vous_participer_à_deux_journées_consécutives_à_épinay-sur-seine_?": "cela_dépend_des_dates"
+   }
+  },
+  "ville": "Épinay-sur-Seine"
+ },
+ {
+  "id": "fd8c4ea4-1899-4d22-8523-16b253d72261",
+  "name": "Rabah Nasri",
+  "email": "92rabah.nasri@gmail.com",
+  "phone": "+33651794299",
+  "interest": "Épinay | Stage points | Formulaire 01",
+  "notes": "répondeur, message envoyé",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": "PERMIS",
+  "created_at": "2026-10-19T08:12:38.659423+00:00",
+  "statut": "a_relancer",
+  "chaleur": "froid",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "67bc2ecf-39c4-4cfd-835e-20abd3d361ef"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-23T10:03:50.074607+00:00",
+  "qualified_at": "2026-10-22T09:10:27.695921+00:00",
+  "qualified_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "qualified_by_name": "Tchapi",
+  "relance_count": 3,
+  "notes_history": [
+   {
+    "text": "répondeur, message envoyé",
+    "at": "2026-10-22T09:05:01.939557+00:00",
+    "by_name": "Tchapi"
+   }
+  ],
+  "notes_updated_at": "2026-10-22T09:05:01.939557+00:00",
+  "notes_updated_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "notes_updated_by_name": "Tchapi",
+  "campaign_name": "ENGHIEN +7 CREA STAT 1",
+  "meta_account": "meta tdl",
+  "meta_details": {
+   "meta_lead_id": "l:1630581828512689",
+   "created_time": "2026-10-16T16:40:24+02:00",
+   "adset_name": "Nouvel ensemble de publicités de Prospects",
+   "ad_name": "crea stat prix",
+   "form_name": "Épinay | Stage points | Formulaire 01",
+   "platform": "fb",
+   "answers": {
+    "quand_avez-vous_effectué_votre_dernier_stage_de_récupération_de_points_?": "jamais",
+    "avez-vous_reçu_une_lettre_48si_vous_informant_de_l’invalidation_de_votre_permis_?": "je_ne_sais_pas",
+    "pouvez-vous_participer_à_deux_journées_consécutives_à_épinay-sur-seine_?": "non"
+   }
+  },
+  "ville": "Épinay-sur-Seine"
+ },
+ {
+  "id": "07366b49-7f50-430b-8251-36859e74cde6",
+  "name": "Francisco",
+  "email": "eliefrancisco01@yahoo.com",
+  "phone": "+33749899777",
+  "interest": "Épinay | Stage points | Formulaire 01",
+  "notes": "stage payé 170€ pour la date du 06-07 novembre ",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": null,
+  "created_at": "2026-10-19T08:12:38.705916+00:00",
+  "statut": "inscrit",
+  "chaleur": null,
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "3cc47908-8d4e-41ab-9424-2509b37658fe"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-22T08:59:27.024668+00:00",
+  "notes_history": [
+   {
+    "text": "mr souhaite faire le stage du 30 -31 octtobre",
+    "at": "2026-10-22T08:48:06.735690+00:00",
+    "by_name": "Tchapi"
+   },
+   {
+    "text": "stage payé 170€ pour la date du 06-07 novembre ",
+    "at": "2026-10-22T08:59:27.024645+00:00",
+    "by_name": "Tchapi"
+   }
+  ],
+  "notes_updated_at": "2026-10-22T08:59:27.024645+00:00",
+  "notes_updated_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "notes_updated_by_name": "Tchapi",
+  "relance_count": 3,
+  "qualified_at": "2026-10-22T08:48:13.358180+00:00",
+  "qualified_by": "4e202caf-fc84-46fe-b4c4-5246e92c0794",
+  "qualified_by_name": "Tchapi",
+  "inscription_id": "d8b29766-2a6d-4721-9b79-708072c42c51"
+ },
+ {
+  "id": "bf8b9446-5aa6-4e3b-921a-2d8b7cba77ea",
+  "name": "Mounir Akrim",
+  "email": "amounir2@hotmail.com",
+  "phone": "+33612311345",
+  "interest": "Creil | Stage points | Formulaire 01-copy-copy",
+  "notes": "Il serait fortement intéressé par le stage du 20 et 21 novembre, si ce dernier était était confirmé ( manque un BAFM pour le valider ).\nPrix proposé : 200 euros",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": "PERMIS",
+  "created_at": "2026-10-19T08:14:24.034545+00:00",
+  "statut": "a_relancer",
+  "chaleur": "chaud",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "91a0451f-12a8-4525-adf2-4c9ac3ff9a8c"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-23T10:05:22.125151+00:00",
+  "notes_history": [
+   {
+    "text": "Il serait fortement intéressé par le stage du 20 et 21 novembre, si ce dernier était était confirmé ( manque un BAFM pour le valider ).\nPrix proposé : 200 euros",
+    "at": "2026-10-21T13:58:44.740063+00:00",
+    "by_name": "Anaïs"
+   }
+  ],
+  "notes_updated_at": "2026-10-21T13:58:44.740063+00:00",
+  "notes_updated_by": "867208ff-cf8e-40b6-9856-645520ebcf4d",
+  "notes_updated_by_name": "Anaïs",
+  "relance_count": 2,
+  "qualified_at": "2026-10-21T13:59:05.271616+00:00",
+  "qualified_by": "867208ff-cf8e-40b6-9856-645520ebcf4d",
+  "qualified_by_name": "Anaïs",
+  "campaign_name": "ENGHIEN +7 CREA STAT 1",
+  "meta_account": "meta tdl",
+  "meta_details": {
+   "meta_lead_id": "l:1167576482595461",
+   "created_time": "2026-10-17T15:15:04+02:00",
+   "adset_name": "adset CREIL +15KM copy",
+   "ad_name": "crea stat creil ss prix",
+   "form_name": "Creil | Stage points | Formulaire 01-copy-copy",
+   "platform": "fb",
+   "answers": {
+    "quand_avez-vous_effectué_votre_dernier_stage_de_récupération_de_points_?": "il_y_a_plus_d’un_an",
+    "avez-vous_reçu_une_lettre_48si_vous_informant_de_l’invalidation_de_votre_permis_?": "non",
+    "pouvez-vous_participer_à_deux_journées_consécutives_à_creil?": "oui"
+   }
+  },
+  "ville": "Creil"
+ },
+ {
+  "id": "5d828790-72f4-4cd2-a3f8-483448bddd06",
+  "name": "Eddie Semaan",
+  "email": "eddiesemaan@hotmail.fr",
+  "phone": "+33636027547",
+  "interest": "Creil | Stage points | Formulaire 01-copy-copy",
+  "notes": "Le prospect est intéressé, cependant, il aimerait que son stage se déroule le vendredi et le samedi. Il serait fortement intéressé par le stage du 20 et 21 novembre, si ce dernier était était confirmé ( manque un BAFM pour le valider ). Il sera recontacté en début de semaine prochaine.\nPrix proposé 200 euros",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": "PERMIS",
+  "created_at": "2026-10-19T08:14:24.124638+00:00",
+  "statut": "a_relancer",
+  "chaleur": "chaud",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "7df8c049-22e6-4100-bfd5-aa336898d938"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-10-23T10:05:22.196710+00:00",
+  "notes_history": [
+   {
+    "text": "Le prospect est intéressé, cependant, il aimerait que son stage se déroule le vendredi et le samedi. Il serait fortement intéressé par le stage du 20 et 21 novembre, si ce dernier était était confirmé ( manque un BAFM pour le valider ). Il sera recontacté en début de semaine prochaine.",
+    "at": "2026-10-21T13:58:21.871006+00:00",
+    "by_name": "Anaïs"
+   },
+   {
+    "text": "Le prospect est intéressé, cependant, il aimerait que son stage se déroule le vendredi et le samedi. Il serait fortement intéressé par le stage du 20 et 21 novembre, si ce dernier était était confirmé ( manque un BAFM pour le valider ). Il sera recontacté en début de semaine prochaine.\nPrix proposé 200 euros",
+    "at": "2026-10-21T13:58:57.779297+00:00",
+    "by_name": "Anaïs"
+   }
+  ],
+  "notes_updated_at": "2026-10-21T13:58:57.779297+00:00",
+  "notes_updated_by": "867208ff-cf8e-40b6-9856-645520ebcf4d",
+  "notes_updated_by_name": "Anaïs",
+  "relance_count": 3,
+  "qualified_at": "2026-10-21T13:59:02.128750+00:00",
+  "qualified_by": "867208ff-cf8e-40b6-9856-645520ebcf4d",
+  "qualified_by_name": "Anaïs",
+  "campaign_name": "ENGHIEN +7 CREA STAT 1",
+  "meta_account": "meta tdl",
+  "meta_details": {
+   "meta_lead_id": "l:1824960248658169",
+   "created_time": "2026-10-17T08:56:23+02:00",
+   "adset_name": "adset CREIL +15KM copy",
+   "ad_name": "crea stat creil ss prix",
+   "form_name": "Creil | Stage points | Formulaire 01-copy-copy",
+   "platform": "fb",
+   "answers": {
+    "quand_avez-vous_effectué_votre_dernier_stage_de_récupération_de_points_?": "il_y_a_plus_d’un_an",
+    "avez-vous_reçu_une_lettre_48si_vous_informant_de_l’invalidation_de_votre_permis_?": "non",
+    "pouvez-vous_participer_à_deux_journées_consécutives_à_creil?": "oui"
+   }
+  },
+  "ville": "Creil"
+ },
+ {
+  "id": "2514a32b-30c4-42d2-b9c4-fee7cc2c7882",
+  "name": "Stéphane Galtier",
+  "email": "shan.galtier@gmail.com",
+  "phone": "+33768006460",
+  "interest": "Creil | Stage points | Formulaire 01-copy-copy",
+  "notes": "Le prospect souhaiterais s'inscrire à stage de récupération de points qui aura lieu en décembre, car il ne peut pas s'inscrire avant.",
+  "tags": [],
+  "contacted": false,
+  "source": "meta_lead_imports",
+  "category": "PERMIS",
+  "created_at": "2026-10-19T08:14:24.213486+00:00",
+  "statut": "a_relancer",
+  "chaleur": "froid",
+  "motif_cloture": null,
+  "relancer_le": null,
+  "is_test": false,
+  "sources": [
+   "meta"
+  ],
+  "legacy_ids": {
+   "meta_lead_imports": "fbdfd916-4ada-4547-90d8-4c58df5dfbd9"
+  },
+  "compte_meta": "META TDL",
+  "campagne": "ENGHIEN +7 CREA STAT 1",
+  "updated_at": "2026-11-03T11:11:39.168165+00:00",
+  "qualified_at": "2026-10-20T13:55:29.221092+00:00",
+  "qualified_by": "867208ff-cf8e-40b6-9856-645520ebcf4d",
+  "qualified_by_name": "Anaïs",
+  "relance_count": 2,
+  "notes_history": [
+   {
+    "text": "Le prospect souhaiterais s'inscrire à stage de récupération de points qui aura lieu en décembre, car il ne peut pas s'inscrire avant.",
+    "at": "2026-10-20T13:55:47.486948+00:00",
+    "by_name": "Anaïs"
+   }
+  ],
+  "notes_updated_at": "2026-10-20T13:55:47.486948+00:00",
+  "notes_updated_by": "867208ff-cf8e-40b6-9856-645520ebcf4d",
+  "notes_updated_by_name": "Anaïs",
+  "campaign_name": "ABO-VTC-CREIL - Copie",
+  "meta_account": "meta tdl vtc creil",
+  "meta_details": {
+   "meta_lead_id": "l:1142973358459788",
+   "created_time": "2026-11-01T17:30:08+01:00",
+   "adset_name": "adset vtc creil +15km",
+   "ad_name": "crea vtc creil",
+   "form_name": "vtc creil-copy",
+   "platform": "fb",
+   "answers": {
+    "comment_souhaitez-vous_financer_votre_formation_vtc_?": "avec_mon_cpf"
+   }
+  },
+  "ville": "Creil"
+ }
+]

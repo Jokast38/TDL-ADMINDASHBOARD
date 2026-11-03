@@ -44,6 +44,12 @@ async def _get_lead_or_meta(lead_id: str):
     collection selon qu'il a été importé avant ou après la Phase 1
     d'unification (2026-10-20) — voir _statut_to_qualification. Renvoie
     (nom_collection, document) ou (None, None)."""
+    # Ancienne ligne déjà reprise dans Prospects : c'est la fiche Prospects
+    # qu'on modifie, pour ne plus avoir deux versions du même prospect (voir
+    # scripts/merge_meta_duplicates.py).
+    doc = await db.leads.find_one({"legacy_ids.meta_lead_imports": lead_id})
+    if doc:
+        return "leads", doc
     doc = await db.meta_lead_imports.find_one({"id": lead_id})
     if doc:
         return "meta_lead_imports", doc
@@ -269,6 +275,11 @@ async def list_meta_leads(
             {"phone": {"$regex": search, "$options": "i"}},
         ]
     docs = await db.meta_lead_imports.find(query, {"_id": 0}).sort("created_time", -1).to_list(5000)
+    # Une ancienne ligne reprise dans Prospects n'est plus affichée : seule sa
+    # fiche Prospects l'est, pour ne pas voir (et modifier) deux fois le même
+    # prospect (voir scripts/merge_meta_duplicates.py).
+    already_in_leads = set(await db.leads.distinct("legacy_ids.meta_lead_imports"))
+    docs = [d for d in docs if d["id"] not in already_in_leads]
 
     # Depuis la Phase 1 (2026-10-20), les NOUVEAUX imports Meta écrivent
     # directement dans db.leads plutôt que dans cette collection legacy —
@@ -407,6 +418,7 @@ async def update_meta_lead(lead_id: str, payload: MetaLeadUpdate, user: dict = D
     collection_name, doc = await _get_lead_or_meta(lead_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Lead introuvable")
+    lead_id = doc["id"]
     collection = db[collection_name]
     if collection_name == "leads":
         # Vocabulaire affiché ("qualification") -> champs unifiés réels sur
@@ -486,7 +498,7 @@ async def delete_meta_lead(lead_id: str, user: dict = Depends(require_role(*ROLE
     collection_name, doc = await _get_lead_or_meta(lead_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Lead introuvable")
-    await db[collection_name].delete_one({"id": lead_id})
+    await db[collection_name].delete_one({"id": doc["id"]})
     return {"ok": True}
 
 
@@ -501,6 +513,7 @@ async def enroll_meta_lead(lead_id: str, payload: MetaLeadEnrollIn, request: Req
     collection_name, doc = await _get_lead_or_meta(lead_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Lead introuvable")
+    lead_id = doc["id"]
     if not doc.get("email"):
         raise HTTPException(status_code=400, detail="Ce lead n'a pas d'email — inscription impossible")
     if doc.get("inscription_id"):
