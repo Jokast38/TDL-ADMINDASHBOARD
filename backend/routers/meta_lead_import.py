@@ -26,6 +26,7 @@ from core.database import db
 from core.security import require_role
 from core.config import ROLES_LEADS, ROLES_DOSSIERS_MGMT
 from core.utils import now_iso, format_date_long_fr
+from core.meta_ville import meta_ville, meta_ville_of
 from models.meta_lead_import import MetaLeadUpdate, MetaLeadEnrollIn
 from models.inscription import InscriptionIn
 from routers.inscriptions import create_inscription
@@ -67,13 +68,8 @@ router = APIRouter(prefix="/meta-lead-import", tags=["meta-lead-import"])
 # `statut`, au lieu de chacun son propre champ qualification/status legacy).
 
 
-def _meta_ville(form_name: str, campaign_name: str) -> Optional[str]:
-    text = f"{form_name or ''} {campaign_name or ''}".upper()
-    if "EPINAY" in text or "ÉPINAY" in text:
-        return "Épinay-sur-Seine"
-    if "CREIL" in text:
-        return "Creil"
-    return None
+# Ville : voir core/meta_ville.py (questions du formulaire, publicité,
+# ensemble de publicités, puis formulaire et campagne).
 
 QUALIFICATION_LABELS = {
     "a_contacter": "À contacter",
@@ -170,9 +166,8 @@ async def import_meta_leads_csv(
     d'unification du 2026-10-20 — auparavant écrivait dans la collection à
     part db.meta_lead_imports, désormais legacy (toujours lisible via GET
     ci-dessous pour les anciens imports, mais plus alimentée). Ville et
-    catégorie de formation sont déduites du nom du formulaire/de la
-    campagne, comme le faisait l'ancien calcul client (voir _meta_ville/
-    _category_for_interest) — même dynamique, juste calculée à l'import
+    catégorie de formation sont déduites de la publicité (voir
+    core/meta_ville.py et _category_for_interest), calculées à l'import
     plutôt qu'à l'affichage."""
     if not meta_account.strip():
         raise HTTPException(status_code=400, detail="Le compte Meta est requis")
@@ -204,7 +199,7 @@ async def import_meta_leads_csv(
             skipped_already_enrolled += 1
             continue
 
-        ville = _meta_ville(row["form_name"], row["campaign_name"])
+        ville = meta_ville(row["answers"], row["ad_name"], row["adset_name"], row["form_name"], row["campaign_name"])
         category = _category_for_interest(row["form_name"]) or _category_for_interest(row["campaign_name"])
         meta_details = {
             "meta_lead_id": row["meta_lead_id"], "created_time": row["created_time"],
@@ -292,7 +287,22 @@ async def list_meta_leads(
             {"phone": {"$regex": search, "$options": "i"}},
         ]}]
     from_leads = await db.leads.find(leads_query, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    # Les prospects repris de l'ancienne collection lors de la Phase 1 n'ont
+    # pas gardé le détail de la publicité : la ville se retrouve sur leur
+    # import d'origine (legacy_ids.meta_lead_imports).
+    missing_ville_ids = [
+        (lead.get("legacy_ids") or {}).get("meta_lead_imports") for lead in from_leads
+        if not lead.get("ville") and not meta_ville_of(lead)
+    ]
+    origins = await db.meta_lead_imports.find(
+        {"id": {"$in": [i for i in missing_ville_ids if i]}}, {"_id": 0}
+    ).to_list(5000) if any(missing_ville_ids) else []
+    origin_by_id = {o["id"]: o for o in origins}
+    for d in docs:
+        d["ville"] = d.get("ville") or meta_ville_of(d)
     for lead in from_leads:
+        origin = origin_by_id.get((lead.get("legacy_ids") or {}).get("meta_lead_imports"))
+        lead["ville"] = lead.get("ville") or meta_ville_of(lead) or (meta_ville_of(origin) if origin else None)
         lead_qualification = _statut_to_qualification(lead)
         if qualification and lead_qualification != qualification:
             continue

@@ -23,6 +23,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
 from core.config import META_APP_SECRET, META_WEBHOOK_VERIFY_TOKEN, META_PAGE_ACCESS_TOKEN
+from core.database import db
+from core.meta_ville import meta_ville
 from routers.leads import create_lead_from_contact
 from services.staff_notify import notify_new_lead
 
@@ -59,7 +61,7 @@ def _fetch_lead_details(leadgen_id: str) -> dict:
         f"https://graph.facebook.com/{GRAPH_API_VERSION}/{leadgen_id}",
         params={
             "access_token": META_PAGE_ACCESS_TOKEN,
-            "fields": "field_data,form_id,ad_id,ad_name,campaign_name,created_time",
+            "fields": "field_data,form_id,ad_id,ad_name,adset_name,campaign_name,created_time",
         },
         timeout=15,
     )
@@ -88,7 +90,8 @@ def _extract_fields(field_data: list) -> dict:
     known = {"full_name", "first_name", "last_name", "email", "phone_number", "phone"}
     extra_notes = "\n".join(f"{k} : {v}" for k, v in values.items() if k not in known and v)
 
-    return {"name": name, "email": email, "phone": phone, "notes": extra_notes}
+    answers = {k: v for k, v in values.items() if k not in known and v}
+    return {"name": name, "email": email, "phone": phone, "notes": extra_notes, "answers": answers}
 
 
 @router.post("")
@@ -133,6 +136,20 @@ async def receive_lead_notification(request: Request):
             if lead:
                 created += 1
             if lead and lead.get("is_new"):
+                # Même détail que l'import CSV (routers/meta_lead_import.py),
+                # sinon la ville et la campagne restaient vides pour un lead
+                # arrivé en direct.
+                ville = meta_ville(parsed["answers"], detail.get("ad_name"), detail.get("adset_name"), None, detail.get("campaign_name"))
+                extra = {
+                    "ville": ville, "campaign_name": detail.get("campaign_name"),
+                    "meta_details": {
+                        "meta_lead_id": leadgen_id, "created_time": detail.get("created_time"),
+                        "adset_name": detail.get("adset_name"), "ad_name": detail.get("ad_name"),
+                        "form_name": None, "answers": parsed["answers"],
+                    },
+                }
+                await db.leads.update_one({"id": lead["id"]}, {"$set": extra})
+                lead.update(extra)
                 # En tâche de fond : l'envoi est limité à 28 emails/minute et
                 # Meta attend une réponse rapide de ce webhook.
                 asyncio.create_task(notify_new_lead(lead))

@@ -1065,15 +1065,11 @@ function MetaEventsTab() {
   }, [search, qualifFilter, accountFilter, campaignFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Meta Lead Ads ne fournit ni champ "intérêt" structuré ni champ ville —
-  // on les déduit au mieux du nom du formulaire/de la campagne (qui mentionne
-  // généralement la formation et parfois la ville), même logique de
-  // regroupement que Prospects/Cosmosia (canonicalizeInterest).
-  const metaVille = (l) => {
-    const text = `${l.form_name || ""} ${l.campaign_name || ""}`.toUpperCase();
-    if (text.includes("EPINAY")) return "Épinay-sur-Seine";
-    if (text.includes("CREIL")) return "Creil";
-    return null;
-  };
+  // l'intérêt est déduit du nom du formulaire/de la campagne (même
+  // regroupement que Prospects/Cosmosia, canonicalizeInterest), la ville
+  // côté serveur à partir des questions, de la publicité et de l'ensemble de
+  // publicités (voir backend core/meta_ville.py).
+  const metaVille = (l) => l.ville || null;
   const [interestFilter, setInterestFilter] = useState("all");
   const [villeFilter, setVilleFilter] = useState("all");
   const uniqueInterests = useMemo(() => {
