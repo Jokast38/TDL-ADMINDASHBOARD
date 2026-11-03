@@ -73,6 +73,51 @@ def _http_post(url: str, headers: dict, json_data: dict):
     return requests.post(url, headers=headers, json=json_data, timeout=15)
 
 
+def _http_get(url: str, headers: dict):
+    return requests.get(url, headers=headers, timeout=15)
+
+
+# Brevo accepte l'appel API (201) puis rejette le mail en différé si
+# l'expéditeur n'est pas validé chez eux : le journal affichait "sent" pour
+# plus de 9 000 mails jamais délivrés (octobre 2026). On vérifie donc avant
+# d'envoyer, avec un cache pour ne pas interroger Brevo à chaque mail.
+_BREVO_SENDER_CACHE_S = 3600
+_brevo_sender_cache: dict = {}
+
+
+def _brevo_sender_validated(api_key: str, from_addr: str) -> bool:
+    cached = _brevo_sender_cache.get((api_key, from_addr))
+    if cached and time.monotonic() - cached[1] < _BREVO_SENDER_CACHE_S:
+        return cached[0]
+    headers = {"api-key": api_key, "Accept": "application/json"}
+    email = from_addr.strip().lower()
+    domain = email.rsplit("@", 1)[-1]
+    def _fetch(path: str, key: str) -> list:
+        r = _http_get(f"https://api.brevo.com/v3/{path}", headers)
+        r.raise_for_status()
+        return r.json().get(key) or []
+
+    try:
+        senders = _fetch("senders", "senders")
+        ok = any((s.get("email") or "").lower() == email and s.get("active") for s in senders)
+        if not ok:
+            domains = _fetch("senders/domains", "domains")
+            ok = any((d.get("domain_name") or "").lower() == domain and d.get("authenticated") for d in domains)
+    except Exception as e:
+        # Brevo injoignable pour la vérification : on tente l'envoi plutôt que
+        # de perdre le mail, sans mettre ce résultat en cache.
+        logger.warning(f"Vérification de l'expéditeur Brevo impossible ({e})")
+        return True
+    _brevo_sender_cache[(api_key, from_addr)] = (ok, time.monotonic())
+    return ok
+
+
+# Refus d'o2switch qu'un nouvel essai ne fait qu'aggraver : identifiants
+# refusés (souvent un blocage temporaire anti-abus de l'hébergeur, qu'une
+# nouvelle connexion prolonge) ou domaine suspendu pour volume d'envoi.
+_SMTP_NO_RETRY_MARKERS = ("535", "has been suspended")
+
+
 async def _send_via_resend(api_key: str, from_addr: str, to: str, subject: str, body: str, attachment: dict = None, cc: list = None) -> str:
     """Envoie via l'API HTTP Resend et renvoie le statut ('sent' ou 'failed: ...')."""
     try:
@@ -209,6 +254,8 @@ async def _send_via_smtp(s: dict, to: str, subject: str, body: str, attachment: 
             return "sent"
         except Exception as e:
             last_error = e
+            if any(marker in str(e) for marker in _SMTP_NO_RETRY_MARKERS):
+                break
             if attempt < max_attempts:
                 logger.warning(f"SMTP tentative {attempt}/{max_attempts} échouée pour {to} ({e}), nouvel essai...")
                 await asyncio.sleep(2 * attempt)
@@ -280,8 +327,12 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
         if log["status"] != "sent" and s.get("brevo_fallback_api_key"):
             logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Brevo en secours...")
             log["smtp_error"] = log["status"]
-            log["status"] = await _send_via_brevo(s["brevo_fallback_api_key"], from_addr, to, subject, tracked_body, attachment, cc)
             log["fallback_provider"] = "brevo"
+            if await asyncio.to_thread(_brevo_sender_validated, s["brevo_fallback_api_key"], from_addr):
+                log["status"] = await _send_via_brevo(s["brevo_fallback_api_key"], from_addr, to, subject, tracked_body, attachment, cc)
+            else:
+                logger.error(f"Secours Brevo inutilisable : l'expéditeur {from_addr} n'est pas validé chez Brevo — mail pour {to} non envoyé")
+                log["status"] = f"failed: expéditeur {from_addr} non validé chez Brevo"
         elif log["status"] != "sent" and s.get("resend_fallback_api_key"):
             logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Resend en secours...")
             log["smtp_error"] = log["status"]

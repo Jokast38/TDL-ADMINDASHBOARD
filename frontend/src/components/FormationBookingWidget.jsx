@@ -303,7 +303,7 @@ export default function FormationBookingWidget({ formationId: initialFormationId
                   {sending ? "Envoi..." : "Envoyer ma demande d'inscription"} <CaretRight size={12} className="ml-1" weight="bold" />
                 </Button>
                 <p className="text-center text-xs text-gray-400">
-                  Sans engagement · Réponse sous 24h ouvrées · Ou appelez le <a href="tel:0180907244" className="font-bold underline">01 80 90 72 44</a>
+                  Sans engagement · Réponse sous 24h ouvrées · Ou appelez le <a href="tel:0180907244" className="font-bold underline">01 80 90 72 49</a>
                 </p>
               </form>
             )}

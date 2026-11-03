@@ -256,7 +256,7 @@ export default function VtcFormationLanding() {
                   {heroSending ? "Envoi..." : "Être rappelé gratuitement"}
                 </Button>
                 <p className="text-center text-xs text-gray-500">
-                  Sans engagement · ou au <a href="tel:+33180907244" className="font-bold text-black">01 80 90 72 44</a>
+                  Sans engagement · ou au <a href="tel:+33180907244" className="font-bold text-black">01 80 90 72 49</a>
                 </p>
               </form>
             )}

@@ -108,7 +108,7 @@ export default function SiteFooter({ className = "" }) {
             </li>
             <li className="flex items-center gap-2">
               <Phone size={15} className="shrink-0" style={{ color: GOLD }} />
-              <a href="tel:0180907244" className="hover:text-white transition-colors">01 80 90 72 44</a>
+              <a href="tel:0180907244" className="hover:text-white transition-colors">01 80 90 72 49</a>
             </li>
             <li className="flex items-center gap-2">
               <EnvelopeSimple size={15} className="shrink-0" style={{ color: GOLD }} />

@@ -1276,7 +1276,7 @@ function StickyToc({ sections }) {
 }
 
 // ─── Carte de prix collante (sidebar) ──────────────────────────────────────────
-function StickyPriceCard({ price, priceNote, facts, nextSessionLabel, ctaHref = "#contact", ctaLabel = "Je m'inscris", phone = "01 80 90 72 44" }) {
+function StickyPriceCard({ price, priceNote, facts, nextSessionLabel, ctaHref = "#contact", ctaLabel = "Je m'inscris", phone = "01 80 90 72 49" }) {
   return (
     <div className="hidden lg:block bg-white rounded-xl border-t-4 p-6 shadow-lg" style={{ borderTopColor: GOLD }}>
       <p className="font-display font-extrabold text-3xl">{price}</p>
