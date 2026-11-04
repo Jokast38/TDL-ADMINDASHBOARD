@@ -7,7 +7,7 @@
 | CACES R486 Cat. B - Nacelle élévatrice | 21h | 650 € |
 | Stage de récupération de points de permis | 14h (2 jours) | 179 € (189 € tarif fidélité) |
 | Permis B - Forfait complet (auto-école) | 20h de conduite + code | 1 290 € |
-| ECSR - Enseignant de la Conduite | 1 190h | Sur devis |
+| ECSR - Enseignant de la Conduite (CCP1 + CCP2) | 1 190h | 6 990 € |
 | Formation VTC (présentiel) | 50h | 1 490 € |
 | Formation VTC en Ligne | 50h | 990 € |
 | Formation Continue VTC (renouvellement) | 14h | 200 € |

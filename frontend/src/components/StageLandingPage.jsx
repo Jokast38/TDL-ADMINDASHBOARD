@@ -84,7 +84,7 @@ function StageNav({ ctaLabel = "Réserver une session", ctaHref = "#form" }) {
       />
       <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 shrink-0">
-          <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" width="40" height="40" className="w-10 h-10 rounded object-contain bg-black" />
+          <img src="/logo-tdl.png" alt="TDL Formation" width="40" height="40" className="w-10 h-10 rounded object-contain bg-black" />
           <span className="font-display font-bold text-sm tracking-tight hidden lg:inline">TDL Formation</span>
         </Link>
         <nav className="hidden lg:flex items-center gap-6 text-xs font-semibold uppercase tracking-wide">

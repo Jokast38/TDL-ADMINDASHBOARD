@@ -33,7 +33,7 @@ export default function ErrorPage({
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col items-center justify-center px-6 py-16 text-center" data-testid="error-page">
       <img
-        src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png"
+        src="/logo-tdl.png"
         alt="TDL Formation"
         className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-contain bg-white p-2 mb-8"
       />

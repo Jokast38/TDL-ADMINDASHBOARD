@@ -43,7 +43,7 @@ export default function SiteFooter({ className = "" }) {
         <div>
           <Link to="/" className="flex items-center gap-2 mb-4">
             <img
-              src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png"
+              src="/logo-tdl.png"
               alt="TDL Formation"
               width="36"
               height="36"

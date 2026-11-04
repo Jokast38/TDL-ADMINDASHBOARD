@@ -170,7 +170,7 @@ export default function PublicInscription() {
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-4xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
+            <img src="/logo-tdl.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
             <span className="font-display font-bold">TDL Formation</span>
           </Link>
           <Link to="/" className="text-sm text-gray-500 hover:text-[#0a0a0a] flex items-center gap-1">

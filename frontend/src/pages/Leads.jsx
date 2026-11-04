@@ -58,7 +58,7 @@ const EMAIL_HEADER = `
     <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.07);">
       <tr>
         <td align="center" style="background-color:#0a0a0a;padding:28px 24px;">
-          <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" width="60" height="60" style="display:block;border-radius:8px;margin:0 auto 12px;" />
+          <img src="https://www.tdl-formation.fr/logo-tdl.png" alt="TDL Formation" width="60" height="60" style="display:block;border-radius:8px;margin:0 auto 12px;" />
           <p style="margin:0;color:#d4af37;font-size:13px;letter-spacing:2px;text-transform:uppercase;font-weight:bold;">TDL Formation</p>
           <p style="margin:6px 0 0 0;color:#ffffff;font-size:12px;">TOP DRIVE LEARNING</p>
         </td>

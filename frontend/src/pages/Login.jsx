@@ -57,7 +57,7 @@ export default function Login() {
       <div className="hidden lg:flex flex-col justify-between w-1/2 bg-[#0a0a0a] text-white p-12 relative overflow-hidden">
         <div>
           <Link to="/" className="flex items-center gap-3" data-testid="login-logo">
-            <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-12 h-12 rounded object-contain bg-black border border-[#d4af37]/40" />
+            <img src="/logo-tdl.png" alt="TDL Formation" className="w-12 h-12 rounded object-contain bg-black border border-[#d4af37]/40" />
             <span className="font-display font-bold text-xl">TDL Formation</span>
           </Link>
         </div>
@@ -79,7 +79,7 @@ export default function Login() {
         <div className="w-full max-w-md">
           <div className="lg:hidden mb-8">
             <Link to="/" className="flex items-center gap-2" data-testid="login-logo-mobile">
-              <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
+              <img src="/logo-tdl.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
               <span className="font-display font-bold text-lg">TDL Formation</span>
             </Link>
           </div>

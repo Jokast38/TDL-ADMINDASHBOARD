@@ -627,7 +627,7 @@ export default function StudentSpace() {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
+            <img src="/logo-tdl.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
             <span className="font-display font-bold hidden sm:inline">TDL Formation</span>
           </Link>
           <div className="flex items-center gap-2 sm:gap-3">

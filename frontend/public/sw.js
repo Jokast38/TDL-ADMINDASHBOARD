@@ -11,8 +11,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: "https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png",
-      badge: "https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png",
+      icon: "/logo-tdl.png",
+      badge: "/logo-tdl.png",
       data: { url: data.url || "/admin" },
     })
   );

@@ -104,6 +104,14 @@ export const CATEGORY_FAQS = {
       a: "La formation dure généralement plusieurs mois en alternance entre théorie, pratique pédagogique et stage en entreprise, avec un rythme adapté à chaque promotion.",
     },
     {
+      q: "Que contient la formation ECSR ?",
+      a: "Le titre se compose de deux certificats de compétences professionnelles. CCP1 : former des apprenants conducteurs par des actions individuelles et collectives. CCP2 : sensibiliser l'ensemble des usagers de la route à l'adoption de comportements sûrs et respectueux de l'environnement.",
+    },
+    {
+      q: "Quel est le prix de la formation ECSR ?",
+      a: "La formation complète coûte 6 990 €, CCP1 et CCP2 compris.",
+    },
+    {
       q: "Le titre ECSR est-il éligible au financement CPF ou France Travail ?",
       a: "Oui, selon votre situation, la formation ECSR peut être prise en charge par le CPF, France Travail ou un OPCO. Notre équipe étudie votre éligibilité et vous accompagne dans les démarches.",
     },

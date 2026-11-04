@@ -30,7 +30,7 @@ export default function ForgotPassword() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6" data-testid="forgot-password-page">
       <div className="w-full max-w-md bg-white border border-gray-200 rounded-md p-8 shadow-sm">
         <Link to="/" className="flex items-center gap-2 mb-8">
-          <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
+          <img src="/logo-tdl.png" alt="TDL Formation" className="w-10 h-10 rounded object-contain bg-black" />
           <span className="font-display font-bold text-lg">TDL Formation</span>
         </Link>
 

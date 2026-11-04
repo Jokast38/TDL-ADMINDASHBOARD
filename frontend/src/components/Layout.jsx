@@ -129,7 +129,7 @@ export default function Layout({ children }) {
       >
         <div className={`h-16 flex items-center ${collapsed ? "justify-center px-2" : "justify-between px-6"} border-b border-gray-200 sticky top-0 bg-white z-10`}>
           <Link to="/admin" className="flex items-center gap-2 min-w-0" data-testid="sidebar-logo">
-            <img src="https://customer-assets.emergentagent.com/job_tdl-admin-hub/artifacts/o12h65zz_image.png" alt="TDL Formation" className="w-9 h-9 rounded object-contain bg-black shrink-0" />
+            <img src="/logo-tdl.png" alt="TDL Formation" className="w-9 h-9 rounded object-contain bg-black shrink-0" />
             {!collapsed && <span className="font-display font-bold text-lg tracking-tight truncate">TDL Formation</span>}
           </Link>
           <button onClick={() => setOpen(false)} className="md:hidden p-2" aria-label="Fermer menu" data-testid="sidebar-close">
