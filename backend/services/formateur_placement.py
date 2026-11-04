@@ -60,10 +60,13 @@ async def planning_for(user: dict, year: int) -> dict:
     formateurs placés : seulement si chaque place est libre ou non."""
     today = _today()
     categories = await _categories_by_formation(formateur_categories(user))
-    stages = await db.stages.find(
-        {"formation_id": {"$in": list(categories)}, "date_debut": _year_query(year), "statut": {"$ne": "annule"}},
-        {"_id": 0},
-    ).sort("date_debut", 1).to_list(2000)
+    query = {"formation_id": {"$in": list(categories)}, "date_debut": _year_query(year), "statut": {"$ne": "annule"}}
+    # Sessions de test (scripts/formateur_test.py) : réservées au compte de
+    # test, sinon elles déclencheraient le rappel « Choisissez vos dates » des
+    # vrais formateurs.
+    if not user.get("is_test"):
+        query["is_test"] = {"$ne": True}
+    stages = await db.stages.find(query, {"_id": 0}).sort("date_debut", 1).to_list(2000)
     titres = await _titres_by_user(stages)
     mine = await _my_stages(user["id"], year)
     mine_ids = {s["id"] for s in mine}
@@ -192,7 +195,7 @@ async def agenda(start: str, end: str) -> list:
             "id": s["id"], "formation_titre": s.get("formation_titre"), "category": category,
             "date_debut": s["date_debut"][:10], "date_fin": s["date_fin"][:10],
             "heure_debut": s.get("heure_debut"), "heure_fin": s.get("heure_fin"),
-            "lieu_ville": s.get("lieu_ville", ""), "places": places,
+            "lieu_ville": s.get("lieu_ville", ""), "places": places, "is_test": bool(s.get("is_test")),
         })
     return items
 

@@ -116,7 +116,7 @@ export default function FormateursAgenda({ formateurs }) {
                         title={`${s.formation_titre}${s.lieu_ville ? ` · ${s.lieu_ville}` : ""}`}
                         data-testid={`formateurs-agenda-session-${s.id}`}
                       >
-                        <span className="block truncate font-medium">{s.formation_titre}</span>
+                        <span className="block truncate font-medium">{s.is_test ? "TEST · " : ""}{s.formation_titre}</span>
                         <span className="block truncate">{noms.length ? noms.join(", ") : "Aucun formateur"}{libres ? ` · ${libres} libre(s)` : ""}</span>
                       </button>
                     );
@@ -132,7 +132,7 @@ export default function FormateursAgenda({ formateurs }) {
         <DialogContent data-testid="formateurs-agenda-dialog">
           {selected && (
             <>
-              <DialogHeader><DialogTitle>{selected.formation_titre}</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{selected.is_test ? "Session de test — " : ""}{selected.formation_titre}</DialogTitle></DialogHeader>
               <div className="space-y-3 text-sm">
                 <p className="text-gray-500 flex items-center gap-3 flex-wrap">
                   <span className="flex items-center gap-1"><Calendar size={14} /> {formatDateFR(selected.date_debut)} → {formatDateFR(selected.date_fin)}

@@ -7,15 +7,23 @@ Ses placements sont de vrais placements : ils prennent la place BAFM de la
 session tant qu'ils ne sont pas retirés. --delete les retire tous avec le
 compte.
 
+--sessions crée des sessions de récupération de points en 2027 à des dates
+aléatoires (demande du 2026-11-04), marquées `is_test` : seul le compte de
+test les voit dans son planning, et le statut "complet" les retire de la
+réservation publique.
+
 Usage (depuis backend/) :
-    python scripts/formateur_test.py           # crée le compte (ou redonne un mot de passe)
-    python scripts/formateur_test.py --delete  # supprime le compte et ses placements
+    python scripts/formateur_test.py             # crée le compte (ou redonne un mot de passe)
+    python scripts/formateur_test.py --sessions  # ajoute des sessions de test en 2027
+    python scripts/formateur_test.py --delete    # supprime le compte, ses placements et les sessions de test
 """
 import asyncio
 import os
+import random
 import secrets
 import sys
 import uuid
+from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -25,6 +33,8 @@ from core.utils import now_iso
 from services.convention import _stage_animateur_ids
 
 EMAIL = "formateur.test@example.com"
+NB_SESSIONS = 16
+LIEUX = [("Épinay-sur-Seine (93)", "59 avenue Joffre", "09:00", "17:00")] * 3 + [("Creil", "", "08:30", "16:30")]
 
 
 async def create() -> None:
@@ -45,7 +55,29 @@ async def create() -> None:
     print(f"Email : {EMAIL}\nMot de passe : {password}")
 
 
+async def create_sessions() -> None:
+    formation = await db.formations.find_one({"category": "PERMIS"}, {"_id": 0, "id": 1, "title": 1})
+    debuts = set()
+    while len(debuts) < NB_SESSIONS:
+        jour = date(2027, 1, 4) + timedelta(days=random.randrange(0, 357))
+        if jour.weekday() in (0, 4):  # stages du lundi-mardi ou du vendredi-samedi
+            debuts.add(jour)
+    for debut in sorted(debuts):
+        ville, adresse, heure_debut, heure_fin = random.choice(LIEUX)
+        await db.stages.insert_one({
+            "id": str(uuid.uuid4()), "formation_id": formation["id"], "formation_titre": formation["title"],
+            "date_debut": debut.isoformat(), "date_fin": (debut + timedelta(days=1)).isoformat(),
+            "lieu_ville": ville, "lieu_adresse": adresse, "heure_debut": heure_debut, "heure_fin": heure_fin,
+            "capacite_max": 20, "nb_inscrits": 0, "animateur_ids": [], "animateur_id": None,
+            "statut": "complet", "is_test": True, "notes": "SESSION DE TEST — scripts/formateur_test.py --delete",
+            "created_at": now_iso(), "updated_at": now_iso(),
+        })
+    print(f"{NB_SESSIONS} sessions de test créées en 2027 : " + ", ".join(d.strftime("%d/%m") for d in sorted(debuts)))
+
+
 async def delete() -> None:
+    result = await db.stages.delete_many({"is_test": True})
+    print(f"{result.deleted_count} session(s) de test supprimée(s).")
     user = await db.users.find_one({"email": EMAIL}, {"_id": 0, "id": 1})
     if not user:
         print("Aucun compte de test.")
@@ -60,4 +92,9 @@ async def delete() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(delete() if "--delete" in sys.argv else create())
+    if "--delete" in sys.argv:
+        asyncio.run(delete())
+    elif "--sessions" in sys.argv:
+        asyncio.run(create_sessions())
+    else:
+        asyncio.run(create())
