@@ -919,8 +919,9 @@ def generate_caces_card_pdf(
     revu le 2026-11-04) :
     - recto : titulaire et numéros à gauche, identité de l'OTC (logo) à
       droite, encadré de vérification ameli.fr et n° INRS de l'OTC en bas ;
-      le QR code de vérification TDL est en bas à droite, sous la mention
-      INPI ;
+      en bas à droite, comme sur le modèle, la mention INPI et le logo
+      Assurance Maladie – Risques professionnels, puis le QR code de
+      vérification TDL ;
     - verso : photo, état civil, lieu/date et signataire avec le cachet du
       centre à gauche ; tableau des 9 catégories R.489 à droite.
     `photo_bytes` (photo du dossier) et `cachet_bytes` (cachet du centre,
@@ -1004,6 +1005,8 @@ def generate_caces_card_pdf(
 
     logo_path = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "assets", "tdl_logo.png")
     logo = ImageReader(logo_path) if _os.path.exists(logo_path) else None
+    ameli_path = _os.path.join(_os.path.dirname(logo_path), "assurance_maladie_logo.png")
+    ameli_logo = ImageReader(ameli_path) if _os.path.exists(ameli_path) else None
 
     # ── RECTO ──────────────────────────────────────────────────────────
     _title()
@@ -1071,16 +1074,22 @@ def generate_caces_card_pdf(
     c.setFont("Times-Bold", 26)
     c.drawCentredString(rc, h - 8.2 * cm, "CACES®")
 
-    # Mention INPI (à gauche) et QR code de vérification TDL (à droite).
+    # Mention INPI, logo Assurance Maladie – Risques professionnels (comme sur
+    # le modèle), puis QR code de vérification TDL au bord droit.
     c.setFont("Helvetica", 6)
     for i, line in enumerate(("La marque CACES®", "est protégée par un dépôt à", "l'INPI sous le numéro", "03.3237295")):
-        c.drawCentredString(rc - 1.6 * cm, h - 9.25 * cm - i * 0.25 * cm, line)
+        c.drawCentredString(mid + 1.45 * cm, h - 9.55 * cm - i * 0.25 * cm, line)
+    if ameli_logo:
+        aw = 3.0 * cm
+        ah = aw * ameli_logo.getSize()[1] / ameli_logo.getSize()[0]
+        c.drawImage(ameli_logo, mid + 2.95 * cm, h - 10.75 * cm, width=aw, height=ah)
     qr = 1.9 * cm
-    c.drawImage(_qr_image_reader(verif_url), rc + 0.5 * cm, h - 10.75 * cm, width=qr, height=qr, mask="auto")
+    qr_x = w - 0.7 * cm - qr
+    c.drawImage(_qr_image_reader(verif_url), qr_x, h - 10.75 * cm, width=qr, height=qr, mask="auto")
     c.setFont("Helvetica", 5.5)
     c.setFillColor(grey)
-    c.drawCentredString(rc + 0.5 * cm + qr / 2, h - 11.0 * cm, "Vérifier ce certificat")
-    c.drawCentredString(rc + 0.5 * cm + qr / 2, h - 11.25 * cm, "tdl-formation.fr/verif-caces")
+    c.drawCentredString(qr_x + qr / 2, h - 11.0 * cm, "Vérifier ce certificat")
+    c.drawCentredString(qr_x + qr / 2, h - 11.25 * cm, "tdl-formation.fr/verif-caces")
 
     # Encadré réglementaire de vérification (base nationale ameli.fr).
     box_x, box_y, box_w, box_h = 0.6 * cm, h - 11.1 * cm, mid - 1.9 * cm, 1.25 * cm
