@@ -7,7 +7,7 @@ import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
   CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive, Question, Student,
-  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLeft, CaretRight, Headset, CreditCard, PhoneCall,
+  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLeft, CaretRight, Headset, CreditCard, PhoneCall, Certificate,
 } from "@phosphor-icons/react";
 
 // Exporté pour être réutilisé par le sélecteur de pages autorisées sur la
@@ -40,6 +40,7 @@ export const navAll = [
   { to: "/admin/apprenants", label: "Apprenants", icon: Student, roles: ["admin", "employe", "responsable_admission", "agent_admin", "agent_telephonique"] },
   { to: "/admin/dossiers", label: "Dossiers (Kanban)", icon: Folders, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/examens", label: "Examens", icon: ClipboardText, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
+  { to: "/admin/caces", label: "CACES", icon: Certificate, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/rdv", label: "Rendez-vous", icon: CalendarPlus, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/leads", label: "Leads", icon: UsersThree, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
   { to: "/admin/documents-library", label: "Bibliothèque PDF", icon: FilePdf, roles: ["admin", "responsable_admission", "agent_admin"] },

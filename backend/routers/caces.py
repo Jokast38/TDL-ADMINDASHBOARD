@@ -9,6 +9,7 @@ Portée volontairement limitée à ce qui a été confirmé comme faisable :
 - Pas de génération automatique PAR LOT ; chaque carte est générée à la
   demande depuis la fiche du candidat.
 """
+import base64
 import uuid
 from typing import Optional, Dict, Any, List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
@@ -26,6 +27,10 @@ from models.caces import (
 )
 from services.caces import compute_attempt_status, finalize_category, add_external_category, today_iso
 from services.pdf import generate_caces_card_pdf
+from services.email import send_email
+from services.email_template import render_branded_email
+from core.caces_verif import normalize_numero, name_matches
+from core.utils import format_date_long_fr
 
 router = APIRouter(prefix="/caces", tags=["caces"])
 
@@ -33,6 +38,27 @@ router = APIRouter(prefix="/caces", tags=["caces"])
 @router.get("/categories")
 async def list_categories(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
     return [{"category": c, "duree_pratique_min": CACES_PRATIQUE_DUREE_MIN.get(c)} for c in CACES_CATEGORIES]
+
+
+@router.get("/candidats")
+async def list_candidats(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Dossiers CACES pour la page CACES (demande du 2026-11-04) : c'est
+    d'un dossier qu'on ouvre un examen pour une catégorie."""
+    dossiers = await db.dossiers.find(
+        {"category": "CACES"},
+        {"_id": 0, "id": 1, "student_id": 1, "student_name": 1, "student_email": 1, "formation_title": 1, "status": 1, "id_photo_path": 1},
+    ).sort("created_at", -1).to_list(2000)
+    for d in dossiers:
+        d["has_photo"] = bool(d.pop("id_photo_path", None))
+    return dossiers
+
+
+@router.get("/testeurs")
+async def list_testeurs(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Formateurs dont le titre est « Testeur CACES », proposés à la saisie
+    de l'épreuve pratique (le nom reste modifiable à la main)."""
+    users = await db.users.find({"titre": "Testeur CACES"}, {"_id": 0, "name": 1}).to_list(200)
+    return sorted({u["name"] for u in users if u.get("name")})
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +140,91 @@ async def record_pratique_result(attempt_id: str, payload: CacesPratiqueResultIn
     return await _maybe_finalize(attempt)
 
 
+async def _card_pdf(certificate: dict) -> bytes:
+    """PDF de la carte avec la photo d'identité du premier dossier lié à une
+    de ses catégories (un seul dossier porte la photo, voir
+    _store_dossier_photo) — absente si jamais capturée."""
+    photo_bytes = None
+    dossier_id = next((c.get("dossier_id") for c in certificate.get("categories", []) if c.get("dossier_id")), None)
+    if dossier_id:
+        dossier = await db.dossiers.find_one({"id": dossier_id}, {"_id": 0, "id_photo_path": 1})
+        if dossier and dossier.get("id_photo_path"):
+            try:
+                photo_bytes, _ = await get_object(dossier["id_photo_path"])
+            except Exception:
+                photo_bytes = None
+    return generate_caces_card_pdf(certificate, f"{PUBLIC_FRONTEND_URL}/verif-caces", photo_bytes=photo_bytes)
+
+
+def _resultat(part: Optional[dict]) -> str:
+    if not part:
+        return "pas encore passée"
+    verdict = "réussie" if part.get("passed") else "non réussie"
+    return f"{verdict} le {format_date_long_fr(part.get('date', ''))}"
+
+
+@router.post("/exam-attempts/{attempt_id}/send-results")
+async def send_results(attempt_id: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Envoie au candidat le résultat de son examen CACES (demande du
+    2026-11-04), avec sa carte en pièce jointe quand la catégorie est
+    obtenue."""
+    attempt = await db.caces_exam_attempts.find_one({"id": attempt_id}, {"_id": 0})
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Tentative introuvable")
+    if not attempt.get("theorie") and not attempt.get("pratique"):
+        raise HTTPException(status_code=400, detail="Aucun résultat saisi pour cet examen")
+    email = attempt.get("student_email")
+    if not email and attempt.get("dossier_id"):
+        dossier = await db.dossiers.find_one({"id": attempt["dossier_id"]}, {"_id": 0, "student_email": 1}) or {}
+        email = dossier.get("student_email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Aucun email connu pour ce candidat")
+
+    status = compute_attempt_status(attempt)
+    category = attempt["category"]
+    lignes = [
+        f"Bonjour {attempt.get('student_name', '')},\n",
+        f"Voici les résultats de votre examen CACES® R.489, catégorie {category} :\n",
+        f"Épreuve théorique : {_resultat(attempt.get('theorie'))}",
+        f"Épreuve pratique : {_resultat(attempt.get('pratique'))}\n",
+    ]
+    attachment = None
+    certificate = None
+    if status == "valide" and attempt.get("finalized_certificate_id"):
+        certificate = await db.caces_certificates.find_one({"id": attempt["finalized_certificate_id"]}, {"_id": 0})
+    if certificate:
+        entry = next((c for c in certificate.get("categories", []) if c["category"] == category), {})
+        lignes.append(
+            f"Félicitations, vous avez obtenu le CACES® catégorie {category}, numéro {entry.get('numero_caces', '')}, "
+            f"valable jusqu'au {format_date_long_fr(certificate.get('expiration_date', ''))}.\n"
+            "Votre carte CACES® est en pièce jointe. Son authenticité peut être vérifiée à tout moment "
+            f"en scannant son QR code, ou avec son numéro sur {PUBLIC_FRONTEND_URL}/verif-caces."
+        )
+        pdf = await _card_pdf(certificate)
+        attachment = {"filename": f"carte_caces_{category}.pdf", "content_b64": base64.b64encode(pdf).decode()}
+    elif status in ("theorie_ok", "pratique_ok"):
+        manque = "pratique" if status == "theorie_ok" else "théorique"
+        lignes.append(f"Il vous reste l'épreuve {manque} à valider dans les 12 mois. Nous revenons vers vous pour la programmer.")
+    elif status == "expire":
+        lignes.append("Le délai de 12 mois entre les deux épreuves est dépassé : l'examen est à repasser. Nous revenons vers vous.")
+    else:
+        lignes.append("L'examen n'est pas validé cette fois-ci. Nous revenons vers vous pour vous proposer une nouvelle date.")
+    lignes.append("\nPour toute question, contactez-nous : contact@tdl-formation.fr.")
+
+    log = await send_email(
+        email, f"Vos résultats CACES® — catégorie {category}", render_branded_email("\n".join(lignes)),
+        attachment=attachment, extra={"caces_attempt_id": attempt_id},
+    )
+    if log.get("status") not in ("sent", "mocked"):
+        raise HTTPException(status_code=502, detail="Échec de l'envoi de l'email")
+    sent_at = now_iso()
+    await db.caces_exam_attempts.update_one(
+        {"id": attempt_id}, {"$set": {"results_sent_at": sent_at, "results_sent_by": user.get("name"), "updated_at": sent_at}},
+    )
+    attempt.update({"results_sent_at": sent_at, "results_sent_by": user.get("name"), "status": status})
+    return attempt
+
+
 async def _maybe_finalize(attempt: dict) -> dict:
     status = compute_attempt_status(attempt)
     if status == "valide" and not attempt.get("finalized_certificate_id"):
@@ -184,21 +295,7 @@ async def download_card_pdf(certificate_id: str, user: dict = Depends(require_ro
     certificate = await db.caces_certificates.find_one({"id": certificate_id}, {"_id": 0})
     if not certificate:
         raise HTTPException(status_code=404, detail="Carte introuvable")
-
-    # Photo d'identité — reprise du premier dossier lié à une catégorie de
-    # cette carte (un seul dossier/étudiant porte la photo, voir
-    # _store_dossier_photo), absente si jamais capturée.
-    photo_bytes = None
-    dossier_id = next((c.get("dossier_id") for c in certificate.get("categories", []) if c.get("dossier_id")), None)
-    if dossier_id:
-        dossier = await db.dossiers.find_one({"id": dossier_id}, {"_id": 0, "id_photo_path": 1})
-        if dossier and dossier.get("id_photo_path"):
-            try:
-                photo_bytes, _ = await get_object(dossier["id_photo_path"])
-            except Exception:
-                photo_bytes = None
-
-    pdf_bytes = generate_caces_card_pdf(certificate, f"{PUBLIC_FRONTEND_URL}/verif-caces", photo_bytes=photo_bytes)
+    pdf_bytes = await _card_pdf(certificate)
     filename = f"caces_{(certificate.get('student_name') or 'carte').replace(' ', '_')}.pdf"
     return Response(content=pdf_bytes, media_type="application/pdf", headers={"Content-Disposition": f'inline; filename="{filename}"'})
 
@@ -305,11 +402,7 @@ async def get_my_dossier_photo(dossier_id: str, user: dict = Depends(get_current
 # principe d'ID opaque comme seul "secret").
 # ---------------------------------------------------------------------------
 
-@router.get("/public/{certificate_id}")
-async def public_verify_certificate(certificate_id: str):
-    certificate = await db.caces_certificates.find_one({"id": certificate_id}, {"_id": 0})
-    if not certificate:
-        raise HTTPException(status_code=404, detail="Certificat introuvable")
+def _public_view(certificate: dict) -> dict:
     today = today_iso()
     return {
         "student_name": certificate.get("student_name"),
@@ -326,3 +419,27 @@ async def public_verify_certificate(certificate_id: str):
             for c in certificate.get("categories", [])
         ],
     }
+
+
+@router.get("/public/verify")
+async def public_verify_by_numero(numero: str, nom: str):
+    """Vérification par numéro CACES® + nom du titulaire (page publique
+    /verif-caces). Même réponse « introuvable » que le numéro n'existe pas
+    ou que le nom ne corresponde pas, pour ne rien révéler."""
+    wanted = normalize_numero(numero)
+    if not wanted or not (nom or "").strip():
+        raise HTTPException(status_code=400, detail="Numéro et nom obligatoires")
+    certs = await db.caces_certificates.find({}, {"_id": 0}).to_list(10000)
+    for certificate in certs:
+        entry = next((c for c in certificate.get("categories", []) if normalize_numero(c.get("numero_caces")) == wanted), None)
+        if entry and name_matches(certificate.get("student_name"), nom):
+            return {**_public_view(certificate), "numero_verifie": entry["numero_caces"], "categorie_verifiee": entry["category"]}
+    raise HTTPException(status_code=404, detail="Aucun CACES® ne correspond à ce numéro et ce nom")
+
+
+@router.get("/public/{certificate_id}")
+async def public_verify_certificate(certificate_id: str):
+    certificate = await db.caces_certificates.find_one({"id": certificate_id}, {"_id": 0})
+    if not certificate:
+        raise HTTPException(status_code=404, detail="Certificat introuvable")
+    return _public_view(certificate)

@@ -51,6 +51,8 @@ const Inscriptions = lazy(() => import("@/pages/Inscriptions"));
 const PaiementConfirmation = lazy(() => import("@/pages/PaiementConfirmation"));
 const Students = lazy(() => import("@/pages/Students"));
 const Exams = lazy(() => import("@/pages/Exams"));
+const CacesAdmin = lazy(() => import("@/pages/CacesAdmin"));
+const VerifCaces = lazy(() => import("@/pages/VerifCaces"));
 const Appointments = lazy(() => import("@/pages/Appointments"));
 const Dossiers = lazy(() => import("@/pages/Dossiers"));
 const CentreAppel = lazy(() => import("@/pages/CentreAppel"));
@@ -190,6 +192,8 @@ function App() {
             <Route path="/test-positionnement/:token" element={<PositioningTest />} />
             <Route path="/test-francais/:token" element={<FrenchTest />} />
             <Route path="/satisfaction/:type/:inscriptionId" element={<SatisfactionSurvey />} />
+            <Route path="/verif-caces" element={<VerifCaces />} />
+            <Route path="/verif-caces/:certificateId" element={<VerifCaces />} />
 
             <Route path="/espace-eleve" element={
               <ProtectedRoute roles={["etudiant"]}><StudentSpace /></ProtectedRoute>
@@ -239,6 +243,9 @@ function App() {
             } />
             <Route path="/admin/examens" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Exams /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/caces" element={
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><CacesAdmin /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/rdv" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Appointments /></AdminLayout></ProtectedRoute>
