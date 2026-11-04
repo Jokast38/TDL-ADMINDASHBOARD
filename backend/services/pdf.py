@@ -908,215 +908,317 @@ def _qr_image_reader(data: str):
     return ImageReader(buf)
 
 
-def generate_caces_card_pdf(certificate: dict, public_verif_url_base: str, photo_bytes: Optional[bytes] = None) -> bytes:
+def generate_caces_card_pdf(
+    certificate: dict, public_verif_url_base: str, photo_bytes: Optional[bytes] = None,
+    cachet_bytes: Optional[bytes] = None, otc_numero_inrs: Optional[str] = None,
+) -> bytes:
     """Carte CACES® recto/verso (2 pages A5 paysage) pour UN titulaire —
     `certificate` est un document de db.caces_certificates (voir
-    services/caces.py). Le QR code de chaque face pointe vers la page de
-    vérification publique de la carte (pas d'une seule catégorie), pour
-    rester valide même si une catégorie est ajoutée plus tard. `photo_bytes`
-    est la photo d'identité du dossier (voir routers/caces.py), optionnelle."""
+    services/caces.py). Mise en page calquée sur le modèle réglementaire
+    fourni par l'équipe (4.6.2 modele_certificat_CACES_R489_TDL_Formation_V2,
+    revu le 2026-11-04) :
+    - recto : titulaire et numéros à gauche, identité de l'OTC (logo) à
+      droite, encadré de vérification ameli.fr et n° INRS de l'OTC en bas ;
+      le QR code de vérification TDL est en bas à droite, sous la mention
+      INPI ;
+    - verso : photo, état civil, lieu/date et signataire avec le cachet du
+      centre à gauche ; tableau des 9 catégories R.489 à droite.
+    `photo_bytes` (photo du dossier) et `cachet_bytes` (cachet du centre,
+    Paramètres > Attestations) sont optionnels : un cadre vide les remplace."""
+    import os as _os
+    import io as _io
     from reportlab.lib.pagesizes import A5, landscape
     from reportlab.pdfgen import canvas as rl_canvas
     from reportlab.lib import colors
     from reportlab.lib.units import cm
     from reportlab.lib.utils import ImageReader
-    import io as _io
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.platypus import Paragraph, Table, TableStyle
+    from xml.sax.saxutils import escape as _xml_escape
 
     page_size = landscape(A5)
     w, h = page_size
     buf = _io.BytesIO()
     c = rl_canvas.Canvas(buf, pagesize=page_size)
-    gold = colors.HexColor("#d4af37")
+    c.setTitle(f"Certificat CACES R.489 — {certificate.get('student_name') or ''}")
+    blue = colors.HexColor("#1a4fd4")
     black = colors.HexColor("#0a0a0a")
-    grey = colors.HexColor("#666666")
+    grey = colors.HexColor("#555555")
+    light_grey = colors.HexColor("#aaaaaa")
+    cell_blue = colors.HexColor("#e8eefb")
 
     categories = certificate.get("categories", [])
     by_cat = {cat["category"]: cat for cat in categories}
     verif_url = f"{public_verif_url_base}/{certificate['id']}"
+    student_name = certificate.get("student_name") or "—"
+
+    def _numero_affiche(entry: dict) -> str:
+        # « C1B.000012345678 » s'imprime « C1B. 000012345678 », comme sur le modèle.
+        numero = entry.get("numero_caces") or ""
+        return numero.replace(".", ". ", 1) if "." in numero else numero
+
+    def _date_courte(iso: Optional[str]) -> str:
+        try:
+            return datetime.strptime((iso or "")[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except ValueError:
+            return iso or ""
+
+    def _date_longue(iso: Optional[str]) -> str:
+        # « 12 avril 1990 », sans jour de la semaine, comme sur le modèle.
+        mois = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août",
+                "septembre", "octobre", "novembre", "décembre")
+        try:
+            d = datetime.strptime((iso or "")[:10], "%Y-%m-%d")
+        except ValueError:
+            return iso or "—"
+        return f"{d.day} {mois[d.month - 1]} {d.year}"
+
+    def _image(data: Optional[bytes]):
+        if not data:
+            return None
+        try:
+            return ImageReader(_io.BytesIO(data))
+        except Exception:
+            return None
+
+    def _draw_fit(img, x, y, box_w, box_h):
+        """Image centrée dans le cadre, proportions conservées."""
+        iw, ih = img.getSize()
+        scale = min(box_w / iw, box_h / ih)
+        dw, dh = iw * scale, ih * scale
+        c.drawImage(img, x + (box_w - dw) / 2, y + (box_h - dh) / 2, width=dw, height=dh, mask="auto")
+
+    def _dashed_vline(x, y0, y1):
+        c.saveState()
+        c.setStrokeColor(light_grey)
+        c.setDash(2, 2)
+        c.setLineWidth(0.8)
+        c.line(x, y0, x, y1)
+        c.restoreState()
+
+    def _title():
+        c.setFillColor(grey)
+        c.setFont("Times-Bold", 15)
+        c.drawCentredString(w / 2, h - 1.1 * cm, "Certificat CACES® R.489 — TDL Formation")
+
+    logo_path = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "assets", "tdl_logo.png")
+    logo = ImageReader(logo_path) if _os.path.exists(logo_path) else None
 
     # ── RECTO ──────────────────────────────────────────────────────────
-    c.setFillColor(black)
-    c.setFont("Helvetica-Bold", 13)
-    c.drawCentredString(w / 2, h - 1 * cm, "Certificat CACES® R.489 — TDL Formation")
-    c.setStrokeColor(gold)
-    c.setLineWidth(1.2)
-    c.line(1 * cm, h - 1.3 * cm, w - 1 * cm, h - 1.3 * cm)
+    _title()
+    mid = w / 2 + 0.6 * cm
+    _dashed_vline(mid, h - 2.1 * cm, h - 9.4 * cm)
 
-    y = h - 2.2 * cm
-    c.setFont("Helvetica-Oblique", 9)
-    c.setFillColor(black)
-    c.drawString(1 * cm, y, "Titulaire :")
-    y -= 0.55 * cm
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(1 * cm, y, certificate.get("student_name") or "—")
+    x = 0.9 * cm
+    y = h - 2.6 * cm
+    c.setFillColor(grey)
+    c.setFont("Times-Italic", 10)
+    c.drawString(x, y, "Titulaire :")
+    y -= 0.65 * cm
+    c.setFillColor(blue)
+    c.setFont("Times-Bold", 15)
+    c.drawString(x, y, student_name)
 
-    y -= 0.9 * cm
-    c.setFont("Helvetica-Oblique", 9)
-    c.drawString(1 * cm, y, "CACES® numéro(s) :")
+    y -= 0.95 * cm
+    c.setFillColor(grey)
+    c.setFont("Times-Italic", 10)
+    label = "CACES® numéro(s) :"
+    c.drawString(x, y, label)
+    c.setStrokeColor(grey)
+    c.setLineWidth(0.5)
+    c.line(x, y - 0.08 * cm, x + c.stringWidth(label, "Times-Italic", 10), y - 0.08 * cm)
+    c.setFillColor(blue)
+    c.setFont("Times-Bold", 12)
     for cat_code, _ in _CACES_CATEGORY_ROWS:
         entry = by_cat.get(cat_code)
-        if not entry:
-            continue
-        y -= 0.5 * cm
-        c.setFont("Helvetica-Bold", 10)
-        c.setFillColor(colors.HexColor("#1a4fd4"))
-        c.drawString(1 * cm, y, f"- C{cat_code}. {entry['numero_caces'].split('.', 1)[-1] if '.' in entry['numero_caces'] else entry['numero_caces']}")
-    c.setFillColor(black)
+        if entry:
+            y -= 0.55 * cm
+            c.drawString(x, y, f"- {_numero_affiche(entry)}")
 
-    y -= 1 * cm
-    c.setFont("Helvetica-Oblique", 9)
-    c.drawString(1 * cm, y, "Délivré par :")
-    y -= 0.5 * cm
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(1 * cm, y, "TDL FORMATION")
+    y = min(y - 1.1 * cm, h - 6.9 * cm)
+    c.setFillColor(grey)
+    c.setFont("Times-Italic", 10)
+    c.drawString(x, y, "Délivré par :")
+    y -= 0.6 * cm
+    c.setFillColor(black)
+    c.setFont("Times-Bold", 13)
+    c.drawString(x, y, "TDL FORMATION")
+    c.setFont("Times-Roman", 9.5)
     y -= 0.45 * cm
-    c.setFont("Helvetica", 9)
-    c.drawString(1 * cm, y, "59 Avenue Joffre")
-    y -= 0.4 * cm
-    c.drawString(1 * cm, y, "93800 Épinay-sur-Seine")
-    y -= 0.5 * cm
-    c.drawString(1 * cm, y, "Tél. : 01 80 90 72 49 – tdl-formation.fr")
+    c.drawString(x, y, "59 Avenue Joffre")
+    y -= 0.38 * cm
+    c.drawString(x, y, "93800 Épinay-sur-Seine")
+    y -= 0.6 * cm
+    tel = "Tél. : 01 80 90 72 49 –  "
+    c.drawString(x, y, tel)
+    c.setFillColor(blue)
+    link_x = x + c.stringWidth(tel, "Times-Roman", 9.5)
+    c.drawString(link_x, y, "tdl-formation.fr")
+    c.setStrokeColor(blue)
+    c.line(link_x, y - 0.06 * cm, link_x + c.stringWidth("tdl-formation.fr", "Times-Roman", 9.5), y - 0.06 * cm)
 
-    # Colonne droite : identité visuelle + QR
-    rx = w - 6.2 * cm
-    c.setFont("Helvetica-Bold", 14)
+    # Colonne droite : identité de l'OTC.
+    rc = mid + (w - mid) / 2
+    if logo:
+        c.drawImage(logo, rc - 1.7 * cm, h - 5.7 * cm, width=3.4 * cm, height=3.4 * cm, mask="auto")
     c.setFillColor(black)
-    c.drawCentredString(rx + 2.6 * cm, h - 2.2 * cm, "TDL FORMATION")
-    c.setFont("Helvetica", 8)
-    c.setFillColor(grey)
-    c.drawCentredString(rx + 2.6 * cm, h - 2.7 * cm, "Organisme Testeur Certifié CACES®")
-    c.drawCentredString(rx + 2.6 * cm, h - 3.1 * cm, "59 Avenue Joffre, 93800 Épinay-sur-Seine")
+    c.setFont("Times-Bold", 13)
+    c.drawCentredString(rc, h - 6.3 * cm, "TDL FORMATION")
+    c.setFont("Times-Roman", 8.5)
+    c.drawCentredString(rc, h - 6.75 * cm, "Organisme Testeur Certifié CACES®")
+    c.drawCentredString(rc, h - 7.1 * cm, "59 Avenue Joffre, 93800 Épinay-sur-Seine")
+    c.setFont("Times-Bold", 26)
+    c.drawCentredString(rc, h - 8.2 * cm, "CACES®")
 
-    c.setFillColor(black)
-    c.setFont("Helvetica-Bold", 20)
-    c.drawCentredString(rx + 2.6 * cm, h - 4.3 * cm, "CACES®")
-
-    qr_size = 2.6 * cm
-    qr_img = _qr_image_reader(verif_url)
-    c.drawImage(qr_img, rx + 1.3 * cm, h - 7.3 * cm, width=qr_size, height=qr_size, mask="auto")
-    c.setFont("Helvetica", 6.5)
-    c.setFillColor(grey)
-    c.drawCentredString(rx + 2.6 * cm, h - 7.6 * cm, "Vérifier l'authenticité — scanner ce QR code")
-
+    # Mention INPI (à gauche) et QR code de vérification TDL (à droite).
     c.setFont("Helvetica", 6)
-    c.drawCentredString(rx + 2.6 * cm, 1.3 * cm, "La marque CACES® est protégée par un dépôt à l'INPI sous le numéro 03.3237295")
+    for i, line in enumerate(("La marque CACES®", "est protégée par un dépôt à", "l'INPI sous le numéro", "03.3237295")):
+        c.drawCentredString(rc - 1.6 * cm, h - 9.25 * cm - i * 0.25 * cm, line)
+    qr = 1.9 * cm
+    c.drawImage(_qr_image_reader(verif_url), rc + 0.5 * cm, h - 10.75 * cm, width=qr, height=qr, mask="auto")
+    c.setFont("Helvetica", 5.5)
+    c.setFillColor(grey)
+    c.drawCentredString(rc + 0.5 * cm + qr / 2, h - 11.0 * cm, "Vérifier ce certificat")
+    c.drawCentredString(rc + 0.5 * cm + qr / 2, h - 11.25 * cm, "tdl-formation.fr/verif-caces")
 
-    c.setStrokeColor(colors.HexColor("#cccccc"))
-    c.rect(1 * cm, 0.6 * cm, w - 2 * cm, 1.3 * cm, stroke=1, fill=0)
-    c.setFont("Helvetica", 7)
+    # Encadré réglementaire de vérification (base nationale ameli.fr).
+    box_x, box_y, box_w, box_h = 0.6 * cm, h - 11.1 * cm, mid - 1.9 * cm, 1.25 * cm
+    c.setStrokeColor(colors.HexColor("#999999"))
+    c.setLineWidth(1)
+    c.rect(box_x, box_y, box_w, box_h, stroke=1, fill=0)
+    c.setFillColor(grey)
+    c.setFont("Times-Roman", 7.5)
+    c.drawCentredString(box_x + box_w / 2, box_y + 0.88 * cm, "Pour vérifier la validité de ce(s) CACES® [employeurs] ou pour éditer l'attestation")
+    c.drawCentredString(box_x + box_w / 2, box_y + 0.55 * cm, "correspondante [titulaire], consulter la base de données CACES® sur le site :")
+    c.setFillColor(blue)
+    c.setFont("Times-Bold", 7.5)
+    c.drawCentredString(box_x + box_w / 2, box_y + 0.2 * cm, "http://www.ameli.fr")
+
+    # Numéro de certification de l'OTC dans la base INRS.
+    inrs_x, inrs_y, inrs_w, inrs_h = 0.8 * cm, h - 12.7 * cm, mid - 1.6 * cm, 0.75 * cm
+    c.setFillColor(colors.HexColor("#f0f4fc"))
+    c.setStrokeColor(colors.HexColor("#c9d6ef"))
+    c.rect(inrs_x, inrs_y, inrs_w, inrs_h, stroke=1, fill=1)
     c.setFillColor(black)
-    c.drawString(1.2 * cm, 1.5 * cm, "Pour vérifier la validité de ce(s) CACES®, scannez le QR code ou consultez :")
-    c.setFont("Helvetica-Bold", 7)
-    c.drawString(1.2 * cm, 1.0 * cm, verif_url)
+    c.setFont("Times-Roman", 9)
+    inrs_label = "Inscrit dans la base INRS sous le n° : "
+    c.drawString(inrs_x + 0.25 * cm, inrs_y + 0.27 * cm, inrs_label)
+    c.setFillColor(blue)
+    c.setFont("Times-Bold", 9)
+    c.drawString(inrs_x + 0.25 * cm + c.stringWidth(inrs_label, "Times-Roman", 9), inrs_y + 0.27 * cm, otc_numero_inrs or "—")
 
+    c.setFillColor(grey)
+    c.setFont("Times-Italic", 7)
+    c.drawString(0.6 * cm, 0.8 * cm, "Document recto / verso. Toute copie doit comporter les deux faces — CACES")
     c.showPage()
 
     # ── VERSO ──────────────────────────────────────────────────────────
-    c.setFillColor(black)
-    c.setFont("Helvetica-Bold", 13)
-    c.drawCentredString(w / 2, h - 1 * cm, "Certificat CACES® R.489 — TDL Formation")
-    c.setStrokeColor(gold)
-    c.line(1 * cm, h - 1.3 * cm, w - 1 * cm, h - 1.3 * cm)
+    _title()
+    left_w = 5.6 * cm
+    _dashed_vline(left_w, 0.9 * cm, h - 1.6 * cm)
+    lc = left_w / 2
 
-    # Photo d'identité — voir routers/caces.py (photo du dossier, captée
-    # depuis l'espace apprenant ou sur place) ; simple cadre si absente.
-    photo_x, photo_y, photo_w, photo_h = 1 * cm, h - 4.9 * cm, 2.8 * cm, 3.5 * cm
-    if photo_bytes:
-        try:
-            photo_img = ImageReader(_io.BytesIO(photo_bytes))
-            c.drawImage(photo_img, photo_x, photo_y, width=photo_w, height=photo_h, mask="auto")
-        except Exception:
-            photo_bytes = None
-    if not photo_bytes:
-        c.setStrokeColor(colors.HexColor("#cccccc"))
-        c.rect(photo_x, photo_y, photo_w, photo_h, stroke=1, fill=0)
-        c.setFont("Helvetica-Oblique", 7)
+    photo_x, photo_y, photo_w, photo_h = lc - 1.5 * cm, h - 5.6 * cm, 3.0 * cm, 3.7 * cm
+    photo = _image(photo_bytes)
+    if photo:
+        _draw_fit(photo, photo_x, photo_y, photo_w, photo_h)
+    c.setStrokeColor(colors.HexColor("#888888"))
+    c.setLineWidth(0.8)
+    c.rect(photo_x, photo_y, photo_w, photo_h, stroke=1, fill=0)
+    if not photo:
         c.setFillColor(grey)
-        c.drawCentredString(photo_x + photo_w / 2, photo_y + photo_h / 2, "Photo")
+        c.setFont("Times-Roman", 8)
+        c.drawCentredString(lc, photo_y + photo_h / 2 + 0.1 * cm, "Photographie")
+        c.drawCentredString(lc, photo_y + photo_h / 2 - 0.3 * cm, "du titulaire")
 
-    # Bloc identité (gauche, sous la photo)
-    c.setFont("Helvetica-Oblique", 8)
-    c.setFillColor(black)
-    c.drawString(1 * cm, h - 5.3 * cm, "Titulaire (en toutes lettres) :")
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(1 * cm, h - 5.8 * cm, certificate.get("student_name") or "—")
+    def _champ(y, label, value, size=8.5):
+        c.setFillColor(grey)
+        c.setFont("Times-Italic", 7.5)
+        c.drawCentredString(lc, y, label)
+        c.setFillColor(blue)
+        c.setFont("Times-Bold", size)
+        c.drawCentredString(lc, y - 0.38 * cm, value)
 
-    c.setFont("Helvetica-Oblique", 8)
-    c.drawString(1 * cm, h - 6.5 * cm, "Date de naissance :")
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(1 * cm, h - 7 * cm, certificate.get("date_naissance") or "—")
+    dates = [e.get("date_obtention") for e in categories if e.get("date_obtention")]
+    _champ(h - 6.3 * cm, "Titulaire (en toutes lettres) :", student_name)
+    _champ(h - 7.3 * cm, "Date de naissance :", _date_longue(certificate.get("date_naissance")))
+    _champ(h - 8.3 * cm, "Fait à Epinay-Sur-Seine, le :", _date_longue(max(dates) if dates else None))
+    _champ(h - 9.3 * cm, "Signataire (en toutes lettres) :", certificate.get("signataire_name") or "—")
+    if certificate.get("signataire_qualite"):
+        c.setFont("Times-Bold", 8.5)
+        c.drawCentredString(lc, h - 10.05 * cm, certificate["signataire_qualite"])
 
-    c.setFont("Helvetica-Oblique", 8)
-    c.setFillColor(black)
-    c.drawString(1 * cm, h - 7.9 * cm, f"Fait à Épinay-sur-Seine, le : {certificate.get('created_at', '')[:10]}")
-
-    c.setFont("Helvetica-Oblique", 8)
-    c.drawString(1 * cm, h - 8.8 * cm, "Signataire (en toutes lettres) :")
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(1 * cm, h - 9.3 * cm, certificate.get("signataire_name") or "—")
-    c.setFont("Helvetica", 8)
-    c.drawString(1 * cm, h - 9.7 * cm, certificate.get("signataire_qualite") or "")
-    c.setStrokeColor(grey)
-    c.line(1 * cm, h - 10.3 * cm, 4.5 * cm, h - 10.3 * cm)
-    c.setFont("Helvetica", 7)
-    c.drawString(1 * cm, h - 10.6 * cm, "(signature)")
-
-    # Tableau des catégories (droite)
-    table_x = 4.9 * cm
-    table_w = w - table_x - 0.8 * cm
-    col_widths = [0.7 * cm, 3.2 * cm, 1.9 * cm, 1.9 * cm, table_w - 0.7 - 3.2 - 1.9 - 1.9]
-    headers = ["Cat.", "Type", "N° CACES®", "Testeur", "Obt. / Éch."]
-
-    c.setFillColor(black)
-    c.rect(table_x, h - 2 * cm, table_w, 0.6 * cm, fill=1, stroke=0)
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 7)
-    cx = table_x
-    for i, header in enumerate(headers):
-        c.drawString(cx + 0.05 * cm, h - 1.85 * cm, header)
-        cx += col_widths[i]
-
-    row_h = (h - 3.3 * cm - 2.2 * cm) / len(_CACES_CATEGORY_ROWS)
-    row_h = min(row_h, 0.95 * cm)
-    ry = h - 2 * cm
-    c.setFont("Helvetica", 6.5)
-    for cat_code, label in _CACES_CATEGORY_ROWS:
-        ry -= row_h
-        entry = by_cat.get(cat_code)
-        c.setStrokeColor(colors.HexColor("#dddddd"))
-        c.rect(table_x, ry, table_w, row_h, stroke=1, fill=0)
-        cx = table_x
-        c.setFillColor(black)
-        c.setFont("Helvetica-Bold", 7)
-        c.drawString(cx + 0.08 * cm, ry + row_h / 2 - 0.1 * cm, cat_code)
-        cx += col_widths[0]
-        c.setFont("Helvetica", 6.3)
-        c.drawString(cx + 0.08 * cm, ry + row_h / 2 - 0.1 * cm, label[:38])
-        cx += col_widths[1]
-        if entry:
-            c.setFont("Helvetica-Bold", 7)
-            c.setFillColor(colors.HexColor("#1a4fd4"))
-            c.drawString(cx + 0.08 * cm, ry + row_h / 2 - 0.1 * cm, entry["numero_caces"])
-            cx += col_widths[2]
-            c.setFillColor(black)
-            c.setFont("Helvetica", 6.3)
-            c.drawString(cx + 0.08 * cm, ry + row_h / 2 - 0.1 * cm, (entry.get("testeur_name") or "—")[:18])
-            cx += col_widths[3]
-            c.setFont("Helvetica-Bold", 6.3)
-            obtention = entry.get("date_obtention", "")
-            echeance = certificate.get("expiration_date", "")
-            c.drawString(cx + 0.08 * cm, ry + row_h / 2, obtention)
-            c.drawString(cx + 0.08 * cm, ry + row_h / 2 - 0.35 * cm, echeance)
-
-    c.setFillColor(black)
-    c.rect(table_x, ry - 0.7 * cm, table_w, 0.6 * cm, fill=1, stroke=0)
-    c.setFillColor(gold)
-    c.setFont("Helvetica-Bold", 6.5)
-    c.drawCentredString(table_x + table_w / 2, ry - 0.5 * cm, "Ce(s) CACES® ne permet(tent) pas la délivrance d'une AIPR")
-
+    # Cachet et signature du centre, au-dessus du trait « (signature) ».
+    cachet = _image(cachet_bytes)
+    if cachet:
+        _draw_fit(cachet, 0.5 * cm, 1.15 * cm, left_w - 1 * cm, 2.2 * cm)
+    c.setStrokeColor(colors.HexColor("#888888"))
+    c.line(0.6 * cm, 1.1 * cm, left_w - 0.4 * cm, 1.1 * cm)
     c.setFillColor(grey)
-    c.setFont("Helvetica-Oblique", 6)
-    c.drawCentredString(w / 2, 0.5 * cm, "Document recto / verso. Toute copie doit comporter les deux faces.")
+    c.setFont("Times-Italic", 6.5)
+    c.drawCentredString(lc, 0.8 * cm, "(signature et cachet du centre)")
+
+    # Tableau des catégories R.489.
+    tx = left_w + 0.35 * cm
+    tw = w - tx - 0.45 * cm
+    c.setFillColor(black)
+    c.rect(tx, h - 2.35 * cm, tw, 0.65 * cm, stroke=0, fill=1)
+    c.setFillColor(colors.white)
+    c.setFont("Times-Bold", 11)
+    c.drawCentredString(tx + tw / 2, h - 2.15 * cm, "CACES® R.489 – Chariots à conducteur porté")
+
+    head = ParagraphStyle("head", fontName="Times-Bold", fontSize=6.3, leading=7.5, textColor=colors.white, alignment=TA_CENTER)
+    cell = ParagraphStyle("cell", fontName="Times-Roman", fontSize=6.6, leading=7.8, alignment=TA_LEFT)
+    val = ParagraphStyle("val", fontName="Times-Bold", fontSize=6.6, leading=7.8, textColor=blue, alignment=TA_CENTER)
+    catp = ParagraphStyle("cat", fontName="Times-Bold", fontSize=10, leading=11, alignment=TA_CENTER)
+
+    def _type_label(label: str) -> str:
+        return _xml_escape(label.replace(" — ", " – "))
+
+    rows = [[Paragraph(t, head) for t in (
+        "Cat.", "Type", "N° du CACES®", "NOM – Prénom du testeur (épreuves pratiques)", "Obtention / Échéance",
+    )]]
+    obtained_rows = []
+    for i, (cat_code, label) in enumerate(_CACES_CATEGORY_ROWS, start=1):
+        entry = by_cat.get(cat_code)
+        if entry:
+            obtained_rows.append(i)
+            origine = f"<br/>({_xml_escape(entry['external']['otc_name'])})" if entry.get("external") else ""
+            rows.append([
+                Paragraph(cat_code, catp), Paragraph(_type_label(label), cell),
+                Paragraph(_numero_affiche(entry), val),
+                Paragraph(_xml_escape(entry.get("testeur_name") or "—") + origine, val),
+                Paragraph(f"{_date_courte(entry.get('date_obtention'))} /<br/>{_date_courte(certificate.get('expiration_date'))}", val),
+            ])
+        else:
+            rows.append([Paragraph(cat_code, catp), Paragraph(_type_label(label), cell), "", "", ""])
+
+    col = [0.9 * cm, 3.3 * cm, 2.4 * cm, 4.4 * cm]
+    col.append(tw - sum(col))
+    table = Table(rows, colWidths=col, rowHeights=[0.7 * cm] + [0.66 * cm] * len(_CACES_CATEGORY_ROWS))
+    style = [
+        ("BACKGROUND", (0, 0), (-1, 0), black),
+        ("GRID", (0, 0), (-1, -1), 0.6, colors.HexColor("#999999")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+    ]
+    style += [("BACKGROUND", (0, r), (0, r), cell_blue) for r in obtained_rows]
+    table.setStyle(TableStyle(style))
+    _tw, th = table.wrapOn(c, tw, h)
+    table_top = h - 2.5 * cm
+    table.drawOn(c, tx, table_top - th)
+
+    bar_y = table_top - th - 0.8 * cm
+    c.setFillColor(black)
+    c.rect(tx, bar_y, tw, 0.6 * cm, stroke=0, fill=1)
+    c.setFillColor(colors.white)
+    c.setFont("Times-Bold", 10)
+    c.drawCentredString(tx + tw / 2, bar_y + 0.19 * cm, "Ce(s) CACES® ne permet(tent) pas la délivrance d'une AIPR")
+    c.setFillColor(grey)
+    c.setFont("Times-Italic", 6.5)
+    c.drawRightString(tx + tw, bar_y - 0.3 * cm, "Document recto/verso, toute copie doit comporter les deux faces")
 
     c.showPage()
     c.save()

@@ -153,7 +153,19 @@ async def _card_pdf(certificate: dict) -> bytes:
                 photo_bytes, _ = await get_object(dossier["id_photo_path"])
             except Exception:
                 photo_bytes = None
-    return generate_caces_card_pdf(certificate, f"{PUBLIC_FRONTEND_URL}/verif-caces", photo_bytes=photo_bytes)
+    # Cachet du centre (Paramètres > Attestations, le même que sur les
+    # attestations de stage) et n° de certification INRS de l'OTC.
+    settings_doc = await db.settings.find_one({"id": "global"}, {"_id": 0, "attestation_cachet_path": 1, "caces_otc_numero_inrs": 1}) or {}
+    cachet_bytes = None
+    if settings_doc.get("attestation_cachet_path"):
+        try:
+            cachet_bytes, _ = await get_object(settings_doc["attestation_cachet_path"])
+        except Exception:
+            cachet_bytes = None
+    return generate_caces_card_pdf(
+        certificate, f"{PUBLIC_FRONTEND_URL}/verif-caces", photo_bytes=photo_bytes,
+        cachet_bytes=cachet_bytes, otc_numero_inrs=settings_doc.get("caces_otc_numero_inrs"),
+    )
 
 
 def _resultat(part: Optional[dict]) -> str:

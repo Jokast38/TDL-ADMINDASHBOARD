@@ -52,6 +52,9 @@ class SettingsIn(BaseModel):
     attestation_agrement_numero: Optional[str] = None
     attestation_psychologue_nom: Optional[str] = None
     attestation_psychologue_numero: Optional[str] = None
+    # Carte CACES® (services/pdf.py::generate_caces_card_pdf) : numéro de
+    # certification de l'OTC inscrit dans la base INRS, imprimé au recto.
+    caces_otc_numero_inrs: Optional[str] = None
 
 
 class ChatIn(BaseModel):

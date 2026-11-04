@@ -307,6 +307,16 @@ export default function Settings() {
               />
             </div>
           </Card>
+
+          <Card className="p-6 border border-gray-200 rounded-md shadow-none mt-6">
+            <h3 className="font-display text-xl font-bold mb-1">Carte CACES®</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Le cachet du centre ci-dessus est aussi apposé au verso de la carte, à côté de la signature.
+            </p>
+            <div className="space-y-4 max-w-xl">
+              <Field label="N° de certification OTC (base INRS)" value={s.caces_otc_numero_inrs} onChange={(v) => update("caces_otc_numero_inrs", v)} testid="caces-otc-inrs" />
+            </div>
+          </Card>
         </TabsContent>
       </Tabs>
 
