@@ -331,6 +331,13 @@ CONVENTION_FORMATION = {
       seul compétent pour régler le litige.
     </p>
 
+    <h2 style="font-family:Helvetica-Bold;font-size:12pt;color:#0a0a0a;">11. Communications</h2>
+    <p style="font-family:Helvetica;font-size:9.5pt;">
+      Le stagiaire accepte de recevoir, par email, SMS et WhatsApp, les messages liés à sa formation : convocation,
+      rappels de session, documents à fournir, paiement et demande d'avis en fin de formation. Il peut à tout moment
+      s'opposer aux messages WhatsApp en répondant STOP.
+    </p>
+
     <p style="font-family:Helvetica;font-size:8.5pt;color:#666666;margin-top:18px;">
       Document réalisé en 2 exemplaires à {{ville}}, le {{date_signature}}
     </p>

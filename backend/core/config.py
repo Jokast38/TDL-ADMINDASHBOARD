@@ -81,6 +81,15 @@ META_PAGE_ACCESS_TOKEN = os.getenv("META_PAGE_ACCESS_TOKEN")
 # qualifiés). META_LEAD_LINK_ACCESS_TOKEN et META_CRM_DATASET_ID viennent de
 # l'écran "Configurer l'intégration" de ce dataset côté Meta.
 META_LEAD_LINK_ACCESS_TOKEN = os.getenv("META_LEAD_LINK_ACCESS_TOKEN")
+
+# WhatsApp Cloud API (messages importants à l'apprenant, en plus du mail —
+# voir services/whatsapp.py). Le jeton doit avoir les droits
+# whatsapp_business_messaging et whatsapp_business_management ; à défaut de
+# META_WHATSAPP_TOKEN, META_API_TOKEN est utilisé. Sans
+# META_WHATSAPP_PHONE_NUMBER_ID, le premier numéro du compte est retenu.
+META_WHATSAPP_BUSINESS_ACCOUNT_ID = os.getenv("META_WHATSAPP_BUSINESS_ACCOUNT_ID")
+META_WHATSAPP_PHONE_NUMBER_ID = os.getenv("META_WHATSAPP_PHONE_NUMBER_ID")
+META_WHATSAPP_TOKEN = os.getenv("META_WHATSAPP_TOKEN") or META_API_TOKEN
 META_CRM_DATASET_ID = os.getenv("META_CRM_DATASET_ID", "1394070676160616")
 
 # Notifications push navigateur (Web Push / VAPID).

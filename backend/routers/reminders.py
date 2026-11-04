@@ -9,7 +9,7 @@ from services.staff_notify import (
 )
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
-    send_review_requests,
+    send_review_requests, send_session_eve_reminders,
 )
 
 router = APIRouter(prefix="/reminders", tags=["reminders"])
@@ -174,4 +174,13 @@ async def run_review_requests(user: dict = Depends(require_role("admin"))):
     chaque jour : 48h après la fin pour les stages de récupération de
     points, 1 semaine après pour les autres formations."""
     notified = await send_review_requests()
+    return {"notified": notified}
+
+
+@router.post("/session-eve/run")
+async def run_session_eve_reminders(user: dict = Depends(require_role("admin"))):
+    """Déclenchement manuel du rappel de la veille (mail + WhatsApp) — la
+    boucle de fond (voir server.py) l'envoie automatiquement chaque jour
+    entre 10h et 20h."""
+    notified = await send_session_eve_reminders()
     return {"notified": notified}

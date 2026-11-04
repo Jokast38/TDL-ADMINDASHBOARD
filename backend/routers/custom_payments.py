@@ -20,7 +20,8 @@ from services import stripe_service
 from services.email import send_email
 from services.email_template import render_branded_email
 from services.activity import log_action
-from services.sms import send_sms
+from services.whatsapp import send_whatsapp_or_sms
+from core import whatsapp_templates as wa
 
 router = APIRouter(prefix="/custom-payments", tags=["custom-payments"])
 
@@ -93,13 +94,14 @@ async def create_custom_payment(payload: CustomPaymentIn, user: dict = Depends(r
         src_lead = await db.leads.find_one({"id": payload.lead_id}, {"_id": 0, "phone": 1})
         phone = src_lead.get("phone") if src_lead else None
     if phone:
-        sms_log = await send_sms(
-            phone,
-            f"TDL Formation : voici votre lien de paiement pour {payload.title} ({payload.price:.2f} €) : {session.url}",
+        # WhatsApp d'abord, SMS seulement si WhatsApp n'a pas pu partir.
+        wa_log = await send_whatsapp_or_sms(
+            phone, wa.LIEN_PAIEMENT, [payload.recipient_name, payload.title, f"{payload.price:.2f}", session.url],
+            sms_text=f"TDL Formation : voici votre lien de paiement pour {payload.title} ({payload.price:.2f} €) : {session.url}",
             extra={"lead_id": payload.lead_id, "custom_payment_id": payment_id},
         )
-        doc["sms_status"] = sms_log["status"]
-        await db.custom_payments.update_one({"id": payment_id}, {"$set": {"sms_status": sms_log["status"]}})
+        doc["whatsapp_status"] = wa_log["status"]
+        await db.custom_payments.update_one({"id": payment_id}, {"$set": {"whatsapp_status": wa_log["status"]}})
 
     doc.pop("_id", None)
     return doc

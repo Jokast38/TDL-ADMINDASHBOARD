@@ -24,7 +24,7 @@ from services.activity import log_action
 from services.meta_capi import send_capi_event
 from services.password_reset import create_reset_token
 from services import identity_extraction
-from services.candidate_automation import _hours_since_end, convocation_message
+from services.candidate_automation import _hours_since_end, convocation_message, send_convocation_whatsapp
 
 router = APIRouter(tags=["inscriptions"])
 
@@ -625,6 +625,7 @@ async def assign_inscription_stage(iid: str, payload: StageAssignIn, user: dict 
             stage["formation_category"] = formation.get("category")
             message = convocation_message(stage, inscription)
             await send_email(inscription["student_email"], f"📋 Convocation — {stage.get('formation_titre', '')}", render_branded_email(message))
+            await send_convocation_whatsapp(stage, inscription)
             await db.inscriptions.update_one({"id": iid}, {"$set": {"convocation_sent_at": now_iso()}})
         except Exception:
             # L'affectation reste effective même si l'envoi échoue — l'agent

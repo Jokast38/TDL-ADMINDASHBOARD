@@ -106,7 +106,7 @@ export default function CustomPayment() {
         recipient_phone: recipientPhone.trim() || null,
         session_label: session ? fmtSessionLabel(session) : null,
       });
-      toast.success(recipientPhone.trim() ? "Lien de paiement envoyé par email et SMS" : "Lien de paiement envoyé par email");
+      toast.success(recipientPhone.trim() ? "Lien de paiement envoyé par email et WhatsApp" : "Lien de paiement envoyé par email");
       setPrice(""); setRecipientName(""); setRecipientEmail(""); setRecipientPhone(""); setCustomTitle(""); setFormationId(""); setSessionId("");
       loadHistory();
     } catch (e) {
@@ -223,7 +223,7 @@ export default function CustomPayment() {
               <p className="text-xs text-red-500 mt-1">Format invalide (ex : 06 12 34 56 78 ou +33612345678)</p>
             )}
             {recipientPhone.trim() && isValidPhone(recipientPhone) && (
-              <p className="text-xs text-gray-400 mt-1">Le lien sera aussi envoyé par SMS.</p>
+              <p className="text-xs text-gray-400 mt-1">Le lien sera aussi envoyé par WhatsApp (par SMS si WhatsApp échoue).</p>
             )}
           </div>
         </div>
@@ -245,7 +245,7 @@ export default function CustomPayment() {
                 <th className="py-2.5 px-4 overline">Destinataire</th>
                 <th className="py-2.5 px-4 overline text-right">Prix</th>
                 <th className="py-2.5 px-4 overline">Statut</th>
-                <th className="py-2.5 px-4 overline">SMS</th>
+                <th className="py-2.5 px-4 overline">WhatsApp</th>
                 <th className="py-2.5 px-4 overline">Envoyé le</th>
                 <th className="py-2.5 px-4 overline">Envoyé par</th>
                 <th className="py-2.5 px-4 overline text-right">Lien</th>
@@ -272,10 +272,11 @@ export default function CustomPayment() {
                     </Badge>
                   </td>
                   <td className="py-2.5 px-4">
-                    {h.sms_status === "sent" ? (
+                    {/* Anciens liens : seul le statut SMS existait (avant le 2026-11-03). */}
+                    {(h.whatsapp_status || h.sms_status) === "sent" ? (
                       <span className="inline-flex items-center gap-1 text-xs text-[#0B7238]"><ChatCircleText size={13} weight="fill" /> Envoyé</span>
-                    ) : h.sms_status && h.sms_status !== "disabled" ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-red-500" title={h.sms_status}><ChatCircleText size={13} /> Échec</span>
+                    ) : (h.whatsapp_status || h.sms_status) && (h.whatsapp_status || h.sms_status) !== "disabled" ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-red-500" title={h.whatsapp_status || h.sms_status}><ChatCircleText size={13} /> Échec</span>
                     ) : (
                       <span className="text-xs text-gray-300">—</span>
                     )}

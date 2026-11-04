@@ -15,7 +15,8 @@ from core.config import PUBLIC_FRONTEND_URL, GOOGLE_PLACE_ID
 from services.email import send_email
 from services.email_template import render_branded_email
 from services.pdf import generate_attestation_pdf
-from services.sms import send_sms
+from services.whatsapp import send_whatsapp, send_whatsapp_or_sms
+from core import whatsapp_templates as wa
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
 CONTACT_PHONE = "01 XX XX XX XX"  # à ajuster depuis Paramètres si besoin
@@ -108,6 +109,22 @@ def convocation_sms(stage: dict, insc: dict) -> str:
     )
 
 
+def _lieu(stage: dict) -> str:
+    return ", ".join(p for p in (stage.get("lieu_adresse"), stage.get("lieu_ville")) if p) or "TDL Formation"
+
+
+async def send_convocation_whatsapp(stage: dict, insc: dict) -> dict:
+    """Convocation par WhatsApp, en plus du mail — le SMS ne part qu'en
+    secours, si WhatsApp n'a pas pu être envoyé."""
+    horaires = f"de {_hhmm_to_h(stage.get('heure_debut') or '09:00')} à {_hhmm_to_h(stage.get('heure_fin') or '17:00')}"
+    return await send_whatsapp_or_sms(
+        insc.get("student_phone"), wa.CONVOCATION,
+        [insc.get("student_name"), stage.get("formation_titre"), format_date_long_fr(stage.get("date_debut", "")),
+         format_date_long_fr(stage.get("date_fin", "")), horaires, _lieu(stage)],
+        sms_text=convocation_sms(stage, insc), extra={"inscription_id": insc["id"]},
+    )
+
+
 async def send_convocations() -> int:
     """Envoie la convocation 7 jours avant le début de chaque session, à
     tout candidat actif affecté et pas encore convoqué."""
@@ -125,9 +142,43 @@ async def send_convocations() -> int:
                 continue
             message = convocation_message(stage, insc)
             await send_email(insc["student_email"], f"📋 Convocation — {stage.get('formation_titre', '')}", render_branded_email(message))
-            if insc.get("student_phone"):
-                await send_sms(insc["student_phone"], convocation_sms(stage, insc), extra={"inscription_id": insc["id"]})
+            await send_convocation_whatsapp(stage, insc)
             await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"convocation_sent_at": now_iso()}})
+            count += 1
+    return count
+
+
+async def send_session_eve_reminders() -> int:
+    """Rappel la veille du premier jour de la session (demande du
+    2026-11-03), par mail et par WhatsApp, à tout candidat actif affecté et
+    pas encore rappelé (`eve_reminder_sent_at`)."""
+    target = (_today() + timedelta(days=1)).isoformat()
+    stages = await db.stages.find({"date_debut": target, "statut": {"$ne": "annule"}}, {"_id": 0}).to_list(200)
+    count = 0
+    for stage in stages:
+        heure = _hhmm_to_h(stage.get("heure_debut") or "09:00")
+        date_debut = format_date_long_fr(stage.get("date_debut", ""))
+        inscriptions = await db.inscriptions.find(
+            {"stage_id": stage["id"], "status": "active", "eve_reminder_sent_at": {"$exists": False}}, {"_id": 0}
+        ).to_list(300)
+        for insc in inscriptions:
+            if not insc.get("student_email") and not insc.get("student_phone"):
+                continue
+            if insc.get("student_email"):
+                message = (
+                    f"Bonjour {insc.get('student_name', '')},\n\n"
+                    f"Rappel : votre formation {stage.get('formation_titre', '')} commence demain, {date_debut} à {heure}.\n"
+                    f"Lieu : {_lieu(stage)}\n\n"
+                    "Pensez à votre pièce d'identité. En cas d'empêchement, prévenez-nous au plus vite."
+                )
+                await send_email(insc["student_email"], f"⏰ C'est demain — {stage.get('formation_titre', '')}", render_branded_email(message))
+            if insc.get("student_phone"):
+                await send_whatsapp(
+                    insc["student_phone"], wa.RAPPEL_VEILLE,
+                    [insc.get("student_name"), stage.get("formation_titre"), date_debut, heure, _lieu(stage)],
+                    extra={"inscription_id": insc["id"]},
+                )
+            await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"eve_reminder_sent_at": now_iso()}})
             count += 1
     return count
 
@@ -357,6 +408,11 @@ async def _send_review_requests_for(formation_ids: list, target_dates: list) -> 
                 insc["student_email"], f"Votre avis sur {stage.get('formation_titre', '')} ?",
                 render_branded_email(message, "Laisser un avis Google", write_review_url),
             )
+            if insc.get("student_phone"):
+                await send_whatsapp(
+                    insc["student_phone"], wa.AVIS_GOOGLE, [insc.get("student_name"), stage.get("formation_titre")],
+                    button_param=GOOGLE_PLACE_ID, extra={"inscription_id": insc["id"]},
+                )
             await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"review_request_sent_at": now_iso()}})
             count += 1
     return count

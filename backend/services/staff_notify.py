@@ -13,6 +13,8 @@ from core.utils import now_iso, format_date_long_fr, format_date_fr
 from services.email import send_email
 from services.email_template import render_branded_email, render_staff_notification
 from services.push import send_push_to_users
+from services.whatsapp import send_whatsapp
+from core import whatsapp_templates as wa
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
 CEO_EMAIL = "r.tafial@curbee.fr"
@@ -561,6 +563,21 @@ async def notify_staff_exam_theorique_result(dossier: dict, result: str) -> None
     )
 
 
+async def _dossier_phone(dossier: dict) -> Optional[str]:
+    """Le dossier ne porte pas le téléphone : celui de l'inscription, sinon
+    celui du compte apprenant."""
+    if dossier.get("student_phone"):
+        return dossier["student_phone"]
+    if dossier.get("inscription_id"):
+        insc = await db.inscriptions.find_one({"id": dossier["inscription_id"]}, {"_id": 0, "student_phone": 1}) or {}
+        if insc.get("student_phone"):
+            return insc["student_phone"]
+    if dossier.get("student_id"):
+        student = await db.users.find_one({"id": dossier["student_id"]}, {"_id": 0, "phone": 1}) or {}
+        return student.get("phone")
+    return None
+
+
 async def send_document_reminders(min_gap_hours: int = 72) -> int:
     """Relance les apprenants dont le dossier a des documents manquants, au
     plus une fois tous les `min_gap_hours` par dossier (72h par défaut) —
@@ -605,6 +622,12 @@ async def send_document_reminders(min_gap_hours: int = 72) -> int:
                 f"<p>TDL Formation</p>"
             ),
         )
+        phone = await _dossier_phone(d)
+        if phone:
+            await send_whatsapp(
+                phone, wa.DOCUMENTS_MANQUANTS, [d.get("student_name"), d.get("formation_title"), manquants_label],
+                extra={"dossier_id": d["id"]},
+            )
         await db.dossiers.update_one({"id": d["id"]}, {"$set": {"doc_reminder_last_sent_at": now_iso()}})
         notified += 1
 

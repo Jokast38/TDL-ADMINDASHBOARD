@@ -39,7 +39,7 @@ from services.staff_notify import (
 )
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
-    send_review_requests,
+    send_review_requests, send_session_eve_reminders,
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -596,6 +596,7 @@ async def startup():
     asyncio.create_task(_satisfaction_chaud_loop())
     asyncio.create_task(_satisfaction_froid_loop())
     asyncio.create_task(_review_requests_loop())
+    asyncio.create_task(_session_eve_reminders_loop())
 
 
 async def _convocations_loop():
@@ -667,6 +668,24 @@ async def _review_requests_loop():
         except Exception as e:
             log.warning(f"Demandes d'avis Google : erreur — {e}")
         await asyncio.sleep(24 * 3600)
+
+
+async def _session_eve_reminders_loop():
+    """Toutes les heures, entre 10h et 20h (heure de Paris) seulement —
+    jamais un message de rappel en pleine nuit —, rappelle par mail et
+    WhatsApp les candidats dont la session commence le lendemain. Chaque
+    inscription n'est rappelée qu'une fois (`eve_reminder_sent_at`)."""
+    from zoneinfo import ZoneInfo
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            if 10 <= datetime.now(ZoneInfo("Europe/Paris")).hour < 20:
+                notified = await send_session_eve_reminders()
+                if notified:
+                    log.info(f"Rappels de la veille : {notified} envoyé(s)")
+        except Exception as e:
+            log.warning(f"Rappels de la veille : erreur — {e}")
+        await asyncio.sleep(3600)
 
 
 @app.on_event("shutdown")

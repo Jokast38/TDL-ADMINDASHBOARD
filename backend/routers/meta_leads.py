@@ -27,6 +27,7 @@ from core.database import db
 from core.meta_ville import meta_ville
 from routers.leads import create_lead_from_contact
 from services.staff_notify import notify_new_lead
+from services.whatsapp import record_inbound, record_status
 
 router = APIRouter(prefix="/webhooks/meta", tags=["meta-leads"])
 logger = logging.getLogger(__name__)
@@ -103,6 +104,20 @@ async def receive_lead_notification(request: Request):
         raise HTTPException(status_code=403, detail="Signature invalide")
 
     payload = await request.json()
+    # Même application Meta, donc même webhook, pour WhatsApp : statuts de
+    # remise des messages envoyés et réponses des apprenants (STOP).
+    if payload.get("object") == "whatsapp_business_account":
+        for entry in payload.get("entry", []):
+            for change in entry.get("changes", []):
+                if change.get("field") != "messages":
+                    continue
+                value = change.get("value", {})
+                for status in value.get("statuses", []):
+                    await record_status(status)
+                for message in value.get("messages", []):
+                    await record_inbound(message)
+        return {"ok": True}
+
     created = 0
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
