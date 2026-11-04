@@ -8,7 +8,8 @@ import { formatDateFR } from "@/lib/dateFormat";
 import { toast } from "sonner";
 
 const PLACE_LABELS = { BAFM: "BAFM", PSY: "Psychologue", FORMATEUR: "Formateur", TESTEUR: "Testeur" };
-const JOURS_COURT = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+const PLACE_COURT = { BAFM: "BAFM", PSY: "PSY", FORMATEUR: "Formateur", TESTEUR: "Testeur" };
+const JOURS_COURT =["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
 // Même formatage local que pages/Agenda.jsx : toISOString() décalerait
 // la date d'un jour selon le fuseau.
@@ -23,6 +24,15 @@ function monthGrid(anchor) {
 }
 
 const placesLibres = (s) => Object.values(s.places).filter((holders) => !holders.length).length;
+const placesPourvues = (s) => Object.values(s.places).filter((holders) => holders.length).length;
+
+// Vert : complète ; bleu : au moins un formateur placé, une place reste libre
+// (ex. BAFM placé, psychologue à trouver) ; orange : personne n'est placé.
+function chipClass(s) {
+  if (!placesLibres(s)) return "bg-[#0B7238]/15 border-[#0B7238] text-[#0B7238]";
+  if (placesPourvues(s)) return "bg-[#2563eb]/10 border-[#2563eb] text-[#1e40af]";
+  return "bg-[#F5A623]/15 border-[#F5A623] text-[#8a5a00]";
+}
 
 // Agenda des placements pour les agents : qui est placé sur quelle session,
 // et les sessions où il manque encore un formateur (voir
@@ -86,7 +96,8 @@ export default function FormateursAgenda({ formateurs }) {
 
       <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#0B7238]/15 border-l-2 border-[#0B7238]" /> Toutes les places pourvues</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#F5A623]/15 border-l-2 border-[#F5A623]" /> Place(s) libre(s)</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#2563eb]/10 border-l-2 border-[#2563eb]" /> Formateur placé, une place reste libre</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-[#F5A623]/15 border-l-2 border-[#F5A623]" /> Aucun formateur placé</span>
         {!loading && <span>{aPourvoir} session(s) à pourvoir ce mois-ci</span>}
       </div>
 
@@ -105,19 +116,20 @@ export default function FormateursAgenda({ formateurs }) {
                     {d.getDate()}
                   </span>
                   {(byDay.get(iso) || []).map((s) => {
-                    const libres = placesLibres(s);
-                    const noms = Object.values(s.places).flat().map((h) => h.name.split(" ")[0]);
+                    const noms = Object.entries(s.places).flatMap(([place, holders]) => holders.map((h) => `${PLACE_COURT[place] || place} : ${h.name}`));
+                    const manquants = Object.entries(s.places).filter(([, holders]) => !holders.length).map(([place]) => `${PLACE_COURT[place] || place} manquant`);
                     return (
                       <button
                         key={s.id}
                         type="button"
                         onClick={() => setSelected(s)}
-                        className={`text-left text-[10px] leading-tight px-1.5 py-0.5 rounded border-l-2 ${libres ? "bg-[#F5A623]/15 border-[#F5A623] text-[#8a5a00]" : "bg-[#0B7238]/15 border-[#0B7238] text-[#0B7238]"}`}
+                        className={`text-left text-[10px] leading-tight px-1.5 py-0.5 rounded border-l-2 ${chipClass(s)}`}
                         title={`${s.formation_titre}${s.lieu_ville ? ` · ${s.lieu_ville}` : ""}`}
                         data-testid={`formateurs-agenda-session-${s.id}`}
                       >
                         <span className="block truncate font-medium">{s.is_test ? "TEST · " : ""}{s.formation_titre}</span>
-                        <span className="block truncate">{noms.length ? noms.join(", ") : "Aucun formateur"}{libres ? ` · ${libres} libre(s)` : ""}</span>
+                        {noms.map((n) => <span key={n} className="block truncate font-semibold">{n}</span>)}
+                        {manquants.map((m) => <span key={m} className="block truncate">{m}</span>)}
                       </button>
                     );
                   })}
@@ -145,7 +157,7 @@ export default function FormateursAgenda({ formateurs }) {
                       <span className="font-medium">{PLACE_LABELS[place] || place}</span>
                       {holders.length
                         ? <span>{holders.map((h) => h.name).join(", ")}</span>
-                        : <span className="text-[#F5A623] font-medium">Libre</span>}
+                        : <span className="text-[#F5A623] font-medium">Manquant</span>}
                     </div>
                   ))}
                 </div>

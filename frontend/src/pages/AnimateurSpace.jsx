@@ -275,7 +275,11 @@ function DossierTab() {
 export default function AnimateurSpace() {
   const { user } = useAuth();
   const { startTour } = useTour();
-  const [tab, setTab] = useState("sessions"); // sessions | planning | dossier | signature
+  // ?tab=planning : ouvert depuis le bouton du rappel « Choisissez vos dates ».
+  const [tab, setTab] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    return ["sessions", "planning", "dossier", "signature"].includes(requested) ? requested : "sessions";
+  }); // sessions | planning | dossier | signature
   const [stages, setStages] = useState([]);
   const [selected, setSelected] = useState(null);
   const [jours, setJours] = useState([]);

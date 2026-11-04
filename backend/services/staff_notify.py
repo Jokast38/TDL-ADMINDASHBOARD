@@ -1104,6 +1104,19 @@ async def send_convention_session_reminders() -> int:
     return notified
 
 
+# Formateur pas encore connecté : la page de connexion le ramène sur cet
+# onglet une fois identifié (voir ProtectedRoute dans App.js).
+PLANNING_PATH = "/espace-animateur?tab=planning"
+
+
+def planning_reminder_message(name: str, year: int, deadline_fr: str) -> str:
+    return (
+        f"Bonjour {name},\n\n"
+        f"Vous n'avez pas encore choisi vos dates pour l'année {year}.\n\n"
+        f"Merci de vous placer avant le {deadline_fr}, depuis votre espace formateur (onglet « Planning »)."
+    )
+
+
 async def send_formateur_planning_reminders() -> int:
     """Rappel hebdomadaire, du 1er août au 30 novembre, aux formateurs qui n'ont
     choisi aucune date pour l'année suivante, avec un récapitulatif aux agents
@@ -1133,13 +1146,11 @@ async def send_formateur_planning_reminders() -> int:
             continue
         relances.append(a)
         if a.get("email"):
-            message = (
-                f"Bonjour {a.get('name', '')},\n\n"
-                f"Vous n'avez pas encore choisi vos dates pour l'année {year}.\n\n"
-                f"Merci de vous placer avant le {deadline_fr}, depuis votre espace formateur (onglet « Planning »)."
-            )
-            await send_email(a["email"], f"📅 Choisissez vos dates {year}", render_branded_email(message))
-        await send_push_to_users([a["id"]], f"Choisissez vos dates {year}", f"Avant le {deadline_fr}", "/espace-animateur")
+            message = planning_reminder_message(a.get("name", ""), year, deadline_fr)
+            await send_email(a["email"], f"📅 Choisissez vos dates {year}", render_branded_email(
+                message, "Choisir mes dates", f"{PUBLIC_FRONTEND_URL}{PLANNING_PATH}",
+            ))
+        await send_push_to_users([a["id"]], f"Choisissez vos dates {year}", f"Avant le {deadline_fr}", PLANNING_PATH)
 
     if not relances:
         return 0
