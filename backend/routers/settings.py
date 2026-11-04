@@ -5,7 +5,7 @@ from core.database import db
 from core.security import require_role
 from core.storage import put_object
 from core.utils import now_iso
-from core.config import EMERGENT_LLM_KEY, OLLAMA_API_KEY, APP_NAME
+from core.config import OLLAMA_API_KEY, APP_NAME, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL
 from models.settings import SettingsIn
 from services.trello import TrelloService
 
@@ -75,5 +75,5 @@ async def integrations_status(user: dict = Depends(require_role("admin", "employ
             "payment": bool(s.get("n8n_webhook_payment")),
         },
         "ai": {"configured": bool(OLLAMA_API_KEY)},
-        "storage": {"configured": bool(EMERGENT_LLM_KEY)},
+        "storage": {"configured": bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)},
     }

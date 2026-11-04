@@ -168,6 +168,35 @@ async def retirer_formateur(user: dict, stage_id: str) -> dict:
     return {"ok": True}
 
 
+async def agenda(start: str, end: str) -> list:
+    """Sessions qui chevauchent [start, end] avec, pour chaque place, les
+    formateurs qui l'occupent — vue des agents (page Formateurs), qui eux
+    voient les noms, contrairement au formateur dans son espace."""
+    stages = await db.stages.find(
+        {"date_debut": {"$lte": f"{end}T23:59:59"}, "date_fin": {"$gte": start}, "statut": {"$ne": "annule"}},
+        {"_id": 0},
+    ).sort("date_debut", 1).to_list(2000)
+    categories = await _categories_by_formation()
+    ids = {aid for s in stages for aid in _stage_animateur_ids(s)}
+    users = await db.users.find({"id": {"$in": list(ids)}}, {"_id": 0, "id": 1, "name": 1, "titre": 1}).to_list(len(ids) or 1)
+    by_id = {u["id"]: u for u in users}
+
+    items = []
+    for s in stages:
+        category = categories.get(s.get("formation_id"))
+        places = {p: [] for p in places_of_category(category)}
+        for aid in _stage_animateur_ids(s):
+            u = by_id.get(aid, {"id": aid, "name": "Compte supprimé"})
+            places.setdefault(place_for(u.get("titre"), category), []).append({"id": aid, "name": u.get("name", "")})
+        items.append({
+            "id": s["id"], "formation_titre": s.get("formation_titre"), "category": category,
+            "date_debut": s["date_debut"][:10], "date_fin": s["date_fin"][:10],
+            "heure_debut": s.get("heure_debut"), "heure_fin": s.get("heure_fin"),
+            "lieu_ville": s.get("lieu_ville", ""), "places": places,
+        })
+    return items
+
+
 async def planning_overview(year: int) -> dict:
     """Jours placés par formateur sur l'année, pour les agents (page Formateurs)
     et le rappel annuel."""

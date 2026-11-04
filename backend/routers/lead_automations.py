@@ -21,6 +21,12 @@ log = logging.getLogger(__name__)
 # à nouveau le statut du lead) le remet dans un parcours de relance.
 _STOP_STATUSES = ["interesse", "pas_interesse"]
 
+# Un envoi en échec n'est retenté qu'au bout de ce délai : sans lui, le lead
+# restait "à relancer" et repartait à chaque passage (toutes les 20 min) —
+# le 2026-11-04, jusqu'à 8 tentatives par lead et ~460 mails par passage sur la
+# boîte contact@, qu'o2switch a restreinte.
+_RETRY_AFTER_FAILURE_HOURS = 24
+
 
 def _parse_iso(value: str):
     if not value:
@@ -58,6 +64,9 @@ async def _run_rule(rule: Dict[str, Any], force: bool = False) -> int:
             ref = _parse_iso(lead.get("last_contacted_at") or lead.get("created_at") or "")
             if ref and (now - ref).days < freq_days:
                 continue
+            failed_at = _parse_iso((lead.get("automation_failed_at") or {}).get(rule["id"], ""))
+            if failed_at and (now - failed_at).total_seconds() < _RETRY_AFTER_FAILURE_HOURS * 3600:
+                continue
         body = (rule.get("body") or "").replace("{{name}}", lead.get("name", ""))
         result = await send_email(
             lead["email"], rule.get("subject", ""), body,
@@ -69,6 +78,7 @@ async def _run_rule(rule: Dict[str, Any], force: bool = False) -> int:
             )
             continue
         if result["status"] not in ("sent", "mocked"):
+            await db.leads.update_one({"id": lead["id"]}, {"$set": {f"automation_failed_at.{rule['id']}": now_iso()}})
             continue
         sent += 1
         update = {"updated_at": now_iso()}

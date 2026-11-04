@@ -46,6 +46,11 @@ SMTP2_PORT = int(os.getenv("SMTP2_PORT", "465"))
 MAILBOX_USER = os.getenv("MAILBOX_USER")
 MAILBOX_PASSWORD = os.getenv("MAILBOX_PASSWORD")
 
+# Seule adresse validée comme expéditeur chez Brevo (contact@tdl-formation.fr
+# ne l'est pas) : les mails partis par Brevo l'utilisent, avec l'adresse
+# habituelle en Reply-To pour que les réponses arrivent au même endroit.
+BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL", "tdlparisformation@gmail.com")
+
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
@@ -104,6 +109,13 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:31b")
 
 STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
+
+# Stockage des fichiers (photos, PDF, signatures...) sur Supabase Storage
+# depuis le 2026-11-04 : la clé Emergent n'est plus active. Emergent ne sert
+# plus qu'à relire les fichiers déposés avant (voir core/storage.py).
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").rstrip("/")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_STORAGE_BUCKET = os.getenv("SUPABASE_STORAGE_BUCKET", "tdl-admin")
 
 # URL publique du backend, utilisée pour construire des liens absolus dans les
 # emails envoyés (ex: pixel de tracking d'ouverture) — un email ouvert dans

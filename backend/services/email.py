@@ -7,6 +7,7 @@ import urllib.parse
 from collections import deque
 import requests
 
+from core.config import BREVO_SENDER_EMAIL
 from core.database import db
 from core.utils import now_iso
 from core.config import PUBLIC_BACKEND_URL
@@ -210,10 +211,12 @@ async def _send_via_sendgrid(api_key: str, from_addr: str, to: str, subject: str
 
 async def _send_via_brevo(api_key: str, from_addr: str, to: str, subject: str, body: str, attachment: dict = None, cc: list = None) -> str:
     """Envoie via l'API HTTP Brevo (ex-Sendinblue) — comme Resend/SendGrid,
-    en HTTPS, donc non bloqué par les hébergeurs qui coupent le SMTP sortant."""
+    en HTTPS, donc non bloqué par les hébergeurs qui coupent le SMTP sortant.
+    from_addr devient le Reply-To : l'expéditeur est BREVO_SENDER_EMAIL."""
     try:
         payload = {
-            "sender": {"email": from_addr},
+            "sender": {"email": BREVO_SENDER_EMAIL, "name": "TDL Formation"},
+            "replyTo": {"email": from_addr},
             "to": [{"email": to}],
             "subject": subject,
             "htmlContent": body,
@@ -328,11 +331,11 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
             logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Brevo en secours...")
             log["smtp_error"] = log["status"]
             log["fallback_provider"] = "brevo"
-            if await asyncio.to_thread(_brevo_sender_validated, s["brevo_fallback_api_key"], from_addr):
+            if await asyncio.to_thread(_brevo_sender_validated, s["brevo_fallback_api_key"], BREVO_SENDER_EMAIL):
                 log["status"] = await _send_via_brevo(s["brevo_fallback_api_key"], from_addr, to, subject, tracked_body, attachment, cc)
             else:
-                logger.error(f"Secours Brevo inutilisable : l'expéditeur {from_addr} n'est pas validé chez Brevo — mail pour {to} non envoyé")
-                log["status"] = f"failed: expéditeur {from_addr} non validé chez Brevo"
+                logger.error(f"Secours Brevo inutilisable : l'expéditeur {BREVO_SENDER_EMAIL} n'est pas validé chez Brevo — mail pour {to} non envoyé")
+                log["status"] = f"failed: expéditeur {BREVO_SENDER_EMAIL} non validé chez Brevo"
         elif log["status"] != "sent" and s.get("resend_fallback_api_key"):
             logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Resend en secours...")
             log["smtp_error"] = log["status"]

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.placement_rules import planning_year
 from core.security import require_role
 from core.config import ROLES_TEAM_MGMT
-from services.formateur_placement import planning_for, place_formateur, retirer_formateur, planning_overview
+from services.formateur_placement import agenda, planning_for, place_formateur, retirer_formateur, planning_overview
 
 router = APIRouter(tags=["formateur-planning"])
 
@@ -43,3 +43,14 @@ async def formateurs_planning_overview(
 ):
     resolved = _resolve_year(year)
     return {"year": resolved, "jours": await planning_overview(resolved)}
+
+
+@router.get("/formateurs/agenda")
+async def formateurs_agenda(
+    start: date,
+    end: date,
+    user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "agent_admin", "responsable_admission")),
+):
+    if end < start or (end - start).days > 62:
+        raise HTTPException(status_code=400, detail="Période invalide (62 jours au plus)")
+    return await agenda(start.isoformat(), end.isoformat())

@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, FileText, UploadSimple, Trash, Calendar, PencilSimple, Signature, CheckCircle, Clock, WarningCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import FormateurTitrePicker from "@/components/FormateurTitrePicker";
+import FormateursAgenda from "@/components/FormateursAgenda";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const emptyForm = { nom: "", prenom: "", email: "", phone: "", titre: "", matricule: "", assigned_categories: [] };
 
@@ -283,37 +285,48 @@ export default function Formateurs() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.map((u) => (
-          <Card
-            key={u.id}
-            className="p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-gray-300 transition-all cursor-pointer"
-            onClick={() => openDetail(u)}
-            data-testid={`formateur-card-${u.id}`}
-          >
-            <div className="flex items-start justify-between mb-2">
-              <h3 className="font-display text-lg font-bold leading-tight">{u.name}</h3>
-              {u.signature_path && <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10 text-[10px]"><Signature size={10} className="mr-1" />Signature OK</Badge>}
-            </div>
-            <p className="text-xs text-gray-500">{u.titre || "Formateur"}</p>
-            <p className="text-xs text-gray-400 font-mono mt-1">{u.email}</p>
-            {u.matricule && <p className="text-xs text-gray-400 font-mono mt-0.5">Matricule : {u.matricule}</p>}
-            {u.agrement_bafm_numero && <p className="text-xs text-gray-400 mt-1">BAFM : {u.agrement_bafm_numero}</p>}
-            {planningOverview && (
-              <p className="text-xs text-gray-400 mt-1" data-testid={`formateur-planning-${u.id}`}>
-                Planning {planningOverview.year} : {planningOverview.jours[u.id] || 0} jour(s)
-                {u.quota_jours_annuel != null ? ` / ${u.quota_jours_annuel}` : ""}
-              </p>
+      <Tabs defaultValue="repertoire">
+        <TabsList>
+          <TabsTrigger value="repertoire" data-testid="formateurs-tab-repertoire">Répertoire</TabsTrigger>
+          <TabsTrigger value="agenda" data-testid="formateurs-tab-agenda"><Calendar size={14} className="mr-1" /> Agenda des placements</TabsTrigger>
+        </TabsList>
+        <TabsContent value="agenda" className="mt-4">
+          <FormateursAgenda formateurs={items} />
+        </TabsContent>
+        <TabsContent value="repertoire" className="mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {items.map((u) => (
+              <Card
+                key={u.id}
+                className="p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-gray-300 transition-all cursor-pointer"
+                onClick={() => openDetail(u)}
+                data-testid={`formateur-card-${u.id}`}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="font-display text-lg font-bold leading-tight">{u.name}</h3>
+                  {u.signature_path && <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10 text-[10px]"><Signature size={10} className="mr-1" />Signature OK</Badge>}
+                </div>
+                <p className="text-xs text-gray-500">{u.titre || "Formateur"}</p>
+                <p className="text-xs text-gray-400 font-mono mt-1">{u.email}</p>
+                {u.matricule && <p className="text-xs text-gray-400 font-mono mt-0.5">Matricule : {u.matricule}</p>}
+                {u.agrement_bafm_numero && <p className="text-xs text-gray-400 mt-1">BAFM : {u.agrement_bafm_numero}</p>}
+                {planningOverview && (
+                  <p className="text-xs text-gray-400 mt-1" data-testid={`formateur-planning-${u.id}`}>
+                    Planning {planningOverview.year} : {planningOverview.jours[u.id] || 0} jour(s)
+                    {u.quota_jours_annuel != null ? ` / ${u.quota_jours_annuel}` : ""}
+                  </p>
+                )}
+                <div className="mt-2"><DossierBadge u={u} /></div>
+              </Card>
+            ))}
+            {!items.length && (
+              <Card className="col-span-full p-12 text-center border-dashed">
+                <p className="text-gray-500">Aucun formateur. Cliquez sur "Nouveau formateur" pour en créer un.</p>
+              </Card>
             )}
-            <div className="mt-2"><DossierBadge u={u} /></div>
-          </Card>
-        ))}
-        {!items.length && (
-          <Card className="col-span-full p-12 text-center border-dashed">
-            <p className="text-gray-500">Aucun formateur. Cliquez sur "Nouveau formateur" pour en créer un.</p>
-          </Card>
-        )}
-      </div>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={!!detail} onOpenChange={(v) => !v && setDetail(null)}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" data-testid="formateur-detail-dialog">

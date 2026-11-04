@@ -129,13 +129,14 @@ def test_delai_depasse_trois_essais(env, monkeypatch):
 def test_secours_brevo_si_expediteur_valide(env, monkeypatch):
     _fake, calls = env
     _smtp_failing(monkeypatch, calls, "timed out")
-    _brevo_senders(monkeypatch, [{"email": "contact@tdl-formation.fr", "active": True}])
+    _brevo_senders(monkeypatch, [{"email": "tdlparisformation@gmail.com", "active": True}])
     log = _send()
     assert log["status"] == "sent" and log["fallback_provider"] == "brevo" and calls["brevo"] == 1
 
 
 def test_secours_brevo_si_domaine_authentifie(env, monkeypatch):
     _fake, calls = env
+    monkeypatch.setattr(email, "BREVO_SENDER_EMAIL", "contact@tdl-formation.fr")
     _smtp_failing(monkeypatch, calls, "timed out")
     _brevo_senders(monkeypatch, [], domains=[{"domain_name": "tdl-formation.fr", "authenticated": True}])
     assert _send()["status"] == "sent"
@@ -144,7 +145,7 @@ def test_secours_brevo_si_domaine_authentifie(env, monkeypatch):
 def test_expediteur_non_valide_chez_brevo_echec_visible(env, monkeypatch):
     fake, calls = env
     _smtp_failing(monkeypatch, calls, "timed out")
-    _brevo_senders(monkeypatch, [{"email": "tdlparisformation@gmail.com", "active": True}])
+    _brevo_senders(monkeypatch, [{"email": "contact@tdl-formation.fr", "active": True}])
     log = _send()
     assert log["status"].startswith("failed") and "non validé chez Brevo" in log["status"]
     assert calls["brevo"] == 0
@@ -157,3 +158,17 @@ def test_verification_brevo_impossible_on_tente_quand_meme(env, monkeypatch):
     _brevo_senders(monkeypatch, [], status=401)
     assert _send()["status"] == "sent"
     assert calls["brevo"] == 1
+
+
+def test_brevo_envoie_depuis_l_adresse_validee_et_repond_a_l_adresse_habituelle(monkeypatch):
+    sent = {}
+
+    def _post(_url, _headers, payload):
+        sent.update(payload)
+        return _Response({}, 201)
+
+    monkeypatch.setattr(email, "_http_post", _post)
+    status = asyncio.run(email._send_via_brevo("cle", "contact@tdl-formation.fr", "eleve@test.fr", "Sujet", "<p>Bonjour</p>"))
+    assert status == "sent"
+    assert sent["sender"]["email"] == "tdlparisformation@gmail.com"
+    assert sent["replyTo"] == {"email": "contact@tdl-formation.fr"}
