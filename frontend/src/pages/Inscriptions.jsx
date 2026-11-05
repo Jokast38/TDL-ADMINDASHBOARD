@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
+import { selectableStages } from "@/lib/selectableStages";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -1071,13 +1072,13 @@ export default function Inscriptions() {
               <SelectTrigger data-testid="assign-stage-select"><SelectValue placeholder="Choisir une session" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Aucune (retirer l'affectation)</SelectItem>
-                {stages.filter((s) => s.formation_id === assignTarget?.formation_id).map((s) => (
+                {selectableStages(stages.filter((s) => s.formation_id === assignTarget?.formation_id), assignTarget?.stage_id).map((s) => (
                   <SelectItem key={s.id} value={s.id}>{s.date_debut} → {s.date_fin} — {s.lieu_ville}{s.creneau ? ` (${s.creneau === "JOUR" ? "Jour" : "Soir"})` : ""}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {assignTarget && !stages.some((s) => s.formation_id === assignTarget.formation_id) && (
-              <p className="text-xs text-amber-600">Aucune session planifiée pour cette formation — créez-en une depuis la page Sessions de formation.</p>
+            {assignTarget && !selectableStages(stages.filter((s) => s.formation_id === assignTarget.formation_id)).length && (
+              <p className="text-xs text-amber-600">Aucune session à venir pour cette formation — créez-en une depuis la page Sessions de formation.</p>
             )}
           </div>
           <div className="flex justify-end gap-2 mt-4">

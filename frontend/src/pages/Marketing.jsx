@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { selectableStages } from "@/lib/selectableStages";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1555,7 +1556,7 @@ function MetaLeadEnrollForm({ lead, onEnrolled, onCancel }) {
           <SelectTrigger data-testid="meta-lead-enroll-stage"><SelectValue placeholder="Aucune session précise" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="none">Aucune session précise</SelectItem>
-            {stages.map((s) => (
+            {selectableStages(stages).map((s) => (
               <SelectItem key={s.id} value={s.id}>
                 Du {s.date_debut} au {s.date_fin}{s.lieu_ville ? ` — ${s.lieu_ville}` : ""}{s.creneau ? ` (${s.creneau === "JOUR" ? "Jour" : "Soir"})` : ""} ({s.nb_inscrits} inscrit{s.nb_inscrits > 1 ? "s" : ""})
               </SelectItem>
