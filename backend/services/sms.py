@@ -7,6 +7,7 @@ import re
 import uuid
 
 from core.database import db
+from core.config import OUTBOUND_DISABLED
 from core.utils import now_iso
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ async def send_sms(to_phone: str, content: str, extra: dict = None) -> dict:
         "status": "queued", "created_at": now_iso(), **(extra or {}),
     }
 
-    if not s.get("sms_enabled"):
+    if OUTBOUND_DISABLED or not s.get("sms_enabled"):
         log["status"] = "disabled"
         await db.sms_logs.insert_one(log)
         return log

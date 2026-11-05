@@ -135,6 +135,19 @@ ROLES_ADMIN_STAFF = ("admin", "responsable_admission", "agent_admin")
 ROLES_DOSSIERS_MGMT = ("admin", "employe", "responsable_admission", "agent_admin", "agent_telephonique")
 ROLES_DOCS_VIEW = ("admin", "employe", "responsable_admission", "agent_admin")
 ROLES_ANIMATEUR_PLUS = ("admin", "animateur")
+
+# Interrupteurs pour un serveur LOCAL branché sur une copie des données
+# (2026-11-05 : un serveur local sur la copie Supabase a renvoyé de vraies
+# relances « Documents manquants » à des élèves déjà relancés par la prod).
+# À ne JAMAIS mettre sur Render.
+#   DISABLE_BACKGROUND_JOBS=1 : aucune tâche automatique (relances, rappels, synchros)
+#   DISABLE_OUTBOUND=1        : aucun email/SMS/WhatsApp/push réellement envoyé (journalisés "mocked"/"disabled")
+def _flag(name: str) -> bool:
+    return (os.getenv(name) or "").strip().lower() in ("1", "true", "yes", "oui")
+
+
+BACKGROUND_JOBS_DISABLED = _flag("DISABLE_BACKGROUND_JOBS")
+OUTBOUND_DISABLED = _flag("DISABLE_OUTBOUND")
 # Ouverture/fermeture de l'accès formateur à une session et émargement depuis
 # la page Sessions de formation (core/session_access.py) — mêmes rôles que
 # l'accès à cette page (frontend Layout.jsx), plus agent_admin.

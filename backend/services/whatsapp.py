@@ -14,7 +14,7 @@ import time
 import uuid
 
 from core.config import (
-    META_WHATSAPP_BUSINESS_ACCOUNT_ID, META_WHATSAPP_PHONE_NUMBER_ID, META_WHATSAPP_TOKEN,
+    META_WHATSAPP_BUSINESS_ACCOUNT_ID, META_WHATSAPP_PHONE_NUMBER_ID, META_WHATSAPP_TOKEN, OUTBOUND_DISABLED,
 )
 from core.database import db
 from core.utils import now_iso
@@ -86,7 +86,7 @@ async def send_whatsapp(to_phone: str, template: str, params: list, button_param
         return log
 
     s = await db.settings.find_one({"id": "global"}, {"_id": 0, "whatsapp_enabled": 1}) or {}
-    if s.get("whatsapp_enabled") is False:
+    if OUTBOUND_DISABLED or s.get("whatsapp_enabled") is False:
         return await _done("disabled")
     if not META_WHATSAPP_TOKEN:
         return await _done("not_configured")

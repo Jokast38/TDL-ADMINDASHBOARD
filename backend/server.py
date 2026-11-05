@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
 
+from core.config import BACKGROUND_JOBS_DISABLED
 from core.database import client, db
 from core.security import hash_password, verify_password
 from core.storage import init_storage
@@ -574,6 +575,9 @@ async def _wordpress_auto_sync_loop():
 async def startup():
     asyncio.create_task(_background_init())
     asyncio.create_task(asyncio.to_thread(init_storage))
+    if BACKGROUND_JOBS_DISABLED:
+        logging.getLogger(__name__).warning("DISABLE_BACKGROUND_JOBS : aucune tâche automatique lancée (serveur local)")
+        return
     asyncio.create_task(_automations_loop())
     asyncio.create_task(_callback_reminders_loop())
     asyncio.create_task(_daily_dossiers_digest_loop())

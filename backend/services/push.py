@@ -5,12 +5,14 @@ import logging
 from pywebpush import webpush, WebPushException
 
 from core.database import db
-from core.config import VAPID_PRIVATE_KEY, VAPID_CLAIM_EMAIL
+from core.config import VAPID_PRIVATE_KEY, VAPID_CLAIM_EMAIL, OUTBOUND_DISABLED
 
 logger = logging.getLogger(__name__)
 
 
 def _send_one(subscription_info: dict, payload: dict) -> bool:
+    if OUTBOUND_DISABLED:
+        return False
     try:
         webpush(
             subscription_info=subscription_info,

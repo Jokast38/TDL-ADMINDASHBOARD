@@ -7,7 +7,7 @@ import urllib.parse
 from collections import deque
 import requests
 
-from core.config import BREVO_SENDER_EMAIL
+from core.config import BREVO_SENDER_EMAIL, OUTBOUND_DISABLED
 from core.database import db
 from core.utils import now_iso
 from core.config import PUBLIC_BACKEND_URL
@@ -276,7 +276,7 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
     personnalisé pour mettre l'expéditeur et une adresse de suivi en copie,
     afin que les réponses de l'apprenant restent tracées."""
     s = await db.settings.find_one({"id": "global"}, {"_id": 0}) or {}
-    provider = s.get("email_provider", "mock")
+    provider = "mock" if OUTBOUND_DISABLED else s.get("email_provider", "mock")
     from_addr = s.get("email_from", "noreply@tdlformation.fr")
     # Clé Resend : celle du fournisseur principal si provider="resend", sinon
     # celle dédiée au secours (utilisable même quand le principal est le SMTP).
