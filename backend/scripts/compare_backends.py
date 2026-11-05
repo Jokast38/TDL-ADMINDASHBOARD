@@ -30,7 +30,7 @@ from core.pgdoc import PgClient, encode
 
 ENV = dotenv_values(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 mongo = AsyncIOMotorClient(MONGO_URL)[DB_NAME]
-pg = PgClient(os.getenv("SUPABASE_DB2_URL") or ENV["SUPABASE_DB2_URL"], schema="tdl")[DB_NAME]
+pg = PgClient(os.getenv("SUPABASE_DB2_URL") or ENV["SUPABASE_DB2_URL"], schema=os.getenv("COMPARE_SCHEMA", "tdl"))[DB_NAME]
 
 VIVANTES = {"user_sessions", "activity_log", "email_logs", "sms_logs", "whatsapp_logs", "meta_events_log", "leads",
             "meta_lead_imports", "push_subscriptions", "settings", "chat_sessions", "ai_messages"}
@@ -77,9 +77,12 @@ async def compare(name):
         if cmp_vals:
             pivot = sorted(cmp_vals, key=lambda x: (isinstance(x, str), x))[len(cmp_vals) // 2]
             queries += [{f: {"$gte": pivot}}, {f: {"$lt": pivot}}, {"$or": [{f: {"$gt": pivot}}, {f: sample[0]}]}]
+    # Grosses collections (email_logs : 184 Mo) : on compare les documents
+    # renvoyés par leur _id plutôt que de tout retransférer à chaque requête.
+    proj = {"_id": 1} if len(m_docs) > 5000 else {"_id": 0}
     for q in queries:
-        mq = await mongo[name].find(q, {"_id": 0}).to_list(None)
-        pq = await pg[name].find(q, {"_id": 0}).to_list(None)
+        mq = await mongo[name].find(q, proj).to_list(None)
+        pq = await pg[name].find(q, proj).to_list(None)
         if [canon(x) for x in mq] != [canon(x) for x in pq]:
             problems.append(f"find {q} : MongoDB {len(mq)} / Supabase {len(pq)}")
         mc, pc = await mongo[name].count_documents(q), await pg[name].count_documents(q)
@@ -113,11 +116,11 @@ async def main():
         tag = " (collection vivante : écarts possibles depuis la copie)" if name in VIVANTES and problems else ""
         if problems:
             bad += 1
-            print(f"≠ {name} ({n} docs){tag}")
+            print(f"≠ {name} ({n} docs){tag}", flush=True)
             for p in problems[:8]:
                 print(f"    - {p}")
         else:
-            print(f"OK {name} ({n} docs, {nq} requêtes)")
+            print(f"OK {name} ({n} docs, {nq} requêtes)", flush=True)
     print(f"\n{len(names)} collections, {total_q} requêtes comparées, {bad} collection(s) avec écart")
 
 

@@ -17,8 +17,19 @@ Les types sans équivalent JSON sont conservés sous une forme reconnaissable
 pour l'adaptateur : datetime -> {"$date": iso}, bytes -> {"$binary": base64}.
 
 Usage (depuis backend/) :
-    python scripts/migrate_to_supabase.py           # copie tout
-    python scripts/migrate_to_supabase.py --status  # compare les nombres de documents
+    python scripts/migrate_to_supabase.py              # copie tout (ÉCRASE Supabase)
+    python scripts/migrate_to_supabase.py --status     # compare les nombres de documents
+    python scripts/migrate_to_supabase.py --rattrapage # après la bascule : ajoute dans Supabase
+                                                       # les documents de MongoDB qui n'y sont pas
+    python scripts/migrate_to_supabase.py --retour     # retour arrière : ajoute dans MongoDB
+                                                       # les documents de Supabase qui n'y sont pas
+
+--rattrapage et --retour n'écrasent jamais un document existant : ils
+n'ajoutent que les documents manquants (repérés par leur _id). Ils servent à
+ne rien perdre de ce qui a été écrit dans l'ancienne base pendant les
+quelques minutes de la bascule (inscription, paiement Stripe, lead Meta...).
+Un document MODIFIÉ (et non créé) pendant ce laps de temps est signalé, pas
+fusionné : à vérifier à la main.
 """
 import asyncio
 import base64
@@ -42,7 +53,7 @@ from core.config import DB_NAME, MONGO_URL
 # Toujours MongoDB, même si DB_BACKEND=supabase : c'est la source de la copie.
 db = AsyncIOMotorClient(MONGO_URL)[DB_NAME]
 
-SCHEMA = "tdl"
+SCHEMA = os.getenv("MIGRATE_SCHEMA", "tdl")  # autre schéma : copie de vérification (scripts/compare_backends.py)
 BATCH = 500
 
 
@@ -144,5 +155,73 @@ async def status() -> None:
     print(f"\n{ecarts} collection(s) différente(s)")
 
 
+async def _pg_docs(cur, name: str) -> dict:
+    cur.execute("select to_regclass(%s)", (f"{SCHEMA}.{_ident(name)}",))
+    if cur.fetchone()[0] is None:
+        return {}
+    cur.execute(f"select _id, doc from {SCHEMA}.{_ident(name)}")
+    return {r[0]: r[1] for r in cur.fetchall()}
+
+
+async def rattrapage() -> None:
+    """MongoDB -> Supabase, documents manquants seulement."""
+    names = sorted(n for n in await db.list_collection_names() if not n.startswith("system."))
+    conn = _pg()
+    ajoutes, modifies = 0, []
+    with conn, conn.cursor() as cur:
+        prepare_schema(cur)
+        for name in names:
+            prepare_table(cur, name)
+            pg_docs = await _pg_docs(cur, name)
+            rows = []
+            async for d in db[name].find({}):
+                _id = str(d.pop("_id"))
+                body = to_json(d, Counter())
+                if _id not in pg_docs:
+                    rows.append((_id, Json(body)))
+                elif pg_docs[_id] != body:
+                    modifies.append(f"{name}/{_id}")
+            if rows:
+                execute_values(cur, f"insert into {SCHEMA}.{_ident(name)} (_id, doc) values %s on conflict (_id) do nothing", rows)
+                print(f"{name}: {len(rows)} document(s) ajouté(s)", flush=True)
+                ajoutes += len(rows)
+    conn.close()
+    print(f"\n{ajoutes} document(s) ajouté(s) dans Supabase.")
+    if modifies:
+        print(f"{len(modifies)} document(s) différent(s) entre les deux bases (modifiés d'un côté, non fusionnés) : {modifies[:20]}")
+
+
+async def retour() -> None:
+    """Supabase -> MongoDB, documents manquants seulement (retour arrière)."""
+    from core.pgdoc import decode
+    conn = _pg()
+    ajoutes = 0
+    with conn, conn.cursor() as cur:
+        cur.execute("select table_name from information_schema.tables where table_schema = %s", (SCHEMA,))
+        for (name,) in sorted(cur.fetchall()):
+            pg_docs = await _pg_docs(cur, name)
+            existants = {str(d["_id"]) async for d in db[name].find({}, {"_id": 1})}
+            manquants = []
+            for _id, doc in pg_docs.items():
+                if _id in existants:
+                    continue
+                d = decode(doc)
+                d["_id"] = ObjectId(_id) if ObjectId.is_valid(_id) else _id
+                manquants.append(d)
+            if manquants:
+                await db[name].insert_many(manquants)
+                print(f"{name}: {len(manquants)} document(s) ajouté(s) dans MongoDB", flush=True)
+                ajoutes += len(manquants)
+    conn.close()
+    print(f"\n{ajoutes} document(s) ajouté(s) dans MongoDB.")
+
+
 if __name__ == "__main__":
-    asyncio.run(status() if "--status" in sys.argv else copy_all())
+    if "--status" in sys.argv:
+        asyncio.run(status())
+    elif "--rattrapage" in sys.argv:
+        asyncio.run(rattrapage())
+    elif "--retour" in sys.argv:
+        asyncio.run(retour())
+    else:
+        asyncio.run(copy_all())
