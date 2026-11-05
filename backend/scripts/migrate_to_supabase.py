@@ -35,7 +35,12 @@ from bson import Decimal128, ObjectId
 from dotenv import dotenv_values
 from psycopg2.extras import Json, execute_values
 
-from core.database import db
+from motor.motor_asyncio import AsyncIOMotorClient
+
+from core.config import DB_NAME, MONGO_URL
+
+# Toujours MongoDB, même si DB_BACKEND=supabase : c'est la source de la copie.
+db = AsyncIOMotorClient(MONGO_URL)[DB_NAME]
 
 SCHEMA = "tdl"
 BATCH = 500
@@ -85,7 +90,10 @@ def prepare_schema(cur) -> None:
 
 def prepare_table(cur, name: str) -> None:
     table = f"{SCHEMA}.{_ident(name)}"
-    cur.execute(f"create table if not exists {table} (_id text primary key, doc jsonb not null)")
+    # seq : ordre d'insertion, l'« ordre naturel » de MongoDB (core/pgdoc.py).
+    cur.execute(f"create table if not exists {table} (_id text primary key, doc jsonb not null, seq bigserial)")
+    cur.execute(f"alter table {table} add column if not exists seq bigserial")
+    cur.execute(f"create index if not exists {_ident(name[:40] + '_seq_idx')} on {table} (seq)")
     cur.execute(f"alter table {table} enable row level security")
     cur.execute(f"revoke all on {table} from anon, authenticated, public")
     cur.execute(f"create index if not exists {_ident(name[:40] + '_doc_gin')} on {table} using gin (doc jsonb_path_ops)")
@@ -106,7 +114,7 @@ async def copy_all() -> None:
             rows.append((str(_id), Json(to_json(d, types))))
         with conn, conn.cursor() as cur:
             prepare_table(cur, name)
-            cur.execute(f"truncate {SCHEMA}.{_ident(name)}")
+            cur.execute(f"truncate {SCHEMA}.{_ident(name)} restart identity")
             for i in range(0, len(rows), BATCH):
                 execute_values(cur, f"insert into {SCHEMA}.{_ident(name)} (_id, doc) values %s", rows[i:i + BATCH])
         total += len(rows)

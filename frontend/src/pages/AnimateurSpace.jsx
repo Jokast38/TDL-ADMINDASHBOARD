@@ -6,22 +6,18 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Calendar, MapPin, Users, PenNib, CheckCircle, XCircle, Eraser, FilePdf, UserCircle, FileArrowUp, Signature, PaperPlaneTilt } from "@phosphor-icons/react";
+import { Calendar, MapPin, CheckCircle, XCircle, Eraser, FilePdf, UserCircle, FileArrowUp, Signature, Lock, LockOpen } from "@phosphor-icons/react";
 import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import { toast } from "sonner";
 import { useTour } from "@/contexts/TourContext";
 import { HELP_CATEGORIES } from "@/constants/helpTours";
 import FormateurPlanningTab from "@/components/FormateurPlanningTab";
+import EmargementPanel from "@/components/stages/EmargementPanel";
 
 // Pièces justifiant le droit d'exercer — doit rester synchronisé avec
 // FORMATEUR_DOC_TYPES côté backend (routers/employees.py). Dossier à
 // compléter (documents + convention signée) dans les 24h suivant la
 // création du compte par un agent.
-
-// 4 signatures par jour (remplace l'ancien matin/après-midi/journée) — doit
-// rester synchronisé avec _PERIODES côté backend (routers/emargements.py).
-const PERIODE_LABELS = { matin: "Matin", midi: "Midi", apres_midi: "Après-midi", fin_apres_midi: "Fin d'après-midi" };
 
 const STAFF_DOC_TYPE_LABELS = {
   identite_recto: "Pièce d'identité (recto)",
@@ -282,19 +278,29 @@ export default function AnimateurSpace() {
   }); // sessions | planning | dossier | signature
   const [stages, setStages] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [jours, setJours] = useState([]);
-  const [sessionDate, setSessionDate] = useState(null);
-  const [periode, setPeriode] = useState("matin"); // "matin" | "midi" | "apres_midi" | "fin_apres_midi"
-  const [inscrits, setInscrits] = useState([]);
-  const [signOpen, setSignOpen] = useState(false);
-  const [signTarget, setSignTarget] = useState(null);
-  const [presence, setPresence] = useState(true);
-  const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [requestingSignatures, setRequestingSignatures] = useState(false);
-  const padRef = useRef(null);
 
-  const load = () => api.get("/stages").then((r) => setStages(r.data));
-  useEffect(() => { load(); }, []);
+  // Accès aux sessions (backend core/session_access.py) : fermées par défaut,
+  // ouvertes le jour même par l'équipe TDL ou à 9h30, fermées à 16h45. On
+  // recharge chaque minute pour que l'ouverture/fermeture apparaisse sans
+  // recharger la page.
+  const load = () => api.get("/stages").then((r) => setStages(r.data)).catch(() => {});
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // La session affichée vient de se fermer (16h45 ou fermée par un agent) :
+  // retour à la liste.
+  useEffect(() => {
+    if (!selected) return;
+    const fresh = stages.find((s) => s.id === selected.id);
+    if (fresh && !fresh.acces_formateur?.ouvert) {
+      toast.info(`Session fermée — ${fresh.acces_formateur?.message || ""}`);
+      setSelected(null);
+    }
+  }, [stages, selected]);
 
   // Visite guidée automatique au premier passage d'un formateur dans son
   // espace — pour qu'il ne découvre pas seul comment ça marche. Ne se
@@ -311,113 +317,18 @@ export default function AnimateurSpace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  const openStage = async (s) => {
+  const openStage = (s) => {
+    if (!s.acces_formateur?.ouvert) {
+      toast.info(s.acces_formateur?.message || "Session fermée");
+      return;
+    }
     setSelected(s);
-    const j = await api.get(`/stages/${s.id}/jours`);
-    const days = j.data.jours || [];
-    setJours(days);
-    const firstDay = days[0];
-    setSessionDate(firstDay);
-    setPeriode("matin");
-    const r = await api.get(`/stages/${s.id}/inscrits`, { params: { session_date: firstDay, periode: "matin" } });
-    setInscrits(r.data);
   };
 
-  const refreshInscrits = async (day, per) => {
-    const r = await api.get(`/stages/${selected.id}/inscrits`, { params: { session_date: day, periode: per } });
-    setInscrits(r.data);
-  };
-
-  const changeDay = async (day) => {
-    setSessionDate(day);
-    await refreshInscrits(day, periode);
-  };
-
-  const changePeriode = async (per) => {
-    setPeriode(per);
-    await refreshInscrits(sessionDate, per);
-  };
-
-  const openSign = (ins) => { setSignTarget(ins); setPresence(true); setSignOpen(true); };
-
-  const clearSign = () => padRef.current?.clear();
-
-  const submitSign = async () => {
-    if (!presence) {
-      try {
-        await api.post("/emargements", {
-          stage_id: selected.id,
-          inscription_id: signTarget.id,
-          student_id: signTarget.student_id,
-          student_name: signTarget.student_name,
-          signature_data_url: "",
-          present: false,
-          session_date: sessionDate,
-          periode,
-        });
-        toast.success("Absence enregistrée");
-        setSignOpen(false);
-        refreshInscrits(sessionDate, periode);
-      } catch (e) {
-        toast.error(e.response?.data?.detail || "Erreur");
-      }
-      return;
-    }
-    if (padRef.current?.isEmpty()) {
-      toast.error("Veuillez signer dans la zone");
-      return;
-    }
-    const dataUrl = padRef.current.getCanvas().toDataURL("image/png");
-    try {
-      await api.post("/emargements", {
-        stage_id: selected.id,
-        inscription_id: signTarget.id,
-        student_id: signTarget.student_id,
-        student_name: signTarget.student_name,
-        signature_data_url: dataUrl,
-        present: true,
-        session_date: sessionDate,
-        periode,
-      });
-      toast.success("Émargement signé · attestation générée");
-      setSignOpen(false);
-      refreshInscrits(sessionDate, periode);
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Erreur");
-    }
-  };
-
-  const requestSignatures = async () => {
-    setRequestingSignatures(true);
-    try {
-      const { data } = await api.post(`/stages/${selected.id}/emargements/request`, { session_date: sessionDate, periode });
-      if (data.notified > 0) {
-        toast.success(`${data.notified} apprenant(s) invité(s) à signer depuis leur espace`);
-      } else {
-        toast.info("Tous les apprenants ont déjà signé ou ont déjà été relancés pour ce créneau");
-      }
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Erreur lors de la demande");
-    } finally {
-      setRequestingSignatures(false);
-    }
-  };
-
-  const generateSheet = async () => {
-    setGeneratingPdf(true);
-    try {
-      const { data } = await api.get(`/stages/${selected.id}/emargement-pdf`, { params: { session_date: sessionDate, periode } });
-      const token = localStorage.getItem("tdl_token");
-      const res = await fetch(`${API}/documents-generated/${data.id}/download`, { headers: { Authorization: `Bearer ${token}` } });
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      toast.success("Feuille d'émargement générée");
-    } catch (e) {
-      toast.error(e.response?.data?.detail || "Erreur génération PDF");
-    } finally {
-      setGeneratingPdf(false);
-    }
+  const accessLost = (detail) => {
+    toast.info(detail || "Session fermée");
+    setSelected(null);
+    load();
   };
 
   return (
@@ -452,21 +363,37 @@ export default function AnimateurSpace() {
 
       {tab === "sessions" && (!selected ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {stages.map((s) => (
-            <Card key={s.id} className="p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg cursor-pointer transition-all" onClick={() => openStage(s)} data-testid={`stage-${s.id}`}>
-              <div className="flex items-start justify-between mb-2">
-                <Badge variant="outline">{s.statut}</Badge>
-                <p className="text-xs text-gray-500">{s.nb_inscrits || 0}/{s.capacite_max}</p>
-              </div>
-              <h3 className="font-display font-bold leading-tight">{s.formation_titre}</h3>
-              <div className="flex items-center gap-1 text-xs text-gray-500 mt-3">
-                <Calendar size={12} /> {s.date_debut} → {s.date_fin}
-              </div>
-              <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
-                <MapPin size={12} /> {s.lieu_ville}
-              </div>
-            </Card>
-          ))}
+          {stages.map((s) => {
+            const acces = s.acces_formateur || {};
+            const ouvert = !!acces.ouvert;
+            return (
+              <Card
+                key={s.id}
+                className={`p-5 border rounded-md shadow-none transition-all ${ouvert
+                  ? "border-[#0B7238] hover:-translate-y-1 hover:shadow-lg cursor-pointer"
+                  : "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed grayscale"}`}
+                onClick={() => openStage(s)}
+                aria-disabled={!ouvert}
+                data-testid={`stage-${s.id}`}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <Badge variant="outline">{s.statut}</Badge>
+                  <p className="text-xs text-gray-500">{s.nb_inscrits || 0}/{s.capacite_max}</p>
+                </div>
+                <h3 className="font-display font-bold leading-tight">{s.formation_titre}</h3>
+                <div className="flex items-center gap-1 text-xs text-gray-500 mt-3">
+                  <Calendar size={12} /> {s.date_debut} → {s.date_fin}
+                </div>
+                <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                  <MapPin size={12} /> {s.lieu_ville}
+                </div>
+                <p className={`flex items-center gap-1 text-xs font-medium mt-3 ${ouvert ? "text-[#0B7238]" : "text-gray-500"}`} data-testid={`stage-acces-${s.id}`}>
+                  {ouvert ? <LockOpen size={12} weight="bold" /> : <Lock size={12} weight="bold" />}
+                  {ouvert ? "Ouverte" : "Fermée"}{acces.message ? ` — ${acces.message}` : ""}
+                </p>
+              </Card>
+            );
+          })}
           {!stages.length && (
             <Card className="p-12 text-center border-dashed col-span-full">
               <p className="text-gray-500">Aucune session attribuée pour l'instant.</p>
@@ -475,143 +402,15 @@ export default function AnimateurSpace() {
         </div>
       ) : (
         <div>
-          <Button variant="outline" size="sm" onClick={() => { setSelected(null); setInscrits([]); setJours([]); }} className="mb-4">← Retour aux sessions</Button>
+          <Button variant="outline" size="sm" onClick={() => setSelected(null)} className="mb-4">← Retour aux sessions</Button>
           <Card className="p-6 border border-gray-200 rounded-md shadow-none">
             <h2 className="font-display text-2xl font-bold">{selected.formation_titre}</h2>
             <p className="text-sm text-gray-500 mt-1">{selected.date_debut} au {selected.date_fin} · {selected.lieu_adresse}, {selected.lieu_ville}</p>
-
-            {jours.length > 1 && (
-              <div className="mt-4">
-                <p className="overline mb-2">Jour de la session ({jours.length} jours)</p>
-                <div className="flex flex-wrap gap-2">
-                  {jours.map((j) => (
-                    <button
-                      key={j}
-                      onClick={() => changeDay(j)}
-                      className={`px-3 py-1.5 rounded-md text-xs border ${sessionDate === j ? "bg-[#0a0a0a] text-white border-[#0a0a0a]" : "border-gray-300 hover:bg-gray-50"}`}
-                      data-testid={`day-${j}`}
-                    >
-                      {new Date(j).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="mt-4">
-              <p className="overline mb-2">Créneau</p>
-              <div className="flex gap-2">
-                {[["matin", "Matin"], ["midi", "Midi"], ["apres_midi", "Après-midi"], ["fin_apres_midi", "Fin d'après-midi"]].map(([val, label]) => (
-                  <button
-                    key={val}
-                    onClick={() => changePeriode(val)}
-                    className={`px-3 py-1.5 rounded-md text-xs border ${periode === val ? "bg-[#d4af37] text-black border-[#d4af37]" : "border-gray-300 hover:bg-gray-50"}`}
-                    data-testid={`periode-${val}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-                <p className="overline flex items-center gap-2"><Users size={12} /> Liste d'émargement {sessionDate ? `— ${formatDateFR(sessionDate)}` : ""}</p>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={requestSignatures} disabled={requestingSignatures} data-testid="request-emargements">
-                    <PaperPlaneTilt size={14} className="mr-1" /> {requestingSignatures ? "Envoi..." : "Demander les émargements"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={generateSheet} disabled={generatingPdf} data-testid="generate-emargement-pdf">
-                    <FilePdf size={14} className="mr-1" /> {generatingPdf ? "Génération..." : "Générer la feuille PDF"}
-                  </Button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {inscrits.map((ins) => (
-                  <div key={ins.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-md" data-testid={`inscrit-${ins.id}`}>
-                    <div>
-                      <p className="font-medium text-sm">{ins.student_name}</p>
-                      <p className="text-xs text-gray-500">{ins.student_email}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {ins.emarge ? (
-                        ins.present ? (
-                          <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10"><CheckCircle size={12} weight="fill" className="mr-1" /> Présent · signé</Badge>
-                        ) : (
-                          <Badge className="bg-red-100 text-red-700 hover:bg-red-100"><XCircle size={12} weight="fill" className="mr-1" /> Absent</Badge>
-                        )
-                      ) : (
-                        <Button size="sm" onClick={() => openSign(ins)} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid={`sign-${ins.id}`}>
-                          <PenNib size={14} className="mr-1" /> Émarger
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {!inscrits.length && <p className="text-sm text-gray-400 text-center py-6">Aucun inscrit.</p>}
-              </div>
-            </div>
+            <p className="text-xs text-[#0B7238] mt-1 flex items-center gap-1"><LockOpen size={12} /> {selected.acces_formateur?.message}</p>
+            <EmargementPanel stage={selected} todayOnly today={selected.acces_formateur?.jour} onAccessLost={accessLost} />
           </Card>
         </div>
       ))}
-
-      <Dialog open={signOpen} onOpenChange={setSignOpen}>
-        <DialogContent className="max-w-lg" data-testid="signature-dialog">
-          {signTarget && (
-            <>
-              <DialogHeader>
-                <DialogTitle>
-                  Émargement — {signTarget.student_name} ({sessionDate ? formatDateFR(sessionDate) : ""}
-                  · {PERIODE_LABELS[periode] || periode})
-                </DialogTitle>
-              </DialogHeader>
-              <div className="mt-2 space-y-4">
-                <div className="flex gap-2">
-                  <Button
-                    variant={presence ? "default" : "outline"}
-                    onClick={() => setPresence(true)}
-                    className={presence ? "bg-[#0B7238] hover:bg-[#0a5e2e] text-white" : ""}
-                    data-testid="present-btn"
-                  >
-                    <CheckCircle size={14} className="mr-1" /> Présent
-                  </Button>
-                  <Button
-                    variant={!presence ? "default" : "outline"}
-                    onClick={() => setPresence(false)}
-                    className={!presence ? "bg-red-600 hover:bg-red-700 text-white" : ""}
-                    data-testid="absent-btn"
-                  >
-                    <XCircle size={14} className="mr-1" /> Absent
-                  </Button>
-                </div>
-                {presence && (
-                  <>
-                    <div>
-                      <p className="text-sm font-medium mb-1">Signature de l'apprenant</p>
-                      <div className="border-2 border-dashed border-gray-300 rounded-md bg-white">
-                        <SignatureCanvas
-                          ref={padRef}
-                          canvasProps={{ width: 460, height: 180, className: "w-full rounded-md", "data-testid": "signature-pad" }}
-                          penColor="#0a0a0a"
-                        />
-                      </div>
-                      <Button variant="ghost" size="sm" onClick={clearSign} className="mt-1" data-testid="clear-sign">
-                        <Eraser size={12} className="mr-1" /> Effacer
-                      </Button>
-                    </div>
-                  </>
-                )}
-                <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
-                  <Button variant="outline" onClick={() => setSignOpen(false)}>Annuler</Button>
-                  <Button onClick={submitSign} className="bg-[#d4af37] text-black hover:bg-[#b8941f]" data-testid="submit-sign">
-                    Valider l'émargement
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

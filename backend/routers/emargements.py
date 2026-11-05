@@ -9,13 +9,14 @@ from core.database import db
 from core.security import require_role, get_current_user
 from core.storage import put_object, get_object
 from core.utils import now_iso, format_date_long_fr
-from core.config import APP_NAME, ROLES_ALL_STAFF, PUBLIC_FRONTEND_URL
+from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_SESSIONS_CONTROL, PUBLIC_FRONTEND_URL
+from core.session_access import access_status
 from models.stage import EmargementIn, EmargementRequestIn, EmargementSelfSignIn
 from services.email import send_email
 from services.email_template import render_branded_email
 from services.pdf import generate_attestation_pdf, render_html_pdf
 from services.push import send_push_to_user, send_push_to_users
-from routers.stages import _stage_days, _stage_animateur_ids
+from routers.stages import _stage_days, _stage_animateur_ids, require_formateur_access
 from core.stage_recup_points import CAS_STAGE_CHOICES
 
 router = APIRouter(tags=["emargements"])
@@ -35,7 +36,8 @@ async def _path_to_data_url(path: str) -> str:
     return f"data:{content_type or 'image/png'};base64,{b64}"
 
 
-async def _finalize_emargement(stage: dict, payload: EmargementIn, signed_by_animateur_id: Optional[str], signed_by_student: bool = False):
+async def _finalize_emargement(stage: dict, payload: EmargementIn, signed_by_animateur_id: Optional[str], signed_by_student: bool = False,
+                               signed_by_staff: Optional[dict] = None):
     """Cœur commun de l'émargement, partagé entre la saisie en présentiel par
     un animateur (POST /emargements) et la signature à distance par
     l'apprenant lui-même depuis son espace (POST /me/emargements/sign) :
@@ -70,6 +72,11 @@ async def _finalize_emargement(stage: dict, payload: EmargementIn, signed_by_ani
         "present": payload.present, "signed_by_animateur": signed_by_animateur_id, "signed_at": now_iso(),
         "animateur_signed": bool(animateur_signature_data_url), "signed_by_student": signed_by_student,
     }
+    if signed_by_staff:
+        # Émargement saisi par l'équipe TDL depuis la page Sessions : la
+        # personne est tracée, mais l'attestation reste au nom du formateur.
+        em_doc["signed_by_staff"] = signed_by_staff["id"]
+        em_doc["signed_by_staff_name"] = signed_by_staff.get("name")
     await db.emargements.update_one(
         {"stage_id": payload.stage_id, "inscription_id": payload.inscription_id, "session_date": payload.session_date, "periode": periode},
         {"$set": em_doc}, upsert=True
@@ -89,7 +96,8 @@ async def _finalize_emargement(stage: dict, payload: EmargementIn, signed_by_ani
         "stage_id": payload.stage_id, "inscription_id": payload.inscription_id,
         "student_id": payload.student_id, "session_date": payload.session_date, "periode": periode,
         "storage_path": result["path"], "size": result["size"],
-        "generated_by": signed_by_animateur_id or payload.student_id, "generated_at": now_iso(), "signed": True,
+        "generated_by": signed_by_animateur_id or (signed_by_staff or {}).get("id") or payload.student_id,
+        "generated_at": now_iso(), "signed": True,
     }
     await db.generated_docs.insert_one(doc_meta)
 
@@ -160,12 +168,11 @@ async def _notify_if_all_signed(stage: dict, session_date: str, periode: str):
 
 
 @router.post("/emargements")
-async def create_emargement(payload: EmargementIn, user: dict = Depends(require_role("admin", "animateur"))):
+async def create_emargement(payload: EmargementIn, user: dict = Depends(require_role("animateur", *ROLES_SESSIONS_CONTROL))):
     stage = await db.stages.find_one({"id": payload.stage_id}, {"_id": 0})
     if not stage:
         raise HTTPException(status_code=404, detail="Stage introuvable")
-    if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
-        raise HTTPException(status_code=403, detail="Accès refusé")
+    require_formateur_access(user, stage, payload.session_date)
     if payload.present and not (payload.signature_data_url or "").startswith("data:image"):
         raise HTTPException(status_code=400, detail="Une signature est requise lorsque le stagiaire est marqué présent")
     valid_days = _stage_days(stage)
@@ -175,7 +182,10 @@ async def create_emargement(payload: EmargementIn, user: dict = Depends(require_
     if periode not in _PERIODES:
         raise HTTPException(status_code=400, detail=f"periode doit être l'un de : {', '.join(_PERIODES)}")
 
-    em_doc, doc_meta = await _finalize_emargement(stage, payload, signed_by_animateur_id=user["id"])
+    if user["role"] == "animateur":
+        em_doc, doc_meta = await _finalize_emargement(stage, payload, signed_by_animateur_id=user["id"])
+    else:
+        em_doc, doc_meta = await _finalize_emargement(stage, payload, signed_by_animateur_id=None, signed_by_staff=user)
     await db.emargement_requests.update_many(
         {"stage_id": payload.stage_id, "inscription_id": payload.inscription_id, "session_date": payload.session_date, "periode": periode, "status": "pending"},
         {"$set": {"status": "signed", "signed_at": now_iso()}},
@@ -185,7 +195,7 @@ async def create_emargement(payload: EmargementIn, user: dict = Depends(require_
 
 
 @router.post("/stages/{sid}/emargements/request")
-async def request_emargements(sid: str, payload: EmargementRequestIn, user: dict = Depends(require_role("admin", "animateur"))):
+async def request_emargements(sid: str, payload: EmargementRequestIn, user: dict = Depends(require_role("animateur", *ROLES_SESSIONS_CONTROL))):
     """Bouton « Demander les émargements » côté formateur : invite chaque
     apprenant actif de la session à signer lui-même à distance depuis son
     espace — utile quand la signature n'a pas pu être prise en présentiel sur
@@ -195,8 +205,13 @@ async def request_emargements(sid: str, payload: EmargementRequestIn, user: dict
     stage = await db.stages.find_one({"id": sid}, {"_id": 0})
     if not stage:
         raise HTTPException(status_code=404, detail="Stage introuvable")
-    if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
-        raise HTTPException(status_code=403, detail="Accès refusé")
+    require_formateur_access(user, stage, payload.session_date)
+    # Signature à distance seulement pendant que la session est ouverte, et
+    # pour la journée en cours : une fois fermée, il est trop tard pour signer
+    # (sign_my_emargement), donc inutile d'envoyer la demande.
+    status = access_status(stage)
+    if not status["ouvert"] or payload.session_date != status["jour"]:
+        raise HTTPException(status_code=400, detail=f"Demande impossible : la session n'est pas ouverte pour ce jour — {status['message']}")
     valid_days = _stage_days(stage)
     if payload.session_date not in valid_days:
         raise HTTPException(status_code=400, detail=f"session_date doit être l'un de : {', '.join(valid_days)}")
@@ -262,11 +277,22 @@ async def my_emargement_requests(user: dict = Depends(get_current_user)):
     stage_ids = list({r["stage_id"] for r in requests})
     stages = await db.stages.find({"id": {"$in": stage_ids}}, {"_id": 0}).to_list(50) if stage_ids else []
     stages_by_id = {s["id"]: s for s in stages}
+    signables = []
     for r in requests:
         stage = stages_by_id.get(r["stage_id"])
-        r["formation_titre"] = stage.get("formation_titre") if stage else None
-        r["lieu_ville"] = stage.get("lieu_ville") if stage else None
-    return requests
+        # Session fermée (16h45, fermée par un agent, jour passé) : trop tard,
+        # la demande n'est plus proposée.
+        if not stage or not _signable(stage, r["session_date"]):
+            continue
+        r["formation_titre"] = stage.get("formation_titre")
+        r["lieu_ville"] = stage.get("lieu_ville")
+        signables.append(r)
+    return signables
+
+
+def _signable(stage: dict, session_date: str) -> bool:
+    status = access_status(stage)
+    return status["ouvert"] and session_date == status["jour"]
 
 
 @router.post("/me/emargements/sign")
@@ -284,6 +310,8 @@ async def sign_my_emargement(payload: EmargementSelfSignIn, user: dict = Depends
     stage = await db.stages.find_one({"id": req["stage_id"]}, {"_id": 0})
     if not stage:
         raise HTTPException(status_code=404, detail="Stage introuvable")
+    if not _signable(stage, req["session_date"]):
+        raise HTTPException(status_code=403, detail="Trop tard : l'émargement de cette session est fermé")
 
     emargement_payload = EmargementIn(
         stage_id=req["stage_id"], inscription_id=req["inscription_id"], student_id=req["student_id"],
@@ -315,8 +343,9 @@ async def generate_emargement_sheet_pdf(sid: str, session_date: Optional[str] = 
     stage = await db.stages.find_one({"id": sid}, {"_id": 0})
     if not stage:
         raise HTTPException(status_code=404, detail="Stage introuvable")
-    if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
-        raise HTTPException(status_code=403, detail="Accès refusé")
+    if user["role"] == "animateur":
+        session_date = session_date or access_status(stage)["jour"]
+        require_formateur_access(user, stage, session_date)
     valid_days = _stage_days(stage)
     session_date = session_date or valid_days[0]
     if session_date not in valid_days:

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel
 
 
@@ -63,6 +63,11 @@ class EmargementIn(BaseModel):
     # "matin" | "apres_midi" | "journee" — permet un émargement par demi-journée
     # (utile notamment pour les formations Carte VTC, voir cahier des charges).
     periode: Optional[str] = "journee"
+
+
+class StageAccessIn(BaseModel):
+    """Ouverture / fermeture de l'accès formateur (core/session_access.py)."""
+    action: Literal["ouvrir", "fermer"]
 
 
 class EmargementRequestIn(BaseModel):

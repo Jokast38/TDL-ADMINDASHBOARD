@@ -135,6 +135,10 @@ ROLES_ADMIN_STAFF = ("admin", "responsable_admission", "agent_admin")
 ROLES_DOSSIERS_MGMT = ("admin", "employe", "responsable_admission", "agent_admin", "agent_telephonique")
 ROLES_DOCS_VIEW = ("admin", "employe", "responsable_admission", "agent_admin")
 ROLES_ANIMATEUR_PLUS = ("admin", "animateur")
+# Ouverture/fermeture de l'accès formateur à une session et émargement depuis
+# la page Sessions de formation (core/session_access.py) — mêmes rôles que
+# l'accès à cette page (frontend Layout.jsx), plus agent_admin.
+ROLES_SESSIONS_CONTROL = ("admin", "responsable_admission", "agent_admin", "agent_telephonique")
 ROLES_LEADS = ("admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique")
 # Espace dédié aux agents téléphoniques (Bouchra/Lydia/Lina...) — centre
 # d'appel kanban, demande de documents, RDV. Rôle restreint : voir

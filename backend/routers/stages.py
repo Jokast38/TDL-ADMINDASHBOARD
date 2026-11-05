@@ -11,8 +11,10 @@ from core.database import db
 from core.security import require_role
 from core.storage import get_object
 from core.utils import now_iso, format_date_long_fr
-from core.config import ROLES_ALL_STAFF, PUBLIC_FRONTEND_URL
-from models.stage import StageIn, StageUpdate
+from core.config import ROLES_ALL_STAFF, ROLES_SESSIONS_CONTROL, PUBLIC_FRONTEND_URL
+from core.session_access import access_status, paris_now
+from models.stage import StageAccessIn, StageIn, StageUpdate
+from services.activity import log_action
 from services.email import send_email
 from services.email_template import render_staff_notification
 from services.push import send_push_to_user, send_push_to_users
@@ -106,7 +108,52 @@ async def list_stages(
         for s in stages:
             s["nb_inscrits"] = counts_by_stage.get(s["id"], 0)
             s["places_restantes"] = max(0, (s.get("capacite_max") or 0) - s["nb_inscrits"] - (s.get("external_reserved") or 0))
+            s["acces_formateur"] = access_status(s)
     return stages
+
+
+def require_formateur_access(user: dict, stage: dict, session_date: Optional[str] = None) -> None:
+    """Un formateur n'agit sur sa session (liste d'émargement, signatures,
+    feuille PDF) que lorsqu'elle est ouverte, et seulement pour le jour même —
+    voir core/session_access.py. Sans effet pour l'équipe TDL."""
+    if user["role"] != "animateur":
+        return
+    if user["id"] not in _stage_animateur_ids(stage):
+        raise HTTPException(status_code=403, detail="Accès refusé")
+    status = access_status(stage)
+    if not status["ouvert"]:
+        raise HTTPException(status_code=403, detail=f"Session fermée — {status['message']}")
+    if session_date and session_date != status["jour"]:
+        raise HTTPException(status_code=403, detail="Vous ne pouvez émarger que pour la journée en cours")
+
+
+@router.post("/{sid}/acces")
+async def set_formateur_access(sid: str, payload: StageAccessIn, user: dict = Depends(require_role(*ROLES_SESSIONS_CONTROL))):
+    """Ouvre ou ferme l'accès des formateurs à la session pour aujourd'hui
+    (page Sessions de formation). Ouvrir n'est possible que le jour même et
+    avant la fermeture automatique de 16h45."""
+    stage = await db.stages.find_one({"id": sid}, {"_id": 0})
+    if not stage:
+        raise HTTPException(status_code=404, detail="Stage introuvable")
+    status = access_status(stage)
+    if status["raison"] in ("pas_le_jour", "terminee", "annulee"):
+        raise HTTPException(status_code=400, detail=f"Impossible aujourd'hui — {status['message']}")
+    if status["raison"] == "fermee_auto":
+        raise HTTPException(status_code=400, detail=f"Déjà fermée automatiquement à {status['fermeture_auto']} — l'émargement reste possible depuis cette page")
+    today = status["jour"]
+    field = "ouvert" if payload.action == "ouvrir" else "ferme"
+    await db.stages.update_one({"id": sid}, {"$set": {
+        f"acces.{today}.{field}_at": paris_now().isoformat(),
+        f"acces.{today}.{field}_par": user.get("name", ""),
+    }})
+    await log_action(user, f"session_acces_{payload.action}", "stage", sid, {"formation_titre": stage.get("formation_titre"), "jour": today})
+    stage = await db.stages.find_one({"id": sid}, {"_id": 0})
+    if payload.action == "ouvrir" and _stage_animateur_ids(stage):
+        await send_push_to_users(
+            _stage_animateur_ids(stage), "Session ouverte",
+            f"{stage.get('formation_titre', '')} — vous pouvez commencer l'émargement", "/espace-animateur",
+        )
+    return access_status(stage)
 
 
 @router.get("/{sid}/roster")
@@ -303,8 +350,9 @@ async def stage_inscrits(sid: str, session_date: Optional[str] = None, periode: 
     stage = await db.stages.find_one({"id": sid}, {"_id": 0})
     if not stage:
         raise HTTPException(status_code=404, detail="Stage introuvable")
-    if user["role"] == "animateur" and user["id"] not in _stage_animateur_ids(stage):
-        raise HTTPException(status_code=403, detail="Accès refusé")
+    if user["role"] == "animateur":
+        session_date = session_date or access_status(stage)["jour"]
+        require_formateur_access(user, stage, session_date)
     session_date = session_date or _stage_days(stage)[0]
     periode = periode or "journee"
     inscrits = await db.inscriptions.find({"formation_id": stage["formation_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)

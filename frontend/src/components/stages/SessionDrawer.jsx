@@ -3,11 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Calendar, MapPin, Users, PencilSimple, Trash, Lock, LockOpen, FolderOpen, Copy } from "@phosphor-icons/react";
+import { Calendar, MapPin, Users, PencilSimple, Trash, Lock, LockOpen, FolderOpen, Copy, PenNib, ChalkboardTeacher } from "@phosphor-icons/react";
 import FillGauge from "./FillGauge";
+import EmargementPanel from "./EmargementPanel";
 import { extractCreneau, placesRestantes, fillRatio, displayStatus } from "./stageHelpers";
 
 const STATUT_LABELS = { planifie: "Planifié", en_cours: "En cours", complet: "Complet", termine: "Terminé", annule: "Annulé" };
@@ -45,6 +47,27 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
   const [roster, setRoster] = useState([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [acces, setAcces] = useState(null);
+  const [savingAcces, setSavingAcces] = useState(false);
+  const [emargementOpen, setEmargementOpen] = useState(false);
+
+  useEffect(() => { setAcces(stage?.acces_formateur || null); }, [stage]);
+
+  // Accès formateur (backend core/session_access.py) : l'équipe ouvre ou
+  // ferme la session pour aujourd'hui ; sinon ouverture à 9h30, fermeture à
+  // 16h45 (heure de Paris).
+  const setFormateurAccess = async (action) => {
+    setSavingAcces(true);
+    try {
+      const { data } = await api.post(`/stages/${stage.id}/acces`, { action });
+      setAcces(data);
+      toast.success(action === "ouvrir" ? "Session ouverte aux formateurs" : "Session fermée aux formateurs");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSavingAcces(false);
+    }
+  };
 
   useEffect(() => {
     if (!stage) return;
@@ -90,7 +113,37 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
             <p className="text-xs text-gray-600">Formateur(s) : {animNames.join(", ")}</p>
           )}
 
+          {acces && (
+            <div className={`border rounded-md p-3 space-y-2 ${acces.ouvert ? "border-[#0B7238] bg-[#0B7238]/5" : "border-gray-200 bg-gray-50"}`} data-testid="stage-drawer-acces">
+              <p className="flex items-center gap-1.5 text-xs font-semibold">
+                <ChalkboardTeacher size={14} /> Accès formateur :
+                <span className={acces.ouvert ? "text-[#0B7238]" : "text-gray-600"}>{acces.ouvert ? "ouvert" : "fermé"}</span>
+              </p>
+              <p className="text-xs text-gray-500">
+                {acces.message}{acces.par ? ` (par ${acces.par})` : ""}
+              </p>
+              {["en_attente", "ouverte_auto", "ouverte_agent", "fermee_agent"].includes(acces.raison) && (
+                <div className="flex gap-2">
+                  {!acces.ouvert ? (
+                    <Button size="sm" onClick={() => setFormateurAccess("ouvrir")} disabled={savingAcces}
+                      className="bg-[#0B7238] hover:bg-[#0a5e2e] text-white" data-testid="stage-drawer-acces-ouvrir">
+                      <LockOpen size={13} className="mr-1" /> Ouvrir la session
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => setFormateurAccess("fermer")} disabled={savingAcces}
+                      data-testid="stage-drawer-acces-fermer">
+                      <Lock size={13} className="mr-1" /> Fermer la session
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100">
+            <Button size="sm" variant="outline" onClick={() => setEmargementOpen(true)} data-testid="stage-drawer-emargement">
+              <PenNib size={13} className="mr-1" /> Émargement
+            </Button>
             <Button size="sm" variant="outline" onClick={() => onEdit(s)} data-testid="stage-drawer-edit">
               <PencilSimple size={13} className="mr-1" /> Modifier
             </Button>
@@ -162,6 +215,16 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
           </div>
         </div>
       </SheetContent>
+
+      <Dialog open={emargementOpen} onOpenChange={setEmargementOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="stage-emargement-dialog">
+          <DialogHeader><DialogTitle>Émargement — {s.formation_titre}</DialogTitle></DialogHeader>
+          <p className="text-xs text-gray-500">
+            Faire émarger un apprenant sur cet écran reste possible à tout moment (régularisation). La demande de signature à distance n'est possible que pendant que la session est ouverte : une fois fermée, il est trop tard pour que l'apprenant signe.
+          </p>
+          {emargementOpen && <EmargementPanel stage={s} today={acces?.jour} />}
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }
