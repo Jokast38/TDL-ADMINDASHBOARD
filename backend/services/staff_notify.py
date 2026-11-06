@@ -14,6 +14,7 @@ from services.email import send_email
 from services.email_template import render_branded_email, render_staff_notification
 from services.push import send_push_to_users
 from services.whatsapp import send_whatsapp
+from services.appointment_notify import format_rdv
 from core import whatsapp_templates as wa
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
@@ -1226,7 +1227,7 @@ async def send_call_appointment_reminders() -> int:
             continue
         body = (
             f"<p>Bonjour {commercial.get('name', '')},</p>"
-            f"<p>Rappel : appel programmé à <b>{appt.get('scheduled_at', '')}</b> avec "
+            f"<p>Rappel : appel programmé <b>{format_rdv(appt.get('scheduled_at'))}</b> avec "
             f"<b>{appt.get('lead_name', '')}</b>"
             f"{' (' + appt['lead_phone'] + ')' if appt.get('lead_phone') else ''}.</p>"
             f"{'<p>Intérêt : ' + appt['lead_interest'] + '</p>' if appt.get('lead_interest') else ''}"
@@ -1234,7 +1235,7 @@ async def send_call_appointment_reminders() -> int:
         )
         log = await send_email(commercial["email"], "📞 Rappel — appel programmé bientôt", _staff_email(body, "Voir mes appels", "/admin/marketing"))
         if log["status"] in ("sent", "mocked"):
-            await send_push_to_users([commercial["id"]], "Appel programmé", f"Avec {appt.get('lead_name', '')} à {appt.get('scheduled_at', '')}", "/admin/marketing")
+            await send_push_to_users([commercial["id"]], "Appel programmé", f"Avec {appt.get('lead_name', '')} — {format_rdv(appt.get('scheduled_at'))}", "/admin/marketing")
             await db.call_appointments.update_one({"id": appt["id"]}, {"$set": {"reminder_sent": True}})
             notified += 1
     return notified

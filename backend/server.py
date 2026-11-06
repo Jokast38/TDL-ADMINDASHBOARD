@@ -38,6 +38,7 @@ from services.staff_notify import (
     send_emargement_reminders,
     send_understaffed_session_alerts,
 )
+from services.appointment_notify import send_prospect_appointment_reminders
 from services.candidate_automation import (
     send_convocations, send_auto_attestations, send_satisfaction_chaud, send_satisfaction_froid,
     send_review_requests, send_session_eve_reminders,
@@ -488,6 +489,10 @@ async def _call_appointment_reminders_loop():
             notified = await send_call_appointment_reminders()
             if notified:
                 log.info(f"Rappels d'appels programmés : {notified} notification(s) envoyée(s)")
+            # Rappel la veille au prospect (services/appointment_notify.py).
+            notified = await send_prospect_appointment_reminders()
+            if notified:
+                log.info(f"Rappels de RDV aux prospects : {notified} envoyé(s)")
         except Exception as e:
             log.warning(f"Rappels d'appels programmés : erreur — {e}")
         await asyncio.sleep(15 * 60)

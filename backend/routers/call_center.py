@@ -21,6 +21,7 @@ from core.utils import now_iso
 from models.commercial_call import CallLogIn, CallScriptIn, CallScriptUpdate
 from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate
 from services.activity import log_action
+from services.appointment_notify import confirm_to_prospect
 
 router = APIRouter(prefix="/call-center", tags=["call-center"])
 
@@ -314,6 +315,9 @@ async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depen
         "lead_name": lead.get("name"), "scheduled_at": payload.scheduled_at, "commercial_name": commercial.get("name", ""),
     })
     appt.pop("_id", None)
+    # Confirmation au prospect (email + SMS) — demande du 2026-11-06.
+    await confirm_to_prospect(appt)
+    appt = await db.call_appointments.find_one({"id": appt["id"]}, {"_id": 0}) or appt
     return appt
 
 
@@ -368,7 +372,14 @@ async def update_call_appointment(
         updates["reminder_sent"] = False
     updates["updated_at"] = now_iso()
     await db.call_appointments.update_one({"id": appointment_id}, {"$set": updates})
-    return await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+    appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+    # Déplacé (date, type ou lieu) : le prospect est prévenu et le rappel de
+    # la veille repart pour la nouvelle date.
+    changed = any(k in updates and updates[k] != existing.get(k) for k in ("scheduled_at", "kind", "location"))
+    if appt and changed:
+        await confirm_to_prospect(appt, "modification")
+        appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+    return appt
 
 
 @router.delete("/appointments/{appointment_id}")
