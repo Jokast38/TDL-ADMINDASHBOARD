@@ -760,6 +760,8 @@ function CosmosiaTab() {
     }
   };
 
+  const onNoteEdited = (data) => setItems((prev) => prev.map((l) => (l.id === data.id ? data : l)));
+
   const updateNotes = async (id, notes) => {
     try {
       const { data } = await api.put(`/leads/${id}`, { notes });
@@ -954,7 +956,7 @@ function CosmosiaTab() {
                     </span>
                   </td>
                   <td className="py-2.5 px-4 max-w-[220px]">
-                    <MetaLeadNotesCell lead={l} onSave={updateNotes} />
+                    <MetaLeadNotesCell lead={l} onSave={updateNotes} onEdited={onNoteEdited} />
                   </td>
                   <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
                     {l.created_at ? formatDateFR(l.created_at) : "—"}
@@ -1131,6 +1133,8 @@ function MetaEventsTab() {
       toast.error(err.response?.data?.detail || "Erreur");
     }
   };
+
+  const onNoteEdited = (data) => setItems((prev) => prev.map((l) => (l.id === data.id ? data : l)));
 
   const updateNotes = async (id, notes) => {
     try {
@@ -1335,7 +1339,7 @@ function MetaEventsTab() {
                     </span>
                   </td>
                   <td className="py-2.5 px-4 max-w-[220px]">
-                    <MetaLeadNotesCell lead={l} onSave={updateNotes} />
+                    <MetaLeadNotesCell lead={l} onSave={updateNotes} onEdited={onNoteEdited} />
                   </td>
                   <td className="py-2.5 px-4 text-right">
                     <div className="flex justify-end items-center gap-1">
@@ -1409,8 +1413,23 @@ function MetaEventsTab() {
 // passe pas à côté d'une note laissée par un collègue. Survol -> tooltip
 // avec le texte complet (les notes longues sont tronquées dans la cellule).
 // Clic -> popover d'édition avec Textarea + bouton Enregistrer.
-function MetaLeadNotesCell({ lead, onSave }) {
+// Seul l'auteur corrige sa note (les anciennes n'ont que son nom), ou un
+// admin — même règle que routers/meta_lead_import.py::can_edit_note.
+function canEditNote(user, note) {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (note.by_id) return note.by_id === user.id;
+  return !!note.by_name && note.by_name === user.name;
+}
+
+function MetaLeadNotesCell({ lead, onSave, onEdited }) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  // Correction d'une note de l'historique (demande du 2026-11-06) : elle
+  // prend la date de la correction et redevient la note affichée.
+  const [editingAt, setEditingAt] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
   // Vide par défaut (et non préchargé avec lead.notes) : ce champ sert à
   // SAISIR une nouvelle note, qui s'ajoute à l'historique ci-dessous sans
   // écraser les précédentes — avant, le texte existant était préchargé ici,
@@ -1423,6 +1442,21 @@ function MetaLeadNotesCell({ lead, onSave }) {
   const handleOpenChange = (v) => {
     setOpen(v);
     if (v) setDraft("");
+    setEditingAt(null);
+  };
+
+  const saveEdit = async () => {
+    setEditSaving(true);
+    try {
+      const { data } = await api.patch(`/meta-lead-import/${lead.id}/notes`, { at: editingAt, text: editText });
+      onEdited?.(data);
+      setEditingAt(null);
+      toast.success("Note modifiée");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Erreur");
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const save = async () => {
@@ -1497,11 +1531,38 @@ function MetaLeadNotesCell({ lead, onSave }) {
             <div className="mt-3 pt-2 border-t border-gray-100 max-h-40 overflow-y-auto space-y-2">
               <p className="text-[10px] font-medium text-gray-400 uppercase">Historique</p>
               {[...lead.notes_history].reverse().map((h, idx) => (
-                <div key={idx} className="text-xs bg-gray-50 rounded px-2 py-1.5">
-                  <p className="whitespace-pre-wrap">{h.text}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">
-                    {formatDateTimeFR(h.at)}{h.by_name ? ` — ${h.by_name}` : ""}
-                  </p>
+                <div key={h.at || idx} className="text-xs bg-gray-50 rounded px-2 py-1.5">
+                  {editingAt === h.at ? (
+                    <>
+                      <Textarea rows={3} value={editText} onChange={(e) => setEditText(e.target.value)} className="text-xs"
+                        data-testid={`meta-lead-note-edit-textarea-${lead.id}`} />
+                      <div className="flex justify-end gap-2 mt-1.5">
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingAt(null)}>Annuler</Button>
+                        <Button size="sm" className="h-7 text-xs bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
+                          onClick={saveEdit} disabled={editSaving || !editText.trim() || editText.trim() === h.text}
+                          data-testid={`meta-lead-note-edit-save-${lead.id}`}>
+                          {editSaving ? "..." : "Enregistrer"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-start gap-1.5">
+                      <div className="flex-1 min-w-0">
+                        <p className="whitespace-pre-wrap">{h.text}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {formatDateTimeFR(h.at)}{h.by_name ? ` — ${h.by_name}` : ""}{h.modifiee ? " · modifiée" : ""}
+                        </p>
+                      </div>
+                      {h.at && canEditNote(user, h) && (
+                        <button type="button" title="Modifier cette note"
+                          className="shrink-0 text-gray-400 hover:text-gray-700 p-0.5"
+                          onClick={() => { setEditingAt(h.at); setEditText(h.text || ""); }}
+                          data-testid={`meta-lead-note-edit-${lead.id}`}>
+                          <PencilSimple size={13} />
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

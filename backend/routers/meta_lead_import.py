@@ -27,7 +27,7 @@ from core.security import require_role
 from core.config import ROLES_LEADS, ROLES_DOSSIERS_MGMT
 from core.utils import now_iso, format_date_long_fr
 from core.meta_ville import meta_ville, meta_ville_of
-from models.meta_lead_import import MetaLeadUpdate, MetaLeadEnrollIn
+from models.meta_lead_import import MetaLeadUpdate, MetaLeadEnrollIn, LeadNoteEditIn
 from models.inscription import InscriptionIn
 from routers.inscriptions import create_inscription
 from services.email import send_email
@@ -462,7 +462,7 @@ async def update_meta_lead(lead_id: str, payload: MetaLeadUpdate, user: dict = D
         # Historique des notes — voir routers/leads.py::update_lead pour la
         # même logique côté Prospects/Cosmosia.
         mongo_update["$push"] = {"notes_history": {
-            "$each": [{"text": updates["notes"], "at": updates["notes_updated_at"], "by_name": user.get("name", "")}],
+            "$each": [{"text": updates["notes"], "at": updates["notes_updated_at"], "by_id": user["id"], "by_name": user.get("name", "")}],
             "$slice": -20,
         }}
     if collection_name == "leads" and "qualification" in updates:
@@ -488,6 +488,53 @@ async def update_meta_lead(lead_id: str, payload: MetaLeadUpdate, user: dict = D
                 f"{doc.get('name') or 'Un prospect'} vient d'être marqué Inscrit — bravo !", "/admin/marketing",
             )
     doc = await collection.find_one({"id": lead_id}, {"_id": 0})
+    if collection_name == "leads" and doc:
+        doc["qualification"] = _statut_to_qualification(doc)
+    return doc
+
+
+def can_edit_note(user: dict, note: dict) -> bool:
+    """Seul l'auteur corrige sa note (les anciennes notes n'ont que le nom de
+    l'auteur), ou un administrateur."""
+    if user.get("role") == "admin":
+        return True
+    if note.get("by_id"):
+        return note["by_id"] == user["id"]
+    return bool(note.get("by_name")) and note.get("by_name") == user.get("name")
+
+
+@router.patch("/{lead_id}/notes")
+async def edit_lead_note(lead_id: str, payload: LeadNoteEditIn, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Corrige une note de l'historique (demande du 2026-11-06 : une note
+    saisie deux fois ou avec une faute). La note prend la date de la
+    correction et passe en tête de l'historique ; elle devient donc aussi la
+    note affichée sur la ligne du prospect. Pas de relance comptée : ce
+    n'est pas un nouveau contact."""
+    collection_name, doc = await _get_lead_or_meta(lead_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Lead introuvable")
+    text = (payload.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="La note ne peut pas être vide")
+    history = list(doc.get("notes_history") or [])
+    idx = next((i for i, h in enumerate(history) if h.get("at") == payload.at), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Note introuvable — rechargez la page")
+    old = history.pop(idx)
+    if not can_edit_note(user, old):
+        raise HTTPException(status_code=403, detail="Seul l'auteur de la note (ou un administrateur) peut la modifier")
+    at = now_iso()
+    history.append({**old, "text": text, "at": at, "modifiee": True})
+    await db[collection_name].update_one({"id": doc["id"]}, {"$set": {
+        "notes_history": history, "notes": text, "notes_updated_at": at,
+        "notes_updated_by": user["id"], "notes_updated_by_name": user.get("name", ""), "updated_at": at,
+    }})
+    if collection_name == "leads":
+        from routers.leads import _leads_cache_clear
+        _leads_cache_clear()
+    await log_action(user, "lead_note_modifiee", "meta_lead" if collection_name == "meta_lead_imports" else "lead", doc["id"],
+                     {"name": doc.get("name"), "avant": old.get("text"), "apres": text})
+    doc = await db[collection_name].find_one({"id": doc["id"]}, {"_id": 0})
     if collection_name == "leads" and doc:
         doc["qualification"] = _statut_to_qualification(doc)
     return doc

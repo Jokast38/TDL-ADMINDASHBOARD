@@ -871,7 +871,7 @@ async def update_lead(lid: str, payload: LeadUpdate, user: dict = Depends(requir
         # perdre les précédentes (contrairement à `notes`, simple champ texte
         # écrasé à chaque sauvegarde). $slice garde les 20 plus récentes.
         mongo_update["$push"] = {"notes_history": {
-            "$each": [{"text": update["notes"], "at": update["notes_updated_at"], "by_name": user.get("name", "")}],
+            "$each": [{"text": update["notes"], "at": update["notes_updated_at"], "by_id": user["id"], "by_name": user.get("name", "")}],
             "$slice": -20,
         }}
     await db.leads.update_one({"id": lid}, mongo_update)
