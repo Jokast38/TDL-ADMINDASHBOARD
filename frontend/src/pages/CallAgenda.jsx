@@ -106,8 +106,9 @@ export default function CallAgenda() {
     if (!createOpen || !leadQuery.trim()) { setLeadResults([]); return; }
     setSearchingLead(true);
     const t = setTimeout(() => {
-      api.get("/leads", { params: { q: leadQuery.trim(), page: 1, page_size: 8 } })
-        .then((r) => setLeadResults(r.data.items || r.data || []))
+      // Inscrits/apprenants ET prospects (voir BookAppointmentDialog).
+      api.get("/call-center/people", { params: { q: leadQuery.trim() } })
+        .then((r) => setLeadResults(r.data || []))
         .catch(() => setLeadResults([]))
         .finally(() => setSearchingLead(false));
     }, 300);
@@ -441,7 +442,7 @@ export default function CallAgenda() {
                 <div className="relative mt-1">
                   <MagnifyingGlass size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
                   <Input
-                    className="pl-8" placeholder="Rechercher un lead (nom, email, téléphone)..."
+                    className="pl-8" placeholder="Rechercher un prospect, un inscrit ou un apprenant..."
                     value={leadQuery} onChange={(e) => setLeadQuery(e.target.value)}
                     data-testid="call-agenda-lead-search"
                   />
@@ -450,7 +451,7 @@ export default function CallAgenda() {
                       {searchingLead ? (
                         <p className="text-xs text-gray-400 px-3 py-2">Recherche...</p>
                       ) : leadResults.length === 0 ? (
-                        <p className="text-xs text-gray-400 px-3 py-2">Aucun lead trouvé</p>
+                        <p className="text-xs text-gray-400 px-3 py-2">Aucune personne trouvée</p>
                       ) : leadResults.map((l) => (
                         <button
                           key={l.id} type="button"
@@ -458,7 +459,7 @@ export default function CallAgenda() {
                           onClick={() => { setSelectedLead(l); setLeadQuery(""); setLeadResults([]); }}
                         >
                           <p className="font-medium">{l.name || l.full_name}</p>
-                          <p className="text-xs text-gray-400">{l.email || l.phone}</p>
+                          <p className="text-xs text-gray-400">{l.email || l.phone}{l.type && l.type !== "prospect" ? ` · ${l.type === "inscrit" ? "Inscrit" : "Apprenant"}${l.formation ? ` — ${l.formation}` : ""}` : ""}</p>
                         </button>
                       ))}
                     </div>

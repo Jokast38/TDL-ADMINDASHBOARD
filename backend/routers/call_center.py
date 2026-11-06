@@ -8,6 +8,7 @@ celle déjà en place sur la page Prospects (routers/leads.py), via
 assigned_categories sur le profil employé — on réutilise exactement la même
 règle de scope ici pour que la file d'appel corresponde à ce que l'agent
 voit déjà dans Prospects."""
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional
@@ -21,7 +22,7 @@ from core.utils import now_iso
 from models.commercial_call import CallLogIn, CallScriptIn, CallScriptUpdate
 from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate
 from services.activity import log_action
-from services.appointment_notify import confirm_to_prospect
+from services.appointment_notify import cancel_to_prospect, confirm_to_prospect
 
 router = APIRouter(prefix="/call-center", tags=["call-center"])
 
@@ -278,6 +279,64 @@ async def list_call_appointments(
     return {"items": items, "status_options": APPOINTMENT_STATUS_LABELS}
 
 
+async def _student_as_contact(student_id: str) -> Optional[dict]:
+    """Un apprenant (compte `etudiant`) présenté comme un contact de RDV :
+    nom, email, téléphone (celui du compte, sinon de sa dernière
+    inscription) et formation de sa dernière inscription."""
+    student = await db.users.find_one({"id": student_id, "role": "etudiant"}, {"_id": 0, "password_hash": 0})
+    if not student:
+        return None
+    insc = await db.inscriptions.find(
+        {"student_id": student_id}, {"_id": 0, "student_phone": 1, "formation_title": 1, "status": 1},
+    ).sort("created_at", -1).limit(1).to_list(1)
+    insc = insc[0] if insc else {}
+    return {
+        "id": student["id"], "name": student.get("name"), "email": student.get("email"),
+        "phone": student.get("phone") or insc.get("student_phone"),
+        "interest": insc.get("formation_title"), "formation": insc.get("formation_title"),
+        "type": "inscrit" if insc else "apprenant",
+    }
+
+
+@router.get("/people")
+async def search_people(q: str = "", user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Recherche d'une personne pour un RDV (Agenda) : inscrits/apprenants
+    ET prospects — avant, seuls les prospects étaient proposés."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+    rx = {"$regex": re.escape(q), "$options": "i"}
+    proj = {"_id": 0, "id": 1, "name": 1, "email": 1, "phone": 1, "interest": 1}
+    results, seen_emails = [], set()
+
+    students = await db.users.find(
+        {"role": "etudiant", "$or": [{"name": rx}, {"email": rx}, {"phone": rx}]}, {"_id": 0, "id": 1},
+    ).limit(8).to_list(8)
+    ids = [s["id"] for s in students]
+    # Téléphone parfois saisi seulement sur l'inscription : on cherche aussi là.
+    for i in await db.inscriptions.find(
+        {"$or": [{"student_name": rx}, {"student_email": rx}, {"student_phone": rx}]}, {"_id": 0, "student_id": 1},
+    ).limit(8).to_list(8):
+        if i.get("student_id") and i["student_id"] not in ids:
+            ids.append(i["student_id"])
+    for sid in ids[:8]:
+        c = await _student_as_contact(sid)
+        if c:
+            results.append(c)
+            if c.get("email"):
+                seen_emails.add(c["email"].lower())
+
+    for coll in ("leads", "meta_lead_imports"):
+        for l in await db[coll].find({"$or": [{"name": rx}, {"email": rx}, {"phone": rx}]}, proj).limit(8).to_list(8):
+            email = (l.get("email") or "").lower()
+            if email and email in seen_emails:
+                continue  # déjà proposé (inscrit, ou même prospect dans l'autre liste)
+            if email:
+                seen_emails.add(email)
+            results.append({**l, "type": "prospect"})
+    return results[:15]
+
+
 @router.post("/appointments")
 async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depends(require_role(*ROLES_LEADS))):
     """Création manuelle — contrairement aux créneaux générés en masse par
@@ -291,8 +350,14 @@ async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depen
         # Un rendez-vous pris depuis la page Prospects Meta doit fonctionner
         # exactement comme depuis la page Prospects, donc on y cherche aussi.
         lead = await db.meta_lead_imports.find_one({"id": payload.lead_id}, {"_id": 0})
+    person_type = "prospect"
     if not lead:
-        raise HTTPException(status_code=404, detail="Lead introuvable")
+        # Inscrit ou apprenant (compte étudiant) — demande du 2026-11-06 :
+        # l'agenda doit aussi permettre un RDV avec une personne déjà inscrite.
+        lead = await _student_as_contact(payload.lead_id)
+        person_type = (lead or {}).get("type") or person_type
+    if not lead:
+        raise HTTPException(status_code=404, detail="Personne introuvable")
 
     commercial_id = payload.commercial_id or user["id"]
     commercial = await db.users.find_one({"id": commercial_id}, {"_id": 0, "id": 1, "name": 1, "email": 1})
@@ -305,7 +370,7 @@ async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depen
         "lead_interest": lead.get("interest"),
         "commercial_id": commercial_id, "commercial_name": commercial.get("name", ""),
         "scheduled_at": payload.scheduled_at, "notes": payload.notes or "",
-        "status": "planifie", "reminder_sent": False, "source": "manuel",
+        "status": "planifie", "reminder_sent": False, "source": "manuel", "person_type": person_type,
         "kind": payload.kind or "appel", "location": payload.location,
         "formation_id": payload.formation_id, "formation_titre": payload.formation_titre,
         "created_by": user["id"], "created_at": now_iso(), "updated_at": now_iso(),
@@ -376,7 +441,9 @@ async def update_call_appointment(
     # Déplacé (date, type ou lieu) : le prospect est prévenu et le rappel de
     # la veille repart pour la nouvelle date.
     changed = any(k in updates and updates[k] != existing.get(k) for k in ("scheduled_at", "kind", "location"))
-    if appt and changed:
+    if appt and updates.get("status") == "annule" and existing.get("status") == "planifie":
+        await cancel_to_prospect(appt)
+    elif appt and changed:
         await confirm_to_prospect(appt, "modification")
         appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
     return appt

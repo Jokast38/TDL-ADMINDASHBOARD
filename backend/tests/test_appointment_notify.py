@@ -62,3 +62,22 @@ def test_messages_envoyes_au_prospect(monkeypatch):
     physique = {**APPT, "kind": "physique", "location": "TDL Creil", "lead_email": None}
     asyncio.run(an.notify_prospect(physique, "rappel"))
     assert len(sent) == 1 and "Lieu : TDL Creil" in sent[0][2] and len(sent[0][2]) <= 160
+
+
+def test_annulation_previent_le_prospect(monkeypatch):
+    sent = []
+
+    async def fake_email(to, subject, html):
+        sent.append(("email", subject, html))
+        return {"status": "sent"}
+
+    async def fake_sms(to, text, extra=None):
+        sent.append(("sms", text))
+        return {"status": "sent"}
+
+    monkeypatch.setattr(an, "send_email", fake_email)
+    monkeypatch.setattr(an, "send_sms", fake_sms)
+    asyncio.run(an.notify_prospect(APPT, "annulation"))
+    assert sent[0][1] == "❌ Votre rendez-vous du lundi 9 novembre à 10h00 est annulé"
+    assert "Un empêchement" not in sent[0][2]
+    assert sent[1][1] == "TDL Formation : RDV annulé du lun. 09/11 à 10h00. Pour un nouveau RDV : 01 80 90 72 49"

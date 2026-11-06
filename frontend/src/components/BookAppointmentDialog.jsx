@@ -28,6 +28,18 @@ function toISO(d) {
  *   (généré par un import Cosmosia), on propose de le confirmer directement
  *   plutôt que d'en recréer un nouveau.
  */
+const PERSON_TYPES = {
+  inscrit: ["Inscrit", "bg-green-50 text-green-700 border-green-200"],
+  apprenant: ["Apprenant", "bg-blue-50 text-blue-700 border-blue-200"],
+  prospect: ["Prospect", "bg-gray-50 text-gray-500 border-gray-200"],
+};
+
+function PersonBadge({ type }) {
+  const t = PERSON_TYPES[type];
+  if (!t) return null;
+  return <span className={`ml-1 text-[10px] font-normal border rounded px-1.5 py-0.5 ${t[1]}`}>{t[0]}</span>;
+}
+
 export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedLead, onCreated }) {
   const { user } = useAuth();
   // L'attribution du suivi (qui s'occupe de ce prospect) se fait ici, au
@@ -90,8 +102,10 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
     if (fixedLead || !leadQuery.trim()) { setLeadResults([]); return; }
     setSearchingLead(true);
     const t = setTimeout(() => {
-      api.get("/leads", { params: { q: leadQuery.trim(), page: 1, page_size: 8 } })
-        .then((r) => setLeadResults(r.data.items || r.data || []))
+      // Inscrits/apprenants ET prospects (demande du 2026-11-06 : avant,
+      // seuls les prospects étaient proposés).
+      api.get("/call-center/people", { params: { q: leadQuery.trim() } })
+        .then((r) => setLeadResults(r.data || []))
         .catch(() => setLeadResults([]))
         .finally(() => setSearchingLead(false));
     }, 300);
@@ -147,12 +161,12 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
         <div className="space-y-3 mt-2">
           {!fixedLead && (
             <div>
-              <label className="text-sm font-medium">Lead</label>
+              <label className="text-sm font-medium">Personne</label>
               {lead ? (
                 <div className="flex items-center justify-between border border-gray-200 rounded-md px-3 py-2 mt-1">
                   <div className="text-sm">
-                    <p className="font-medium">{lead.name || lead.full_name}</p>
-                    <p className="text-xs text-gray-400">{lead.email || lead.phone}</p>
+                    <p className="font-medium">{lead.name || lead.full_name} <PersonBadge type={lead.type} /></p>
+                    <p className="text-xs text-gray-400">{lead.email || lead.phone}{lead.formation ? ` · ${lead.formation}` : ""}</p>
                   </div>
                   <button className="text-xs text-gray-400 hover:text-red-600 underline" onClick={() => setLead(null)}>Changer</button>
                 </div>
@@ -160,7 +174,7 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
                 <div className="relative mt-1">
                   <MagnifyingGlass size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
                   <Input
-                    className="pl-8" placeholder="Rechercher un lead (nom, email, téléphone)..."
+                    className="pl-8" placeholder="Rechercher un prospect, un inscrit ou un apprenant (nom, email, téléphone)..."
                     value={leadQuery} onChange={(e) => setLeadQuery(e.target.value)}
                     data-testid="book-appointment-lead-search"
                   />
@@ -169,15 +183,15 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
                       {searchingLead ? (
                         <p className="text-xs text-gray-400 px-3 py-2">Recherche...</p>
                       ) : leadResults.length === 0 ? (
-                        <p className="text-xs text-gray-400 px-3 py-2">Aucun lead trouvé</p>
+                        <p className="text-xs text-gray-400 px-3 py-2">{leadQuery.trim().length < 2 ? "Tapez au moins 2 caractères" : "Aucune personne trouvée"}</p>
                       ) : leadResults.map((l) => (
                         <button
                           key={l.id} type="button"
                           className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
                           onClick={() => { setLead(l); setLeadQuery(""); setLeadResults([]); }}
                         >
-                          <p className="font-medium">{l.name || l.full_name}</p>
-                          <p className="text-xs text-gray-400">{l.email || l.phone}</p>
+                          <p className="font-medium">{l.name || l.full_name} <PersonBadge type={l.type} /></p>
+                          <p className="text-xs text-gray-400">{l.email || l.phone}{l.formation ? ` · ${l.formation}` : ""}</p>
                         </button>
                       ))}
                     </div>

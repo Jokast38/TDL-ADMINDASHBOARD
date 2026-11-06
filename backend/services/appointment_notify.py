@@ -81,7 +81,12 @@ async def notify_prospect(appt: dict, kind: str = "confirmation") -> bool:
     formation = appt.get("formation_titre")
     sujet_formation = f" — {formation}" if formation else ""
 
-    if kind == "rappel":
+    if kind == "annulation":
+        sujet = f"❌ Votre rendez-vous du {quand} est annulé"
+        intro = f"Votre rendez-vous avec TDL Formation prévu le <b>{quand}</b>{sujet_formation} est annulé."
+        sms_debut = "RDV annulé du"
+        phrase_lieu, sms_lieu = "Pour en fixer un nouveau, appelez-nous ou répondez à cet email.", "Pour un nouveau RDV"
+    elif kind == "rappel":
         sujet = f"⏰ Rappel : votre rendez-vous demain à {dt.hour}h{dt.minute:02d}"
         intro = f"Petit rappel : vous avez rendez-vous avec TDL Formation <b>demain, {quand}</b>{sujet_formation}."
         sms_debut = "Rappel RDV demain"
@@ -96,7 +101,7 @@ async def notify_prospect(appt: dict, kind: str = "confirmation") -> bool:
 
     message = (
         f"Bonjour {nom},\n\n{intro}\n\n{phrase_lieu}\n\n"
-        f"Un empêchement ? Prévenez-nous au {TDL_PHONE} pour le déplacer.\n\n"
+        + ("" if kind == "annulation" else f"Un empêchement ? Prévenez-nous au {TDL_PHONE} pour le déplacer.\n\n") +
         "À bientôt,\nL'équipe TDL Formation"
     )
     sent = False
@@ -110,7 +115,8 @@ async def notify_prospect(appt: dict, kind: str = "confirmation") -> bool:
     if appt.get("lead_phone"):
         quand_court = "" if kind == "rappel" else f" {_format_court(dt)}"
         heure = f" à {dt.hour}h{dt.minute:02d}" if kind == "rappel" else ""
-        texte = f"TDL Formation : {sms_debut}{quand_court}{heure}. {sms_lieu}. Empechement : {TDL_PHONE}"
+        fin = f"{sms_lieu} : {TDL_PHONE}" if kind == "annulation" else f"{sms_lieu}. Empechement : {TDL_PHONE}"
+        texte = f"TDL Formation : {sms_debut}{quand_court}{heure}. {fin}"
         try:
             log = await send_sms(appt["lead_phone"], texte, extra=extra)
             sent = sent or log.get("status") == "sent"
@@ -132,6 +138,16 @@ async def confirm_to_prospect(appt: dict, kind: str = "confirmation") -> None:
         }})
     except Exception as e:
         logger.warning(f"RDV prospect : confirmation impossible — {e}")
+
+
+async def cancel_to_prospect(appt: dict) -> None:
+    """Annulation d'un RDV planifié : le prospect est prévenu (demande du
+    2026-11-06). Ne lève jamais."""
+    try:
+        await notify_prospect(appt, "annulation")
+        await db.call_appointments.update_one({"id": appt["id"]}, {"$set": {"prospect_cancellation_at": now_iso()}})
+    except Exception as e:
+        logger.warning(f"RDV prospect : annulation non envoyée — {e}")
 
 
 def reminder_due(appt: dict, now: Optional[datetime] = None) -> bool:
