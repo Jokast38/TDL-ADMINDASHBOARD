@@ -152,7 +152,7 @@ async def send_convocation_whatsapp(stage: dict, insc: dict) -> dict:
         insc.get("student_phone"), wa.CONVOCATION,
         [insc.get("student_name"), stage.get("formation_titre"), format_date_long_fr(stage.get("date_debut", "")),
          format_date_long_fr(stage.get("date_fin", "")), horaires, _lieu(stage)],
-        sms_text=convocation_sms(stage, insc), extra={"inscription_id": insc["id"]},
+        sms_text=convocation_sms(stage, insc), extra={"inscription_id": insc["id"]}, sms_category="convocation",
     )
 
 
@@ -177,6 +177,17 @@ async def send_convocations() -> int:
             await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"convocation_sent_at": now_iso()}})
             count += 1
     return count
+
+
+def rappel_veille_sms(stage: dict) -> str:
+    """SMS de secours du rappel de la veille (si WhatsApp ne part pas)."""
+    debut = stage_hours(stage)[0]
+    if is_recup(stage):
+        quand = f"à {_hhmm_to_h(debut)} PRÉCISES (arrivée dès {_recup_accueil(debut)}, retards non tolérés)"
+    else:
+        quand = f"à {_hhmm_to_h(debut)}"
+    return (f"TDL Formation : rappel, votre formation commence DEMAIN {quand} — {_lieu(stage)}. "
+            "Pièce d'identité" + (" + permis." if is_recup(stage) else "."))
 
 
 async def send_session_eve_reminders() -> int:
@@ -207,11 +218,11 @@ async def send_session_eve_reminders() -> int:
                 )
                 await send_email(insc["student_email"], f"⏰ C'est demain — {stage.get('formation_titre', '')}", render_branded_email(message))
             if insc.get("student_phone"):
-                await send_whatsapp(
+                await send_whatsapp_or_sms(
                     insc["student_phone"], wa.RAPPEL_VEILLE,
                     [insc.get("student_name"), stage.get("formation_titre"), date_debut,
                      f"{heure} précises (arrivée dès {_recup_accueil(stage_hours(stage)[0])}, retards non tolérés)" if recup else heure, _lieu(stage)],
-                    extra={"inscription_id": insc["id"]},
+                    sms_text=rappel_veille_sms(stage), extra={"inscription_id": insc["id"]}, sms_category="rappel_veille",
                 )
             await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"eve_reminder_sent_at": now_iso()}})
             count += 1

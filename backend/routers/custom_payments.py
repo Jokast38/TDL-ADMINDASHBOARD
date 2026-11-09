@@ -98,9 +98,9 @@ async def create_custom_payment(payload: CustomPaymentIn, user: dict = Depends(r
         wa_log = await send_whatsapp_or_sms(
             phone, wa.LIEN_PAIEMENT, [payload.recipient_name, payload.title, f"{payload.price:.2f}", session.url],
             sms_text=f"TDL Formation : voici votre lien de paiement pour {payload.title} ({payload.price:.2f} €) : {session.url}",
-            extra={"lead_id": payload.lead_id, "custom_payment_id": payment_id},
+            extra={"lead_id": payload.lead_id, "custom_payment_id": payment_id}, sms_category="lien_paiement",
         )
-        doc["whatsapp_status"] = wa_log["status"]
+        doc["whatsapp_status" = wa_log["status"]
         await db.custom_payments.update_one({"id": payment_id}, {"$set": {"whatsapp_status": wa_log["status"]}})
 
     doc.pop("_id", None)

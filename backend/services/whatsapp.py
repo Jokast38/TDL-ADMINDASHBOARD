@@ -124,7 +124,7 @@ async def send_whatsapp(to_phone: str, template: str, params: list, button_param
 
 
 async def send_whatsapp_or_sms(to_phone: str, template: str, params: list, sms_text: str = None,
-                               button_param: str = None, extra: dict = None) -> dict:
+                               button_param: str = None, extra: dict = None, sms_category: str = None) -> dict:
     """WhatsApp d'abord ; le SMS (services/sms.py), quand il existait déjà
     pour ce message, ne part que si WhatsApp n'a pas pu être envoyé — sinon
     l'apprenant recevrait le même message trois fois."""
@@ -133,7 +133,7 @@ async def send_whatsapp_or_sms(to_phone: str, template: str, params: list, sms_t
         return {"status": "no_phone"}
     log = await send_whatsapp(to_phone, template, params, button_param, extra)
     if log["status"] != "sent" and log["status"] != "opted_out" and sms_text:
-        await send_sms(to_phone, sms_text, extra=extra)
+        await send_sms(to_phone, sms_text, extra=extra, category=sms_category)
     return log
 
 

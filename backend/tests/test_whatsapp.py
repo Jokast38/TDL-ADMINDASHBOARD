@@ -131,7 +131,7 @@ def test_sms_seulement_si_whatsapp_echoue(env, monkeypatch):
     _fake, _sent = env
     sms = []
 
-    async def _sms(phone, text, extra=None):
+    async def _sms(phone, text, extra=None, category=None):
         sms.append(text)
 
     import services.sms

@@ -8,8 +8,20 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { CreditCard, EnvelopeSimple, Kanban, Plugs, ChartBar, MagnifyingGlass, Robot, Signature, UploadSimple, CheckCircle } from "@phosphor-icons/react";
+import { CreditCard, EnvelopeSimple, Kanban, Plugs, ChartBar, MagnifyingGlass, Robot, Signature, UploadSimple, CheckCircle, ChatText } from "@phosphor-icons/react";
 import { toast } from "sonner";
+
+// Types de SMS activables un par un — mêmes clés et mêmes valeurs par défaut
+// que backend/services/sms.py:SMS_CATEGORIES (budget limité : seuls les liens
+// de paiement et les rappels de session sont actifs par défaut).
+const SMS_CATEGORIES = [
+  { key: "lien_paiement", label: "Liens de paiement", hint: "Lien de paiement personnalisé envoyé au client", def: true },
+  { key: "convocation", label: "Convocation (7 jours avant)", hint: "Date, horaires et lieu de la session", def: true },
+  { key: "rappel_veille", label: "Rappel la veille de la session", hint: "Heure de début et lieu, la veille au soir", def: true },
+  { key: "paiement_recu", label: "Paiement reçu", hint: "Confirmation après paiement (le reçu part déjà par email)", def: false },
+  { key: "rdv_prospect", label: "Rendez-vous prospects", hint: "Confirmation, déplacement, rappel et annulation de RDV", def: false },
+  { key: "documents", label: "Documents manquants", hint: "Demande de documents (doublon de l'email)", def: false },
+];
 
 export default function Settings() {
   const [s, setS] = useState({});
@@ -38,6 +50,7 @@ export default function Settings() {
       <Tabs defaultValue="email">
         <TabsList className="mb-4 flex-wrap" data-testid="settings-tabs">
           <TabsTrigger value="email" data-testid="tab-email"><EnvelopeSimple size={14} className="mr-1" /> Email</TabsTrigger>
+          <TabsTrigger value="sms" data-testid="tab-sms"><ChatText size={14} className="mr-1" /> SMS</TabsTrigger>
           <TabsTrigger value="stripe" data-testid="tab-stripe"><CreditCard size={14} className="mr-1" /> Stripe</TabsTrigger>
           <TabsTrigger value="trello" data-testid="tab-trello"><Kanban size={14} className="mr-1" /> Trello</TabsTrigger>
           <TabsTrigger value="n8n" data-testid="tab-n8n"><Plugs size={14} className="mr-1" /> n8n</TabsTrigger>
@@ -142,6 +155,43 @@ export default function Settings() {
                   />
                 </div>
               )}
+            </div>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="sms">
+          <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+            <h3 className="font-display text-xl font-bold mb-1">SMS (Brevo)</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Les SMS sont facturés par Brevo à l'unité : choisissez quels messages partent aussi par SMS.
+              L'email part toujours, même quand le SMS est désactivé.
+            </p>
+            <div className="space-y-4 max-w-xl">
+              <div className="flex items-center gap-2">
+                <Switch checked={!!s.sms_enabled} onCheckedChange={(v) => update("sms_enabled", v)} data-testid="sms-enabled" />
+                <label className="text-sm font-medium">Envoi de SMS activé</label>
+              </div>
+              <Field label="Nom de l'expéditeur (11 caractères max)" value={s.sms_sender} onChange={(v) => update("sms_sender", v)} testid="sms-sender" placeholder="TDLFORMA" />
+              <div className={`pt-4 border-t border-gray-200 space-y-3 ${s.sms_enabled ? "" : "opacity-50"}`}>
+                <p className="text-sm font-semibold">Messages envoyés par SMS</p>
+                {SMS_CATEGORIES.map((c) => {
+                  const on = s.sms_categories?.[c.key] ?? c.def;
+                  return (
+                    <div key={c.key} className="flex items-start gap-3">
+                      <Switch
+                        checked={on}
+                        disabled={!s.sms_enabled}
+                        onCheckedChange={(v) => update("sms_categories", { ...(s.sms_categories || {}), [c.key]: v })}
+                        data-testid={`sms-cat-${c.key}`}
+                      />
+                      <div>
+                        <p className="text-sm">{c.label}</p>
+                        <p className="text-xs text-gray-500">{c.hint}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </Card>
         </TabsContent>

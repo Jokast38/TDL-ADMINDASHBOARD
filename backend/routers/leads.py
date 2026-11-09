@@ -1055,7 +1055,7 @@ async def request_documents(lid: str, payload: DocumentRequestIn, user: dict = D
         await send_sms(
             lead["phone"],
             f"TDL Formation : merci de nous transmettre ces documents pour finaliser votre dossier : {docs_line}.",
-            extra={"lead_id": lid},
+            extra={"lead_id": lid}, category="documents",
         )
 
     await db.leads.update_one({"id": lid}, {"$set": {

@@ -99,7 +99,7 @@ async def _mark_paid_and_notify(inscription_id: str, amount_paid: float, payment
         await send_sms(
             inscription["student_phone"],
             f"TDL Formation : paiement de {amount_paid:.2f} € reçu pour {inscription.get('formation_title', '')}. Merci !",
-            extra={"inscription_id": inscription_id},
+            extra={"inscription_id": inscription_id}, category="paiement_recu",
         )
     try:
         await notify_inscription_paid(inscription)

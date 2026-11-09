@@ -49,7 +49,7 @@ def test_messages_envoyes_au_prospect(monkeypatch):
         sent.append(("email", to, subject))
         return {"status": "sent"}
 
-    async def fake_sms(to, text, extra=None):
+    async def fake_sms(to, text, extra=None, category=None):
         sent.append(("sms", to, text))
         return {"status": "sent"}
 
@@ -71,7 +71,7 @@ def test_annulation_previent_le_prospect(monkeypatch):
         sent.append(("email", subject, html))
         return {"status": "sent"}
 
-    async def fake_sms(to, text, extra=None):
+    async def fake_sms(to, text, extra=None, category=None):
         sent.append(("sms", text))
         return {"status": "sent"}
 

@@ -118,7 +118,7 @@ async def notify_prospect(appt: dict, kind: str = "confirmation") -> bool:
         fin = f"{sms_lieu} : {TDL_PHONE}" if kind == "annulation" else f"{sms_lieu}. Empechement : {TDL_PHONE}"
         texte = f"TDL Formation : {sms_debut}{quand_court}{heure}. {fin}"
         try:
-            log = await send_sms(appt["lead_phone"], texte, extra=extra)
+            log = await send_sms(appt["lead_phone"], texte, extra=extra, category="rdv_prospect")
             sent = sent or log.get("status") == "sent"
         except Exception as e:
             logger.warning(f"RDV prospect : SMS non envoyé — {e}")

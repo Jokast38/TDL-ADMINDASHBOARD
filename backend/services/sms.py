@@ -14,6 +14,26 @@ logger = logging.getLogger(__name__)
 
 _DIGITS_RE = re.compile(r"[^\d+]")
 
+# Types de SMS activables un par un dans Paramètres → SMS (`sms_categories`).
+# Budget limité (demande du 2026-11-09) : par défaut, seuls les liens de
+# paiement et les rappels de sessions à venir partent ; les autres restent
+# prêts, à réactiver quand le budget le permettra.
+SMS_CATEGORIES = {
+    "lien_paiement": True,       # lien de paiement personnalisé
+    "convocation": True,         # convocation 7 jours avant la session
+    "rappel_veille": True,       # rappel la veille de la session
+    "paiement_recu": False,      # confirmation de paiement reçu
+    "rdv_prospect": False,       # confirmation / rappel / annulation de RDV
+    "documents": False,          # demande de documents manquants
+}
+
+
+def sms_category_enabled(settings: dict, category: str | None) -> bool:
+    if not category:
+        return True
+    chosen = (settings.get("sms_categories") or {}).get(category)
+    return SMS_CATEGORIES.get(category, True) if chosen is None else bool(chosen)
+
 
 def normalize_phone_fr(raw: str) -> str | None:
     """Normalise un numéro français vers le format E.164 (+33...) attendu par
@@ -51,7 +71,7 @@ async def _send_via_brevo_sms(api_key: str, sender: str, to: str, content: str) 
         return f"error: {e}"
 
 
-async def send_sms(to_phone: str, content: str, extra: dict = None) -> dict:
+async def send_sms(to_phone: str, content: str, extra: dict = None, category: str = None) -> dict:
     """Best-effort : n'importe quel appelant peut ignorer le résultat sans
     casser son propre flux (l'email reste le canal principal, le SMS un
     secours), mais le statut est toujours loggé pour diagnostiquer les ratés."""
@@ -61,9 +81,16 @@ async def send_sms(to_phone: str, content: str, extra: dict = None) -> dict:
         "id": log_id, "to": to_phone, "content": content,
         "status": "queued", "created_at": now_iso(), **(extra or {}),
     }
+    if category:
+        log["category"] = category
 
     if OUTBOUND_DISABLED or not s.get("sms_enabled"):
         log["status"] = "disabled"
+        await db.sms_logs.insert_one(log)
+        return log
+
+    if not sms_category_enabled(s, category):
+        log["status"] = "category_disabled"
         await db.sms_logs.insert_one(log)
         return log
 

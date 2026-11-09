@@ -26,6 +26,8 @@ class SettingsIn(BaseModel):
     # sinon brevo_fallback_api_key) — voir services/sms.py.
     sms_enabled: Optional[bool] = None
     sms_sender: Optional[str] = None
+    # Types de SMS activés un par un (voir services/sms.py:SMS_CATEGORIES).
+    sms_categories: Optional[dict] = None
     n8n_webhook_inscription: Optional[str] = None
     n8n_webhook_dossier: Optional[str] = None
     n8n_webhook_payment: Optional[str] = None
