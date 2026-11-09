@@ -54,7 +54,7 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
   useEffect(() => { setAcces(stage?.acces_formateur || null); }, [stage]);
 
   // Accès formateur (backend core/session_access.py) : l'équipe ouvre ou
-  // ferme la session pour aujourd'hui ; sinon ouverture à 9h30, fermeture à
+  // ferme la session pour aujourd'hui ; sinon ouverture à 8h30, fermeture à
   // 16h45 (heure de Paris).
   const setFormateurAccess = async (action) => {
     setSavingAcces(true);

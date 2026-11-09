@@ -5,13 +5,15 @@ feuille PDF) — demande du 2026-11-05 :
     grisée, sans pouvoir l'ouvrir ;
   - elle ne s'ouvre que le jour même (un des jours de la session) :
       * par un admin ou un agent, depuis la page Sessions de formation,
-      * sinon automatiquement à 9h30 (heure de Paris) ;
+      * sinon automatiquement à 8h30 (heure de Paris — 9h30 jusqu'au
+        2026-11-09, avancé pour les stages de récupération de points qui
+        commencent à 8h) ;
   - elle se ferme automatiquement à 16h45 (heure de Paris), et un agent peut
     la fermer avant.
 
 L'état est calculé à la demande à partir de l'heure et de `stage.acces`
 (ouvertures/fermetures manuelles, par jour) : pas de tâche planifiée, donc
-rien à rater si le serveur Render était en veille à 9h30 ou à 16h45.
+rien à rater si le serveur Render était en veille à 8h30 ou à 16h45.
 
     stage["acces"] = {"2026-11-06": {"ouvert_at": iso, "ouvert_par": nom,
                                      "ferme_at": iso, "ferme_par": nom}}
@@ -21,7 +23,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 PARIS = ZoneInfo("Europe/Paris")
-OUVERTURE_AUTO = time(9, 30)
+OUVERTURE_AUTO = time(8, 30)
 FERMETURE_AUTO = time(16, 45)
 
 

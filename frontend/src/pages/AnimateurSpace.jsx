@@ -280,7 +280,7 @@ export default function AnimateurSpace() {
   const [selected, setSelected] = useState(null);
 
   // Accès aux sessions (backend core/session_access.py) : fermées par défaut,
-  // ouvertes le jour même par l'équipe TDL ou à 9h30, fermées à 16h45. On
+  // ouvertes le jour même par l'équipe TDL ou à 8h30, fermées à 16h45. On
   // recharge chaque minute pour que l'ouverture/fermeture apparaisse sans
   // recharger la page.
   const load = () => api.get("/stages").then((r) => setStages(r.data)).catch(() => {});

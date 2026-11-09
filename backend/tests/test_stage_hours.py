@@ -32,7 +32,8 @@ def test_convocation_recup_annonce_8h_et_l_arrivee():
     assert "Horaires : de 8h à 16h" in msg
     assert "commence à 8h précises" in msg and "dès 7h45" in msg
     sms = convocation_sms(RECUP, INSC)
-    assert "à 8h PRÉCISES" in sms and "dès 7h45" in sms
+    assert "à 8h PRÉCISES" in sms and "dès 7h45" in sms and "Retards non tolérés" in sms
+    assert "LES RETARDS NE SONT PAS TOLÉRÉS" in msg
 
 
 def test_autres_formations_inchangees():

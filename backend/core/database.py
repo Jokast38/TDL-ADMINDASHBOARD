@@ -17,7 +17,11 @@ if DB_BACKEND == "supabase":
     _dsn = os.getenv("SUPABASE_DB2_URL")
     if not _dsn:
         raise RuntimeError("DB_BACKEND=supabase mais SUPABASE_DB2_URL est vide")
-    client = PgClient(_dsn, schema=os.getenv("SUPABASE_DB_SCHEMA", "tdl"))
+    # 5 connexions max par serveur (réglable par PGDOC_POOL_MAX) : le pooler
+    # Supabase en mode Session n'en accepte que 15 au total, et pendant un
+    # déploiement Render l'ancien et le nouveau serveur tournent ensemble.
+    client = PgClient(_dsn, schema=os.getenv("SUPABASE_DB_SCHEMA", "tdl"),
+                      max_size=int(os.getenv("PGDOC_POOL_MAX") or 5))
     db = client[DB_NAME]
     logging.getLogger(__name__).info("Base de données : Supabase (schéma %s)", client.schema)
 elif DB_BACKEND == "mongo":

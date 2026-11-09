@@ -848,7 +848,7 @@ async def send_session_reminders() -> int:
         h_debut, h_fin = stage_hours(stage)
         horaires = f"de {h_debut.replace(':', 'h')} à {h_fin.replace(':', 'h')}"
         if is_recup(stage):
-            horaires += " — début à l'heure précise, merci d'arriver 15 minutes avant"
+            horaires += " — début à l'heure précise, merci d'arriver 15 minutes avant. Les retards ne sont pas tolérés"
         for insc in inscriptions:
             if not insc.get("student_email"):
                 continue

@@ -114,9 +114,9 @@ def _recup_accueil(heure_debut: str) -> str:
 def _recup_ponctualite(heure_debut: str) -> str:
     return (
         f"IMPORTANT : le stage commence à {_hhmm_to_h(heure_debut)} précises. Merci d'arriver dès "
-        f"{_recup_accueil(heure_debut)} pour l'accueil et l'émargement. La présence est obligatoire "
-        "pendant toute la durée du stage : un retard peut entraîner un refus d'accès et la non-délivrance "
-        "de l'attestation de stage.\n\n"
+        f"{_recup_accueil(heure_debut)} pour l'accueil et l'émargement.\n"
+        "LES RETARDS NE SONT PAS TOLÉRÉS : la présence est obligatoire pendant toute la durée du stage, "
+        "un stagiaire en retard se verra refuser l'accès et ne pourra pas obtenir son attestation de stage.\n\n"
     )
 
 
@@ -129,7 +129,7 @@ def convocation_sms(stage: dict, insc: dict) -> str:
     if is_recup(stage):
         return (
             f"TDL Formation : stage récup. de points le {date_debut} à {_hhmm_to_h(heure_debut)} PRÉCISES — {lieu}. "
-            f"Arrivée dès {_recup_accueil(heure_debut)}, tout retard peut être refusé. Pièce d'identité + permis."
+            f"Arrivée dès {_recup_accueil(heure_debut)}. Retards non tolérés. Pièce d'identité + permis."
         )
     return (
         f"TDL Formation : convocation confirmée pour {stage.get('formation_titre', '')} "
@@ -210,7 +210,7 @@ async def send_session_eve_reminders() -> int:
                 await send_whatsapp(
                     insc["student_phone"], wa.RAPPEL_VEILLE,
                     [insc.get("student_name"), stage.get("formation_titre"), date_debut,
-                     f"{heure} précises (arrivée dès {_recup_accueil(stage_hours(stage)[0])})" if recup else heure, _lieu(stage)],
+                     f"{heure} précises (arrivée dès {_recup_accueil(stage_hours(stage)[0])}, retards non tolérés)" if recup else heure, _lieu(stage)],
                     extra={"inscription_id": insc["id"]},
                 )
             await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"eve_reminder_sent_at": now_iso()}})
