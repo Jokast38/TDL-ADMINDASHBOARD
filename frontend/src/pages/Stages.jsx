@@ -47,6 +47,8 @@ const STATUT_LABELS = {
   termine: "Terminé", annule: "Annulé",
 };
 const CRENEAU_HOURS = { JOUR: { heure_debut: "09:00", heure_fin: "17:00" }, SOIR: { heure_debut: "18:00", heure_fin: "21:30" } };
+// Stages de récupération de points : 8h00-16h00 (demande du 2026-11-09).
+const RECUP_HOURS = { heure_debut: "08:00", heure_fin: "16:00" };
 
 function addDaysIso(dateStr, days) {
   if (!dateStr) return dateStr;
@@ -111,9 +113,11 @@ export default function Stages() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
+  const isRecupFormation = (formationId) => formations.find((f) => f.id === formationId)?.category === "PERMIS";
+
   const openCreate = (prefill = {}) => {
     setEditingId(null);
-    setForm({ ...empty, ...prefill });
+    setForm({ ...empty, ...(isRecupFormation(prefill.formation_id) ? RECUP_HOURS : {}), ...prefill });
     setStageModules([]);
     setSelectedTemplateId("");
     setOpen(true);
@@ -150,6 +154,7 @@ export default function Stages() {
       animateur_ids: s.animateur_ids?.length ? s.animateur_ids : (s.animateur_id ? [s.animateur_id] : []),
       creneau: s.creneau || extractCreneau(s.notes) || "", notes: "",
       heure_debut: s.heure_debut || "09:00", heure_fin: s.heure_fin || "17:00", external_reserved: 0,
+      ...(isRecupFormation(s.formation_id) ? RECUP_HOURS : {}),
     });
   };
 
@@ -167,7 +172,7 @@ export default function Stages() {
   const addModuleRow = () => {
     setStageModules((prev) => [...prev, {
       module_id: moduleLib[0]?.id || null, module_nom: moduleLib[0]?.nom || "Module",
-      date: form.date_debut || "", heure_debut: "09:00", heure_fin: "17:00", animateur_id: null,
+      date: form.date_debut || "", heure_debut: form.heure_debut || "09:00", heure_fin: form.heure_fin || "17:00", animateur_id: null,
     }]);
   };
   const updateModuleRow = (idx, patch) => setStageModules((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
@@ -377,6 +382,7 @@ export default function Stages() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, shiftMonth]);
 
   return (
@@ -541,7 +547,12 @@ export default function Stages() {
                 onValueChange={(v) => {
                   const formation = formations.find((f) => f.id === v);
                   const bump = !editingId && form.capacite_max === 20 && formation?.category === "VTC_TAXI";
-                  setForm({ ...form, formation_id: v, ...(bump ? { capacite_max: 25 } : {}) });
+                  // Nouvelle session : horaires par défaut de la formation
+                  // (récup de points 8h-16h, sinon 9h-17h si on quitte la récup).
+                  const wasRecup = form.heure_debut === RECUP_HOURS.heure_debut && form.heure_fin === RECUP_HOURS.heure_fin;
+                  const hours = editingId ? {} : formation?.category === "PERMIS" ? RECUP_HOURS
+                    : wasRecup ? CRENEAU_HOURS.JOUR : {};
+                  setForm({ ...form, formation_id: v, ...hours, ...(bump ? { capacite_max: 25 } : {}) });
                 }}
               >
                 <SelectTrigger data-testid="stage-formation"><SelectValue placeholder="Choisir une formation" /></SelectTrigger>

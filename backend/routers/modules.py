@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from core.stage_hours import stage_hours
 from core.database import db
 from core.security import require_role
 from core.utils import now_iso
@@ -132,8 +133,8 @@ async def apply_session_template(sid: str, payload: ApplyTemplateIn, user: dict 
             "module_id": item["module_id"],
             "module_nom": mod["nom"] if mod else "Module",
             "date": (date_debut + timedelta(days=max(0, item.get("jour", 1) - 1))).isoformat(),
-            "heure_debut": item.get("heure_debut", "09:00"),
-            "heure_fin": item.get("heure_fin", "17:00"),
+            "heure_debut": item.get("heure_debut") or stage_hours(stage)[0],
+            "heure_fin": item.get("heure_fin") or stage_hours(stage)[1],
             "animateur_id": item.get("animateur_id"),
         })
 
@@ -223,8 +224,7 @@ async def get_agenda(date_from: Optional[str] = None, date_to: Optional[str] = N
             # coder "09:00"-"17:00" en dur — sinon une session SOIR s'affiche
             # au même horaire visuel qu'une session JOUR du même jour et les
             # deux événements se superposent sur l'agenda.
-            heure_debut = s.get("heure_debut") or "09:00"
-            heure_fin = s.get("heure_fin") or "17:00"
+            heure_debut, heure_fin = stage_hours(s)
             cur = d1
             while cur <= d2:
                 events.append({

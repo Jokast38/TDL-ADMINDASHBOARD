@@ -15,6 +15,7 @@ from services.email_template import render_branded_email, render_staff_notificat
 from services.push import send_push_to_users
 from services.whatsapp import send_whatsapp
 from services.appointment_notify import format_rdv
+from core.stage_hours import is_recup, stage_hours
 from core import whatsapp_templates as wa
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
@@ -844,6 +845,10 @@ async def send_session_reminders() -> int:
         lieu = f"{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}".strip(", ")
         date_debut_fr = format_date_long_fr(stage['date_debut'])
         date_fin_fr = format_date_long_fr(stage.get('date_fin', ''))
+        h_debut, h_fin = stage_hours(stage)
+        horaires = f"de {h_debut.replace(':', 'h')} à {h_fin.replace(':', 'h')}"
+        if is_recup(stage):
+            horaires += " — début à l'heure précise, merci d'arriver 15 minutes avant"
         for insc in inscriptions:
             if not insc.get("student_email"):
                 continue
@@ -854,6 +859,7 @@ async def send_session_reminders() -> int:
                     f"<p>Bonjour {insc.get('student_name', '')},</p>"
                     f"<p>Rappel : votre session <b>{stage.get('formation_titre', '')}</b> débute le "
                     f"<b>{date_debut_fr}</b> (fin le {date_fin_fr}), à <b>{lieu}</b>.</p>"
+                    f"<p>Horaires : <b>{horaires}</b>.</p>"
                     f"<p>À bientôt !<br>TDL Formation</p>"
                 ),
             )
@@ -873,6 +879,7 @@ async def send_session_reminders() -> int:
                     f"<p>Bonjour {a.get('name', '')},</p>"
                     f"<p>Rappel : la session <b>{stage.get('formation_titre', '')}</b> que vous animez débute le "
                     f"<b>{date_debut_fr}</b> (fin le {date_fin_fr}), à <b>{lieu}</b>, "
+                    f"{h_debut.replace(':', 'h')}-{h_fin.replace(':', 'h')}, "
                     f"avec {len(inscriptions)} inscrit(s).</p><p>TDL Formation</p>"
                 ),
             )

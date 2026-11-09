@@ -12,6 +12,7 @@ from core.security import require_role
 from core.storage import get_object
 from core.utils import now_iso, format_date_long_fr
 from core.config import ROLES_ALL_STAFF, ROLES_SESSIONS_CONTROL, PUBLIC_FRONTEND_URL
+from core.stage_hours import DEFAULT_HOURS, RECUP_HOURS
 from core.session_access import access_status, paris_now
 from models.stage import StageAccessIn, StageIn, StageUpdate
 from services.activity import log_action
@@ -194,6 +195,11 @@ async def create_stage(payload: StageIn, user: dict = Depends(require_role("admi
     if not formation:
         raise HTTPException(status_code=404, detail="Formation introuvable")
     doc = payload.model_dump()
+    # Récupération de points : 8h00-16h00 (demande du 2026-11-09). Le
+    # formulaire envoie le défaut générique 9h-17h quand on n'y touche pas :
+    # on le remplace ; un horaire saisi exprès (autre que 9h-17h) est gardé.
+    if formation.get("category") == "PERMIS" and (doc.get("heure_debut") or "09:00", doc.get("heure_fin") or "17:00") == DEFAULT_HOURS:
+        doc["heure_debut"], doc["heure_fin"] = RECUP_HOURS
     ids = list(doc.get("animateur_ids") or [])
     if doc.get("animateur_id") and doc["animateur_id"] not in ids:
         ids.append(doc["animateur_id"])

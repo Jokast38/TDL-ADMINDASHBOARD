@@ -17,6 +17,7 @@ from services.email_template import render_branded_email
 from services.pdf import generate_attestation_pdf
 from services.whatsapp import send_whatsapp, send_whatsapp_or_sms
 from core import whatsapp_templates as wa
+from core.stage_hours import RECUP_ACCUEIL, is_recup, stage_hours
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
 CONTACT_PHONE = "01 XX XX XX XX"  # à ajuster depuis Paramètres si besoin
@@ -51,8 +52,7 @@ def convocation_message(stage: dict, insc: dict) -> str:
     student_name = insc.get("student_name", "")
     date_debut = format_date_long_fr(stage.get("date_debut", ""))
     date_fin = format_date_long_fr(stage.get("date_fin", ""))
-    heure_debut = stage.get("heure_debut") or "09:00"
-    heure_fin = stage.get("heure_fin") or "17:00"
+    heure_debut, heure_fin = stage_hours(stage)
     lieu = f"{stage.get('lieu_adresse', '')}, {stage.get('lieu_ville', '')}"
 
     if stage.get("formation_category") == "VTC_TAXI":
@@ -92,8 +92,31 @@ def convocation_message(stage: dict, insc: dict) -> str:
         f"Dates : du {date_debut} au {date_fin}\n"
         f"Horaires : de {_hhmm_to_h(heure_debut)} à {_hhmm_to_h(heure_fin)}\n"
         f"Lieu : {lieu}\n\n"
+        + (_recup_ponctualite(heure_debut) if is_recup(stage) else "") +
         "Merci de vous présenter avec une pièce d'identité valide et les documents demandés dans votre dossier.\n\n"
         f"Pour toute question, contactez-nous : {CONTACT_EMAIL}."
+    )
+
+
+def _recup_accueil(heure_debut: str) -> str:
+    """Heure d'accueil d'un stage de récupération de points : 7h45 pour un
+    début à 8h, sinon 15 minutes avant le début."""
+    if heure_debut == "08:00":
+        return _hhmm_to_h(RECUP_ACCUEIL)
+    try:
+        h, m = (int(x) for x in heure_debut.split(":"))
+        t = h * 60 + m - 15
+        return _hhmm_to_h(f"{t // 60:02d}:{t % 60:02d}")
+    except Exception:
+        return _hhmm_to_h(heure_debut)
+
+
+def _recup_ponctualite(heure_debut: str) -> str:
+    return (
+        f"IMPORTANT : le stage commence à {_hhmm_to_h(heure_debut)} précises. Merci d'arriver dès "
+        f"{_recup_accueil(heure_debut)} pour l'accueil et l'émargement. La présence est obligatoire "
+        "pendant toute la durée du stage : un retard peut entraîner un refus d'accès et la non-délivrance "
+        "de l'attestation de stage.\n\n"
     )
 
 
@@ -101,8 +124,13 @@ def convocation_sms(stage: dict, insc: dict) -> str:
     """Version courte de la convocation pour SMS — secours quand l'email
     n'est pas ouvert ou arrive en spam, voir services/sms.py."""
     date_debut = format_date_long_fr(stage.get("date_debut", ""))
-    heure_debut = stage.get("heure_debut") or "09:00"
+    heure_debut = stage_hours(stage)[0]
     lieu = stage.get("lieu_ville", "")
+    if is_recup(stage):
+        return (
+            f"TDL Formation : stage récup. de points le {date_debut} à {_hhmm_to_h(heure_debut)} PRÉCISES — {lieu}. "
+            f"Arrivée dès {_recup_accueil(heure_debut)}, tout retard peut être refusé. Pièce d'identité + permis."
+        )
     return (
         f"TDL Formation : convocation confirmée pour {stage.get('formation_titre', '')} "
         f"le {date_debut} à {_hhmm_to_h(heure_debut)} — {lieu}. Pièce d'identité requise."
@@ -116,7 +144,10 @@ def _lieu(stage: dict) -> str:
 async def send_convocation_whatsapp(stage: dict, insc: dict) -> dict:
     """Convocation par WhatsApp, en plus du mail — le SMS ne part qu'en
     secours, si WhatsApp n'a pas pu être envoyé."""
-    horaires = f"de {_hhmm_to_h(stage.get('heure_debut') or '09:00')} à {_hhmm_to_h(stage.get('heure_fin') or '17:00')}"
+    debut, fin = stage_hours(stage)
+    horaires = f"de {_hhmm_to_h(debut)} à {_hhmm_to_h(fin)}"
+    if is_recup(stage):
+        horaires += f" (arrivée dès {_recup_accueil(debut)})"
     return await send_whatsapp_or_sms(
         insc.get("student_phone"), wa.CONVOCATION,
         [insc.get("student_name"), stage.get("formation_titre"), format_date_long_fr(stage.get("date_debut", "")),
@@ -156,7 +187,8 @@ async def send_session_eve_reminders() -> int:
     stages = await db.stages.find({"date_debut": target, "statut": {"$ne": "annule"}}, {"_id": 0}).to_list(200)
     count = 0
     for stage in stages:
-        heure = _hhmm_to_h(stage.get("heure_debut") or "09:00")
+        heure = _hhmm_to_h(stage_hours(stage)[0])
+        recup = is_recup(stage)
         date_debut = format_date_long_fr(stage.get("date_debut", ""))
         inscriptions = await db.inscriptions.find(
             {"stage_id": stage["id"], "status": "active", "eve_reminder_sent_at": {"$exists": False}}, {"_id": 0}
@@ -167,15 +199,18 @@ async def send_session_eve_reminders() -> int:
             if insc.get("student_email"):
                 message = (
                     f"Bonjour {insc.get('student_name', '')},\n\n"
-                    f"Rappel : votre formation {stage.get('formation_titre', '')} commence demain, {date_debut} à {heure}.\n"
+                    f"Rappel : votre formation {stage.get('formation_titre', '')} commence demain, {date_debut} à {heure}"
+                    + (" précises" if recup else "") + ".\n"
                     f"Lieu : {_lieu(stage)}\n\n"
+                    + (_recup_ponctualite(stage_hours(stage)[0]) if recup else "") +
                     "Pensez à votre pièce d'identité. En cas d'empêchement, prévenez-nous au plus vite."
                 )
                 await send_email(insc["student_email"], f"⏰ C'est demain — {stage.get('formation_titre', '')}", render_branded_email(message))
             if insc.get("student_phone"):
                 await send_whatsapp(
                     insc["student_phone"], wa.RAPPEL_VEILLE,
-                    [insc.get("student_name"), stage.get("formation_titre"), date_debut, heure, _lieu(stage)],
+                    [insc.get("student_name"), stage.get("formation_titre"), date_debut,
+                     f"{heure} précises (arrivée dès {_recup_accueil(stage_hours(stage)[0])})" if recup else heure, _lieu(stage)],
                     extra={"inscription_id": insc["id"]},
                 )
             await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"eve_reminder_sent_at": now_iso()}})

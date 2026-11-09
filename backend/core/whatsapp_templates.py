@@ -43,7 +43,7 @@ TEMPLATES = {
             "Lieu : {{5}}\n\n"
             "Pensez à votre pièce d'identité. En cas d'empêchement, prévenez-nous au plus vite en répondant à ce message."
         ),
-        "examples": ["Karim Benali", "Stage de récupération de points", "samedi 14 novembre 2026", "8h30",
+        "examples": ["Karim Benali", "Stage de récupération de points", "samedi 14 novembre 2026", "8h précises (arrivée dès 7h45)",
                      "59 avenue Joffre, Épinay-sur-Seine"],
     },
     DOCUMENTS_MANQUANTS: {
