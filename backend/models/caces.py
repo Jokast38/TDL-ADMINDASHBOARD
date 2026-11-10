@@ -12,6 +12,10 @@ CACES_CATEGORIES = ("1A", "1B", "2A", "2B", "3", "4", "5", "6", "7")
 # l'agent lors de la planification, purement informative (ne bloque rien).
 CACES_PRATIQUE_DUREE_MIN = {"1B": 45, "3": 60, "5": 45}
 
+# 10 candidats maximum par session CACES (demande du 2026-11-10 ; la R.489
+# §3/3/1/1 plafonne à 12 par testeur en salle pour la théorie).
+CACES_MAX_CANDIDATS = 10
+
 
 class CacesExamAttemptIn(BaseModel):
     dossier_id: Optional[str] = None

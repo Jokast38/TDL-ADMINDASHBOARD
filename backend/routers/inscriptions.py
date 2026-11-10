@@ -14,6 +14,7 @@ from core.security import hash_password, get_current_user, get_optional_user, re
 from core.utils import now_iso, format_date_long_fr
 from core.config import ROLES_DOSSIERS_MGMT, PUBLIC_FRONTEND_URL, effective_assigned_categories
 from models.inscription import InscriptionIn, InscriptionUpdate, DossierUpdate, StageAssignIn
+from models.caces import CACES_MAX_CANDIDATS
 from services.trello import TrelloService
 from services.n8n import trigger_n8n
 from services.email import send_email
@@ -128,7 +129,7 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         if stage.get("statut") == "complet":
             raise HTTPException(status_code=409, detail="Cette session est complète.")
         nb_inscrits = await db.inscriptions.count_documents({"stage_id": payload.stage_id, "status": "active"})
-        if nb_inscrits + (stage.get("external_reserved") or 0) >= (stage.get("capacite_max") or 0):
+        if nb_inscrits + (stage.get("external_reserved") or 0) >= await _capacite(stage):
             raise HTTPException(status_code=409, detail="Cette session est complète.")
 
     user = await db.users.find_one({"email": payload.student_email.lower()})
@@ -605,8 +606,8 @@ async def assign_inscription_stage(iid: str, payload: StageAssignIn, user: dict 
             if stage.get("statut") == "complet":
                 raise HTTPException(status_code=409, detail="Cette session est complète — déverrouillez-la d'abord si vous voulez vraiment y affecter ce candidat.")
             nb_inscrits = await db.inscriptions.count_documents({"stage_id": payload.stage_id, "status": "active"})
-            if nb_inscrits + (stage.get("external_reserved") or 0) >= (stage.get("capacite_max") or 0):
-                raise HTTPException(status_code=409, detail=f"Cette session est à son quota ({stage.get('capacite_max')} places, dont {stage.get('external_reserved') or 0} réservée(s) ailleurs) — augmentez la capacité ou choisissez une autre session.")
+            if nb_inscrits + (stage.get("external_reserved") or 0) >= await _capacite(stage):
+                raise HTTPException(status_code=409, detail=f"Cette session est à son quota ({await _capacite(stage)} places, dont {stage.get('external_reserved') or 0} réservée(s) ailleurs) — augmentez la capacité ou choisissez une autre session.")
 
     await db.inscriptions.update_one(
         {"id": iid}, {"$set": {"stage_id": payload.stage_id, "stage_titre": stage_titre, "updated_at": now_iso()}}
@@ -662,6 +663,17 @@ async def reactivate_inscription(iid: str, user: dict = Depends(require_role(*RO
     return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
 
 
+async def _capacite(stage: dict) -> int:
+    """Capacité réelle d'une session : `capacite_max`, plafonnée à 10 pour
+    le CACES (demande du 2026-11-10), y compris pour les sessions créées
+    avant ce plafond."""
+    cap = stage.get("capacite_max") or 0
+    formation = await db.formations.find_one({"id": stage.get("formation_id")}, {"_id": 0, "category": 1})
+    if formation and formation.get("category") == "CACES":
+        cap = min(cap, CACES_MAX_CANDIDATS)
+    return cap
+
+
 @router.get("/dossiers/me")
 async def list_my_dossiers(user: dict = Depends(get_current_user)):
     if user["role"] != "etudiant":
@@ -673,6 +685,9 @@ async def list_my_dossiers(user: dict = Depends(get_current_user)):
         manquants = _missing_docs(d, docs)
         d["documents_manquants"] = manquants
         d["nb_documents_manquants"] = len(manquants)
+        # Photo de la carte CACES pas encore prise : demandée dans l'espace
+        # apprenant, comme un document manquant (demande du 2026-11-10).
+        d["photo_carte_manquante"] = d.get("category") == "CACES" and not d.get("id_photo_path")
     return items
 
 

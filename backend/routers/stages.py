@@ -15,6 +15,7 @@ from core.config import ROLES_ALL_STAFF, ROLES_SESSIONS_CONTROL, PUBLIC_FRONTEND
 from core.stage_hours import DEFAULT_HOURS, RECUP_HOURS
 from core.session_access import access_status, paris_now
 from models.stage import StageAccessIn, StageIn, StageUpdate
+from models.caces import CACES_MAX_CANDIDATS
 from services.activity import log_action
 from services.email import send_email
 from services.email_template import render_staff_notification
@@ -200,6 +201,9 @@ async def create_stage(payload: StageIn, user: dict = Depends(require_role("admi
     # on le remplace ; un horaire saisi exprès (autre que 9h-17h) est gardé.
     if formation.get("category") == "PERMIS" and (doc.get("heure_debut") or "09:00", doc.get("heure_fin") or "17:00") == DEFAULT_HOURS:
         doc["heure_debut"], doc["heure_fin"] = RECUP_HOURS
+    # CACES : 10 candidats maximum par session (demande du 2026-11-10).
+    if formation.get("category") == "CACES":
+        doc["capacite_max"] = min(doc.get("capacite_max") or CACES_MAX_CANDIDATS, CACES_MAX_CANDIDATS)
     ids = list(doc.get("animateur_ids") or [])
     if doc.get("animateur_id") and doc["animateur_id"] not in ids:
         ids.append(doc["animateur_id"])
@@ -251,6 +255,10 @@ async def update_stage(sid: str, payload: StageUpdate, user: dict = Depends(requ
         update = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if k in ("statut", "notes")}
     else:
         update = payload.model_dump(exclude_unset=True)
+        if update.get("capacite_max") and update["capacite_max"] > CACES_MAX_CANDIDATS:
+            formation = await db.formations.find_one({"id": update.get("formation_id") or existing.get("formation_id")}, {"_id": 0, "category": 1})
+            if formation and formation.get("category") == "CACES":
+                raise HTTPException(status_code=400, detail=f"Session CACES : {CACES_MAX_CANDIDATS} candidats maximum")
         if "animateur_ids" in update or "animateur_id" in update:
             ids = list(update.get("animateur_ids") if update.get("animateur_ids") is not None else existing.get("animateur_ids") or [])
             single = update.get("animateur_id", existing.get("animateur_id"))

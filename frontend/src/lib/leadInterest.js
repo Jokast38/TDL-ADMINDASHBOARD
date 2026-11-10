@@ -6,6 +6,9 @@
 export const stripAccents = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 export const INTEREST_GROUPS = [
+  // ECSR en premier, comme le classement du serveur (routers/leads.py:
+  // _category_for_interest) : un prospect « ecsr,ssiap » est un prospect ECSR.
+  { label: "ECSR", test: (s) => s.includes("ecsr") || s.includes("enseignant") },
   { label: "Passerelle VTC", test: (s) => s.includes("passerelle") && s.includes("vtc") },
   { label: "Passerelle Taxi", test: (s) => s.includes("passerelle") && s.includes("taxi") },
   { label: "Passerelle", test: (s) => s.includes("passerelle") },

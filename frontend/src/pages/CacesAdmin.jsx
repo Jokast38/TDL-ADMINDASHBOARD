@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PhotoCapture from "@/components/PhotoCapture";
+import { QuestionBankTab, CacesSessionsTab } from "@/components/caces/CacesAdminTabs";
 import { formatDateFR } from "@/lib/dateFormat";
 import {
   MagnifyingGlass, Plus, PaperPlaneTilt, DownloadSimple, Certificate, Link as LinkIcon, PencilSimple, Camera,
@@ -140,8 +141,11 @@ export default function CacesAdmin() {
           <TabsList>
             <TabsTrigger value="examens">Examens ({attempts.length})</TabsTrigger>
             <TabsTrigger value="cartes">Cartes ({certificates.length})</TabsTrigger>
+            <TabsTrigger value="sessions" data-testid="caces-tab-sessions">Sessions</TabsTrigger>
+            <TabsTrigger value="questions" data-testid="caces-tab-questions">Questions théoriques</TabsTrigger>
           </TabsList>
         </Tabs>
+        {(tab === "examens" || tab === "cartes") && (<>
         <div className="relative w-full sm:w-64">
           <MagnifyingGlass size={16} className="absolute left-3 top-3 text-gray-400" />
           <Input placeholder="Rechercher un candidat..." value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
@@ -153,9 +157,10 @@ export default function CacesAdmin() {
             {categories.map((c) => <SelectItem key={c.category} value={c.category}>Catégorie {c.category}</SelectItem>)}
           </SelectContent>
         </Select>
+        </>)}
       </div>
 
-      {tab === "examens" ? (
+      {tab === "sessions" ? <CacesSessionsTab /> : tab === "questions" ? <QuestionBankTab /> : tab === "examens" ? (
         <div className="space-y-2">
           {shownAttempts.length === 0 && <p className="text-sm text-gray-500">Aucun examen CACES.</p>}
           {shownAttempts.map((a) => {

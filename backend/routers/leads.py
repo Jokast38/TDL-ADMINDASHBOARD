@@ -482,6 +482,7 @@ async def list_leads(
     assigned_to: Optional[str] = None,
     origin: Optional[str] = None,
     category: Optional[str] = None,
+    sort: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
     user: dict = Depends(require_role(*ROLES_LEADS))
@@ -578,14 +579,17 @@ async def list_leads(
 
     cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, source, campaign, ville, qualification,
                  statut, pipeline_status, assigned_to, origin, category, page, page_size,
-                 tuple(sorted(assigned)) if scoped else None)
+                 tuple(sorted(assigned)) if scoped else None, sort)
     cached = _leads_cache_get(cache_key)
     if cached is not None:
         return cached
 
     total = await db.leads.count_documents(query)
+    # Tri : date d'import (défaut) ou date de la demande côté Cosmosia
+    # (`sort=demande`, colonne « Créé le » de l'export — demande du 2026-11-10).
+    sort_field = "cosmosia_created_at" if sort == "demande" else "created_at"
     items = await db.leads.find(query, {"_id": 0}) \
-        .sort("created_at", -1) \
+        .sort(sort_field, -1) \
         .skip((page - 1) * page_size) \
         .limit(page_size) \
         .to_list(page_size)

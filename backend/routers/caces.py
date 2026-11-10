@@ -9,6 +9,7 @@ Portée volontairement limitée à ce qui a été confirmé comme faisable :
 - Pas de génération automatique PAR LOT ; chaque carte est générée à la
   demande depuis la fiche du candidat.
 """
+import asyncio
 import base64
 import uuid
 from typing import Optional, Dict, Any, List
@@ -27,6 +28,12 @@ from models.caces import (
 )
 from services.caces import compute_attempt_status, finalize_category, add_external_category, today_iso
 from services.pdf import generate_caces_card_pdf
+from services.photo_crop import crop_id_photo
+
+
+async def theorie_reussie_recente(student_id: str):
+    from routers.caces_exam import theorie_reussie_recente as _recent
+    return await _recent(student_id)
 from services.email import send_email
 from services.email_template import render_branded_email
 from core.caces_verif import normalize_numero, name_matches
@@ -83,7 +90,9 @@ async def create_exam_attempt(payload: CacesExamAttemptIn, user: dict = Depends(
         "id": str(uuid.uuid4()), "dossier_id": payload.dossier_id,
         "student_id": payload.student_id, "student_name": payload.student_name,
         "student_email": payload.student_email, "category": payload.category,
-        "notes": payload.notes or "", "theorie": None, "pratique": None,
+        # Théorie déjà réussie sur une copie papier (moins de 12 mois) :
+        # reportée, le candidat ne repasse que la pratique (R.489 §3/3/1).
+        "notes": payload.notes or "", "theorie": await theorie_reussie_recente(payload.student_id), "pratique": None,
         "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.caces_exam_attempts.insert_one(doc)
@@ -360,8 +369,10 @@ async def _store_dossier_photo(dossier_id: str, file: UploadFile) -> dict:
         raise HTTPException(status_code=400, detail="Image trop volumineuse (max 5 Mo)")
     if not (file.content_type or "").startswith("image/"):
         raise HTTPException(status_code=400, detail="Le fichier doit être une image")
+    # Recadrage au format du cadre de la carte, visage centré (services/photo_crop.py).
+    data = await asyncio.to_thread(crop_id_photo, data)
     path = f"{APP_NAME}/dossier_photos/{dossier_id}.jpg"
-    result = await put_object(path, data, file.content_type or "image/jpeg")
+    result = await put_object(path, data, "image/jpeg")
     await db.dossiers.update_one(
         {"id": dossier_id},
         {"$set": {"id_photo_path": result["path"], "id_photo_updated_at": now_iso()}},

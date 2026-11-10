@@ -645,6 +645,7 @@ function CosmosiaTab() {
   const [campaignFilter, setCampaignFilter] = useState("");
   const [campaignOptions, setCampaignOptions] = useState([]);
   const [villeFilter, setVilleFilter] = useState("");
+  const [sortBy, setSortBy] = useState("demande"); // demande | import
   const [villeOptions, setVilleOptions] = useState([]);
   const [interestFilter, setInterestFilter] = useState("all");
   const [allInterests, setAllInterests] = useState([]);
@@ -682,7 +683,7 @@ function CosmosiaTab() {
   const load = (pageOverride) => {
     const myRequestId = ++requestSeq.current;
     setLoading(true);
-    const params = { source: "cosmosia", page: pageOverride ?? page, page_size: COSMOSIA_PAGE_SIZE };
+    const params = { source: "cosmosia", page: pageOverride ?? page, page_size: COSMOSIA_PAGE_SIZE, sort: sortBy === "demande" ? "demande" : undefined };
     if (search.trim()) params.q = search.trim();
     if (campaignFilter) params.campaign = campaignFilter;
     if (villeFilter) params.ville = villeFilter;
@@ -705,7 +706,7 @@ function CosmosiaTab() {
   useEffect(() => {
     if (isFirstCosmosiaFilterRun.current) { isFirstCosmosiaFilterRun.current = false; return; }
     if (page === 1) load(1); else setPage(1);
-  }, [search, campaignFilter, villeFilter, qualifFilter, statutQuickFilter, interestFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, campaignFilter, villeFilter, qualifFilter, statutQuickFilter, interestFilter, sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     api.get("/leads/campaigns", { params: { source: "cosmosia" } }).then(({ data }) => setCampaignOptions(data)).catch(() => {});
     api.get("/leads/villes").then(({ data }) => setVilleOptions(data)).catch(() => {});
@@ -874,6 +875,13 @@ function CosmosiaTab() {
             {villeOptions.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="w-56" data-testid="cosmosia-sort"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="demande">Trier par date de demande</SelectItem>
+            <SelectItem value="import">Trier par date d'import</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Onglets par formation d'intérêt — même logique que la page Prospects
@@ -916,7 +924,7 @@ function CosmosiaTab() {
                 <th className="py-2.5 px-4 overline">Traité par</th>
                 <th className="py-2.5 px-4 overline">Suivi</th>
                 <th className="py-2.5 px-4 overline">Notes</th>
-                <th className="py-2.5 px-4 overline">Importé le</th>
+                <th className="py-2.5 px-4 overline">Demande le</th>
                 <th className="py-2.5 px-4 overline text-right">Rendez-vous</th>
               </tr>
             </thead>
@@ -958,8 +966,13 @@ function CosmosiaTab() {
                   <td className="py-2.5 px-4 max-w-[220px]">
                     <MetaLeadNotesCell lead={l} onSave={updateNotes} onEdited={onNoteEdited} />
                   </td>
-                  <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
-                    {l.created_at ? formatDateFR(l.created_at) : "—"}
+                  {/* Date de la demande côté Cosmosia (colonne « Créé le » de
+                      l'export) ; à défaut, la date d'import. */}
+                  <td
+                    className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap"
+                    title={l.created_at ? `Importé le ${formatDateFR(l.created_at)}` : undefined}
+                  >
+                    {l.cosmosia_created_at ? formatDateTimeFR(l.cosmosia_created_at) : l.created_at ? formatDateFR(l.created_at) : "—"}
                   </td>
                   <td className="py-2.5 px-4 text-right">
                     <div className="flex justify-end items-center gap-1">

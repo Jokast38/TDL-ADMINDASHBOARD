@@ -13,6 +13,8 @@ import { useTour } from "@/contexts/TourContext";
 import { HELP_CATEGORIES } from "@/constants/helpTours";
 import FormateurPlanningTab from "@/components/FormateurPlanningTab";
 import EmargementPanel from "@/components/stages/EmargementPanel";
+import CacesExamPanel, { DocumentsList } from "@/components/caces/CacesExamPanel";
+import { Archive } from "@phosphor-icons/react";
 
 // Pièces justifiant le droit d'exercer — doit rester synchronisé avec
 // FORMATEUR_DOC_TYPES côté backend (routers/employees.py). Dossier à
@@ -268,13 +270,30 @@ function DossierTab() {
   );
 }
 
+// Archives CACES du testeur (questionnaires, corrigés, grilles pratiques,
+// examens d'adéquation) — backend routers/caces_exam.py.
+function TesteurDocuments() {
+  const [docs, setDocs] = useState(null);
+  useEffect(() => { api.get("/caces/documents").then((r) => setDocs(r.data)).catch(() => setDocs([])); }, []);
+  return (
+    <Card className="p-6 border border-gray-200 rounded-md shadow-none">
+      <p className="text-sm text-gray-500 mb-4">
+        Documents produits lors de vos épreuves CACES®, archivés à votre nom. Les questionnaires et corrigés ne
+        s'ouvrent que le jour de l'examen.
+      </p>
+      {docs === null ? <p className="text-sm text-gray-400">Chargement…</p> : <DocumentsList documents={docs} />}
+    </Card>
+  );
+}
+
 export default function AnimateurSpace() {
   const { user } = useAuth();
   const { startTour } = useTour();
+  const isTesteur = user?.titre === "Testeur CACES";
   // ?tab=planning : ouvert depuis le bouton du rappel « Choisissez vos dates ».
   const [tab, setTab] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
-    return ["sessions", "planning", "dossier", "signature"].includes(requested) ? requested : "sessions";
+    return ["sessions", "planning", "dossier", "signature", "caces"].includes(requested) ? requested : "sessions";
   }); // sessions | planning | dossier | signature
   const [stages, setStages] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -337,7 +356,7 @@ export default function AnimateurSpace() {
         <div>
           <p className="overline">Espace animateur</p>
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">
-            {tab === "sessions" ? "Mes sessions" : tab === "planning" ? "Mon planning" : tab === "dossier" ? "Mon dossier" : "Ma signature"}
+            {tab === "sessions" ? "Mes sessions" : tab === "planning" ? "Mon planning" : tab === "dossier" ? "Mon dossier" : tab === "caces" ? "Mes documents CACES" : "Ma signature"}
           </h1>
           <p className="text-gray-500 mt-2">Bienvenue {user?.name}. {stages.length} session(s) attribuée(s).</p>
         </div>
@@ -351,6 +370,11 @@ export default function AnimateurSpace() {
           <Button variant={tab === "dossier" ? "default" : "outline"} size="sm" onClick={() => setTab("dossier")} className={tab === "dossier" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-dossier">
             <UserCircle size={14} className="mr-1" /> Mon dossier
           </Button>
+          {isTesteur && (
+            <Button variant={tab === "caces" ? "default" : "outline"} size="sm" onClick={() => setTab("caces")} className={tab === "caces" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-caces-docs">
+              <Archive size={14} className="mr-1" /> Documents CACES
+            </Button>
+          )}
           <Button variant={tab === "signature" ? "default" : "outline"} size="sm" onClick={() => setTab("signature")} className={tab === "signature" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-signature">
             <Signature size={14} className="mr-1" /> Ma signature
           </Button>
@@ -360,6 +384,7 @@ export default function AnimateurSpace() {
       {tab === "planning" && <FormateurPlanningTab />}
       {tab === "dossier" && <DossierTab />}
       {tab === "signature" && <SignatureTab user={user} />}
+      {tab === "caces" && <TesteurDocuments />}
 
       {tab === "sessions" && (!selected ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -408,6 +433,7 @@ export default function AnimateurSpace() {
             <p className="text-sm text-gray-500 mt-1">{selected.date_debut} au {selected.date_fin} · {selected.lieu_adresse}, {selected.lieu_ville}</p>
             <p className="text-xs text-[#0B7238] mt-1 flex items-center gap-1"><LockOpen size={12} /> {selected.acces_formateur?.message}</p>
             <EmargementPanel stage={selected} todayOnly today={selected.acces_formateur?.jour} onAccessLost={accessLost} />
+            <CacesExamPanel stage={selected} />
           </Card>
         </div>
       ))}

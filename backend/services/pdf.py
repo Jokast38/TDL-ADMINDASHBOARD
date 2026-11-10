@@ -1149,19 +1149,21 @@ def generate_caces_card_pdf(
         c.setFont("Times-Bold", size)
         c.drawCentredString(lc, y - 0.38 * cm, value)
 
-    dates = [e.get("date_obtention") for e in categories if e.get("date_obtention")]
+    # Plus de « Fait à …, le … » (demande du 2026-11-10) : mention non
+    # obligatoire (annexe A6/1 de la R.489) qui se confondait avec les dates
+    # d'obtention ; la place libérée sert à agrandir le cachet signé.
     _champ(h - 6.3 * cm, "Titulaire (en toutes lettres) :", student_name)
     _champ(h - 7.3 * cm, "Date de naissance :", _date_longue(certificate.get("date_naissance")))
-    _champ(h - 8.3 * cm, "Fait à Epinay-Sur-Seine, le :", _date_longue(max(dates) if dates else None))
-    _champ(h - 9.3 * cm, "Signataire (en toutes lettres) :", certificate.get("signataire_name") or "—")
+    _champ(h - 8.3 * cm, "Signataire (en toutes lettres) :", certificate.get("signataire_name") or "—")
     if certificate.get("signataire_qualite"):
         c.setFont("Times-Bold", 8.5)
-        c.drawCentredString(lc, h - 10.05 * cm, certificate["signataire_qualite"])
+        c.drawCentredString(lc, h - 9.05 * cm, certificate["signataire_qualite"])
 
-    # Cachet et signature du centre, au-dessus du trait « (signature) ».
+    # Cachet et signature du centre, au-dessus du trait « (signature) » :
+    # toute la hauteur entre le signataire et le trait.
     cachet = _image(cachet_bytes)
     if cachet:
-        _draw_fit(cachet, 0.5 * cm, 1.15 * cm, left_w - 1 * cm, 2.2 * cm)
+        _draw_fit(cachet, 0.3 * cm, 1.15 * cm, left_w - 0.6 * cm, h - 9.4 * cm - 1.15 * cm)
     c.setStrokeColor(colors.HexColor("#888888"))
     c.line(0.6 * cm, 1.1 * cm, left_w - 0.4 * cm, 1.1 * cm)
     c.setFillColor(grey)

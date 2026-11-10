@@ -620,6 +620,7 @@ export default function StudentSpace() {
     .sort((a, b) => a.stage.date_debut.localeCompare(b.stage.date_debut));
   const nextSession = upcomingSessions[0];
   const needsAttention = dossiers.filter((d) => d.status === "rejete");
+  const photoRequests = dossiers.filter((d) => d.photo_carte_manquante);
 
   return (
     <div className="min-h-screen bg-gray-50" data-testid="student-space">
@@ -713,6 +714,27 @@ export default function StudentSpace() {
               </Card>
             ))}
 
+            {/* Photo de la carte CACES encore absente : demandée ici, avec la
+                prise de vue directement dans la carte (recadrage automatique). */}
+            {photoRequests.map((d) => (
+              <Card key={`photo-${d.id}`} className="p-4 border border-amber-300 bg-amber-50 rounded-md shadow-none" data-testid={`photo-request-${d.id}`}>
+                <div className="flex items-start gap-2 mb-3">
+                  <Warning size={18} weight="fill" className="text-amber-700 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-900">Photo d'identité à prendre — {d.formation_title}</p>
+                    <p className="text-xs text-amber-700 mt-0.5">Elle sera imprimée sur votre carte CACES. Prenez-la maintenant avec votre téléphone ou votre webcam.</p>
+                  </div>
+                </div>
+                <PhotoCapture
+                  label="Photo pour votre carte CACES"
+                  uploadUrl={`/caces/me/dossiers/${d.id}/photo`}
+                  fetchUrl={`/caces/me/dossiers/${d.id}/photo`}
+                  onSaved={fetchDossiers}
+                  testId={`caces-photo-request-${d.id}`}
+                />
+              </Card>
+            ))}
+
             {needsAttention.map((d) => (
               <Card key={d.id} className="p-4 border border-red-300 bg-red-50 rounded-md shadow-none">
                 <div className="flex items-start gap-2">
@@ -724,7 +746,7 @@ export default function StudentSpace() {
               </Card>
             ))}
 
-            {!emargementRequests.length && !missingByDossier.length && !needsAttention.length && !frenchTests.some((t) => t.status === "pending") && (
+            {!emargementRequests.length && !missingByDossier.length && !needsAttention.length && !photoRequests.length && !frenchTests.some((t) => t.status === "pending") && (
               <Card className="p-4 border border-green-200 bg-green-50 rounded-md shadow-none flex items-center gap-2">
                 <CheckCircle size={18} weight="fill" className="text-green-600 shrink-0" />
                 <p className="text-sm text-green-700">Rien à signaler — tout est à jour de votre côté.</p>
@@ -761,7 +783,7 @@ export default function StudentSpace() {
                       <Badge className={`${STATUS_COLOR[d.status] || ""} hover:${STATUS_COLOR[d.status] || ""} text-[10px] shrink-0`}>{STATUS_LABEL[d.status] || d.status}</Badge>
                     </div>
                     <DocumentChecklist dossier={d} docs={docsByDossier[d.id] || []} onUpload={(file, docType) => uploadFile(file, d.id, docType)} />
-                    {d.category === "CACES" && (
+                    {d.category === "CACES" && !d.photo_carte_manquante && (
                       <div className="mt-4 pt-4 border-t border-gray-100">
                         <PhotoCapture
                           label="Photo pour votre carte CACES"

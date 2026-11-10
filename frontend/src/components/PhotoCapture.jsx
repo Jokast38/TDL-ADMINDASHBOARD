@@ -20,7 +20,7 @@ import { api } from "@/lib/api";
 // `uploadUrl` : endpoint POST (multipart, champ "file") qui enregistre la
 // photo. `fetchUrl` : endpoint GET qui sert la photo existante (404 si
 // aucune) — utilisé pour afficher l'aperçu déjà en place au chargement.
-export default function PhotoCapture({ uploadUrl, fetchUrl, label = "Photo d'identité", testId }) {
+export default function PhotoCapture({ uploadUrl, fetchUrl, label = "Photo d'identité", testId, onSaved }) {
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -112,9 +112,10 @@ export default function PhotoCapture({ uploadUrl, fetchUrl, label = "Photo d'ide
       const formData = new FormData();
       formData.append("file", blob, filename);
       await api.post(uploadUrl, formData, { headers: { "Content-Type": "multipart/form-data" } });
-      setPreviewUrl(URL.createObjectURL(blob));
-      setHasExisting(true);
+      // Aperçu relu depuis le serveur : c'est la version recadrée qui compte.
+      await checkExisting();
       toast.success("Photo enregistrée");
+      onSaved?.();
       return true;
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erreur lors de l'envoi de la photo");
@@ -146,9 +147,12 @@ export default function PhotoCapture({ uploadUrl, fetchUrl, label = "Photo d'ide
       <p className="text-sm font-medium flex items-center gap-1.5"><Camera size={15} /> {label}</p>
       <p className="text-xs text-gray-500">
         Photo type identité : visage découvert, de face, fond uni, bonne luminosité — comme pour un passeport.
+        Elle est recadrée automatiquement, visage centré.
       </p>
       <div className="flex items-center gap-3">
-        <div className="w-20 h-26 rounded-md border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center shrink-0" style={{ aspectRatio: "3 / 4" }}>
+        {/* Même format que le cadre de la carte CACES (3,0 x 3,7 cm) : le
+            serveur recadre la photo à ce format, visage centré. */}
+        <div className="w-20 rounded-md border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center shrink-0" style={{ aspectRatio: "30 / 37" }}>
           {previewUrl ? (
             <img src={previewUrl} alt="Photo d'identité" className="w-full h-full object-cover" />
           ) : (
