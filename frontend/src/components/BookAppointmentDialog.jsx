@@ -50,7 +50,10 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
   // collègue ou à l'admission) ; les autres rôles gardent le comportement
   // d'avant (RDV toujours pris en son propre nom, voir commercial_id côté
   // backend qui défaut à l'utilisateur connecté si non fourni).
-  const canAssign = ["admin", "responsable_admission", "agent_telephonique"].includes(user?.role);
+  // Cahier des charges « Rendez-vous dans le CRM » (2026-11-10) : la
+  // personne qui fait le phoning choisit toujours qui assurera le RDV, puis
+  // un créneau libre de son agenda (30 min, 9h-18h, lundi-samedi).
+  const canAssign = true;
   const [assignees, setAssignees] = useState([]);
   const [assignedTo, setAssignedTo] = useState("");
   const [lead, setLead] = useState(fixedLead || null);
@@ -68,16 +71,33 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [slots, setSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const assigneeId = assignedTo || user?.id;
+
+  const loadSlots = () => {
+    if (!open || !assigneeId || !date) return;
+    setLoadingSlots(true);
+    api.get("/call-center/availability", { params: { commercial_id: assigneeId, date } })
+      .then((r) => {
+        setSlots(r.data.creneaux || []);
+        // L'heure choisie n'est plus libre (autre personne, autre jour) : on la retire.
+        setTime((t) => ((r.data.creneaux || []).some((c) => c.heure === t && c.disponible) ? t : ""));
+      })
+      .catch(() => setSlots([]))
+      .finally(() => setLoadingSlots(false));
+  };
+  useEffect(loadSlots, [open, assigneeId, date]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open) return;
     setLead(fixedLead || null);
     setLeadQuery(""); setLeadResults([]); setPendingSlot(null);
     setKind("physique"); setFormationId(""); setLocation(""); setAssignedTo("");
-    setDate(toISO(new Date())); setTime("09:00"); setNotes("");
+    setDate(toISO(new Date())); setTime(""); setNotes("");
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data)).catch(() => {});
     if (canAssign) {
-      api.get("/employees").then((r) => setAssignees((r.data || []).filter((u) => u.role === "agent_telephonique" || u.role === "responsable_admission"))).catch(() => {});
+      api.get("/call-center/assignees").then((r) => setAssignees((r.data || []).filter((u) => u.id !== user?.id))).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, fixedLead]);
@@ -129,7 +149,7 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
 
   const submit = async () => {
     if (!lead) return toast.error("Choisissez un lead");
-    if (!date || !time) return toast.error("Date et heure requises");
+    if (!date || !time) return toast.error("Choisissez un créneau disponible");
     if (kind === "physique" && !location.trim()) return toast.error("Lieu requis pour un rendez-vous physique");
     setSubmitting(true);
     try {
@@ -144,11 +164,13 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
         notes: notes || undefined,
         commercial_id: assignedTo || undefined,
       });
-      toast.success("Rendez-vous créé");
+      toast.success("Rendez-vous confirmé");
       onCreated?.();
       onOpenChange(false);
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur lors de la création");
+      // Créneau pris entre-temps : on recharge pour en choisir un autre.
+      if (e.response?.status === 409) { setTime(""); loadSlots(); }
     } finally {
       setSubmitting(false);
     }
@@ -157,7 +179,7 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="book-appointment-dialog">
-        <DialogHeader><DialogTitle>Planifier un rendez-vous</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Prendre un rendez-vous</DialogTitle></DialogHeader>
         <div className="space-y-3 mt-2">
           {!fixedLead && (
             <div>
@@ -218,7 +240,7 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
 
           {canAssign && (
             <div>
-              <label className="text-sm font-medium">Attribuer à</label>
+              <label className="text-sm font-medium">Personne qui assurera le rendez-vous</label>
               <Select value={assignedTo || "__self__"} onValueChange={(v) => setAssignedTo(v === "__self__" ? "" : v)}>
                 <SelectTrigger data-testid="book-appointment-assignee"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -248,15 +270,30 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium">Date</label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="book-appointment-date" />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Heure</label>
-              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} data-testid="book-appointment-time" />
-            </div>
+          <div>
+            <label className="text-sm font-medium">Date</label>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="book-appointment-date" />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Créneau disponible</label>
+            {loadingSlots ? (
+              <p className="text-xs text-gray-400 mt-1">Chargement de l'agenda...</p>
+            ) : !slots.length ? (
+              <p className="text-xs text-gray-500 mt-1">Pas de créneau ce jour-là (rendez-vous du lundi au samedi, 9h-18h).</p>
+            ) : (
+              <div className="grid grid-cols-6 gap-1 mt-1" data-testid="book-appointment-slots">
+                {slots.map((c) => (
+                  <button
+                    key={c.heure} type="button" disabled={!c.disponible} onClick={() => setTime(c.heure)}
+                    title={c.pris ? "Déjà pris" : c.passe ? "Passé" : "Libre"}
+                    className={`text-xs py-1.5 rounded border ${time === c.heure ? "bg-[#0a0a0a] text-white border-[#0a0a0a]"
+                      : c.disponible ? "border-gray-200 hover:bg-gray-50" : "border-gray-100 text-gray-300 line-through cursor-not-allowed"}`}
+                  >
+                    {c.heure}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           {kind === "physique" && (
             <div>
@@ -265,14 +302,14 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
             </div>
           )}
           <div>
-            <label className="text-sm font-medium">Notes</label>
-            <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <label className="text-sm font-medium">Note (facultatif)</label>
+            <Textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Contexte de l'appel..." />
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Annuler</Button>
-          <Button onClick={submit} disabled={submitting || !lead} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="book-appointment-submit">
-            {submitting ? "..." : "Créer le rendez-vous"}
+          <Button onClick={submit} disabled={submitting || !lead || !time} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="book-appointment-submit">
+            {submitting ? "..." : "Confirmer le rendez-vous"}
           </Button>
         </div>
       </DialogContent>

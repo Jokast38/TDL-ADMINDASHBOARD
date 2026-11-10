@@ -29,3 +29,10 @@ class CallAppointmentUpdate(BaseModel):
     location: Optional[str] = None
     formation_id: Optional[str] = None
     formation_titre: Optional[str] = None
+
+
+class RdvResultatIn(BaseModel):
+    """Résultat d'un RDV saisi par la personne assignée : "effectue" (le RDV
+    a eu lieu) ou "absent" (le lead ne s'est pas présenté)."""
+    resultat: str
+    commentaire: Optional[str] = None

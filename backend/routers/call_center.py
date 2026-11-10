@@ -20,9 +20,11 @@ from core.security import require_role
 from core.config import ROLES_LEADS, ROLES_TEAM_MGMT, effective_assigned_categories
 from core.utils import now_iso
 from models.commercial_call import CallLogIn, CallScriptIn, CallScriptUpdate
-from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate
+from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate, RdvResultatIn
 from services.activity import log_action
 from services.appointment_notify import cancel_to_prospect, confirm_to_prospect
+from core import rdv_suivi
+from core.rdv_suivi import PARIS
 
 router = APIRouter(prefix="/call-center", tags=["call-center"])
 
@@ -245,6 +247,9 @@ APPOINTMENT_STATUS_LABELS = {
     "planifie": "Planifié",
     "traite": "Traité",
     "annule": "Annulé",
+    # Résultats saisis par la personne assignée (suivi des RDV, 2026-11-10).
+    "effectue": "Effectué",
+    "absent": "Lead absent",
 }
 # Statuts "actifs" du point de vue de qui a la main sur le créneau — un
 # agent voit toujours ses propres créneaux (peu importe le statut) + le pool
@@ -276,7 +281,100 @@ async def list_call_appointments(
             range_q["$lte"] = f"{date_to}T23:59:59.999999"
         query["scheduled_at"] = range_q
     items = await db.call_appointments.find(query, {"_id": 0}).sort("scheduled_at", 1).to_list(2000)
+    now = datetime.now(PARIS)
+    for a in items:
+        a["statut_suivi"] = rdv_suivi.statut_suivi(a, now)
     return {"items": items, "status_options": APPOINTMENT_STATUS_LABELS}
+
+
+# ---- Suivi des rendez-vous (cahier des charges « Rendez-vous dans le CRM »,
+# 2026-11-10) : créneaux disponibles de la personne assignée, onglet
+# Rendez-vous (mes RDV du jour / équipe) et saisie du résultat. Règles :
+# core/rdv_suivi.py ; notification « sans retour » : services/staff_notify.py.
+
+async def _rdv_planifies(commercial_id: str) -> list:
+    return await db.call_appointments.find(
+        {"commercial_id": commercial_id, "status": "planifie"}, {"_id": 0, "id": 1, "scheduled_at": 1},
+    ).to_list(2000)
+
+
+async def _check_creneau_libre(commercial_id: str, scheduled_at: str, exclude_id: Optional[str] = None) -> None:
+    if rdv_suivi.en_conflit(scheduled_at, await _rdv_planifies(commercial_id), exclude_id):
+        raise HTTPException(status_code=409, detail="Ce créneau n'est plus disponible — choisissez-en un autre")
+
+
+# Personnes qui peuvent assurer un rendez-vous (choisies à la réservation).
+RDV_ASSIGNABLE_ROLES = ["admin", "responsable_admission", "agent_admin", "agent_telephonique", "commercial", "responsable_commercial", "employe"]
+
+
+@router.get("/assignees")
+async def rdv_assignees(user: dict = Depends(require_role(*ROLES_LEADS))):
+    users = await db.users.find(
+        {"active": True, "role": {"$in": RDV_ASSIGNABLE_ROLES}}, {"_id": 0, "id": 1, "name": 1, "role": 1},
+    ).to_list(500)
+    return sorted((u for u in users if u.get("name")), key=lambda u: u["name"].lower())
+
+
+@router.get("/availability")
+async def appointment_availability(commercial_id: str, date: str, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Créneaux de 30 min (9h-18h, lundi-samedi) de la personne qui assurera
+    le RDV, avec ceux déjà pris ou passés."""
+    from datetime import date as _date
+    try:
+        jour = _date.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Date invalide")
+    return {"date": date, "creneaux": rdv_suivi.creneaux(jour, await _rdv_planifies(commercial_id), datetime.now(PARIS))}
+
+
+@router.get("/rendez-vous")
+async def list_rendez_vous(
+    vue: str = "moi", date_from: Optional[str] = None, date_to: Optional[str] = None,
+    commercial_id: Optional[str] = None, user: dict = Depends(require_role(*ROLES_LEADS)),
+):
+    """Onglet Rendez-vous : `vue=moi` (mes RDV, aujourd'hui par défaut) ou
+    `vue=equipe` (tous les RDV attribués, avec la personne assignée)."""
+    today = datetime.now(PARIS).date().isoformat()
+    date_from, date_to = date_from or today, date_to or date_from or today
+    query: Dict = {"status": {"$ne": "disponible"}}
+    if vue == "moi":
+        query["commercial_id"] = user["id"]
+    elif commercial_id:
+        query["commercial_id"] = commercial_id
+    items = await db.call_appointments.find(query, {"_id": 0}).sort("scheduled_at", 1).to_list(5000)
+    now = datetime.now(PARIS)
+    out = []
+    for a in items:
+        d = rdv_suivi.parse(a.get("scheduled_at"))
+        if not d or not (date_from <= d.date().isoformat() <= date_to):
+            continue
+        a["statut_suivi"] = rdv_suivi.statut_suivi(a, now)
+        a["date_paris"], a["heure_paris"] = d.date().isoformat(), d.strftime("%H:%M")
+        out.append(a)
+    return {"items": out, "statuts": rdv_suivi.STATUTS, "date_from": date_from, "date_to": date_to}
+
+
+@router.post("/appointments/{appointment_id}/resultat")
+async def set_rendez_vous_result(appointment_id: str, payload: RdvResultatIn, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """La personne assignée (ou un responsable) indique si le RDV a eu lieu."""
+    if payload.resultat not in rdv_suivi.RESULTATS:
+        raise HTTPException(status_code=400, detail="Résultat inconnu (effectue ou absent)")
+    appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+    if not appt:
+        raise HTTPException(status_code=404, detail="Rendez-vous introuvable")
+    if appt.get("commercial_id") != user["id"] and user["role"] not in ("admin", "responsable_admission", "responsable_commercial"):
+        raise HTTPException(status_code=403, detail="Seule la personne assignée peut renseigner ce rendez-vous")
+    if appt.get("status") == "annule":
+        raise HTTPException(status_code=400, detail="Rendez-vous annulé")
+    await db.call_appointments.update_one({"id": appointment_id}, {"$set": {
+        "status": payload.resultat, "resultat_commentaire": (payload.commentaire or "").strip() or None,
+        "resultat_at": now_iso(), "resultat_by": user["id"], "resultat_by_name": user.get("name"), "updated_at": now_iso(),
+    }})
+    await log_action(user, f"rdv_{payload.resultat}", "lead", appt.get("lead_id"), {
+        "lead_name": appt.get("lead_name"), "scheduled_at": appt.get("scheduled_at")})
+    appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+    appt["statut_suivi"] = rdv_suivi.statut_suivi(appt, datetime.now(PARIS))
+    return appt
 
 
 async def _student_as_contact(student_id: str) -> Optional[dict]:
@@ -363,6 +461,7 @@ async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depen
     commercial = await db.users.find_one({"id": commercial_id}, {"_id": 0, "id": 1, "name": 1, "email": 1})
     if not commercial:
         raise HTTPException(status_code=404, detail="Agent introuvable")
+    await _check_creneau_libre(commercial_id, payload.scheduled_at)
 
     appt = {
         "id": str(uuid.uuid4()), "lead_id": payload.lead_id,
@@ -432,9 +531,16 @@ async def update_call_appointment(
         if not commercial:
             raise HTTPException(status_code=404, detail="Agent introuvable")
         updates["commercial_name"] = commercial.get("name", "")
+    moved = ("scheduled_at" in updates and updates["scheduled_at"] != existing.get("scheduled_at")) or \
+        ("commercial_id" in updates and updates["commercial_id"] != existing.get("commercial_id"))
+    if moved and (updates.get("status") or existing.get("status")) == "planifie":
+        await _check_creneau_libre(updates.get("commercial_id") or existing.get("commercial_id"),
+                                   updates.get("scheduled_at") or existing.get("scheduled_at"), appointment_id)
     if "scheduled_at" in updates:
-        # Reporté à une autre heure/date -> le rappel doit repartir.
+        # Reporté à une autre heure/date -> le rappel doit repartir, et la
+        # notification « sans retour » aussi.
         updates["reminder_sent"] = False
+        updates["sans_retour_notified_at"] = None
     updates["updated_at"] = now_iso()
     await db.call_appointments.update_one({"id": appointment_id}, {"$set": updates})
     appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})

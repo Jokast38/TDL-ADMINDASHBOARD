@@ -7,7 +7,8 @@ import {
   House, GraduationCap, Folders, Users, Storefront,
   Robot, Gear, SignOut, List, X, ChartBar, ShoppingCart, IdentificationCard, Article,
   CalendarCheck, FilePdf, FileText, UsersThree, Key, TrendUp, Archive, Question, Student,
-  ClipboardText, CalendarPlus, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLeft, CaretRight, Headset, CreditCard, PhoneCall, Certificate,
+  ClipboardText, PenNib, CalendarBlank, Books, EnvelopeSimple, CaretLeft, CaretRight, Headset, CreditCard, PhoneCall, Certificate,
+  SteeringWheel, CalendarDots,
 } from "@phosphor-icons/react";
 
 // Exporté pour être réutilisé par le sélecteur de pages autorisées sur la
@@ -41,7 +42,9 @@ export const navAll = [
   { to: "/admin/dossiers", label: "Dossiers (Kanban)", icon: Folders, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/examens", label: "Examens", icon: ClipboardText, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/caces", label: "CACES", icon: Certificate, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
-  { to: "/admin/rdv", label: "Rendez-vous", icon: CalendarPlus, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
+  { to: "/admin/rdv", label: "Créneaux pratique / examen", icon: SteeringWheel, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
+  // Suivi des rendez-vous du CRM (cahier des charges du 2026-11-10).
+  { to: "/admin/rendez-vous", label: "Rendez-vous", icon: CalendarDots, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
   { to: "/admin/leads", label: "Leads", icon: UsersThree, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
   { to: "/admin/documents-library", label: "Bibliothèque PDF", icon: FilePdf, roles: ["admin", "responsable_admission", "agent_admin"] },
   { to: "/admin/doc-templates", label: "Modèles PDF", icon: FileText, roles: ["admin"] },

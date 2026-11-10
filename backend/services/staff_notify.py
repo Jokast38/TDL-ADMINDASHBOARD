@@ -1266,3 +1266,56 @@ async def send_call_appointment_reminders() -> int:
             await db.call_appointments.update_one({"id": appt["id"]}, {"$set": {"reminder_sent": True}})
             notified += 1
     return notified
+
+
+# ---------------------------------------------------------------------------
+# Rendez-vous sans retour (cahier des charges « Rendez-vous dans le CRM »,
+# 2026-11-10) : le lendemain à 9h, si la personne assignée n'a pas indiqué si
+# le RDV a eu lieu, notification (email + push) à elle et, en copie
+# groupée, aux admins et responsables d'admission. Une seule fois par RDV
+# (`sans_retour_notified_at`) ; règles : core/rdv_suivi.py.
+# ---------------------------------------------------------------------------
+
+RDV_SANS_RETOUR_COPIE = ["admin", "responsable_admission"]
+
+
+async def send_rdv_sans_retour_notifications(now: Optional[datetime] = None) -> int:
+    from core import rdv_suivi
+    now = now or datetime.now(rdv_suivi.PARIS)
+    candidats = await db.call_appointments.find({"status": "planifie"}, {"_id": 0}).to_list(5000)
+    a_notifier = [a for a in candidats if rdv_suivi.a_notifier(a, now)]
+    if not a_notifier:
+        return 0
+
+    lignes = []
+    for a in a_notifier:
+        quand = format_rdv(a.get("scheduled_at"))
+        path = f"/admin/rendez-vous?rdv={a['id']}"
+        assignee = await db.users.find_one({"id": a.get("commercial_id")}, {"_id": 0, "id": 1, "email": 1, "name": 1}) or {}
+        if assignee.get("email"):
+            await send_email(assignee["email"], f"Rendez-vous sans retour — {a.get('lead_name', '')}", _staff_email(
+                f"<p>Bonjour {assignee.get('name', '')},</p>"
+                f"<p>Le rendez-vous avec <b>{a.get('lead_name', '')}</b> du <b>{quand}</b> n'a pas de retour : "
+                "merci d'indiquer s'il a eu lieu ou si le lead était absent.</p>",
+                "Renseigner le rendez-vous", path,
+            ))
+        if assignee.get("id"):
+            await send_push_to_users([assignee["id"]], "Rendez-vous sans retour", f"{a.get('lead_name', '')} — {quand}", path)
+        await db.call_appointments.update_one({"id": a["id"]}, {"$set": {"sans_retour_notified_at": now_iso()}})
+        lignes.append(f"<li><b>{a.get('lead_name', '')}</b> — {quand} — {a.get('commercial_name') or 'non attribué'}</li>")
+
+    responsables = await db.users.find(
+        {"active": True, "role": {"$in": RDV_SANS_RETOUR_COPIE}}, {"_id": 0, "id": 1, "email": 1},
+    ).to_list(100)
+    n = len(a_notifier)
+    for r in responsables:
+        if r.get("email"):
+            await send_email(r["email"], f"Rendez-vous sans retour — {n} rendez-vous", _staff_email(
+                f"<p>{n} rendez-vous n'ont pas de retour (ni « effectué », ni « lead absent ») :</p><ul>{''.join(lignes)}</ul>",
+                "Voir les rendez-vous", "/admin/rendez-vous?vue=equipe",
+            ))
+    if responsables:
+        await send_push_to_users([r["id"] for r in responsables], "Rendez-vous sans retour",
+                                 f"{n} rendez-vous à renseigner", "/admin/rendez-vous?vue=equipe")
+    return n
+

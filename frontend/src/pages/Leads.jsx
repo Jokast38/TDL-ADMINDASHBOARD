@@ -2095,7 +2095,7 @@ export default function Leads() {
                       <button
                         onClick={() => setBookTarget(l)}
                         className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded"
-                        title="Planifier un rendez-vous"
+                        title="Prendre un rendez-vous"
                         data-testid={`book-appointment-${l.id}`}
                       >
                         <CalendarPlus size={14} />

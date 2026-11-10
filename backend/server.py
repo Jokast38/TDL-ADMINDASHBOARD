@@ -31,7 +31,7 @@ from routers.lead_automations import run_due_automations
 from services.staff_notify import (
     send_pending_callback_reminders, send_daily_pending_dossiers_digest, send_document_reminders,
     send_weekly_admin_report, send_daily_leads_digest, send_session_reminders, send_appointment_reminders, send_formateur_dossier_reminders,
-    send_call_appointment_reminders,
+    send_call_appointment_reminders, send_rdv_sans_retour_notifications,
     send_convention_session_reminders,
     send_formateur_planning_reminders,
     send_pending_inscription_reminders,
@@ -494,6 +494,10 @@ async def _call_appointment_reminders_loop():
             notified = await send_prospect_appointment_reminders()
             if notified:
                 log.info(f"Rappels de RDV aux prospects : {notified} envoyé(s)")
+            # RDV de la veille sans résultat saisi, à partir de 9h.
+            notified = await send_rdv_sans_retour_notifications()
+            if notified:
+                log.info(f"Rendez-vous sans retour : {notified} notification(s)")
         except Exception as e:
             log.warning(f"Rappels d'appels programmés : erreur — {e}")
         await asyncio.sleep(15 * 60)
