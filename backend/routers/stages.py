@@ -63,10 +63,14 @@ async def list_public_available_stages(formation_id: str):
     # quand des places sont vendues en parallèle sur une plateforme externe
     # (ex: Groupon pour les stages de récupération de points) et qu'il ne
     # faut jamais dépasser le total réel de places physiques.
+    # Jamais les sessions de test (scripts/formateur_test.py) ; limite haute
+    # pour couvrir une année entière (121 sessions 2027 de récupération de
+    # points importées le 2026-11-10 — l'ancienne limite de 100 coupait l'automne).
     stages = await db.stages.find(
-        {"formation_id": formation_id, "date_fin": {"$gte": today}, "statut": {"$nin": ["annule", "complet"]}},
+        {"formation_id": formation_id, "date_fin": {"$gte": today}, "statut": {"$nin": ["annule", "complet"]},
+         "is_test": {"$ne": True}},
         {"_id": 0},
-    ).sort("date_debut", 1).to_list(100)
+    ).sort("date_debut", 1).to_list(500)
     result = []
     for s in stages:
         nb_inscrits = await db.inscriptions.count_documents({"stage_id": s["id"], "status": "active"})

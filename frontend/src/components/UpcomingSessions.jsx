@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { MapPin, CalendarBlank } from "@phosphor-icons/react";
 
+// Sessions affichées par 15 (demande du 2026-11-10 : avec l'année 2027
+// entière en ligne, la liste de dates était interminable).
+export const SESSIONS_PAR_PAGE = 15;
+
 const MOIS_FR = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
 function formatDate(iso) {
@@ -46,6 +50,7 @@ export function sessionLabel(s) {
  * placeholders. */
 export default function UpcomingSessionsSection({ formationId, title = "Nos prochaines dates de formation" }) {
   const { sessions, loading } = useUpcomingSessions(formationId);
+  const [visible, setVisible] = useState({}); // nombre de dates affichées par centre
   if (!formationId || (!loading && sessions.length === 0)) return null;
 
   const byVille = sessions.reduce((acc, s) => {
@@ -62,7 +67,9 @@ export default function UpcomingSessionsSection({ formationId, title = "Nos proc
         <p className="text-sm text-gray-400">Chargement des sessions...</p>
       ) : (
         <div className="grid sm:grid-cols-2 gap-5">
-          {Object.entries(byVille).map(([ville, items]) => (
+          {Object.entries(byVille).map(([ville, items]) => {
+            const shown = visible[ville] || SESSIONS_PAR_PAGE;
+            return (
             <div key={ville} className="border border-gray-200 rounded-xl overflow-hidden bg-white">
               <div className="flex items-center gap-2 px-4 py-3 bg-black text-white">
                 <span className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#F5C518" }}>
@@ -71,7 +78,7 @@ export default function UpcomingSessionsSection({ formationId, title = "Nos proc
                 <span className="font-display font-extrabold text-sm">{ville}</span>
               </div>
               <ol className="divide-y divide-gray-100">
-                {items.map((s, i) => (
+                {items.slice(0, shown).map((s, i) => (
                   <li key={s.id} className={`flex items-center justify-between gap-3 px-4 py-3 ${i === 0 ? "bg-[#fff8dc]" : ""}`}>
                     <div className="min-w-0">
                       {i === 0 && <em className="block not-italic text-[10px] font-extrabold uppercase tracking-wide" style={{ color: "#8A6400" }}>Prochaine session</em>}
@@ -88,8 +95,18 @@ export default function UpcomingSessionsSection({ formationId, title = "Nos proc
                   </li>
                 ))}
               </ol>
+              {items.length > shown && (
+                <button
+                  type="button"
+                  onClick={() => setVisible((v) => ({ ...v, [ville]: shown + SESSIONS_PAR_PAGE }))}
+                  className="w-full px-4 py-3 text-xs font-bold uppercase border-t border-gray-100 hover:bg-gray-50"
+                >
+                  Voir plus de dates ({items.length - shown} restantes)
+                </button>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

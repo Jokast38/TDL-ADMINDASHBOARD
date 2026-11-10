@@ -14,6 +14,7 @@ import { setPageMeta } from "@/lib/seo";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
+import { SESSIONS_PAR_PAGE } from "@/components/UpcomingSessions";
 
 // Validation basique : téléphone français (avec ou sans +33, espaces/points/
 // tirets tolérés) et email — pour éviter les dossiers avec un numéro
@@ -46,6 +47,7 @@ export default function PublicInscription() {
   const [submitting, setSubmitting] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [visibleSessions, setVisibleSessions] = useState(SESSIONS_PAR_PAGE);
   const [selectedStageId, setSelectedStageId] = useState("");
 
   // Retour depuis Stripe Checkout : le navigateur recharge la page, l'état React
@@ -149,6 +151,7 @@ export default function PublicInscription() {
   const pickFormation = async (f) => {
     setFormationId(f.id);
     setSelectedStageId("");
+    setVisibleSessions(SESSIONS_PAR_PAGE);
     if (SESSION_STEP_CATEGORIES.includes(f.category)) {
       setLoadingSessions(true);
       setStep(1.5);
@@ -260,8 +263,9 @@ export default function PublicInscription() {
             {loadingSessions ? (
               <p className="text-gray-400 text-center py-12">Chargement des sessions disponibles...</p>
             ) : sessions.length ? (
+              <>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {sessions.map((s) => (
+                {sessions.slice(0, visibleSessions).map((s) => (
                   <Card
                     key={s.id}
                     onClick={() => { setSelectedStageId(s.id); setStep(2); }}
@@ -288,6 +292,14 @@ export default function PublicInscription() {
                   </Card>
                 ))}
               </div>
+              {sessions.length > visibleSessions && (
+                <div className="text-center mt-6">
+                  <Button variant="outline" onClick={() => setVisibleSessions((n) => n + SESSIONS_PAR_PAGE)} data-testid="more-sessions">
+                    Voir plus de dates ({sessions.length - visibleSessions} restantes)
+                  </Button>
+                </div>
+              )}
+              </>
             ) : (
               <Card className="p-8 text-center border-dashed border-gray-200">
                 <p className="text-gray-500">Aucune session disponible pour le moment — vous pourrez continuer votre inscription et une session vous sera proposée par notre équipe.</p>
