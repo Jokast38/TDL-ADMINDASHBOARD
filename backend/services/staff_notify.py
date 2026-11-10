@@ -589,6 +589,13 @@ async def send_document_reminders(min_gap_hours: int = 72) -> int:
     lui-même recontacter l'apprenant si besoin. Appelée par la boucle de fond
     (voir server.py) et via POST /reminders/documents/run pour un test/cron
     externe."""
+    # Interrupteur Paramètres → Email (demande du 2026-11-10) : les dossiers
+    # sont encore complétés sur place au paiement, les relances semaient la
+    # confusion chez les apprenants. Désactivées tant que non réactivées.
+    settings = await db.settings.find_one({"id": "global"}, {"_id": 0, "doc_reminders_enabled": 1}) or {}
+    if not settings.get("doc_reminders_enabled"):
+        return 0
+
     now = datetime.now(timezone.utc)
     dossiers = await db.dossiers.find({"status": {"$ne": "termine"}}, {"_id": 0}).to_list(5000)
     notified = 0

@@ -157,6 +157,20 @@ export default function Settings() {
               )}
             </div>
           </Card>
+          <Card className="p-6 border border-gray-200 rounded-md shadow-none mt-4">
+            <h3 className="font-display text-xl font-bold mb-1">Relances automatiques</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Relance des apprenants dont le dossier a des documents manquants (email + WhatsApp, au plus une fois
+              tous les 3 jours). À laisser désactivé tant que les dossiers sont complétés sur place au paiement.
+            </p>
+            <div className="flex items-center gap-2">
+              <Switch checked={!!s.doc_reminders_enabled} onCheckedChange={(v) => update("doc_reminders_enabled", v)} data-testid="doc-reminders-enabled" />
+              <label className="text-sm font-medium">
+                Relances « documents manquants » {s.doc_reminders_enabled ? "activées" : "désactivées"}
+              </label>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">Pensez à cliquer sur « Enregistrer » en bas de page.</p>
+          </Card>
         </TabsContent>
 
         <TabsContent value="sms">

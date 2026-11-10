@@ -28,6 +28,10 @@ class SettingsIn(BaseModel):
     sms_sender: Optional[str] = None
     # Types de SMS activés un par un (voir services/sms.py:SMS_CATEGORIES).
     sms_categories: Optional[dict] = None
+    # Relances automatiques « documents manquants » aux apprenants (email +
+    # WhatsApp). Désactivées tant que les dossiers sont complétés sur place
+    # (demande du 2026-11-10) : absent ou False = pas de relance.
+    doc_reminders_enabled: Optional[bool] = None
     n8n_webhook_inscription: Optional[str] = None
     n8n_webhook_dossier: Optional[str] = None
     n8n_webhook_payment: Optional[str] = None
