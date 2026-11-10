@@ -43,6 +43,7 @@ _LEGACY_MAP = {
     "plus_interesse": ("non_interesse", None, "plus_interesse", None),
     "inscrit": ("inscrit", None, None, None),
     "paye": ("paye", None, None, None),
+    "rdv_pris": ("rendez_vous", "chaud", None, None),
     # pipeline_status (Centre d'appel)
     "formulaire_rempli": ("a_contacter", "froid", None, None),
     "lead_entrant_sans_rdv": ("a_contacter", "froid", None, None),
@@ -239,7 +240,9 @@ def statut_to_qualification(lead: dict) -> str:
                 pass
         return "a_relancer"
     return {
-        "a_contacter": "a_contacter", "rendez_vous": "a_relancer",
+        # Statut « rendez_vous » : affiché « Rendez-vous pris » depuis le
+        # 2026-11-10 (avant, il retombait sur « À relancer »).
+        "a_contacter": "a_contacter", "rendez_vous": "rdv_pris",
         # "paye" a sa propre qualification distincte d'"inscrit" depuis la
         # demande du 2026-11-02 — avant, un lead payé retombait sur
         # "Inscrit" au rechargement, mélangeant son CA avec celui des

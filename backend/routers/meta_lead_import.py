@@ -81,6 +81,9 @@ QUALIFICATION_LABELS = {
     "a_contacter": "À contacter",
     "non_qualifie": "Prospect non qualifié",
     "interesse": "Intéressé",
+    # Posée automatiquement quand un agent confirme un rendez-vous pour le
+    # prospect (routers/call_center.py, demande du 2026-11-10).
+    "rdv_pris": "Rendez-vous pris",
     "pas_de_reponse": "Pas de réponse",
     "a_relancer": "À relancer",
     # Cas récupération de points : un seul stage autorisé par an, donc un

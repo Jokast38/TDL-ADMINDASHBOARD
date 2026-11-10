@@ -113,3 +113,40 @@ def test_critere_de_validation(monkeypatch):
     # Jeudi même : jamais le jour du RDV.
     n, _, _ = _run(monkeypatch, [dict(RDV)], at(JEUDI, "19:00"))
     assert n == 0
+
+
+def test_qualification_rdv_pris():
+    from services.lead_migration import map_legacy_status, statut_to_qualification
+    assert map_legacy_status("rdv_pris")["statut"] == "rendez_vous"
+    assert statut_to_qualification({"statut": "rendez_vous"}) == "rdv_pris"
+
+
+def test_rdv_qualifie_le_prospect_sans_retrograder(monkeypatch):
+    from routers import call_center
+
+    class Coll:
+        def __init__(self, docs):
+            self.docs = docs
+
+        async def find_one(self, q, _p=None):
+            return next((dict(d) for d in self.docs if d["id"] == q["id"]), None)
+
+        async def update_one(self, q, u):
+            for d in self.docs:
+                if d["id"] == q["id"]:
+                    d.update(u["$set"])
+
+    class Db:
+        leads = Coll([{"id": "l1", "statut": "a_contacter"}, {"id": "l2", "statut": "paye"}])
+        meta_lead_imports = Coll([{"id": "m1", "qualification": "interesse"}])
+
+    async def noop(*_a, **_k):
+        return None
+    monkeypatch.setattr(call_center, "db", Db)
+    monkeypatch.setattr(call_center, "log_action", noop)
+    user = {"id": "a1", "name": "Agent"}
+    for lid in ("l1", "l2", "m1"):
+        asyncio.run(call_center._qualifier_rdv_pris(lid, user))
+    assert Db.leads.docs[0]["statut"] == "rendez_vous" and Db.leads.docs[0]["qualified_by"] == "a1"
+    assert Db.leads.docs[1]["statut"] == "paye"
+    assert Db.meta_lead_imports.docs[0]["qualification"] == "rdv_pris"

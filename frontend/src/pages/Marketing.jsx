@@ -618,6 +618,7 @@ const META_LEAD_QUALIF_COLORS = {
   a_contacter: "bg-gray-100 text-gray-600 hover:bg-gray-100",
   non_qualifie: "bg-gray-200 text-gray-500 hover:bg-gray-200",
   interesse: "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10",
+  rdv_pris: "bg-indigo-100 text-indigo-700 hover:bg-indigo-100",
   pas_de_reponse: "bg-amber-100 text-amber-700 hover:bg-amber-100",
   a_relancer: "bg-blue-100 text-blue-700 hover:bg-blue-100",
   a_relancer_1_an: "bg-purple-100 text-purple-700 hover:bg-purple-100",
@@ -1017,6 +1018,7 @@ function CosmosiaTab() {
         open={!!bookTarget}
         onOpenChange={(v) => !v && setBookTarget(null)}
         lead={bookTarget}
+        onCreated={() => load()}
       />
       <SendPaymentLinkDialog
         open={!!paymentLinkTarget}
@@ -1411,6 +1413,7 @@ function MetaEventsTab() {
         open={!!bookTarget}
         onOpenChange={(v) => !v && setBookTarget(null)}
         lead={bookTarget}
+        onCreated={() => load()}
       />
       <SendPaymentLinkDialog
         open={!!paymentLinkTarget}

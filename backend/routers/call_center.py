@@ -435,6 +435,32 @@ async def search_people(q: str = "", user: dict = Depends(require_role(*ROLES_LE
     return results[:15]
 
 
+# Qualifications plus avancées qu'un RDV : jamais rétrogradées.
+_QUALIF_APRES_RDV = ("inscrit", "paye")
+
+
+async def _qualifier_rdv_pris(lead_id: str, user: dict) -> None:
+    """Prospect de n'importe quelle liste (Leads, Cosmosia, Meta, Centre
+    d'appel) passé en « Rendez-vous pris » quand un agent lui place un RDV
+    (demande du 2026-11-10). Un prospect déjà inscrit ou payé reste tel quel."""
+    stamp = {"qualified_by": user["id"], "qualified_by_name": user.get("name", ""),
+             "qualified_at": now_iso(), "updated_at": now_iso()}
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0, "statut": 1, "name": 1})
+    if lead is not None:
+        if lead.get("statut") in _QUALIF_APRES_RDV:
+            return
+        await db.leads.update_one({"id": lead_id}, {"$set": {
+            "statut": "rendez_vous", "chaleur": "chaud", "motif_cloture": None, **stamp}})
+        from routers.leads import _leads_cache_clear
+        _leads_cache_clear()
+    else:
+        lead = await db.meta_lead_imports.find_one({"id": lead_id}, {"_id": 0, "qualification": 1, "name": 1})
+        if not lead or lead.get("qualification") in _QUALIF_APRES_RDV:
+            return
+        await db.meta_lead_imports.update_one({"id": lead_id}, {"$set": {"qualification": "rdv_pris", **stamp}})
+    await log_action(user, "lead_qualifie", "lead", lead_id, {"name": lead.get("name"), "qualification": "rdv_pris", "auto": True})
+
+
 @router.post("/appointments")
 async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depends(require_role(*ROLES_LEADS))):
     """Création manuelle — contrairement aux créneaux générés en masse par
@@ -475,6 +501,8 @@ async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depen
         "created_by": user["id"], "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.call_appointments.insert_one(appt)
+    if person_type == "prospect":
+        await _qualifier_rdv_pris(payload.lead_id, user)
     await log_action(user, "rdv_appel_cree", "lead", payload.lead_id, {
         "lead_name": lead.get("name"), "scheduled_at": payload.scheduled_at, "commercial_name": commercial.get("name", ""),
     })

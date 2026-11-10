@@ -36,6 +36,7 @@ const QUALIF_COLOR = {
   a_contacter: "bg-gray-100 text-gray-600",
   non_qualifie: "bg-gray-200 text-gray-500",
   interesse: "bg-[#0B7238]/10 text-[#0B7238]",
+  rdv_pris: "bg-indigo-100 text-indigo-700",
   pas_de_reponse: "bg-amber-100 text-amber-700",
   a_relancer: "bg-blue-100 text-blue-700",
   a_relancer_1_an: "bg-purple-100 text-purple-700",
@@ -2324,6 +2325,7 @@ export default function Leads() {
         open={!!bookTarget}
         onOpenChange={(v) => !v && setBookTarget(null)}
         lead={bookTarget}
+        onCreated={() => load()}
       />
 
       <SendPaymentLinkDialog
