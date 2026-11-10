@@ -89,7 +89,7 @@ export default function EmargementPanel({ stage, todayOnly = false, today = null
         student_name: signTarget.student_name, signature_data_url: dataUrl, present: presence,
         session_date: sessionDate, periode,
       });
-      toast.success(presence ? "Émargement signé · attestation générée" : "Absence enregistrée");
+      toast.success(presence ? "Émargement signé · attestation (bêta) générée" : "Absence enregistrée");
       setSignOpen(false);
       refresh(sessionDate, periode);
     } catch (e) {
@@ -131,6 +131,15 @@ export default function EmargementPanel({ stage, todayOnly = false, today = null
 
   return (
     <div>
+      {/* Émargement numérique encore en test (demande du 2026-11-10) : seule
+          la feuille papier fournie par Lydia fait foi. */}
+      <div className="mt-4 p-3 rounded-md border border-amber-300 bg-amber-50 text-sm text-amber-900 flex items-start gap-2" data-testid="emargement-beta">
+        <Badge className="bg-amber-500 text-white hover:bg-amber-500 shrink-0">BÊTA</Badge>
+        <p>
+          L'émargement en ligne et l'attestation générée sont encore en test. <b>Seul l'émargement sur la feuille papier
+          fournie par Lydia est valable</b> : faites toujours signer la version papier.
+        </p>
+      </div>
       {jours.length > 1 && (
         <div className="mt-4">
           <p className="overline mb-2">Jour de la session ({jours.length} jours)</p>

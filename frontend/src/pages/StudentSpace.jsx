@@ -383,7 +383,7 @@ function AttestationSection({ dossierId }) {
   if (info.signed) {
     return (
       <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-4 flex items-center justify-between flex-wrap gap-2">
-        <p className="text-sm text-green-800 flex items-center gap-2"><CheckCircle size={16} weight="fill" /> Votre attestation de stage est signée.</p>
+        <p className="text-sm text-green-800 flex items-center gap-2"><CheckCircle size={16} weight="fill" /> Votre attestation de stage est signée. <Badge className="bg-amber-500 text-white hover:bg-amber-500 text-[10px] px-1.5 py-0 shrink-0">BÊTA</Badge></p>
         <Button size="sm" variant="outline" onClick={download} disabled={downloading} data-testid={`download-attestation-${dossierId}`}>
           <FilePdf size={14} className="mr-1" /> {downloading ? "..." : "Télécharger"}
         </Button>
@@ -393,7 +393,7 @@ function AttestationSection({ dossierId }) {
 
   return (
     <div className="bg-gray-50 border border-gray-200 rounded-md p-4 mb-4">
-      <p className="text-sm font-medium mb-3 flex items-center gap-2"><Signature size={16} className="text-[#d4af37]" /> Votre attestation de stage est disponible — complétez et signez-la</p>
+      <p className="text-sm font-medium mb-3 flex items-center gap-2"><Signature size={16} className="text-[#d4af37]" /> Votre attestation de stage est disponible — complétez et signez-la <Badge className="bg-amber-500 text-white hover:bg-amber-500 text-[10px] px-1.5 py-0 shrink-0">BÊTA</Badge></p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
         <Input placeholder="Adresse" value={identity.adresse} onChange={(e) => setIdentity((i) => ({ ...i, adresse: e.target.value }))} />
@@ -548,7 +548,7 @@ export default function StudentSpace() {
     setSigningEmargement(true);
     try {
       await api.post("/me/emargements/sign", { request_id: signEmargementTarget.id, signature_data_url: dataUrl });
-      toast.success("Émargement signé · attestation disponible dans votre espace");
+      toast.success("Émargement signé · attestation (bêta) disponible dans votre espace");
       setSignEmargementTarget(null);
       fetchEmargementRequests();
     } catch (e) {
@@ -668,8 +668,11 @@ export default function StudentSpace() {
                     <div className="flex items-start gap-2">
                       <Signature size={18} className="text-amber-700 mt-0.5 shrink-0" />
                       <div>
-                        <p className="text-sm font-medium text-amber-900">
-                          Émargement à signer — {r.formation_titre || "votre formation"}
+                        <p className="text-sm font-medium text-amber-900 flex items-center gap-2 flex-wrap">
+                          Émargement à signer — {r.formation_titre || "votre formation"} <Badge className="bg-amber-500 text-white hover:bg-amber-500 text-[10px] px-1.5 py-0 shrink-0">BÊTA</Badge>
+                        </p>
+                        <p className="text-xs text-amber-800">
+                          Version en test : seul l'émargement sur la feuille papier fournie par Lydia est valable.
                         </p>
                         <p className="text-xs text-amber-700">
                           Session du {formatDateFR(r.session_date)}
