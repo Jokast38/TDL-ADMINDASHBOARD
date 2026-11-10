@@ -39,3 +39,16 @@ def test_relances_coupees_par_defaut_et_si_desactivees(monkeypatch):
         monkeypatch.setattr(staff_notify, "db", _Db(settings))
         assert asyncio.run(staff_notify.send_document_reminders()) == 0
     assert not _Dossiers.called
+
+
+def test_relances_formateurs_coupees_par_defaut(monkeypatch):
+    class _Users:
+        def find(self, *_a, **_k):
+            raise AssertionError("aucun formateur ne doit être lu quand les relances sont coupées")
+
+    for settings in (None, {"formateur_doc_reminders_enabled": False}):
+        db = _Db(settings)
+        db.users = _Users()
+        monkeypatch.setattr(staff_notify, "db", db)
+        assert asyncio.run(staff_notify.send_formateur_dossier_reminders()) == 0
+        assert asyncio.run(staff_notify.send_convention_session_reminders()) == 0

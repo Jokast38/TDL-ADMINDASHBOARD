@@ -1018,6 +1018,15 @@ async def send_emargement_reminders() -> int:
     return notified
 
 
+async def _formateur_doc_reminders_on() -> bool:
+    """Interrupteur Paramètres → Email (demande du 2026-11-10) : les pièces
+    et conventions des formateurs sont déjà réunies sur papier, les relances
+    (pièces manquantes, convention à signer) sont coupées tant qu'il n'est
+    pas réactivé."""
+    s = await db.settings.find_one({"id": "global"}, {"_id": 0, "formateur_doc_reminders_enabled": 1}) or {}
+    return bool(s.get("formateur_doc_reminders_enabled"))
+
+
 async def send_formateur_dossier_reminders() -> int:
     """Suivi du délai de 24h pour compléter le dossier formateur (documents +
     convention, voir routers/employees.py) — un rappel au formateur lui-même
@@ -1027,6 +1036,8 @@ async def send_formateur_dossier_reminders() -> int:
     sur le compte)."""
     from routers.employees import _formateur_dossier_status, FORMATEUR_DOC_TYPES
 
+    if not await _formateur_doc_reminders_on():
+        return 0
     now = datetime.now(timezone.utc)
     animateurs = await db.users.find({"role": "animateur", "active": True}, {"_id": 0}).to_list(500)
     notified = 0
@@ -1088,6 +1099,8 @@ async def send_convention_session_reminders() -> int:
     une autre session avant d'avoir signé, un nouveau rappel repart."""
     from routers.employees import _next_upcoming_stage_for_animateur
 
+    if not await _formateur_doc_reminders_on():
+        return 0
     animateurs = await db.users.find(
         {"role": "animateur", "active": True, "convention_signed_at": {"$exists": False}}, {"_id": 0}
     ).to_list(500)

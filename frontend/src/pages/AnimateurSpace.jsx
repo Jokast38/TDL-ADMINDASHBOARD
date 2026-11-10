@@ -127,6 +127,56 @@ function SignatureTab({ user }) {
   );
 }
 
+// Nom, prénom et matricule saisis par le formateur (demande du 2026-11-10) :
+// seulement ceux qui manquent ; une fois enregistrés, ils ne sont plus
+// modifiables ici (un agent peut les corriger depuis la page Formateurs).
+const INFOS_FIELDS = [
+  ["prenom", "Prénom"], ["nom", "Nom"], ["matricule", "Matricule (ex : B-2409500050)"],
+];
+
+function MesInfosCard() {
+  const [saved, setSaved] = useState(null); // valeurs enregistrées
+  const [form, setForm] = useState({});
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    api.get("/auth/me").then((r) => setSaved({ prenom: r.data.prenom || "", nom: r.data.nom || "", matricule: r.data.matricule || "" })).catch(() => {});
+  }, []);
+  if (!saved) return null;
+  const manquants = INFOS_FIELDS.filter(([k]) => !saved[k].trim());
+  if (!manquants.length) return null;
+  const save = async () => {
+    setSaving(true);
+    try {
+      const { data } = await api.put("/me/infos-formateur", form);
+      setSaved({ prenom: data.prenom || "", nom: data.nom || "", matricule: data.matricule || "" });
+      setForm({});
+      toast.success("Informations enregistrées");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <Card className="p-5 border border-amber-300 bg-amber-50 rounded-md shadow-none" data-testid="mes-infos-formateur">
+      <h3 className="font-display font-bold mb-1">Informations à compléter</h3>
+      <p className="text-sm text-amber-800 mb-3">
+        Elles figurent sur les feuilles d'émargement et les attestations. Vérifiez-les bien : une fois enregistrées,
+        elles ne sont plus modifiables depuis votre espace.
+      </p>
+      <div className="grid sm:grid-cols-3 gap-2">
+        {manquants.map(([k, label]) => (
+          <Input key={k} placeholder={label} value={form[k] || ""} onChange={(e) => setForm({ ...form, [k]: e.target.value })} />
+        ))}
+      </div>
+      <Button size="sm" className="mt-3 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" onClick={save}
+        disabled={saving || !manquants.some(([k]) => (form[k] || "").trim())}>
+        Enregistrer
+      </Button>
+    </Card>
+  );
+}
+
 function DossierTab() {
   const [dossier, setDossier] = useState(null);
   const [signing, setSigning] = useState(false);
@@ -186,6 +236,7 @@ function DossierTab() {
 
   return (
     <div className="space-y-6 max-w-2xl">
+      <MesInfosCard />
       {dossier.dossier_overdue && (
         <div className="border border-red-300 bg-red-50 text-red-700 rounded-md p-3 text-sm">
           ⏰ Le délai de 24h pour compléter votre dossier est dépassé — merci de finaliser au plus vite les éléments manquants.

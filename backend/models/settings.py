@@ -32,6 +32,9 @@ class SettingsIn(BaseModel):
     # WhatsApp). Désactivées tant que les dossiers sont complétés sur place
     # (demande du 2026-11-10) : absent ou False = pas de relance.
     doc_reminders_enabled: Optional[bool] = None
+    # Relances aux formateurs : pièces de leur dossier et convention à signer
+    # (absent ou False = pas de relance, demande du 2026-11-10).
+    formateur_doc_reminders_enabled: Optional[bool] = None
     n8n_webhook_inscription: Optional[str] = None
     n8n_webhook_dossier: Optional[str] = None
     n8n_webhook_payment: Optional[str] = None

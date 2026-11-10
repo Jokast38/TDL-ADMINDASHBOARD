@@ -169,6 +169,13 @@ export default function Settings() {
                 Relances « documents manquants » {s.doc_reminders_enabled ? "activées" : "désactivées"}
               </label>
             </div>
+            <div className="flex items-center gap-2 mt-4">
+              <Switch checked={!!s.formateur_doc_reminders_enabled} onCheckedChange={(v) => update("formateur_doc_reminders_enabled", v)} data-testid="formateur-doc-reminders-enabled" />
+              <label className="text-sm font-medium">
+                Relances « dossier formateur » (pièces et convention à signer) {s.formateur_doc_reminders_enabled ? "activées" : "désactivées"}
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">À laisser désactivé tant que les pièces des formateurs sont gérées sur papier.</p>
             <p className="text-xs text-gray-400 mt-2">Pensez à cliquer sur « Enregistrer » en bas de page.</p>
           </Card>
         </TabsContent>

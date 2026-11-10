@@ -9,7 +9,7 @@ from core.storage import put_object, get_object
 from core.utils import now_iso
 from core.config import APP_NAME, ROLES_ALL_STAFF, ROLES_TEAM_MGMT, effective_assigned_categories
 from core.placement_rules import PERMIS_ONLY_DOC_TYPES, formateur_is_permis
-from models.employee import EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn, AllowedPagesIn, MatriculeIn, RoleIn, IdentiteIn, QuotaIn
+from models.employee import MesInfosFormateurIn, EmployeeIn, AccountStatusIn, AssignedCategoriesIn, AssignedCentersIn, AssignedTrainingAssignmentsIn, AgrementBafmIn, EmployeeTitreIn, ConventionSignIn, DossierAdjustmentIn, AllowedPagesIn, MatriculeIn, RoleIn, IdentiteIn, QuotaIn
 from services.password_reset import create_reset_token, send_reset_link_email, send_password_setup_email
 from services.pdf import generate_formateur_convention_pdf
 from services.email import send_email
@@ -400,6 +400,25 @@ async def upload_my_profile_document(
 
     doc.pop("_id", None)
     return doc
+
+
+@router.put("/me/infos-formateur")
+async def update_my_formateur_infos(payload: MesInfosFormateurIn, user: dict = Depends(require_role("animateur"))):
+    """Nom, prénom et matricule saisis par le formateur lui-même (demande du
+    2026-11-10 : la liste importée n'avait pas tous les noms ni matricules).
+    Uniquement les champs encore vides : une fois rempli, seul un agent peut
+    le corriger (page Formateurs)."""
+    update = {k: v.strip() for k, v in payload.model_dump().items()
+              if v and v.strip() and not (user.get(k) or "").strip()}
+    if not update:
+        raise HTTPException(status_code=400, detail="Ces informations sont déjà renseignées — contactez l'équipe TDL pour les modifier")
+    prenom = update.get("prenom", user.get("prenom") or "")
+    nom = update.get("nom", user.get("nom") or "")
+    if "prenom" in update or "nom" in update:
+        update["name"] = f"{prenom} {nom}".strip()
+    update["updated_at"] = now_iso()
+    await db.users.update_one({"id": user["id"]}, {"$set": update})
+    return await db.users.find_one({"id": user["id"]}, {"_id": 0, "password_hash": 0})
 
 
 @router.put("/me/agrement-bafm")

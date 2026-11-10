@@ -50,6 +50,13 @@ class MatriculeIn(BaseModel):
     matricule: Optional[str] = None
 
 
+class MesInfosFormateurIn(BaseModel):
+    """Saisie par le formateur lui-même (espace formateur, « Mon dossier »)."""
+    prenom: Optional[str] = None
+    nom: Optional[str] = None
+    matricule: Optional[str] = None
+
+
 class IdentiteIn(BaseModel):
     nom: str = Field(min_length=1)
     prenom: str = Field(min_length=1)
