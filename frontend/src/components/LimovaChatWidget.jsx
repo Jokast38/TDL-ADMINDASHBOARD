@@ -43,11 +43,20 @@ function injectWidget() {
   document.body.appendChild(script);
 }
 
+// Pages qui ne sont pas « le site public » (demande du 2026-11-10) :
+// connexion et mots de passe, dashboard, espaces élève et formateur, tests
+// et enquêtes envoyés par lien. L'espace élève est /espace-eleve (l'ancien
+// test sur /espace-etudiant ne correspondait à aucune page).
+const PRIVATE_PREFIXES = [
+  "/admin", "/espace-", "/login", "/forgot-password", "/reset-password", "/change-password",
+  "/test-francais", "/test-positionnement", "/satisfaction",
+];
+
+export const isPublicSitePage = (pathname) => !PRIVATE_PREFIXES.some((p) => pathname.startsWith(p));
+
 export default function LimovaChatWidget() {
   const location = useLocation();
-  // Réservé au site public : jamais sur le dashboard admin ni sur l'espace
-  // apprenant (zone authentifiée, pas "le site public" au sens de la demande).
-  const isPublicPage = !location.pathname.startsWith("/admin") && !location.pathname.startsWith("/espace-etudiant");
+  const isPublicPage = isPublicSitePage(location.pathname);
 
   useEffect(() => {
     if (isPublicPage) injectWidget();
