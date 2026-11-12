@@ -31,7 +31,7 @@ SCRAPED_MARK = "Import scraper ProStages"
 STOP_RE = re.compile(r"^\W*(stop|arr[eê]t|desabonn|désabonn|unsubscribe)", re.IGNORECASE)
 # Ordre des statuts d'un SMS : on ne revient jamais en arrière
 RANK = {"pending": 0, "sent": 1, "delivered": 2, "failed": 3, "cancelled": 3}
-STATE_MAP = {"Pending": "pending", "Processed": "pending", "Sent": "sent", "Delivered": "delivered",
+STATE_MAP = {"queued": "pending", "sending": "pending", "Pending": "pending", "Processed": "pending", "Sent": "sent", "Delivered": "delivered",
              "Failed": "failed", "Cancelled": "cancelled"}
 
 
@@ -126,7 +126,7 @@ async def process_campaigns() -> int:
     if not ok:
         return 0
     cfg = await smsgate.gateway_config()
-    if not (cfg["user"] and cfg["password"]):
+    if not smsgate.is_configured(cfg):
         return 0
     budget = cfg["daily_cap"] - await _sent_today()
     total = 0
@@ -155,7 +155,8 @@ async def process_campaigns() -> int:
                        "campaign_id": campaign["id"], "lead_id": r["lead_id"], "to": r["phone"], "content": text,
                        "created_at": now_iso(), "updated_at": now_iso()}
                 try:
-                    await smsgate.send(cfg, msg_id, r["phone"], text)
+                    res = await smsgate.send(cfg, msg_id, r["phone"], text)
+                    log["gateway_id"] = res.get("id") or msg_id
                     log["status"] = "pending"
                 except smsgate.GatewayError as e:
                     if e.retryable:
@@ -203,7 +204,7 @@ async def poll_statuses() -> int:
     """Filet de sécurité si les webhooks n'arrivent pas : interroge la passerelle
     pour les SMS des dernières 48 h encore en attente ou envoyés sans accusé."""
     cfg = await smsgate.gateway_config()
-    if not (cfg["user"] and cfg["password"]):
+    if not smsgate.is_configured(cfg):
         return 0
     since = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
     logs = await db.sms_logs.find(

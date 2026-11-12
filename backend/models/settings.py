@@ -34,6 +34,9 @@ class SettingsIn(BaseModel):
     smsgate_user: Optional[str] = None
     smsgate_password: Optional[str] = None
     smsgate_webhook_secret: Optional[str] = None
+    # Clé sk_... du serveur SMS personnel (SMS-SERVER) : si renseignée, les
+    # campagnes passent par ce serveur (smsgate_url = son adresse publique).
+    smsgate_api_key: Optional[str] = None
     sms_campaign_prefix: Optional[str] = None
     sms_campaign_stop_text: Optional[str] = None
     sms_campaign_daily_cap: Optional[int] = None

@@ -510,10 +510,15 @@ function SmsGatewayCard({ s, update }) {
         gratuit, sans crédit Brevo. Identifiants : appli SMS Gateway → Paramètres → Cloud Server.
       </p>
       <div className="space-y-4 max-w-xl">
-        <Field label="Identifiant (Cloud Server)" value={s.smsgate_user} onChange={(v) => update("smsgate_user", v)} testid="smsgate-user" />
-        <Field label="Mot de passe (Cloud Server)" value={s.smsgate_password} onChange={(v) => update("smsgate_password", v)} testid="smsgate-password" type="password" />
-        <Field label="Clé de signature des webhooks (appli → Webhooks → Signing Key)" value={s.smsgate_webhook_secret} onChange={(v) => update("smsgate_webhook_secret", v)} testid="smsgate-secret" type="password" />
-        <Field label="URL de l'API (laisser vide = cloud SMS Gate)" value={s.smsgate_url} onChange={(v) => update("smsgate_url", v)} testid="smsgate-url" placeholder="https://api.sms-gate.app/3rdparty/v1" />
+        <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-md p-3">
+          <b>Serveur SMS personnel</b> : renseignez sa clé API (sk_…) et son adresse — l'identifiant et le mot de passe SMS Gate
+          sont alors ignorés. <b>SMS Gate direct</b> : laissez la clé API vide et renseignez identifiant + mot de passe.
+        </div>
+        <Field label="Clé API du serveur SMS personnel (sk_…)" value={s.smsgate_api_key} onChange={(v) => update("smsgate_api_key", v)} testid="smsgate-apikey" type="password" />
+        <Field label="Adresse de la passerelle (serveur personnel : obligatoire · SMS Gate : laisser vide)" value={s.smsgate_url} onChange={(v) => update("smsgate_url", v)} testid="smsgate-url" placeholder="https://sms.mondomaine.fr  ou  https://api.sms-gate.app/3rdparty/v1" />
+        <Field label="Identifiant SMS Gate (Cloud Server)" value={s.smsgate_user} onChange={(v) => update("smsgate_user", v)} testid="smsgate-user" />
+        <Field label="Mot de passe SMS Gate (Cloud Server)" value={s.smsgate_password} onChange={(v) => update("smsgate_password", v)} testid="smsgate-password" type="password" />
+        <Field label="Clé de signature des callbacks (serveur personnel : « secret callback » · SMS Gate : Signing Key de l'appli)" value={s.smsgate_webhook_secret} onChange={(v) => update("smsgate_webhook_secret", v)} testid="smsgate-secret" type="password" />
         <Field label="Début de chaque SMS (identifie l'expéditeur)" value={s.sms_campaign_prefix} onChange={(v) => update("sms_campaign_prefix", v)} testid="smsgate-prefix" placeholder="TDL Formation : " />
         <Field label="Mention de désinscription (fin de chaque SMS)" value={s.sms_campaign_stop_text} onChange={(v) => update("sms_campaign_stop_text", v)} testid="smsgate-stop" placeholder="STOP SMS : répondez STOP" />
         <Field label="SMS de campagne maximum par jour (protège la ligne)" value={s.sms_campaign_daily_cap} onChange={(v) => update("sms_campaign_daily_cap", v === "" ? null : Number(v))} testid="smsgate-cap" type="number" placeholder="100" />

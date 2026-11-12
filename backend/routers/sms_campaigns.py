@@ -34,7 +34,7 @@ async def preview(payload: LeadIdsIn, user: dict = Depends(require_role(*ROLES_L
     return {
         "eligible": len(sel["recipients"]), "excluded": sel["excluded"], "found": sel["found"],
         "prefix": cfg["prefix"], "stop_text": cfg["stop_text"], "daily_cap": cfg["daily_cap"],
-        "configured": bool(cfg["user"] and cfg["password"]),
+        "configured": smsgate.is_configured(cfg),
         "window_open": window_open, "window_reason": why,
         "exemple_prenom": sel["recipients"][0]["prenom"] if sel["recipients"] else "",
     }
@@ -45,7 +45,7 @@ async def create(payload: CampaignIn, user: dict = Depends(require_role(*ROLES_L
     if not payload.consent_confirmed:
         raise HTTPException(400, "Confirmez que ces prospects ont accepté d'être contactés par SMS.")
     cfg = await smsgate.gateway_config()
-    if not (cfg["user"] and cfg["password"]):
+    if not smsgate.is_configured(cfg):
         raise HTTPException(400, "Passerelle SMS non configurée (Paramètres → SMS → Passerelle SMS).")
     label = payload.label or f"Campagne SMS du {datetime.now(smsgate.PARIS):%d/%m/%Y %H:%M}"
     return await svc.create_campaign(label, payload.body.strip(), payload.lead_ids, user)
@@ -61,10 +61,19 @@ async def list_campaigns(user: dict = Depends(require_role(*ROLES_LEADS))):
 async def gateway_status(user: dict = Depends(require_role(*ROLES_LEADS))):
     cfg = await smsgate.gateway_config()
     window_open, why = smsgate.sending_window_open()
-    out = {"configured": bool(cfg["user"] and cfg["password"]), "window_open": window_open, "window_reason": why,
+    out = {"configured": smsgate.is_configured(cfg), "window_open": window_open, "window_reason": why,
            "daily_cap": cfg["daily_cap"], "sent_today": await svc._sent_today(),
            "optouts": await db.sms_optouts.count_documents({})}
-    if out["configured"]:
+    out["mode"] = cfg["mode"]
+    if out["configured"] and cfg["mode"] == "dispatcher":
+        try:
+            h = await smsgate.call(cfg, "GET", "/health")
+            out["devices"] = [{"name": "Téléphone (via serveur SMS personnel)", "last_seen": None,
+                               "online": bool(h.get("gateway_online"))}]
+            out["dispatcher_queue"] = h.get("queued")
+        except smsgate.GatewayError as e:
+            out["error"] = f"Serveur SMS personnel injoignable : {e}"
+    elif out["configured"]:
         try:
             devices = await smsgate.call(cfg, "GET", "/devices")
             now = datetime.now(timezone.utc)
@@ -88,6 +97,10 @@ async def register_webhooks(request: Request, user: dict = Depends(require_role(
     url = f"{proto}://{host}/api/sms/gateway-webhook"
     if not url.startswith("https://"):
         raise HTTPException(400, f"Le backend doit être joignable en HTTPS (URL détectée : {url})")
+    if cfg["mode"] == "dispatcher":
+        raise HTTPException(400, f"Avec le serveur SMS personnel, collez cette URL comme « URL de callback » de la "
+                                 f"plateforme TDL dans son dashboard : {url} — et son « secret callback » dans "
+                                 f"le champ Clé de signature ci-dessus.")
     if not cfg["webhook_secret"]:
         raise HTTPException(400, "Renseignez d'abord la clé de signature (Signing Key de l'appli) dans Paramètres → SMS.")
     try:
@@ -122,7 +135,14 @@ async def gateway_webhook(request: Request):
     except ValueError:
         raise HTTPException(400, "JSON invalide")
     event, p = data.get("event", ""), data.get("payload") or {}
-    if event == "sms:received":
+    # Format du serveur SMS personnel (SMS-SERVER) : {"event": "sms.status"|"sms.reply"|"sms.received", "data": {...}}
+    d = data.get("data") or {}
+    if event == "sms.status":
+        await svc.apply_state(d.get("id") or "", d.get("status"), d.get("error"))
+    elif event in ("sms.reply", "sms.received"):
+        await svc.handle_inbound(d.get("from") or "", d.get("message") or "")
+    # Format SMS Gate direct
+    elif event == "sms:received":
         await svc.handle_inbound(p.get("sender") or p.get("phoneNumber") or "", p.get("message") or "")
     elif event in ("sms:sent", "sms:delivered", "sms:failed"):
         state = {"sms:sent": "Sent", "sms:delivered": "Delivered", "sms:failed": "Failed"}[event]
