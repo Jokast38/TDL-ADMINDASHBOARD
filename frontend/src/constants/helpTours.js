@@ -2,7 +2,7 @@ import {
   House, GraduationCap, Folders, IdentificationCard, UsersThree, FilePdf, FileText,
   Archive, ShoppingCart, Storefront, Robot, Article, Users, Gear, ChartBar,
   CalendarCheck, PenNib, TrendUp, LinkSimple, Student, Signature, ArrowsClockwise,
-  CreditCard, ListChecks, Exam, SteeringWheel,
+  CreditCard, ListChecks, Exam, SteeringWheel, Calendar,
 } from "@phosphor-icons/react";
 
 // Contenu du Centre d'aide (visites guidées) — une catégorie par profil

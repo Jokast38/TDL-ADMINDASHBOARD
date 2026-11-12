@@ -151,8 +151,11 @@ function RouteFallback() {
 function App() {
   return (
     <div className="App">
-      <ErrorBoundary>
+      {/* ErrorBoundary DANS le routeur : sa page d'erreur contient un <Link>,
+          qui plantait à son tour hors du routeur (2026-11-12) et laissait la
+          page en chargement infini au lieu d'afficher l'erreur. */}
       <BrowserRouter>
+      <ErrorBoundary>
         <AuthProvider>
           <TourProvider>
           <AnalyticsLoader />
@@ -318,8 +321,8 @@ function App() {
           <Toaster position="top-right" richColors />
           </TourProvider>
         </AuthProvider>
-      </BrowserRouter>
       </ErrorBoundary>
+      </BrowserRouter>
     </div>
   );
 }
