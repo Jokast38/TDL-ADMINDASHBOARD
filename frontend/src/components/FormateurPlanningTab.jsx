@@ -10,6 +10,20 @@ import { toast } from "sonner";
 
 const PLACE_LABELS = { BAFM: "BAFM", PSY: "Psychologue", FORMATEUR: "Formateur", TESTEUR: "Testeur" };
 
+// Centre de la session (2026-11-12) : Creil et Épinay ont chacun leurs
+// dates, le formateur filtre et repère le centre d'un coup d'œil.
+const CENTRES = [
+  { key: "tous", label: "Tous les centres" },
+  { key: "epinay", label: "Épinay-sur-Seine", style: "border-[#0052CC] text-[#0052CC] bg-[#0052CC]/5" },
+  { key: "creil", label: "Creil", style: "border-[#B45309] text-[#B45309] bg-[#B45309]/5" },
+];
+const centreOf = (s) => {
+  const v = (s.lieu_ville || "").toLowerCase();
+  if (v.includes("creil")) return "creil";
+  if (v.includes("pinay")) return "epinay";
+  return "autre";
+};
+
 const monthLabel = (key) => new Date(`${key}-01T12:00:00`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 
 // Choix des dates de l'année par le formateur : il voit si chaque place est
@@ -19,17 +33,23 @@ export default function FormateurPlanningTab() {
   const [year, setYear] = useState(currentYear + 1);
   const [planning, setPlanning] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [centre, setCentre] = useState("tous");
 
   const load = useCallback(() => api.get("/me/planning", { params: { year } }).then((r) => setPlanning(r.data)), [year]);
   useEffect(() => { setPlanning(null); load().catch(() => toast.error("Erreur de chargement du planning")); }, [load]);
 
   const months = useMemo(() => {
     const byMonth = {};
-    (planning?.sessions || []).forEach((s) => {
+    (planning?.sessions || []).filter((s) => centre === "tous" || centreOf(s) === centre).forEach((s) => {
       const key = s.date_debut.slice(0, 7);
       (byMonth[key] = byMonth[key] || []).push(s);
     });
     return Object.entries(byMonth);
+  }, [planning, centre]);
+  const counts = useMemo(() => {
+    const c = { tous: (planning?.sessions || []).length, epinay: 0, creil: 0 };
+    (planning?.sessions || []).forEach((s) => { const k = centreOf(s); if (k in c) c[k] += 1; });
+    return c;
   }, [planning]);
 
   const toggle = async (session) => {
@@ -71,6 +91,17 @@ export default function FormateurPlanningTab() {
         </Select>
       </div>
 
+      {planning && (counts.creil > 0 || counts.epinay > 0) && (
+        <div className="flex gap-2 flex-wrap" data-testid="planning-centres">
+          {CENTRES.map((c) => (
+            <button key={c.key} type="button" onClick={() => setCentre(c.key)} data-testid={`planning-centre-${c.key}`}
+              className={`text-xs px-3 py-1.5 rounded-full border ${centre === c.key ? "bg-[#0a0a0a] text-white border-[#0a0a0a]" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+              {c.label} ({counts[c.key] || 0})
+            </button>
+          ))}
+        </div>
+      )}
+
       {planning && !months.length && (
         <Card className="p-12 text-center border-dashed">
           <p className="text-gray-500">Aucune session ouverte pour {year} pour le moment.</p>
@@ -87,7 +118,11 @@ export default function FormateurPlanningTab() {
                   <p className="font-medium text-sm">{s.formation_titre}</p>
                   <p className="text-xs text-gray-500 flex items-center gap-3 mt-1 flex-wrap">
                     <span className="flex items-center gap-1"><Calendar size={12} /> {formatDateFR(s.date_debut)} → {formatDateFR(s.date_fin)}</span>
-                    {s.lieu_ville && <span className="flex items-center gap-1"><MapPin size={12} /> {s.lieu_ville}</span>}
+                    {s.lieu_ville && (
+                      <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded border font-semibold ${CENTRES.find((c) => c.key === centreOf(s))?.style || "border-gray-200"}`}>
+                        <MapPin size={12} /> {s.lieu_ville}
+                      </span>
+                    )}
                   </p>
                   <div className="flex gap-1.5 mt-2 flex-wrap">
                     {Object.entries(s.places).map(([place, libre]) => (

@@ -65,6 +65,13 @@ class EmargementIn(BaseModel):
     periode: Optional[str] = "journee"
 
 
+class GenerationRecupIn(BaseModel):
+    """Génération des sessions récup d'une année pour un centre (2026-11-12)."""
+    year: int
+    centre: Literal["creil", "epinay"]
+    formation_id: str
+
+
 class StageFormateursIn(BaseModel):
     """Équipe de formateurs d'une session, modifiée par l'équipe (demande du
     2026-11-12 : corriger un placement depuis le dashboard)."""

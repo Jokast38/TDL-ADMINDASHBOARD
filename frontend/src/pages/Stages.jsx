@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash, UploadSimple, Books, MagnifyingGlass, SquaresFour, ListBullets, FunnelSimple } from "@phosphor-icons/react";
+import { Plus, Trash, UploadSimple, Books, MagnifyingGlass, SquaresFour, ListBullets, FunnelSimple, CalendarPlus } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import AddressAutocomplete from "@/components/AddressAutocomplete";
 import { normalizeLocation } from "@/lib/normalizeLocation";
@@ -17,6 +17,8 @@ import LocationFilter from "@/components/stages/LocationFilter";
 import MonthNavigator from "@/components/stages/MonthNavigator";
 import SessionCard from "@/components/stages/SessionCard";
 import SessionDrawer from "@/components/stages/SessionDrawer";
+import GenerationRecupDialog from "@/components/stages/GenerationRecupDialog";
+import { useAuth } from "@/contexts/AuthContext";
 import CalendarView from "@/components/stages/CalendarView";
 import {
   monthKey, monthLabelShort, monthLabelLong, todayIso, extractCreneau, fillRatio,
@@ -89,6 +91,9 @@ export default function Stages() {
     setParams(next, { replace: true });
   };
 
+  const { user } = useAuth();
+  const canGenerate = ["admin", "responsable_admission"].includes(user?.role);
+  const [generationOpen, setGenerationOpen] = useState(false);
   const load = () => api.get("/stages").then((r) => setItems(r.data));
   useEffect(() => {
     load();
@@ -398,6 +403,12 @@ export default function Stages() {
           <Button type="button" variant="outline" disabled={importing} onClick={() => importFileRef.current?.click()} title="Importe les sessions VTC/Taxi/Passerelle depuis un fichier Excel (1 onglet par mois)">
             <UploadSimple size={16} className="mr-1" /> {importing ? "Import..." : "Importer Excel VTC/Taxi"}
           </Button>
+          {canGenerate && (
+            <Button type="button" variant="outline" onClick={() => setGenerationOpen(true)} data-testid="generation-recup-btn"
+              title="Crée les sessions de récupération de points d'une année pour Creil ou Épinay (lundi-mardi, vendredi-samedi)">
+              <CalendarPlus size={16} className="mr-1" /> Générer les sessions récup
+            </Button>
+          )}
           <Button className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="new-stage-btn" onClick={() => openCreate()}>
             <Plus size={16} className="mr-1" /> Planifier une session <span className="hidden sm:inline text-[10px] opacity-60 ml-1 border border-white/30 rounded px-1">N</span>
           </Button>
@@ -523,6 +534,10 @@ export default function Stages() {
             ))}
           </div>
         </>
+      )}
+
+      {canGenerate && (
+        <GenerationRecupDialog open={generationOpen} onClose={() => setGenerationOpen(false)} formations={formations} onDone={load} />
       )}
 
       <SessionDrawer

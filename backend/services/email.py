@@ -294,7 +294,7 @@ def _smtp_configured(s: dict) -> bool:
 
 
 async def send_email(to: str, subject: str, body: str, extra: dict = None, attachment: dict = None, cc: list = None,
-                     kind: str = None) -> dict:
+                     kind: str = None, track_clicks: bool = True) -> dict:
     """attachment (optionnel) : {"filename": str, "content_b64": str} — utilisé
     par le composeur d'email personnalisé pour joindre un fichier.
     cc (optionnel) : liste d'adresses en copie — utilisé par le composeur
@@ -336,7 +336,10 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
     log["audience"], log["sender"] = audience, from_addr
 
     if provider != "mock":
-        tracked_body = _with_click_tracking(body, log_id)
+        # track_clicks=False : liens laissés tels quels (pas de redirection par
+        # le backend), pour un lien qui doit s'afficher et s'ouvrir exactement
+        # comme écrit (ex. https://tdl-formation.fr/login, 2026-11-12).
+        tracked_body = _with_click_tracking(body, log_id) if track_clicks else body
         tracked_body = _with_tracking_pixel(tracked_body, log_id)
     else:
         tracked_body = body

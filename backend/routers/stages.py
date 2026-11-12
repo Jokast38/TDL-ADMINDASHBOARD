@@ -15,7 +15,7 @@ from core.config import ROLES_ALL_STAFF, ROLES_SESSIONS_CONTROL, ROLES_FORMATEUR
 from core.placement_rules import formateur_categories, place_for, places_of_category
 from core.stage_hours import DEFAULT_HOURS, RECUP_HOURS
 from core.session_access import access_status, paris_now
-from models.stage import StageAccessIn, StageFormateursIn, StageIn, StageUpdate
+from models.stage import GenerationRecupIn, StageAccessIn, StageFormateursIn, StageIn, StageUpdate
 from models.caces import CACES_MAX_CANDIDATS
 from services.activity import log_action
 from services.email import send_email
@@ -132,6 +132,31 @@ def require_formateur_access(user: dict, stage: dict, session_date: Optional[str
         raise HTTPException(status_code=403, detail=f"Session fermée — {status['message']}")
     if session_date and session_date != status["jour"]:
         raise HTTPException(status_code=403, detail="Vous ne pouvez émarger que pour la journée en cours")
+
+
+def _annee_generation(year: int) -> int:
+    today = datetime.now().date()
+    if not today.year <= year <= today.year + 2:
+        raise HTTPException(status_code=400, detail=f"Année entre {today.year} et {today.year + 2}")
+    return year
+
+
+@router.get("/generation-recup/apercu")
+async def apercu_generation_recup(year: int, centre: str, formation_id: str,
+                                  user: dict = Depends(require_role("admin", "responsable_admission"))):
+    """Dates que créerait la génération (lundi-mardi, vendredi-samedi, jours
+    fériés gérés : core/recup_calendar.py), et celles déjà en ligne."""
+    from services.recup_generation import plan
+    return await plan(_annee_generation(year), centre, formation_id)
+
+
+@router.post("/generation-recup")
+async def generation_recup(payload: GenerationRecupIn, user: dict = Depends(require_role("admin", "responsable_admission"))):
+    from services.recup_generation import generate
+    result = await generate(_annee_generation(payload.year), payload.centre, payload.formation_id, user)
+    await log_action(user, "stages_generes", "stage", None, {
+        "annee": payload.year, "centre": result["centre_label"], "crees": result["crees"], "batch": result["generation_batch"]})
+    return result
 
 
 @router.post("/{sid}/acces")

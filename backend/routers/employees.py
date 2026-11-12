@@ -596,6 +596,15 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     sessions_today = await db.user_sessions.find({"date": today}, {"_id": 0}).to_list(500)
     sessions_by_user = {s["user_id"]: s for s in sessions_today}
+    # Dernière connexion tous jours confondus (2026-11-12) : avant, seule la
+    # journée en cours comptait, et un formateur connecté la veille
+    # apparaissait « Jamais connecté ».
+    since = (datetime.now(timezone.utc) - timedelta(days=365)).strftime("%Y-%m-%d")
+    last_seen_by_user: dict = {}
+    for sess in await db.user_sessions.find({"date": {"$gte": since}}, {"_id": 0, "user_id": 1, "last_seen": 1}).to_list(50000):
+        ls = sess.get("last_seen") or ""
+        if ls > last_seen_by_user.get(sess.get("user_id"), ""):
+            last_seen_by_user[sess["user_id"]] = ls
 
     result = []
     for s in staff:
@@ -654,7 +663,7 @@ async def employees_activity(user: dict = Depends(require_role("admin"))):
             "total_dossiers_traites": total_dossiers,
             "pending_workload": pending_workload,
             "connection_minutes_today": connection_minutes_today,
-            "last_seen": sess.get("last_seen") if sess else None,
+            "last_seen": last_seen_by_user.get(uid) or (sess.get("last_seen") if sess else None),
             "first_seen": sess.get("first_seen") if sess else None,
         })
 
