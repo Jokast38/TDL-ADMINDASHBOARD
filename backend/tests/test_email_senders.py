@@ -15,7 +15,7 @@ from services import email  # noqa: E402
 SETTINGS = {
     "id": "global", "email_provider": "smtp", "email_from": "contact@tdl-formation.fr",
     "smtp_host": "smtp.test", "smtp_port": 465, "smtp_tls": False, "smtp_user": "contact@tdl-formation.fr",
-    "smtp_password": "p", "email_from_equipe": "dashboard@tdl-formation.fr", "email_from_marketing": "info@tdl-formation.fr",
+    "smtp_password": "p", "smtp_password_dedie": "p2", "email_from_equipe": "dashboard@tdl-formation.fr", "email_from_marketing": "info@tdl-formation.fr",
 }
 
 
@@ -43,6 +43,8 @@ def _setup(monkeypatch, refuse=()):
 
     async def smtp(s, to, *_a, **_k):
         used.append(s["smtp_user"])
+        # contact@ avec son mot de passe, les boîtes dédiées avec le leur.
+        assert s["smtp_password"] == ("p" if s["smtp_user"] == "contact@tdl-formation.fr" else "p2")
         return "smtp_error: (535, b'Incorrect authentication data')" if s["smtp_user"] in refuse else "sent"
     monkeypatch.setattr(email, "db", _Db)
     monkeypatch.setattr(email, "_send_via_smtp", smtp)

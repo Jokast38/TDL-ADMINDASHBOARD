@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle, UserMinus, XCircle, Phone, MapPin } from "@phosphor-icons/react";
-import { formatDateFR } from "@/lib/dateFormat";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CheckCircle, UserMinus, XCircle, Phone, MapPin, NotePencil } from "@phosphor-icons/react";
+import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import { toast } from "sonner";
 
 // Onglet « Rendez-vous » du CRM (cahier des charges du 2026-11-10) : mes RDV
@@ -41,6 +43,7 @@ export default function RendezVous() {
   const [assignees, setAssignees] = useState([]);
   const [data, setData] = useState({ items: [], statuts: {} });
   const [busy, setBusy] = useState(null);
+  const [notesFor, setNotesFor] = useState(null); // RDV dont on ouvre les notes
 
   // Lien « Renseigner le rendez-vous » de la notification : on ouvre la
   // bonne journée et la bonne vue pour que la ligne soit visible.
@@ -149,12 +152,13 @@ export default function RendezVous() {
                 <th className="py-2.5 px-4 overline">Heure</th>
                 <th className="py-2.5 px-4 overline">Assigné à</th>
                 <th className="py-2.5 px-4 overline">Statut</th>
+                <th className="py-2.5 px-4 overline">Notes</th>
                 <th className="py-2.5 px-4 overline text-right">Résultat</th>
               </tr>
             </thead>
             <tbody>
               {!items.length && (
-                <tr><td colSpan="6" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="7" className="py-10 text-center text-gray-400">
                   {vue === "moi" ? "Aucun rendez-vous ce jour-là." : "Aucun rendez-vous sur cette période."}
                 </td></tr>
               )}
@@ -181,6 +185,23 @@ export default function RendezVous() {
                       </Badge>
                       {a.resultat_by_name && <p className="text-[11px] text-gray-400 mt-1">par {a.resultat_by_name}</p>}
                     </td>
+                    <td className="py-2.5 px-4 max-w-[220px]">
+                      {(() => {
+                        const last = (a.notes_history || []).slice(-1)[0];
+                        return (
+                          <button type="button" onClick={() => setNotesFor(a)} className="text-left w-full group" data-testid={`rdv-notes-${a.id}`}>
+                            {last ? (
+                              <>
+                                <p className="text-xs text-gray-700 line-clamp-2 group-hover:underline">{last.text}</p>
+                                <p className="text-[11px] text-gray-400">{last.by_name} · {(a.notes_history || []).length} note(s)</p>
+                              </>
+                            ) : (
+                              <span className="text-xs text-[#0052CC] flex items-center gap-1 group-hover:underline"><NotePencil size={13} /> Ajouter une note</span>
+                            )}
+                          </button>
+                        );
+                      })()}
+                    </td>
                     <td className="py-2.5 px-4 text-right">
                       {peutSaisir ? (
                         <div className="flex justify-end flex-wrap gap-1">
@@ -205,6 +226,68 @@ export default function RendezVous() {
           </table>
         </div>
       </Card>
+      <RdvNotesDialog appt={notesFor} onClose={() => setNotesFor(null)} onSaved={(updated) => { setNotesFor((cur) => ({ ...cur, ...updated })); load(); }} />
     </div>
+  );
+}
+
+// Notes d'un rendez-vous : note de prise de RDV, puis historique daté (qui,
+// quand). Chaque note est aussi ajoutée à l'historique du prospect.
+function RdvNotesDialog({ appt, onClose, onSaved }) {
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setText(""); }, [appt?.id]);
+  if (!appt) return null;
+
+  const save = async () => {
+    if (!text.trim()) return;
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/call-center/appointments/${appt.id}/notes`, { text: text.trim() });
+      toast.success("Note ajoutée");
+      setText("");
+      onSaved(data);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Note non enregistrée");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const history = appt.notes_history || [];
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="rdv-notes-dialog">
+        <DialogHeader>
+          <DialogTitle className="font-display">Notes — {appt.lead_name}</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-gray-500">
+          RDV du {formatDateFR(appt.date_paris)} à {appt.heure_paris} · {appt.commercial_name || "non attribué"}
+        </p>
+        {appt.notes && (
+          <div className="bg-gray-50 border border-gray-200 rounded-md p-3 text-sm">
+            <p className="text-[11px] text-gray-400 mb-1">Note à la prise du rendez-vous</p>
+            {appt.notes}
+          </div>
+        )}
+        <div className="space-y-2">
+          {history.length === 0 && <p className="text-sm text-gray-400">Aucune note pour l'instant.</p>}
+          {[...history].reverse().map((n, i) => (
+            <div key={`${n.at}-${i}`} className="border-l-2 border-[#d4af37] pl-3">
+              <p className="text-sm whitespace-pre-wrap">{n.text}</p>
+              <p className="text-[11px] text-gray-400">{n.by_name} · {formatDateTimeFR(n.at)}</p>
+            </div>
+          ))}
+        </div>
+        <Textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder="Compte rendu, besoins du lead, suite à donner..." data-testid="rdv-note-input" />
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Fermer</Button>
+          <Button onClick={save} disabled={saving || !text.trim()} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="rdv-note-save">
+            Ajouter la note
+          </Button>
+        </div>
+        <p className="text-[11px] text-gray-400">La note est aussi ajoutée à l'historique du prospect (pages Leads et Marketing).</p>
+      </DialogContent>
+    </Dialog>
   );
 }

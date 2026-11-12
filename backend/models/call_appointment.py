@@ -36,3 +36,8 @@ class RdvResultatIn(BaseModel):
     a eu lieu) ou "absent" (le lead ne s'est pas présenté)."""
     resultat: str
     commentaire: Optional[str] = None
+
+
+class RdvNoteIn(BaseModel):
+    """Note prise sur un rendez-vous (onglet Rendez-vous, 2026-11-12)."""
+    text: str

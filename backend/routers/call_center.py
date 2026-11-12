@@ -20,7 +20,7 @@ from core.security import require_role
 from core.config import ROLES_LEADS, ROLES_TEAM_MGMT, effective_assigned_categories
 from core.utils import now_iso
 from models.commercial_call import CallLogIn, CallScriptIn, CallScriptUpdate
-from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate, RdvResultatIn
+from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate, RdvResultatIn, RdvNoteIn
 from services.activity import log_action
 from services.appointment_notify import cancel_to_prospect, confirm_to_prospect
 from core import rdv_suivi
@@ -352,6 +352,40 @@ async def list_rendez_vous(
         a["date_paris"], a["heure_paris"] = d.date().isoformat(), d.strftime("%H:%M")
         out.append(a)
     return {"items": out, "statuts": rdv_suivi.STATUTS, "date_from": date_from, "date_to": date_to}
+
+
+@router.post("/appointments/{appointment_id}/notes")
+async def add_rendez_vous_note(appointment_id: str, payload: RdvNoteIn, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Note prise pendant ou après un rendez-vous (demande du 2026-11-12) :
+    ajoutée à l'historique du RDV et à celui du prospect (Leads, Cosmosia,
+    Meta), pour retrouver le suivi depuis les deux côtés."""
+    text = (payload.text or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Note vide")
+    appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+    if not appt:
+        raise HTTPException(status_code=404, detail="Rendez-vous introuvable")
+    note = {"text": text, "at": now_iso(), "by_id": user["id"], "by_name": user.get("name", "")}
+    await db.call_appointments.update_one(
+        {"id": appointment_id}, {"$push": {"notes_history": note}, "$set": {"updated_at": now_iso()}})
+
+    from services.appointment_notify import format_rdv
+    lead_note = {**note, "text": f"📅 RDV du {format_rdv(appt.get('scheduled_at'))} : {text}", "rdv_id": appointment_id}
+    for coll in (db.leads, db.meta_lead_imports):
+        res = await coll.update_one({"id": appt.get("lead_id")}, {
+            "$push": {"notes_history": {"$each": [lead_note], "$slice": -20}},
+            "$set": {"notes": lead_note["text"], "notes_updated_at": note["at"], "notes_updated_by": user["id"],
+                     "notes_updated_by_name": user.get("name", ""), "updated_at": now_iso()},
+        })
+        if getattr(res, "matched_count", 0):
+            if coll is db.leads:
+                from routers.leads import _leads_cache_clear
+                _leads_cache_clear()
+            break
+    await log_action(user, "rdv_note", "lead", appt.get("lead_id"), {"lead_name": appt.get("lead_name"), "note": text})
+    appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+    appt["statut_suivi"] = rdv_suivi.statut_suivi(appt, datetime.now(PARIS))
+    return appt
 
 
 @router.post("/appointments/{appointment_id}/resultat")

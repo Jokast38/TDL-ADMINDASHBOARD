@@ -150,3 +150,41 @@ def test_rdv_qualifie_le_prospect_sans_retrograder(monkeypatch):
     assert Db.leads.docs[0]["statut"] == "rendez_vous" and Db.leads.docs[0]["qualified_by"] == "a1"
     assert Db.leads.docs[1]["statut"] == "paye"
     assert Db.meta_lead_imports.docs[0]["qualification"] == "rdv_pris"
+
+
+def test_note_de_rdv_ajoutee_au_rdv_et_au_prospect(monkeypatch):
+    from routers import call_center
+
+    class Coll:
+        def __init__(self, docs):
+            self.docs = docs
+
+        async def find_one(self, q, _p=None):
+            return next((dict(d) for d in self.docs if d["id"] == q["id"]), None)
+
+        async def update_one(self, q, u):
+            class R:
+                matched_count = 0
+            for d in self.docs:
+                if d["id"] == q["id"]:
+                    for k, v in u.get("$push", {}).items():
+                        d.setdefault(k, []).extend(v["$each"] if isinstance(v, dict) and "$each" in v else [v])
+                    d.update(u.get("$set", {}))
+                    R.matched_count = 1
+            return R()
+
+    class Db:
+        call_appointments = Coll([{**RDV, "lead_id": "l1"}])
+        leads = Coll([{"id": "l1", "name": "Karim"}])
+        meta_lead_imports = Coll([])
+
+    async def noop(*_a, **_k):
+        return None
+    monkeypatch.setattr(call_center, "db", Db)
+    monkeypatch.setattr(call_center, "log_action", noop)
+    import routers.leads as leads_router
+    monkeypatch.setattr(leads_router, "_leads_cache_clear", lambda: None)
+    out = asyncio.run(call_center.add_rendez_vous_note("r1", call_center.RdvNoteIn(text="Intéressé par la passerelle"), {"id": "a1", "name": "Agent", "role": "agent_telephonique"}))
+    assert out["notes_history"][-1]["text"] == "Intéressé par la passerelle" and out["notes_history"][-1]["by_name"] == "Agent"
+    lead = Db.leads.docs[0]
+    assert "RDV du" in lead["notes_history"][-1]["text"] and "passerelle" in lead["notes"]

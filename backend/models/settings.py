@@ -40,6 +40,8 @@ class SettingsIn(BaseModel):
     # même mot de passe SMTP que la boîte principale. Vide = boîte principale.
     email_from_equipe: Optional[str] = None
     email_from_marketing: Optional[str] = None
+    # Mot de passe commun des boîtes dédiées (vide = variable MAILBOX_PASSWORD).
+    smtp_password_dedie: Optional[str] = None
     smtp_reserve_transactional: Optional[int] = None
     marketing_per_hour: Optional[int] = None
     # Relances aux formateurs : pièces de leur dossier et convention à signer

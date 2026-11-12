@@ -249,8 +249,10 @@ async def _send_via_smtp(s: dict, to: str, subject: str, body: str, attachment: 
 # - « marketing » : relances et campagnes -> « email_from_marketing » (ex. info@)
 # - « clients »   : tout le reste (apprenants, prospects en transactionnel)
 #                   -> expéditeur principal (contact@)
-# Les boîtes partagent le mot de passe SMTP principal. Si la connexion d'une
-# boîte échoue, l'email repart depuis la boîte principale avant tout secours.
+# Mot de passe des boîtes dédiées : Paramètres « smtp_password_dedie », sinon
+# la variable MAILBOX_PASSWORD (même mot de passe pour dashboard@ et info@,
+# différent de celui de contact@ — vérifié le 2026-11-12). Si la connexion
+# d'une boîte échoue, l'email repart depuis la boîte principale avant tout secours.
 # Le plafond d'envoi reste commun (même domaine o2switch, services/email_rate.py).
 _STAFF_CACHE: dict = {}
 _STAFF_CACHE_S = 600
@@ -282,7 +284,9 @@ def _sender_settings(s: dict, audience: str) -> dict:
     addr = (s.get(f"email_from_{audience}") or "").strip() if audience != "clients" else ""
     if not addr:
         return s
-    return {**s, "email_from": addr, "smtp_user": addr}
+    from core.config import MAILBOX_PASSWORD
+    password = s.get("smtp_password_dedie") or MAILBOX_PASSWORD or s.get("smtp_password")
+    return {**s, "email_from": addr, "smtp_user": addr, "smtp_password": password}
 
 
 def _smtp_configured(s: dict) -> bool:
