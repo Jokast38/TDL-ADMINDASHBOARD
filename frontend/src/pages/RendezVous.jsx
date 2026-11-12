@@ -227,21 +227,19 @@ export default function RendezVous() {
                       {a.resultat_by_name && <p className="text-[11px] text-gray-400 mt-1">par {a.resultat_by_name}</p>}
                     </td>
                     <td className="py-2.5 px-4">
-                      {a.lead_qualification ? (
-                        <>
-                          <Select value={a.lead_qualification} onValueChange={(v) => setQualification(a, v)} disabled={busy === a.id}>
-                            <SelectTrigger className={`h-7 text-xs w-40 border-0 ${QUALIF_COLOR[a.lead_qualification] || "bg-gray-100"}`} data-testid={`rdv-qualif-${a.id}`}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Object.entries(qualifOptions).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                          {a.qualification_rdv?.by_name && (
-                            <p className="text-[11px] text-gray-400 mt-1" title={formatDateTimeFR(a.qualification_rdv.at)}>par {a.qualification_rdv.by_name}</p>
-                          )}
-                        </>
-                      ) : <span className="text-xs text-gray-400">Prospect introuvable</span>}
+                      {/* Toujours la liste déroulante, comme dans Leads / Meta / Cosmosia :
+                          sans qualification connue, « À contacter » par défaut. */}
+                      <Select value={a.lead_qualification || "a_contacter"} onValueChange={(v) => setQualification(a, v)} disabled={busy === a.id}>
+                        <SelectTrigger className={`h-7 text-xs w-40 border-0 ${QUALIF_COLOR[a.lead_qualification || "a_contacter"] || "bg-gray-100"}`} data-testid={`rdv-qualif-${a.id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(qualifOptions).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      {a.qualification_rdv?.by_name && (
+                        <p className="text-[11px] text-gray-400 mt-1" title={formatDateTimeFR(a.qualification_rdv.at)}>par {a.qualification_rdv.by_name}</p>
+                      )}
                     </td>
                     <td className="py-2.5 px-4 max-w-[220px]">
                       {(() => {
