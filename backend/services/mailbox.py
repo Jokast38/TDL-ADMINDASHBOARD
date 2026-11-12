@@ -31,6 +31,50 @@ def mailbox_configured() -> bool:
     return bool(IMAP_HOST and SMTP2_HOST and MAILBOX_USER and MAILBOX_PASSWORD)
 
 
+# Mot de passe de la boîte (2026-11-12) : MAILBOX_PASSWORD a pris la valeur
+# du mot de passe commun des boîtes dédiées (info@, dashboard@), différent de
+# celui de contact@ -> la Messagerie répondait 502 (AUTHENTICATIONFAILED). On
+# essaie MAILBOX_PASSWORD, puis le mot de passe SMTP de Paramètres → Email
+# quand il s'agit du même compte, et on garde celui qui marche.
+_passwords = [MAILBOX_PASSWORD] if MAILBOX_PASSWORD else []
+_PASSWORDS_TTL_S = 600
+_passwords_loaded_at = 0.0
+
+
+async def _load_passwords() -> None:
+    global _passwords, _passwords_loaded_at
+    if time.monotonic() - _passwords_loaded_at < _PASSWORDS_TTL_S:
+        return
+    candidates = [MAILBOX_PASSWORD]
+    try:
+        from core.database import db
+        s = await db.settings.find_one({"id": "global"}, {"_id": 0, "smtp_user": 1, "smtp_password": 1}) or {}
+        if (s.get("smtp_user") or "").strip().lower() == (MAILBOX_USER or "").strip().lower():
+            candidates.append(s.get("smtp_password"))
+    except Exception as e:
+        logger.warning(f"Messagerie : mot de passe des Paramètres illisible ({e})")
+    ordered = [p for p in _passwords if p in candidates] + candidates
+    _passwords = [p for i, p in enumerate(ordered) if p and p not in ordered[:i]]
+    _passwords_loaded_at = time.monotonic()
+
+
+def _login(conn) -> None:
+    """Connexion IMAP ou SMTP avec le premier mot de passe accepté ; celui
+    qui marche passe en tête pour les connexions suivantes."""
+    global _passwords
+    last = None
+    for p in list(_passwords) or [MAILBOX_PASSWORD]:
+        try:
+            conn.login(MAILBOX_USER, p)
+        except (imaplib.IMAP4.error, smtplib.SMTPAuthenticationError) as e:
+            last = e
+            continue
+        if _passwords and _passwords[0] != p:
+            _passwords = [p] + [x for x in _passwords if x != p]
+        return
+    raise last
+
+
 def _force_ipv4():
     """Comme pour le SMTP de secours : certains hébergeurs résolvent le host
     mail en IPv6 sans route sortante IPv6 disponible sur Render, ce qui casse
@@ -59,7 +103,7 @@ def _imap_connect() -> imaplib.IMAP4_SSL:
         m = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, timeout=20)
     finally:
         socket.getaddrinfo = original
-    m.login(MAILBOX_USER, MAILBOX_PASSWORD)
+    _login(m)
     return m
 
 
@@ -234,7 +278,7 @@ def _send_and_save_sync(to: str, subject: str, body_html: str, attachments: list
         s = smtplib.SMTP_SSL(SMTP2_HOST, SMTP2_PORT, timeout=20)
     finally:
         socket.getaddrinfo = original
-    s.login(MAILBOX_USER, MAILBOX_PASSWORD)
+    _login(s)
     s.sendmail(MAILBOX_USER, [to, *(cc or [])], raw)
     s.quit()
 
@@ -254,6 +298,7 @@ def _send_and_save_sync(to: str, subject: str, body_html: str, attachments: list
 
 
 async def list_messages(folder: str, limit: int = 30, offset: int = 0, subject: str = None) -> dict:
+    await _load_passwords()
     return await asyncio.to_thread(_list_messages_sync, folder, limit, offset, subject)
 
 
@@ -271,14 +316,17 @@ def _delete_message_sync(folder: str, uid: str) -> bool:
 
 
 async def delete_message(folder: str, uid: str) -> bool:
+    await _load_passwords()
     return await asyncio.to_thread(_delete_message_sync, folder, uid)
 
 
 async def get_message(folder: str, uid: str, mark_read: bool = True) -> dict:
+    await _load_passwords()
     return await asyncio.to_thread(_get_message_sync, folder, uid, mark_read)
 
 
 async def get_attachment(folder: str, uid: str, part_index: int):
+    await _load_passwords()
     return await asyncio.to_thread(_get_attachment_sync, folder, uid, part_index)
 
 
@@ -289,6 +337,7 @@ async def send_and_save(to: str, subject: str, body_html: str, attachments: list
     # n'était pas plafonnée et l'Offre flash pouvait faire suspendre le domaine).
     from services.email_rate import acquire_slot
     await acquire_slot(kind)
+    await _load_passwords()
     try:
         return await asyncio.to_thread(_send_and_save_sync, to, subject, body_html, attachments, cc)
     except Exception as e:
