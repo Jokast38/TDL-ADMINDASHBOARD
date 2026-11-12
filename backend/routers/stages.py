@@ -11,10 +11,11 @@ from core.database import db
 from core.security import require_role
 from core.storage import get_object
 from core.utils import now_iso, format_date_long_fr
-from core.config import ROLES_ALL_STAFF, ROLES_SESSIONS_CONTROL, PUBLIC_FRONTEND_URL
+from core.config import ROLES_ALL_STAFF, ROLES_SESSIONS_CONTROL, ROLES_FORMATEURS_EDIT, PUBLIC_FRONTEND_URL
+from core.placement_rules import formateur_categories, place_for, places_of_category
 from core.stage_hours import DEFAULT_HOURS, RECUP_HOURS
 from core.session_access import access_status, paris_now
-from models.stage import StageAccessIn, StageIn, StageUpdate
+from models.stage import StageAccessIn, StageFormateursIn, StageIn, StageUpdate
 from models.caces import CACES_MAX_CANDIDATS
 from services.activity import log_action
 from services.email import send_email
@@ -162,6 +163,84 @@ async def set_formateur_access(sid: str, payload: StageAccessIn, user: dict = De
     return access_status(stage)
 
 
+async def _formateurs_options(stage: dict) -> dict:
+    formation = await db.formations.find_one({"id": stage.get("formation_id")}, {"_id": 0, "category": 1}) or {}
+    category = formation.get("category")
+    users = await db.users.find(
+        {"role": {"$in": ["animateur", "admin"]}, "active": {"$ne": False}},
+        {"_id": 0, "id": 1, "name": 1, "titre": 1, "role": 1, "assigned_categories": 1},
+    ).sort("name", 1).to_list(500)
+    # Sessions qui chevauchent celle-ci : un formateur déjà placé dessus est
+    # signalé (pas bloqué, l'équipe garde la main).
+    overlapping = await db.stages.find(
+        {"id": {"$ne": stage["id"]}, "statut": {"$ne": "annule"},
+         "date_debut": {"$lte": stage["date_fin"]}, "date_fin": {"$gte": stage["date_debut"]}},
+        {"_id": 0, "id": 1, "date_debut": 1, "formation_titre": 1, "animateur_ids": 1, "animateur_id": 1},
+    ).to_list(200)
+    busy = {}
+    for o in overlapping:
+        for aid in _stage_animateur_ids(o):
+            busy.setdefault(aid, f"{o.get('formation_titre', '')} du {o['date_debut'][:10]}")
+    formateurs = [{
+        "id": u["id"], "name": u.get("name", ""), "titre": u.get("titre") or "", "role": u.get("role"),
+        "place": place_for(u.get("titre"), category),
+        "meme_type": u.get("role") == "admin" or category in formateur_categories(u),
+        "deja_place": busy.get(u["id"]),
+    } for u in users]
+    return {"category": category, "places": list(places_of_category(category)),
+            "animateur_ids": _stage_animateur_ids(stage), "formateurs": formateurs}
+
+
+@router.get("/{sid}/formateurs")
+async def get_stage_formateurs(sid: str, user: dict = Depends(require_role(*ROLES_FORMATEURS_EDIT))):
+    """Formateurs assignables à la session, avec leur place (BAFM, PSY...) et
+    un signalement s'ils sont déjà placés sur une session aux mêmes dates."""
+    stage = await db.stages.find_one({"id": sid}, {"_id": 0})
+    if not stage:
+        raise HTTPException(status_code=404, detail="Stage introuvable")
+    return await _formateurs_options(stage)
+
+
+@router.put("/{sid}/formateurs")
+async def set_stage_formateurs(sid: str, payload: StageFormateursIn, user: dict = Depends(require_role(*ROLES_FORMATEURS_EDIT))):
+    """Corrige l'équipe d'une session (demande du 2026-11-12) : remplace un
+    formateur placé par erreur, sans passer par la modification complète de la
+    session (réservée aux admins). Pas de quota ni de date limite ici : ces
+    règles ne concernent que le placement par le formateur lui-même."""
+    stage = await db.stages.find_one({"id": sid}, {"_id": 0})
+    if not stage:
+        raise HTTPException(status_code=404, detail="Stage introuvable")
+    ids = list(dict.fromkeys(payload.animateur_ids))
+    if ids:
+        found = await db.users.find({"id": {"$in": ids}, "role": {"$in": ["animateur", "admin"]}}, {"_id": 0, "id": 1}).to_list(len(ids))
+        if len(found) != len(ids):
+            raise HTTPException(status_code=400, detail="Formateur introuvable")
+    before = _stage_animateur_ids(stage)
+    await db.stages.update_one({"id": sid}, {"$set": {
+        "animateur_ids": ids, "animateur_id": ids[0] if ids else None, "updated_at": now_iso()}})
+
+    added = [i for i in ids if i not in before]
+    removed = [i for i in before if i not in ids]
+    names = {u["id"]: u.get("name", "") for u in await db.users.find(
+        {"id": {"$in": list(set(before) | set(ids))}}, {"_id": 0, "id": 1, "name": 1}).to_list(50)}
+    formation = await db.formations.find_one({"id": stage.get("formation_id")}, {"_id": 0, "category": 1}) or {}
+    if formation.get("category") == "PERMIS":
+        # Annexe « Dates » de la convention des formateurs concernés.
+        for fid in set(added) | set(removed):
+            await regenerate_convention_pdf(fid)
+    await log_action(user, "stage_formateurs", "stage", sid, {
+        "formation_titre": stage.get("formation_titre"), "date_debut": stage.get("date_debut"),
+        "avant": [names.get(i, i) for i in before], "apres": [names.get(i, i) for i in ids],
+    })
+    libelle = f"{stage.get('formation_titre', '')} du {format_date_long_fr(stage.get('date_debut', ''))}"
+    if added:
+        await send_push_to_users(added, "Nouvelle session assignée", libelle, "/espace-animateur")
+    if removed:
+        await send_push_to_users(removed, "Session retirée de votre planning", libelle, "/espace-animateur")
+    updated = await db.stages.find_one({"id": sid}, {"_id": 0})
+    return {**updated, **await _formateurs_options(updated)}
+
+
 @router.get("/{sid}/roster")
 async def stage_roster(sid: str, user: dict = Depends(require_role(*ROLES_ALL_STAFF))):
     """Liste des candidats affectés à cette session précise (via
@@ -265,7 +344,11 @@ async def update_stage(sid: str, payload: StageUpdate, user: dict = Depends(requ
                 raise HTTPException(status_code=400, detail=f"Session CACES : {CACES_MAX_CANDIDATS} candidats maximum")
         if "animateur_ids" in update or "animateur_id" in update:
             ids = list(update.get("animateur_ids") if update.get("animateur_ids") is not None else existing.get("animateur_ids") or [])
-            single = update.get("animateur_id", existing.get("animateur_id"))
+            # animateur_id n'est que le reflet de animateur_ids[0] : quand la
+            # liste est envoyée, elle fait foi. Avant le 2026-11-12, l'ancien
+            # animateur_id était remis dans la liste, si bien qu'on ne pouvait
+            # pas retirer le premier formateur d'une session.
+            single = update.get("animateur_id") if update.get("animateur_ids") is None else None
             if single and single not in ids:
                 ids.append(single)
             update["animateur_ids"] = ids

@@ -534,6 +534,7 @@ export default function Stages() {
         onDelete={remove}
         onDuplicate={duplicateStage}
         onDownloadAnts={downloadStageAntsBundle}
+        onStageUpdated={(updated) => { setDrawerStage((cur) => ({ ...cur, ...updated })); load(); }}
       />
 
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditingId(null); setForm(empty); } }}>

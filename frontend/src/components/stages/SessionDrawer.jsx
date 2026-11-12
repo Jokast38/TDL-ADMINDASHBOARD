@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Calendar, MapPin, Users, PencilSimple, Trash, Lock, LockOpen, FolderOpen, Copy, PenNib, ChalkboardTeacher } from "@phosphor-icons/react";
 import FillGauge from "./FillGauge";
 import EmargementPanel from "./EmargementPanel";
+import FormateursDialog from "./FormateursDialog";
 import { extractCreneau, placesRestantes, fillRatio, displayStatus } from "./stageHelpers";
 
 const STATUT_LABELS = { planifie: "Planifié", en_cours: "En cours", complet: "Complet", termine: "Terminé", annule: "Annulé" };
@@ -42,7 +43,7 @@ const DOSSIER_STATUS_BADGE = {
 // Panneau latéral de détail d'une session — récap, jauge, inscrits, actions.
 // Le bouton "Modifier" délègue au formulaire existant (onEdit), qui reste la
 // même Dialog qu'avant (aucune logique métier réécrite).
-export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onToggleLock, onDelete, onDuplicate, onDownloadAnts }) {
+export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onToggleLock, onDelete, onDuplicate, onDownloadAnts, onStageUpdated }) {
   const navigate = useNavigate();
   const [roster, setRoster] = useState([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
@@ -50,6 +51,7 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
   const [acces, setAcces] = useState(null);
   const [savingAcces, setSavingAcces] = useState(false);
   const [emargementOpen, setEmargementOpen] = useState(false);
+  const [formateursOpen, setFormateursOpen] = useState(false);
 
   useEffect(() => { setAcces(stage?.acces_formateur || null); }, [stage]);
 
@@ -109,9 +111,12 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
           <FillGauge inscrits={s.nb_inscrits || 0} capacite={s.capacite_max || 0} ratio={ratio} />
           <p className="text-xs text-gray-500">{rest} place(s) restante(s){s.external_reserved ? ` (${s.external_reserved} réservée(s) ailleurs)` : ""}</p>
 
-          {!!animNames.length && (
-            <p className="text-xs text-gray-600">Formateur(s) : {animNames.join(", ")}</p>
-          )}
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-gray-600">Formateur(s) : {animNames.length ? animNames.join(", ") : (s.animateur_ids?.length ? `${s.animateur_ids.length} placé(s)` : "aucun")}</p>
+            <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => setFormateursOpen(true)} data-testid="stage-drawer-formateurs">
+              <ChalkboardTeacher size={13} className="mr-1" /> Changer
+            </Button>
+          </div>
 
           {acces && (
             <div className={`border rounded-md p-3 space-y-2 ${acces.ouvert ? "border-[#0B7238] bg-[#0B7238]/5" : "border-gray-200 bg-gray-50"}`} data-testid="stage-drawer-acces">
@@ -225,6 +230,7 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
           {emargementOpen && <EmargementPanel stage={s} today={acces?.jour} />}
         </DialogContent>
       </Dialog>
+      <FormateursDialog stage={s} open={formateursOpen} onClose={() => setFormateursOpen(false)} onSaved={(updated) => onStageUpdated?.(updated)} />
     </Sheet>
   );
 }

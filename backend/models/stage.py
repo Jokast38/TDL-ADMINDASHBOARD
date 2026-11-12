@@ -65,6 +65,12 @@ class EmargementIn(BaseModel):
     periode: Optional[str] = "journee"
 
 
+class StageFormateursIn(BaseModel):
+    """Équipe de formateurs d'une session, modifiée par l'équipe (demande du
+    2026-11-12 : corriger un placement depuis le dashboard)."""
+    animateur_ids: List[str]
+
+
 class StageAccessIn(BaseModel):
     """Ouverture / fermeture de l'accès formateur (core/session_access.py)."""
     action: Literal["ouvrir", "fermer"]

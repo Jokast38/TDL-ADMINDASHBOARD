@@ -152,6 +152,9 @@ OUTBOUND_DISABLED = _flag("DISABLE_OUTBOUND")
 # la page Sessions de formation (core/session_access.py) — mêmes rôles que
 # l'accès à cette page (frontend Layout.jsx), plus agent_admin.
 ROLES_SESSIONS_CONTROL = ("admin", "responsable_admission", "agent_admin", "agent_telephonique")
+# Corriger les formateurs placés sur une session (2026-11-12) : toute l'équipe
+# admin, employés compris ; la modification complète reste aux admins.
+ROLES_FORMATEURS_EDIT = (*ROLES_SESSIONS_CONTROL, "employe")
 ROLES_LEADS = ("admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique")
 # Espace dédié aux agents téléphoniques (Bouchra/Lydia/Lina...) — centre
 # d'appel kanban, demande de documents, RDV. Rôle restreint : voir
