@@ -28,6 +28,15 @@ class SettingsIn(BaseModel):
     sms_sender: Optional[str] = None
     # Types de SMS activés un par un (voir services/sms.py:SMS_CATEGORIES).
     sms_categories: Optional[dict] = None
+    # Passerelle SMS personnelle pour les campagnes (services/smsgate.py) :
+    # téléphone Android + cloud SMS Gate, gratuit, indépendant de Brevo.
+    smsgate_url: Optional[str] = None
+    smsgate_user: Optional[str] = None
+    smsgate_password: Optional[str] = None
+    smsgate_webhook_secret: Optional[str] = None
+    sms_campaign_prefix: Optional[str] = None
+    sms_campaign_stop_text: Optional[str] = None
+    sms_campaign_daily_cap: Optional[int] = None
     # Relances automatiques « documents manquants » aux apprenants (email +
     # WhatsApp). Désactivées tant que les dossiers sont complétés sur place
     # (demande du 2026-11-10) : absent ou False = pas de relance.

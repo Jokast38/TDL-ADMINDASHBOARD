@@ -229,6 +229,7 @@ export default function Settings() {
               </div>
             </div>
           </Card>
+          <SmsGatewayCard s={s} update={update} />
         </TabsContent>
 
         <TabsContent value="stripe">
@@ -480,6 +481,77 @@ function AttestationImageUpload({ label, endpoint, testid }) {
         {uploaded && <span className="text-xs text-[#0B7238] flex items-center gap-1"><CheckCircle size={14} weight="fill" /> Enregistrée</span>}
       </div>
     </div>
+  );
+}
+
+// Passerelle SMS personnelle (téléphone Android + SMS Gate) pour les campagnes
+// SMS — gratuite, indépendante de Brevo. Voir backend/services/smsgate.py.
+function SmsGatewayCard({ s, update }) {
+  const [status, setStatus] = useState(null);
+  const [hooks, setHooks] = useState(null);
+  const refresh = () => api.get("/sms-campaigns/gateway/status").then(({ data }) => setStatus(data)).catch(() => {});
+  useEffect(() => { refresh(); }, []);
+
+  const registerHooks = async () => {
+    try {
+      const { data } = await api.post("/sms-campaigns/gateway/register-webhooks");
+      setHooks(data);
+      toast.success("Webhooks enregistrés sur la passerelle");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    }
+  };
+
+  return (
+    <Card className="p-6 border border-gray-200 rounded-md shadow-none mt-6">
+      <h3 className="font-display text-xl font-bold mb-1">Passerelle SMS (campagnes)</h3>
+      <p className="text-sm text-gray-500 mb-6">
+        Les campagnes SMS (page Prospects → cocher → « Campagne SMS ») partent par notre téléphone relié à SMS Gate :
+        gratuit, sans crédit Brevo. Identifiants : appli SMS Gateway → Paramètres → Cloud Server.
+      </p>
+      <div className="space-y-4 max-w-xl">
+        <Field label="Identifiant (Cloud Server)" value={s.smsgate_user} onChange={(v) => update("smsgate_user", v)} testid="smsgate-user" />
+        <Field label="Mot de passe (Cloud Server)" value={s.smsgate_password} onChange={(v) => update("smsgate_password", v)} testid="smsgate-password" type="password" />
+        <Field label="Clé de signature des webhooks (appli → Webhooks → Signing Key)" value={s.smsgate_webhook_secret} onChange={(v) => update("smsgate_webhook_secret", v)} testid="smsgate-secret" type="password" />
+        <Field label="URL de l'API (laisser vide = cloud SMS Gate)" value={s.smsgate_url} onChange={(v) => update("smsgate_url", v)} testid="smsgate-url" placeholder="https://api.sms-gate.app/3rdparty/v1" />
+        <Field label="Début de chaque SMS (identifie l'expéditeur)" value={s.sms_campaign_prefix} onChange={(v) => update("sms_campaign_prefix", v)} testid="smsgate-prefix" placeholder="TDL Formation : " />
+        <Field label="Mention de désinscription (fin de chaque SMS)" value={s.sms_campaign_stop_text} onChange={(v) => update("sms_campaign_stop_text", v)} testid="smsgate-stop" placeholder="STOP SMS : répondez STOP" />
+        <Field label="SMS de campagne maximum par jour (protège la ligne)" value={s.sms_campaign_daily_cap} onChange={(v) => update("sms_campaign_daily_cap", v === "" ? null : Number(v))} testid="smsgate-cap" type="number" placeholder="100" />
+
+        <div className="pt-4 border-t border-gray-200 space-y-2 text-sm">
+          <div className="flex items-center justify-between">
+            <p className="font-semibold">État</p>
+            <Button size="sm" variant="outline" onClick={refresh}>Actualiser</Button>
+          </div>
+          {!status ? <p className="text-gray-500">—</p> : !status.configured ? (
+            <p className="text-gray-500">Non configurée (enregistrez les paramètres puis actualisez).</p>
+          ) : (
+            <>
+              {status.error && <p className="text-red-600">{status.error}</p>}
+              {(status.devices || []).map((d) => (
+                <p key={d.name}>
+                  <Badge className={d.online ? "bg-green-100 text-green-800" : "bg-red-100 text-red-700"}>{d.online ? "En ligne" : "Hors ligne"}</Badge>{" "}
+                  {d.name} · vu {d.last_seen ? new Date(d.last_seen).toLocaleString("fr-FR") : "jamais"}
+                </p>
+              ))}
+              <p className="text-gray-500">
+                Aujourd'hui : {status.sent_today}/{status.daily_cap} SMS · {status.optouts} numéro(s) STOP ·
+                {status.window_open ? " créneau d'envoi ouvert" : ` envoi en pause (${status.window_reason})`}
+              </p>
+            </>
+          )}
+          <Button size="sm" variant="outline" onClick={registerHooks} disabled={!status?.configured}>
+            Enregistrer les webhooks (statuts + réponses STOP)
+          </Button>
+          {hooks && (
+            <div className="text-xs text-gray-600">
+              <p>URL : <code>{hooks.url}</code></p>
+              {Object.entries(hooks.results).map(([ev, r]) => <p key={ev}>{ev} : {r}</p>)}
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }
 

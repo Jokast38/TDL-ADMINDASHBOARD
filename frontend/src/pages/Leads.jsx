@@ -22,6 +22,7 @@ import {
 import { toast } from "sonner";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
 import SendPaymentLinkDialog from "@/components/SendPaymentLinkDialog";
+import SmsCampaignDialog from "@/components/SmsCampaignDialog";
 import { canonicalizeInterest } from "@/lib/leadInterest";
 
 
@@ -1830,6 +1831,9 @@ export default function Leads() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+
+            {/* Campagne SMS (passerelle personnelle, gratuite) */}
+            <SmsCampaignDialog leadIds={Array.from(selected)} />
 
             {/* Relance */}
             <Dialog open={relanceOpen} onOpenChange={setRelanceOpen}>
