@@ -282,7 +282,13 @@ async def get_attachment(folder: str, uid: str, part_index: int):
     return await asyncio.to_thread(_get_attachment_sync, folder, uid, part_index)
 
 
-async def send_and_save(to: str, subject: str, body_html: str, attachments: list = None, cc: list = None) -> dict:
+async def send_and_save(to: str, subject: str, body_html: str, attachments: list = None, cc: list = None,
+                        kind: str = "transactionnel") -> dict:
+    # Même domaine o2switch que les emails du dashboard : même plafond
+    # d'envoi (services/email_rate.py — avant le 2026-11-12, cette boîte
+    # n'était pas plafonnée et l'Offre flash pouvait faire suspendre le domaine).
+    from services.email_rate import acquire_slot
+    await acquire_slot(kind)
     try:
         return await asyncio.to_thread(_send_and_save_sync, to, subject, body_html, attachments, cc)
     except Exception as e:

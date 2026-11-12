@@ -4,46 +4,23 @@ import time
 import uuid
 import logging
 import urllib.parse
-from collections import deque
 import requests
 
 from core.config import BREVO_SENDER_EMAIL, OUTBOUND_DISABLED
 from core.database import db
 from core.utils import now_iso
 from core.config import PUBLIC_BACKEND_URL
+from services import email_rate
 
 logger = logging.getLogger(__name__)
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-# O2switch (hébergeur de la boîte SMTP admin@tdl-formation.fr) limite
-# l'envoi sortant à 30 emails/minute et suspend le domaine entier en cas de
-# dépassement (confirmé par leur support, demande du 2026-10-23 — l'envoi a
-# déjà été coupé une fois pour ce motif). Une campagne ou une relance en
-# masse qui boucle sur `send_email` enverrait sinon tout en quelques
-# secondes. On étale donc les envois SMTP à la source, dans un
-# process-global (pas par campagne) pour que PLUSIEURS envois en masse
-# lancés en parallèle restent, ensemble, sous la limite réelle de
-# l'hébergeur — avec une marge de sécurité (28 au lieu de 30) pour absorber
-# l'imprécision du minutage.
-_SMTP_RATE_LIMIT = 28
-_SMTP_RATE_WINDOW_S = 60
-_smtp_send_times: deque = deque()
-_smtp_rate_lock = asyncio.Lock()
-
-
-async def _throttle_smtp_rate():
-    async with _smtp_rate_lock:
-        while True:
-            now = time.monotonic()
-            while _smtp_send_times and now - _smtp_send_times[0] >= _SMTP_RATE_WINDOW_S:
-                _smtp_send_times.popleft()
-            if len(_smtp_send_times) < _SMTP_RATE_LIMIT:
-                _smtp_send_times.append(now)
-                return
-            wait_s = _SMTP_RATE_WINDOW_S - (now - _smtp_send_times[0]) + 0.1
-            logger.info(f"Débit SMTP O2switch atteint ({_SMTP_RATE_LIMIT}/min) — pause {wait_s:.1f}s avant le prochain envoi")
-            await asyncio.sleep(max(wait_s, 0.1))
+# Débit d'envoi o2switch (30/min pour tout le domaine) : voir
+# services/email_rate.py — réserve pour les emails importants, plafond horaire
+# du marketing et compteur partagé entre serveurs (demande du 2026-11-12).
+async def _throttle_smtp_rate(kind: str = email_rate.TRANSACTIONNEL, s: dict = None):
+    await email_rate.acquire_slot(kind, s)
 
 
 def _with_tracking_pixel(body: str, log_id: str) -> str:
@@ -236,14 +213,15 @@ async def _send_via_brevo(api_key: str, from_addr: str, to: str, subject: str, b
         return f"error: {e}"
 
 
-async def _send_via_smtp(s: dict, to: str, subject: str, body: str, attachment: dict = None, cc: list = None) -> str:
+async def _send_via_smtp(s: dict, to: str, subject: str, body: str, attachment: dict = None, cc: list = None,
+                         kind: str = email_rate.TRANSACTIONNEL) -> str:
     """Envoie en SMTP avec retry (Gmail depuis un hébergeur cloud échoue parfois
     de façon aléatoire — IP partagée méfiante — sans être bloqué à 100%)."""
     max_attempts = 3
     last_error = None
     for attempt in range(1, max_attempts + 1):
         try:
-            await _throttle_smtp_rate()
+            await _throttle_smtp_rate(kind, s)
             await asyncio.to_thread(
                 _smtp_send,
                 s.get("smtp_host", "smtp.gmail.com"),
@@ -265,11 +243,54 @@ async def _send_via_smtp(s: dict, to: str, subject: str, body: str, attachment: 
     return f"smtp_error: {last_error}"
 
 
+# ---- Expéditeur selon le type d'email (demande du 2026-11-12) ------------
+# - « equipe »    : destinataire = compte du personnel ou formateur
+#                   -> Paramètres « email_from_equipe » (ex. dashboard@)
+# - « marketing » : relances et campagnes -> « email_from_marketing » (ex. info@)
+# - « clients »   : tout le reste (apprenants, prospects en transactionnel)
+#                   -> expéditeur principal (contact@)
+# Les boîtes partagent le mot de passe SMTP principal. Si la connexion d'une
+# boîte échoue, l'email repart depuis la boîte principale avant tout secours.
+# Le plafond d'envoi reste commun (même domaine o2switch, services/email_rate.py).
+_STAFF_CACHE: dict = {}
+_STAFF_CACHE_S = 600
+
+
+async def _is_staff(email: str) -> bool:
+    key = (email or "").strip().lower()
+    cached = _STAFF_CACHE.get(key)
+    if cached and time.monotonic() - cached[1] < _STAFF_CACHE_S:
+        return cached[0]
+    try:
+        user = await db.users.find_one({"email": key, "role": {"$ne": "etudiant"}}, {"_id": 0, "id": 1})
+        ok = bool(user)
+    except Exception:
+        ok = False
+    _STAFF_CACHE[key] = (ok, time.monotonic())
+    return ok
+
+
+async def _audience(to: str, kind: str) -> str:
+    if kind == email_rate.MARKETING:
+        return "marketing"
+    return "equipe" if await _is_staff(to) else "clients"
+
+
+def _sender_settings(s: dict, audience: str) -> dict:
+    """Réglages d'envoi pour ce type d'email : expéditeur et compte SMTP de
+    la boîte dédiée si elle est renseignée, sinon la boîte principale."""
+    addr = (s.get(f"email_from_{audience}") or "").strip() if audience != "clients" else ""
+    if not addr:
+        return s
+    return {**s, "email_from": addr, "smtp_user": addr}
+
+
 def _smtp_configured(s: dict) -> bool:
     return bool(s.get("smtp_host") and s.get("smtp_user") and s.get("smtp_password"))
 
 
-async def send_email(to: str, subject: str, body: str, extra: dict = None, attachment: dict = None, cc: list = None) -> dict:
+async def send_email(to: str, subject: str, body: str, extra: dict = None, attachment: dict = None, cc: list = None,
+                     kind: str = None) -> dict:
     """attachment (optionnel) : {"filename": str, "content_b64": str} — utilisé
     par le composeur d'email personnalisé pour joindre un fichier.
     cc (optionnel) : liste d'adresses en copie — utilisé par le composeur
@@ -288,6 +309,9 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
         "opened": False, "opened_at": None, "open_count": 0,
         "clicked": False, "clicked_at": None, "click_count": 0,
         "attachment_filename": attachment["filename"] if attachment else None,
+        # « marketing » (relances, campagnes) ou « transactionnel » : sert au
+        # plafonnage (services/email_rate.py) et aux chiffres des Paramètres.
+        "kind": email_rate.kind_of(extra, kind),
         **(extra or {}),
     }
 
@@ -300,6 +324,13 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
         await db.email_logs.insert_one(log)
         return log
 
+    # Expéditeur selon le type d'email (voir _sender_settings).
+    audience = await _audience(to, log["kind"])
+    main_settings = s
+    s = _sender_settings(s, audience)
+    from_addr = s.get("email_from", from_addr)
+    log["audience"], log["sender"] = audience, from_addr
+
     if provider != "mock":
         tracked_body = _with_click_tracking(body, log_id)
         tracked_body = _with_tracking_pixel(tracked_body, log_id)
@@ -311,7 +342,7 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
         if log["status"] != "sent" and _smtp_configured(s):
             logger.warning(f"Resend en échec pour {to} ({log['status']}), tentative SMTP en secours...")
             log["resend_error"] = log["status"]
-            log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment, cc)
+            log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment, cc, log["kind"])
             log["fallback_provider"] = "smtp"
 
     elif provider == "sendgrid" and s.get("email_api_key"):
@@ -322,11 +353,19 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
         if log["status"] != "sent" and _smtp_configured(s):
             logger.warning(f"Brevo en échec pour {to} ({log['status']}), tentative SMTP en secours...")
             log["brevo_error"] = log["status"]
-            log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment, cc)
+            log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment, cc, log["kind"])
             log["fallback_provider"] = "smtp"
 
     elif provider == "smtp" and _smtp_configured(s):
-        log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment, cc)
+        log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment, cc, log["kind"])
+        if log["status"] != "sent" and s is not main_settings and _smtp_configured(main_settings):
+            # Boîte dédiée refusée (mot de passe, boîte absente…) : on repart
+            # depuis la boîte principale avant de passer au secours Brevo.
+            logger.warning(f"Boîte {s.get('smtp_user')} en échec pour {to} ({log['status']}), envoi depuis la boîte principale")
+            log["sender_error"] = log["status"]
+            s = main_settings
+            log["sender"] = from_addr = s.get("email_from", from_addr)
+            log["status"] = await _send_via_smtp(s, to, subject, tracked_body, attachment, cc, log["kind"])
         if log["status"] != "sent" and s.get("brevo_fallback_api_key"):
             logger.warning(f"SMTP définitivement en échec pour {to} ({log['status']}), tentative Brevo en secours...")
             log["smtp_error"] = log["status"]

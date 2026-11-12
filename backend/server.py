@@ -25,7 +25,7 @@ from routers import (
     exams, appointments, stage_attestations, modules, satisfaction, french_tests,
     mailbox, meta_leads, flash_offer, ocr_test, meta_lead_import,
     call_center, cosmosia_import, custom_payments, meta_crm_test, stats,
-    pricing, caces, caces_exam, formateur_planning,
+    pricing, caces, caces_exam, formateur_planning, email_debit,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import (
@@ -118,6 +118,7 @@ app.include_router(cosmosia_import.router, prefix=_PREFIX)
 app.include_router(pricing.router,         prefix=_PREFIX)
 app.include_router(caces.router,           prefix=_PREFIX)
 app.include_router(caces_exam.router,      prefix=_PREFIX)
+app.include_router(email_debit.router,     prefix=_PREFIX)
 app.include_router(positioning_tests.router, prefix=_PREFIX)
 app.include_router(backlinks.router,      prefix=_PREFIX)
 app.include_router(docs.router,           prefix=_PREFIX)
@@ -269,6 +270,23 @@ async def _automations_loop():
         except Exception as e:
             log.warning(f"Relances automatiques : erreur — {e}")
         await asyncio.sleep(3600)
+
+
+async def _email_campaigns_loop():
+    """Toutes les 2 min, envoie la suite des campagnes en file d'attente,
+    dans le plafond horaire du marketing (services/email_campaigns.py)."""
+    from services.email_campaigns import process_campaigns
+    from services.email_rate import cleanup_old_buckets
+    log = logging.getLogger(__name__)
+    while True:
+        try:
+            sent = await process_campaigns()
+            if sent:
+                log.info(f"Campagnes email : {sent} email(s) envoyé(s)")
+            await cleanup_old_buckets()
+        except Exception as e:
+            log.warning(f"Campagnes email : erreur — {e}")
+        await asyncio.sleep(120)
 
 
 async def _callback_reminders_loop():
@@ -589,6 +607,7 @@ async def startup():
         logging.getLogger(__name__).warning("DISABLE_BACKGROUND_JOBS : aucune tâche automatique lancée (serveur local)")
         return
     asyncio.create_task(_automations_loop())
+    asyncio.create_task(_email_campaigns_loop())
     asyncio.create_task(_callback_reminders_loop())
     asyncio.create_task(_daily_dossiers_digest_loop())
     asyncio.create_task(_document_reminders_loop())

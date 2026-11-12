@@ -95,13 +95,32 @@ def _campaign_body(name: str) -> str:
     )
 
 
-async def _send_campaign_email(to_email: str, to_name: str = "") -> dict:
+async def _send_campaign_email(to_email: str, to_name: str = "", kind: str = "transactionnel") -> dict:
     body_html = render_branded_email(
         _campaign_body(to_name),
         button_label="Je réserve ma place à 120€",
         button_url=LANDING_URL,
     )
-    return await mailbox.send_and_save(to_email, CAMPAIGN_SUBJECT, body_html)
+    return await mailbox.send_and_save(to_email, CAMPAIGN_SUBJECT, body_html, kind=kind)
+
+
+async def send_flash_offer_email(to_email: str, to_name: str, campaign_id: str) -> bool:
+    """Envoi d'une Offre flash depuis la file des campagnes
+    (services/email_campaigns.py) : plafond marketing, et une ligne dans le
+    journal des emails pour qu'elle compte dans le plafond horaire."""
+    import uuid as _uuid
+    from core.utils import now_iso
+    status = "sent"
+    try:
+        await _send_campaign_email(to_email, to_name, kind="marketing")
+    except Exception as e:
+        status = f"failed: {e}"
+    await db.email_logs.insert_one({
+        "id": str(_uuid.uuid4()), "to": to_email, "subject": CAMPAIGN_SUBJECT, "provider": "messagerie",
+        "status": status, "kind": "marketing", "flash_campaign": True, "campaign_id": campaign_id,
+        "created_at": now_iso(), "opened": False, "clicked": False,
+    })
+    return status == "sent"
 
 
 class CampaignTestIn(BaseModel):
@@ -134,19 +153,11 @@ async def campaign_send(user: dict = Depends(require_role(*ROLES_LEADS))):
         raise HTTPException(status_code=503, detail="Messagerie interne non configurée")
 
     inscribed_emails = set(await db.inscriptions.distinct("student_email"))
-    leads = await db.leads.find({"email": {"$ne": None, "$exists": True}}, {"_id": 0}).to_list(100000)
-
-    sent, failed, skipped = 0, 0, 0
-    for lead in leads:
-        email = (lead.get("email") or "").strip().lower()
-        if not email or email in inscribed_emails:
-            skipped += 1
-            continue
-        try:
-            await _send_campaign_email(email, lead.get("name", ""))
-            sent += 1
-        except Exception as e:
-            failed += 1
-            log.warning(f"Campagne offre flash : échec d'envoi à {email} : {e}")
-
-    return {"sent": sent, "failed": failed, "skipped": skipped, "total_leads": len(leads)}
+    leads = await db.leads.find({"email": {"$ne": None, "$exists": True}}, {"_id": 0, "id": 1, "email": 1}).to_list(100000)
+    ids = [l["id"] for l in leads if (l.get("email") or "").strip() and l["email"].strip().lower() not in inscribed_emails]
+    # Mise en file (services/email_campaigns.py) : envoi étalé en tâche de
+    # fond, dans le plafond horaire du marketing (demande du 2026-11-12).
+    from services.email_campaigns import create_campaign
+    campaign = await create_campaign("flash", CAMPAIGN_SUBJECT, "", ids, user, mark_contacted=False,
+                                     label="Offre flash — récupération de points")
+    return {"queued": True, "campaign": campaign, "skipped": len(leads) - len(ids), "total_leads": len(leads)}

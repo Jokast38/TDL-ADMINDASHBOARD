@@ -11,6 +11,7 @@ from core.config import ROLES_LEADS
 from core.utils import now_iso
 from models.lead import LeadAutomationIn, LeadAutomationUpdate
 from services.email import send_email
+from services.email_rate import marketing_quota_remaining
 from routers.leads import _leads_cache_clear
 
 router = APIRouter(prefix="/leads/automations", tags=["lead-automations"])
@@ -51,15 +52,22 @@ async def _rule_target_query(rule: Dict[str, Any]) -> Dict[str, Any]:
     return query
 
 
-async def _run_rule(rule: Dict[str, Any], force: bool = False) -> int:
+async def _run_rule(rule: Dict[str, Any], force: bool = False, budget: int = None) -> int:
+    """`budget` : nombre maximum d'envois pour ce passage (plafond horaire
+    du marketing, services/email_rate.py) ; les leads restants partent au
+    passage suivant, les plus anciennement contactés d'abord."""
     query = await _rule_target_query(rule)
     leads = await db.leads.find(query, {"_id": 0}).to_list(100000)
+    leads.sort(key=lambda l: l.get("last_contacted_at") or l.get("created_at") or "")
     now = datetime.now(timezone.utc)
     freq_days = rule.get("frequency_days") or 0
     sent = 0
+    attempts = 0
     for lead in leads:
         if not lead.get("email"):
             continue
+        if budget is not None and attempts >= budget:
+            break
         if not force:
             ref = _parse_iso(lead.get("last_contacted_at") or lead.get("created_at") or "")
             if ref and (now - ref).days < freq_days:
@@ -68,6 +76,7 @@ async def _run_rule(rule: Dict[str, Any], force: bool = False) -> int:
             if failed_at and (now - failed_at).total_seconds() < _RETRY_AFTER_FAILURE_HOURS * 3600:
                 continue
         body = (rule.get("body") or "").replace("{{name}}", lead.get("name", ""))
+        attempts += 1
         result = await send_email(
             lead["email"], rule.get("subject", ""), body,
             extra={"lead_id": lead["id"], "automation_id": rule["id"]},
@@ -119,8 +128,13 @@ async def run_due_automations() -> int:
     rules = await db.lead_automations.find({"active": True}, {"_id": 0}).to_list(1000)
     total = 0
     for rule in rules:
+        # Plafond horaire du marketing, partagé avec les campagnes.
+        budget = await marketing_quota_remaining()
+        if budget <= 0:
+            log.info("Relances automatiques : plafond horaire du marketing atteint, reprise au prochain passage")
+            break
         try:
-            total += await _run_rule(rule, force=False)
+            total += await _run_rule(rule, force=False, budget=budget)
         except Exception as e:
             log.warning(f"Automation {rule.get('id')} failed: {e}")
     return total

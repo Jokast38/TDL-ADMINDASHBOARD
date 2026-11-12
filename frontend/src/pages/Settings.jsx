@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { CreditCard, EnvelopeSimple, Kanban, Plugs, ChartBar, MagnifyingGlass, Robot, Signature, UploadSimple, CheckCircle, ChatText } from "@phosphor-icons/react";
 import { toast } from "sonner";
+import EmailDebitCard from "@/components/EmailDebitCard";
 
 // Types de SMS activables un par un — mêmes clés et mêmes valeurs par défaut
 // que backend/services/sms.py:SMS_CATEGORIES (budget limité : seuls les liens
@@ -124,6 +125,17 @@ export default function Settings() {
                   </div>
                   <Field label="Compte / utilisateur" value={s.smtp_user} onChange={(v) => update("smtp_user", v)} testid="smtp-user" placeholder="administration@tdl-formation.fr" />
                   <Field label="Mot de passe" type="password" value={s.smtp_password} onChange={(v) => update("smtp_password", v)} testid="smtp-password" />
+                  <div className="space-y-3 pt-3 border-t border-gray-100">
+                    <p className="text-sm font-semibold">Expéditeurs par type d'email</p>
+                    <p className="text-xs text-gray-500">
+                      Boîtes du même domaine, avec le <b>même mot de passe</b> que ci-dessus. Laisser vide = envoi depuis la boîte
+                      principale. Si une boîte refuse la connexion, l'email repart automatiquement depuis la boîte principale.
+                      Le plafond de 30 emails/minute d'o2switch reste commun à toutes les boîtes.
+                    </p>
+                    <Field label="Notifications internes (équipe, formateurs)" value={s.email_from_equipe} onChange={(v) => update("email_from_equipe", v)} testid="email-from-equipe" placeholder="dashboard@tdl-formation.fr" />
+                    <Field label="Relances et campagnes (prospects)" value={s.email_from_marketing} onChange={(v) => update("email_from_marketing", v)} testid="email-from-marketing" placeholder="info@tdl-formation.fr" />
+                    <p className="text-xs text-gray-400">Apprenants, clients et prospects (emails transactionnels) : boîte principale ({s.smtp_user || s.email_from || "—"}).</p>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Switch checked={s.smtp_tls !== false} onCheckedChange={(v) => update("smtp_tls", v)} data-testid="smtp-tls" />
                     <label className="text-sm">STARTTLS (décochez pour SSL direct, ex: port 465)</label>
@@ -157,6 +169,7 @@ export default function Settings() {
               )}
             </div>
           </Card>
+          <EmailDebitCard settings={s} update={update} />
           <Card className="p-6 border border-gray-200 rounded-md shadow-none mt-4">
             <h3 className="font-display text-xl font-bold mb-1">Relances automatiques</h3>
             <p className="text-sm text-gray-500 mb-4">

@@ -1081,7 +1081,7 @@ async def send_relance_single(payload: LeadRelanceSingleIn, user: dict = Depends
     if not lead.get("email"):
         return {"sent": False, "reason": "no_email"}
     body = payload.body.replace("{{name}}", lead.get("name", ""))
-    log = await send_email(lead["email"], payload.subject, body, extra={"lead_id": payload.lead_id})
+    log = await send_email(lead["email"], payload.subject, body, extra={"lead_id": payload.lead_id, "relance_manuelle": True})
     if log["status"] not in ("sent", "mocked"):
         return {"sent": False, "reason": log["status"]}
     update = {"updated_at": now_iso()}
@@ -1108,7 +1108,7 @@ async def send_relance(payload: LeadRelanceIn, user: dict = Depends(require_role
             no_email += 1
             continue
         body = payload.body.replace("{{name}}", lead.get("name", ""))
-        log = await send_email(lead["email"], payload.subject, body, extra={"lead_id": lead["id"]})
+        log = await send_email(lead["email"], payload.subject, body, extra={"lead_id": lead["id"], "relance_manuelle": True})
         if log["status"] not in ("sent", "mocked"):
             continue
         sent += 1
@@ -1137,26 +1137,12 @@ async def send_broadcast(payload: LeadBroadcastIn, user: dict = Depends(require_
         if values:
             query["interest"] = {"$in": values}
 
-    leads = await db.leads.find(query, {"_id": 0}).to_list(100000)
-    sent, no_email = 0, 0
-    for lead in leads:
-        if not lead.get("email"):
-            no_email += 1
-            continue
-        body = payload.body.replace("{{name}}", lead.get("name", ""))
-        log = await send_email(lead["email"], payload.subject, body, extra={"lead_id": lead["id"], "campaign": True})
-        if log["status"] not in ("sent", "mocked"):
-            continue
-        sent += 1
-        update = {"updated_at": now_iso()}
-        if payload.mark_contacted:
-            update["contacted"] = True
-            update["last_contacted_at"] = now_iso()
-            update["last_contacted_by"] = user["id"]
-            update["status"] = "contacte"
-        await db.leads.update_one({"id": lead["id"]}, {"$set": update})
-        if payload.add_tag:
-            await db.leads.update_one({"id": lead["id"]}, {"$addToSet": {"tags": payload.add_tag}})
-    if sent:
-        _leads_cache_clear()
-    return {"sent": sent, "skipped_no_email": no_email, "total_matched": len(leads)}
+    leads = await db.leads.find(query, {"_id": 0, "id": 1, "email": 1}).to_list(100000)
+    ids = [l["id"] for l in leads if l.get("email")]
+    # Mise en file (services/email_campaigns.py) : envoi en tâche de fond,
+    # étalé dans le plafond horaire du marketing, sans dépendre de l'onglet
+    # du navigateur (demande du 2026-11-12).
+    from services.email_campaigns import create_campaign
+    campaign = await create_campaign("broadcast", payload.subject, payload.body, ids, user,
+                                     mark_contacted=payload.mark_contacted, add_tag=payload.add_tag)
+    return {"queued": True, "campaign": campaign, "skipped_no_email": len(leads) - len(ids), "total_matched": len(leads)}

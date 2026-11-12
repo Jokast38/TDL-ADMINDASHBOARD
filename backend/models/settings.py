@@ -32,6 +32,16 @@ class SettingsIn(BaseModel):
     # WhatsApp). Désactivées tant que les dossiers sont complétés sur place
     # (demande du 2026-11-10) : absent ou False = pas de relance.
     doc_reminders_enabled: Optional[bool] = None
+    # Débit d'envoi (services/email_rate.py, demande du 2026-11-12) : envois
+    # par minute (28 max, limite o2switch 30/min pour tout le domaine), part
+    # réservée aux emails importants, plafond horaire du marketing.
+    smtp_rate_per_minute: Optional[int] = None
+    # Expéditeurs par type d'email (services/email.py, demande du 2026-11-12) :
+    # même mot de passe SMTP que la boîte principale. Vide = boîte principale.
+    email_from_equipe: Optional[str] = None
+    email_from_marketing: Optional[str] = None
+    smtp_reserve_transactional: Optional[int] = None
+    marketing_per_hour: Optional[int] = None
     # Relances aux formateurs : pièces de leur dossier et convention à signer
     # (absent ou False = pas de relance, demande du 2026-11-10).
     formateur_doc_reminders_enabled: Optional[bool] = None

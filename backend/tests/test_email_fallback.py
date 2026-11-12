@@ -57,7 +57,7 @@ def env(monkeypatch):
     calls = {"smtp": 0, "brevo": 0}
     email._brevo_sender_cache.clear()
 
-    async def _no_throttle():
+    async def _no_throttle(*_a, **_k):
         return None
 
     async def _no_sleep(_s):

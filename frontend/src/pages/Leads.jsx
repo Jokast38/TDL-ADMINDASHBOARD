@@ -490,6 +490,9 @@ export default function Leads() {
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastResult, setBroadcastResult] = useState(null);
   const [broadcastProgress, setBroadcastProgress] = useState(null);
+  // Campagne mise en file côté serveur (backend services/email_campaigns.py) :
+  // envoi étalé dans le plafond horaire, suivi ici tant que la fenêtre est ouverte.
+  const [broadcastCampaign, setBroadcastCampaign] = useState(null);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editLead, setEditLead] = useState(null);
@@ -961,53 +964,49 @@ export default function Leads() {
     setBroadcastResult(null);
     setBroadcastCount(null);
     setBroadcastProgress(null);
+    setBroadcastCampaign(null);
   };
 
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  // Envoi bouclé côté client (comme la relance manuelle) plutôt qu'un seul gros
-  // appel serveur : ça donne une vraie barre de progression, et le petit délai
-  // entre chaque email limite le risque de déclencher la limite anti-abus de
-  // Gmail SMTP sur un gros volume envoyé d'un coup.
+  // Campagne mise en file côté serveur (demande du 2026-11-12) : envoi étalé
+  // en arrière-plan dans le plafond horaire du marketing, sans dépendre de
+  // cet onglet (avant, la boucle tournait ici, email par email). La barre de
+  // progression suit la campagne (effet ci-dessous).
   const sendBroadcast = async () => {
     if (broadcastTemplateKey === "custom" && !broadcastCustomMessage.trim()) return toast.error("Le message est requis");
     if (!broadcastSubject || !broadcastBody) return toast.error("Sujet et message requis");
     if (!broadcastAll && broadcastInterests.size === 0) return toast.error("Sélectionnez au moins un intérêt, ou \"Tous les leads\"");
     setBroadcasting(true);
     try {
-      const { data: targets } = await api.get("/leads/broadcast-targets", {
-        params: broadcastAll ? {} : { interest_in: broadcastInterestIn },
+      const { data } = await api.post("/leads/broadcast", {
+        interest_in: broadcastAll ? undefined : broadcastInterestIn,
+        subject: broadcastSubject, body: broadcastBody, mark_contacted: true, add_tag: "campagne_broadcast",
       });
-      const withEmail = targets.filter((l) => l.email);
-      const noEmail = targets.length - withEmail.length;
-
-      let sent = 0, skipped = 0, errors = 0;
-      setBroadcastProgress({ total: withEmail.length, sent: 0, skipped: 0, errors: 0, done: false });
-      for (const lead of withEmail) {
-        try {
-          const { data } = await api.post("/leads/relance/single", {
-            lead_id: lead.id, subject: broadcastSubject, body: broadcastBody,
-            mark_contacted: true, add_tag: "campagne_broadcast",
-          });
-          data.sent ? sent++ : skipped++;
-        } catch { errors++; }
-        setBroadcastProgress({ total: withEmail.length, sent, skipped, errors, done: false });
-        await sleep(300);
-      }
-      setBroadcastProgress({ total: withEmail.length, sent, skipped, errors, done: true });
-      setBroadcastResult({ sent, no_email: noEmail, send_failed: skipped + errors, total_matched: targets.length });
-      if (sent === 0 && (skipped + errors) > 0) {
-        toast.error(`Aucun email envoyé — ${skipped + errors} échec(s) d'envoi (SMTP/Resend). Vérifiez la configuration email.`);
-      } else {
-        toast.success(`${sent} email(s) envoyé(s) sur ${targets.length} lead(s) correspondant(s)`);
-      }
-      load();
+      setBroadcastCampaign({ ...data.campaign, no_email: data.skipped_no_email, total_matched: data.total_matched });
+      setBroadcastProgress({ total: data.campaign.total, sent: 0, skipped: 0, errors: 0, done: data.campaign.total === 0 });
+      toast.success(`Campagne mise en file : ${data.campaign.total} email(s), envoyés progressivement en arrière-plan`);
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur lors de l'envoi de la campagne");
     } finally {
       setBroadcasting(false);
     }
   };
+
+  // Suivi de la campagne en file (rafraîchi toutes les 10 s).
+  useEffect(() => {
+    if (!broadcastCampaign?.id || broadcastProgress?.done) return;
+    const t = setInterval(async () => {
+      try {
+        const { data: c } = await api.get(`/email/campagnes/${broadcastCampaign.id}`);
+        const done = ["terminee", "annulee"].includes(c.status);
+        setBroadcastProgress({ total: c.total, sent: c.sent, skipped: 0, errors: c.failed, done });
+        if (done) {
+          setBroadcastResult({ sent: c.sent, no_email: broadcastCampaign.no_email, send_failed: c.failed, total_matched: broadcastCampaign.total_matched });
+          load();
+        }
+      } catch { /* nouvel essai au prochain tour */ }
+    }, 10000);
+    return () => clearInterval(t);
+  }, [broadcastCampaign, broadcastProgress?.done]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Relances automatiques ──────────────────────────────────────────────────
   const loadAutomations = async () => {
@@ -1384,7 +1383,7 @@ export default function Leads() {
                       <span>
                         {broadcastProgress.done
                           ? `Terminé — ${broadcastProgress.sent} envoyé(s)${broadcastProgress.skipped ? `, ${broadcastProgress.skipped} sans email` : ""}${broadcastProgress.errors ? `, ${broadcastProgress.errors} erreur(s)` : ""}`
-                          : `Envoi en cours… ${broadcastProgress.sent + broadcastProgress.skipped + broadcastProgress.errors} / ${broadcastProgress.total}`}
+                          : `Envoi progressif en arrière-plan… ${broadcastProgress.sent + broadcastProgress.skipped + broadcastProgress.errors} / ${broadcastProgress.total} (vous pouvez fermer cette fenêtre — suivi dans Paramètres → Email)`}
                       </span>
                       <span className="font-mono">
                         {Math.round(((broadcastProgress.sent + broadcastProgress.skipped + broadcastProgress.errors) / Math.max(broadcastProgress.total, 1)) * 100)}%
