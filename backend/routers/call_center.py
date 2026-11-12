@@ -20,7 +20,7 @@ from core.security import require_role
 from core.config import ROLES_LEADS, ROLES_TEAM_MGMT, effective_assigned_categories
 from core.utils import now_iso
 from models.commercial_call import CallLogIn, CallScriptIn, CallScriptUpdate
-from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate, RdvResultatIn, RdvNoteIn
+from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate, RdvResultatIn, RdvNoteIn, RdvQualificationIn
 from services.activity import log_action
 from services.appointment_notify import cancel_to_prospect, confirm_to_prospect
 from core import rdv_suivi
@@ -351,7 +351,65 @@ async def list_rendez_vous(
         a["statut_suivi"] = rdv_suivi.statut_suivi(a, now)
         a["date_paris"], a["heure_paris"] = d.date().isoformat(), d.strftime("%H:%M")
         out.append(a)
+    await _avec_qualification(out)
     return {"items": out, "statuts": rdv_suivi.STATUTS, "date_from": date_from, "date_to": date_to}
+
+
+async def _avec_qualification(appts: list) -> None:
+    """Qualification actuelle du prospect de chaque RDV (même vocabulaire et
+    même source que les pages Leads et Marketing : statut unifié traduit par
+    statut_to_qualification ; champ `qualification` pour les anciens imports
+    Meta)."""
+    from services.lead_migration import statut_to_qualification
+    ids = list({a.get("lead_id") for a in appts if a.get("lead_id")})
+    if not ids:
+        return
+    quals = {}
+    for lead in await db.leads.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "statut": 1, "motif_cloture": 1, "chaleur": 1}).to_list(len(ids)):
+        quals[lead["id"]] = statut_to_qualification(lead)
+    reste = [i for i in ids if i not in quals]
+    if reste:
+        for lead in await db.meta_lead_imports.find({"id": {"$in": reste}}, {"_id": 0, "id": 1, "qualification": 1}).to_list(len(reste)):
+            quals[lead["id"]] = lead.get("qualification") or "a_contacter"
+    for a in appts:
+        a["lead_qualification"] = quals.get(a.get("lead_id"))
+
+
+@router.put("/appointments/{appointment_id}/qualification")
+async def qualifier_rendez_vous(appointment_id: str, payload: RdvQualificationIn, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Qualifie le prospect d'un RDV depuis l'onglet Rendez-vous (demande du
+    2026-11-12), exactement comme depuis Leads/Marketing : même endpoint de
+    mise à jour pour les prospects (statut unifié, historique, relances
+    automatiques), champ `qualification` pour les anciens imports Meta. La
+    qualification choisie est aussi gardée sur le RDV, avec qui et quand."""
+    from routers.meta_lead_import import QUALIFICATION_LABELS
+    if payload.qualification not in QUALIFICATION_LABELS:
+        raise HTTPException(status_code=400, detail="Qualification inconnue")
+    appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+    if not appt:
+        raise HTTPException(status_code=404, detail="Rendez-vous introuvable")
+    lead_id = appt.get("lead_id")
+    if lead_id and await db.leads.find_one({"id": lead_id}, {"_id": 0, "id": 1}):
+        from models.lead import LeadUpdate
+        from routers.leads import update_lead
+        await update_lead(lead_id, LeadUpdate(qualification=payload.qualification), user)
+    elif lead_id and await db.meta_lead_imports.find_one({"id": lead_id}, {"_id": 0, "id": 1}):
+        await db.meta_lead_imports.update_one({"id": lead_id}, {"$set": {
+            "qualification": payload.qualification, "qualified_by": user["id"], "qualified_by_name": user.get("name", ""),
+            "qualified_at": now_iso(), "updated_at": now_iso()}})
+        await log_action(user, "lead_qualifie", "lead", lead_id, {"name": appt.get("lead_name"), "qualification": payload.qualification, "rdv_id": appointment_id})
+    else:
+        raise HTTPException(status_code=404, detail="Prospect du rendez-vous introuvable")
+    entry = {"qualification": payload.qualification, "at": now_iso(), "by_id": user["id"], "by_name": user.get("name", "")}
+    await db.call_appointments.update_one({"id": appointment_id}, {
+        "$set": {"qualification_rdv": entry, "updated_at": now_iso()}, "$push": {"qualification_history": entry}})
+    appt = await db.call_appointments.find_one({"id": appointment_id}, {"_id": 0})
+    d = rdv_suivi.parse(appt.get("scheduled_at"))
+    appt["statut_suivi"] = rdv_suivi.statut_suivi(appt, datetime.now(PARIS))
+    if d:
+        appt["date_paris"], appt["heure_paris"] = d.date().isoformat(), d.strftime("%H:%M")
+    await _avec_qualification([appt])
+    return appt
 
 
 @router.post("/appointments/{appointment_id}/notes")

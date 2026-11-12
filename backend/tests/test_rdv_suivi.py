@@ -152,6 +152,69 @@ def test_rdv_qualifie_le_prospect_sans_retrograder(monkeypatch):
     assert Db.meta_lead_imports.docs[0]["qualification"] == "rdv_pris"
 
 
+def test_qualification_depuis_l_onglet_rendez_vous(monkeypatch):
+    from routers import call_center
+    import routers.leads as leads_router
+
+    class Coll:
+        def __init__(self, docs):
+            self.docs = docs
+
+        def find(self, q, _p=None):
+            ids = q["id"]["$in"]
+            docs = [d for d in self.docs if d["id"] in ids]
+
+            class C:
+                async def to_list(self, _n):
+                    return [dict(d) for d in docs]
+            return C()
+
+        async def find_one(self, q, _p=None):
+            return next((dict(d) for d in self.docs if d["id"] == q["id"]), None)
+
+        async def update_one(self, q, u):
+            for d in self.docs:
+                if d["id"] == q["id"]:
+                    for k, v in u.get("$push", {}).items():
+                        d.setdefault(k, []).append(v)
+                    d.update(u.get("$set", {}))
+
+    class Db:
+        call_appointments = Coll([{**RDV, "lead_id": "l1"}, {**RDV, "id": "r2", "lead_id": "m1"}])
+        leads = Coll([{"id": "l1", "name": "Karim", "statut": "rendez_vous"}])
+        meta_lead_imports = Coll([{"id": "m1", "qualification": "rdv_pris"}])
+
+    calls = []
+
+    async def fake_update_lead(lid, payload, user):
+        calls.append((lid, payload.qualification))
+        Db.leads.docs[0]["statut"] = "inscrit"
+
+    async def noop(*_a, **_k):
+        return None
+    monkeypatch.setattr(call_center, "db", Db)
+    monkeypatch.setattr(call_center, "log_action", noop)
+    monkeypatch.setattr(leads_router, "update_lead", fake_update_lead)
+    user = {"id": "a1", "name": "Agent", "role": "agent_telephonique"}
+
+    # Liste : qualification actuelle de chaque prospect, prospects et anciens imports Meta.
+    appts = [dict(a) for a in Db.call_appointments.docs]
+    asyncio.run(call_center._avec_qualification(appts))
+    assert [a["lead_qualification"] for a in appts] == ["rdv_pris", "rdv_pris"]
+
+    # Prospect : même chemin que la page Leads ; ancien import Meta : champ qualification.
+    out = asyncio.run(call_center.qualifier_rendez_vous("r1", call_center.RdvQualificationIn(qualification="inscrit"), user))
+    assert calls == [("l1", "inscrit")] and out["lead_qualification"] == "inscrit"
+    assert out["qualification_rdv"]["by_name"] == "Agent"
+    asyncio.run(call_center.qualifier_rendez_vous("r2", call_center.RdvQualificationIn(qualification="interesse"), user))
+    assert Db.meta_lead_imports.docs[0]["qualification"] == "interesse"
+
+    import pytest
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException):
+        asyncio.run(call_center.qualifier_rendez_vous("r1", call_center.RdvQualificationIn(qualification="nimporte"), user))
+
+
 def test_note_de_rdv_ajoutee_au_rdv_et_au_prospect(monkeypatch):
     from routers import call_center
 

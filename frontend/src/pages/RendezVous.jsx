@@ -30,6 +30,21 @@ const STATUT_STYLE = {
   fait: "bg-green-100 text-green-700",
 };
 const MANAGERS = ["admin", "responsable_admission", "responsable_commercial"];
+// Qualification du prospect (2026-11-12) : mêmes libellés et couleurs que
+// la colonne Qualification de Leads.jsx, même source côté serveur — qualifier
+// ici met à jour le prospect dans Leads et Marketing.
+const QUALIF_COLOR = {
+  a_contacter: "bg-gray-100 text-gray-600",
+  non_qualifie: "bg-gray-200 text-gray-500",
+  interesse: "bg-[#0B7238]/10 text-[#0B7238]",
+  rdv_pris: "bg-indigo-100 text-indigo-700",
+  pas_de_reponse: "bg-amber-100 text-amber-700",
+  a_relancer: "bg-blue-100 text-blue-700",
+  a_relancer_1_an: "bg-purple-100 text-purple-700",
+  plus_interesse: "bg-red-100 text-red-700",
+  inscrit: "bg-green-600 text-white",
+  paye: "bg-emerald-700 text-white",
+};
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
 
 export default function RendezVous() {
@@ -44,6 +59,8 @@ export default function RendezVous() {
   const [data, setData] = useState({ items: [], statuts: {} });
   const [busy, setBusy] = useState(null);
   const [notesFor, setNotesFor] = useState(null); // RDV dont on ouvre les notes
+  const [qualifOptions, setQualifOptions] = useState({});
+  const [qualifFilter, setQualifFilter] = useState("all");
 
   // Lien « Renseigner le rendez-vous » de la notification : on ouvre la
   // bonne journée et la bonne vue pour que la ligne soit visible.
@@ -60,7 +77,21 @@ export default function RendezVous() {
 
   useEffect(() => {
     api.get("/call-center/assignees").then((r) => setAssignees(r.data || [])).catch(() => {});
+    api.get("/meta-lead-import/qualification-options").then((r) => setQualifOptions(r.data || {})).catch(() => {});
   }, []);
+
+  const setQualification = async (a, qualification) => {
+    setBusy(a.id);
+    try {
+      const { data: updated } = await api.put(`/call-center/appointments/${a.id}/qualification`, { qualification });
+      setData((d) => ({ ...d, items: d.items.map((x) => (x.id === a.id ? { ...x, ...updated } : x)) }));
+      toast.success(`${a.lead_name || "Prospect"} : ${qualifOptions[qualification] || qualification}`);
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Qualification non enregistrée");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const load = () => {
     const p = vue === "moi" ? { vue, date_from: dateFrom, date_to: dateFrom } : { vue, date_from: dateFrom, date_to: dateTo };
@@ -96,7 +127,8 @@ export default function RendezVous() {
     }
   };
 
-  const items = data.items || [];
+  const allItems = data.items || [];
+  const items = qualifFilter === "all" ? allItems : allItems.filter((a) => (a.lead_qualification || "a_contacter") === qualifFilter);
   const aRenseigner = items.filter((a) => a.statut_suivi === "retour_a_renseigner").length;
 
   return (
@@ -133,6 +165,13 @@ export default function RendezVous() {
             </Select>
           </>
         )}
+        <Select value={qualifFilter} onValueChange={setQualifFilter}>
+          <SelectTrigger className="w-52 h-9" data-testid="rdv-filtre-qualification"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Toutes les qualifications</SelectItem>
+            {Object.entries(qualifOptions).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+          </SelectContent>
+        </Select>
         {dateFrom !== today() && <Button variant="ghost" size="sm" onClick={() => { setDateFrom(today()); setDateTo(today()); }}>Aujourd'hui</Button>}
       </div>
 
@@ -152,14 +191,16 @@ export default function RendezVous() {
                 <th className="py-2.5 px-4 overline">Heure</th>
                 <th className="py-2.5 px-4 overline">Assigné à</th>
                 <th className="py-2.5 px-4 overline">Statut</th>
+                <th className="py-2.5 px-4 overline">Qualification</th>
                 <th className="py-2.5 px-4 overline">Notes</th>
                 <th className="py-2.5 px-4 overline text-right">Résultat</th>
               </tr>
             </thead>
             <tbody>
               {!items.length && (
-                <tr><td colSpan="7" className="py-10 text-center text-gray-400">
-                  {vue === "moi" ? "Aucun rendez-vous ce jour-là." : "Aucun rendez-vous sur cette période."}
+                <tr><td colSpan="8" className="py-10 text-center text-gray-400">
+                  {qualifFilter !== "all" && allItems.length ? "Aucun rendez-vous avec cette qualification."
+                    : vue === "moi" ? "Aucun rendez-vous ce jour-là." : "Aucun rendez-vous sur cette période."}
                 </td></tr>
               )}
               {items.map((a) => {
@@ -184,6 +225,23 @@ export default function RendezVous() {
                         {data.statuts?.[a.statut_suivi] || a.statut_suivi}
                       </Badge>
                       {a.resultat_by_name && <p className="text-[11px] text-gray-400 mt-1">par {a.resultat_by_name}</p>}
+                    </td>
+                    <td className="py-2.5 px-4">
+                      {a.lead_qualification ? (
+                        <>
+                          <Select value={a.lead_qualification} onValueChange={(v) => setQualification(a, v)} disabled={busy === a.id}>
+                            <SelectTrigger className={`h-7 text-xs w-40 border-0 ${QUALIF_COLOR[a.lead_qualification] || "bg-gray-100"}`} data-testid={`rdv-qualif-${a.id}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(qualifOptions).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          {a.qualification_rdv?.by_name && (
+                            <p className="text-[11px] text-gray-400 mt-1" title={formatDateTimeFR(a.qualification_rdv.at)}>par {a.qualification_rdv.by_name}</p>
+                          )}
+                        </>
+                      ) : <span className="text-xs text-gray-400">Prospect introuvable</span>}
                     </td>
                     <td className="py-2.5 px-4 max-w-[220px]">
                       {(() => {

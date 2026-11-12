@@ -41,3 +41,8 @@ class RdvResultatIn(BaseModel):
 class RdvNoteIn(BaseModel):
     """Note prise sur un rendez-vous (onglet Rendez-vous, 2026-11-12)."""
     text: str
+
+
+class RdvQualificationIn(BaseModel):
+    """Qualification du prospect depuis l'onglet Rendez-vous (2026-11-12)."""
+    qualification: str
