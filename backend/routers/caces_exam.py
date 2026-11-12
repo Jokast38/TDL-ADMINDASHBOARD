@@ -17,6 +17,7 @@ Le testeur est un formateur affecté à la session dont le titre est
 « Testeur CACES » (le même qu'à la saisie de l'épreuve pratique, voir
 routers/caces.py:list_testeurs)."""
 import csv
+import hashlib
 import io
 import secrets
 import uuid
@@ -188,19 +189,61 @@ class GrilleIn(BaseModel):
     questions: List[QuestionIn]
 
 
-def _grille_summary(numero: str, doc: Optional[dict]) -> dict:
+def _grille_summary(numero: str, doc: Optional[dict], reviews: Optional[dict] = None) -> dict:
     questions = (doc or {}).get("questions") or []
     par_theme = {k: sum(1 for q in questions if q.get("theme") == k) for k in THEME_KEYS}
-    return {"numero": numero, "nb_questions": len(questions), "par_theme": par_theme,
-            "attendu": {k: b for k, _, b in THEMES_THEORIE}, "updated_at": (doc or {}).get("updated_at"),
-            "updated_by": (doc or {}).get("updated_by")}
+    out = {"numero": numero, "nb_questions": len(questions), "par_theme": par_theme,
+           "attendu": {k: b for k, _, b in THEMES_THEORIE}, "updated_at": (doc or {}).get("updated_at"),
+           "updated_by": (doc or {}).get("updated_by")}
+    if reviews is not None:
+        out["revue"] = _revue_stats(numero, questions, reviews)
+    return out
+
+
+# ---- Revue des questions par le formateur CACES (demande du 2026-11-12) ----
+# Le formateur passe chaque question en revue : « valide » ou « a_corriger »
+# avec un commentaire ; c'est l'équipe qui corrige la banque. Une revue est
+# rattachée au CONTENU de la question (thème, énoncé, réponse) : une question
+# modifiée repasse donc automatiquement « à revoir ».
+REVUE_STATUTS = ("valide", "a_corriger")
+
+
+def _qid(q: dict) -> str:
+    raw = f"{q.get('theme')}|{(q.get('enonce') or '').strip()}|{bool(q.get('reponse'))}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+async def _reviews() -> dict:
+    """{(numero, qid): revue}"""
+    docs = await db.caces_question_reviews.find({}, {"_id": 0}).to_list(5000)
+    return {(d["numero"], d["qid"]): d for d in docs}
+
+
+def _revue_stats(numero: str, questions: list, reviews: dict) -> dict:
+    statuts = [(reviews.get((numero, _qid(q))) or {}).get("statut") for q in questions]
+    return {"valide": statuts.count("valide"), "a_corriger": statuts.count("a_corriger"),
+            "a_revoir": sum(1 for s in statuts if s not in REVUE_STATUTS)}
+
+
+def _require_revue(user: dict) -> None:
+    if user.get("role") in ROLES_DOSSIERS_MGMT:
+        return
+    if user.get("role") == "animateur" and "CACES" in (user.get("assigned_categories") or []):
+        return
+    raise HTTPException(status_code=403, detail="Réservé aux formateurs CACES")
+
+
+class RevueIn(BaseModel):
+    statut: Optional[str] = None  # valide | a_corriger | None (remettre à revoir)
+    commentaire: Optional[str] = ""
 
 
 @router.get("/theorie/grilles")
 async def list_grilles(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
     docs = {d["numero"]: d for d in await db.caces_theorie_grilles.find({}, {"_id": 0}).to_list(10)}
+    reviews = await _reviews()
     return {"themes": [{"key": k, "label": l, "bareme": b} for k, l, b in THEMES_THEORIE],
-            "grilles": [_grille_summary(n, docs.get(n)) for n in GRILLES_THEORIE]}
+            "grilles": [_grille_summary(n, docs.get(n), reviews) for n in GRILLES_THEORIE]}
 
 
 @router.get("/theorie/grilles/{numero}")
@@ -208,7 +251,9 @@ async def get_grille(numero: str, user: dict = Depends(require_role(*ROLES_DOSSI
     if numero not in GRILLES_THEORIE:
         raise HTTPException(status_code=404, detail="Grille inconnue")
     doc = await db.caces_theorie_grilles.find_one({"numero": numero}, {"_id": 0}) or {}
-    return {"numero": numero, "questions": doc.get("questions") or []}
+    reviews = await _reviews()
+    questions = [{**q, "revue": reviews.get((numero, _qid(q)))} for q in doc.get("questions") or []]
+    return {"numero": numero, "questions": questions}
 
 
 async def _save_grille(numero: str, questions: List[dict], user: dict) -> None:
@@ -232,6 +277,81 @@ async def save_grille(numero: str, payload: GrilleIn, user: dict = Depends(requi
         questions.append({"theme": q.theme, "enonce": q.enonce.strip(), "reponse": q.reponse})
     await _save_grille(numero, questions, user)
     return _grille_summary(numero, {"questions": questions, "updated_at": now_iso(), "updated_by": user.get("name")})
+
+
+@router.get("/theorie/revue")
+async def revue_grilles(user: dict = Depends(get_current_user)):
+    """Les 4 grilles avec la revue de chaque question (espace formateur,
+    onglet « Validation des questions »)."""
+    _require_revue(user)
+    docs = {d["numero"]: d for d in await db.caces_theorie_grilles.find({}, {"_id": 0}).to_list(10)}
+    reviews = await _reviews()
+    grilles = []
+    for n in GRILLES_THEORIE:
+        qs = (docs.get(n) or {}).get("questions") or []
+        grilles.append({
+            "numero": n, "stats": _revue_stats(n, qs, reviews),
+            "questions": [{"qid": _qid(q), "numero_question": i, "theme": q["theme"], "enonce": q["enonce"],
+                           "reponse": q["reponse"], "revue": reviews.get((n, _qid(q)))} for i, q in enumerate(qs, start=1)],
+        })
+    return {"themes": [{"key": k, "label": l} for k, l, _ in THEMES_THEORIE], "grilles": grilles}
+
+
+@router.put("/theorie/revue/{numero}/{qid}")
+async def revue_question(numero: str, qid: str, payload: RevueIn, user: dict = Depends(get_current_user)):
+    _require_revue(user)
+    doc = await db.caces_theorie_grilles.find_one({"numero": numero}, {"_id": 0}) or {}
+    q = next((q for q in doc.get("questions") or [] if _qid(q) == qid), None)
+    if not q:
+        raise HTTPException(status_code=404, detail="Question introuvable (modifiée entre-temps ?) — rechargez la page")
+    rid = f"{numero}:{qid}"
+    if payload.statut is None:
+        await db.caces_question_reviews.delete_one({"id": rid})
+        return {"qid": qid, "revue": None}
+    if payload.statut not in REVUE_STATUTS:
+        raise HTTPException(status_code=400, detail="Statut inconnu")
+    commentaire = (payload.commentaire or "").strip()
+    if payload.statut == "a_corriger" and not commentaire:
+        raise HTTPException(status_code=400, detail="Indiquez ce qu'il faut corriger")
+    revue = {"id": rid, "numero": numero, "qid": qid, "statut": payload.statut, "commentaire": commentaire,
+             "enonce": q["enonce"], "by_id": user["id"], "by_name": user.get("name", ""), "at": now_iso()}
+    await db.caces_question_reviews.update_one({"id": rid}, {"$set": revue}, upsert=True)
+    return {"qid": qid, "revue": revue}
+
+
+@router.post("/theorie/revue/envoyer")
+async def envoyer_revue(user: dict = Depends(get_current_user)):
+    """Le formateur a fini (ou fait une pause) : un seul email récapitulatif
+    à l'équipe avec les questions à corriger — pas un email par question."""
+    _require_revue(user)
+    reviews = await _reviews()
+    docs = {d["numero"]: d for d in await db.caces_theorie_grilles.find({}, {"_id": 0}).to_list(10)}
+    lignes, total = [], {"valide": 0, "a_corriger": 0, "a_revoir": 0}
+    for n in GRILLES_THEORIE:
+        qs = (docs.get(n) or {}).get("questions") or []
+        st = _revue_stats(n, qs, reviews)
+        for k in total:
+            total[k] += st[k]
+        for i, q in enumerate(qs, start=1):
+            r = reviews.get((n, _qid(q)))
+            if r and r.get("statut") == "a_corriger":
+                lignes.append(f"<li><b>Grille {n}, question {i}</b> : {q['enonce']}<br><i>Remarque : {r.get('commentaire', '')}</i></li>")
+    from services.email import send_email
+    from core.config import PUBLIC_FRONTEND_URL
+    equipe = await db.users.find({"role": {"$in": ["admin", "responsable_admission"]}, "active": {"$ne": False},
+                                  "email": {"$exists": True, "$ne": ""}}, {"_id": 0, "email": 1}).to_list(20)
+    body = (
+        f"<p>{user.get('name', '')} a passé en revue les questions des grilles théoriques CACES® :</p>"
+        f"<p><b>{total['valide']}</b> validée(s), <b>{total['a_corriger']}</b> à corriger, {total['a_revoir']} pas encore revue(s).</p>"
+        + (f"<p>Questions à corriger :</p><ul>{''.join(lignes)}</ul>" if lignes else "")
+        + f"<p>Corrigez-les dans <a href=\"{PUBLIC_FRONTEND_URL}/admin/caces\">CACES → Banque de questions</a> : "
+          "une question modifiée repasse automatiquement « à revoir » pour le formateur.</p>"
+    )
+    for e in equipe:
+        await send_email(e["email"], f"CACES : revue des questions par {user.get('name', '')} ({total['a_corriger']} à corriger)", body)
+    await db.caces_revue_envois.insert_one({"id": str(uuid.uuid4()), "by_id": user["id"], "by_name": user.get("name"),
+                                            "at": now_iso(), **total})
+    return {**total, "destinataires": len(equipe)}
 
 
 def _rows_from_upload(filename: str, data: bytes) -> List[List]:

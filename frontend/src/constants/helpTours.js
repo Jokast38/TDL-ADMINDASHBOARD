@@ -2,7 +2,7 @@ import {
   House, GraduationCap, Folders, IdentificationCard, UsersThree, FilePdf, FileText,
   Archive, ShoppingCart, Storefront, Robot, Article, Users, Gear, ChartBar,
   CalendarCheck, PenNib, TrendUp, LinkSimple, Student, Signature, ArrowsClockwise,
-  CreditCard,
+  CreditCard, ListChecks, Exam, SteeringWheel,
 } from "@phosphor-icons/react";
 
 // Contenu du Centre d'aide (visites guidées) — une catégorie par profil
@@ -261,6 +261,99 @@ export const HELP_CATEGORIES = [
         targetSelector: '[data-testid="tab-dossier"]',
         description:
           "À compléter dans les 24h suivant la création de votre compte : chargez vos 10 pièces justificatives (identité, diplôme BAFM/PSY, GTA, KBIS...) puis signez la convention de collaboration directement à l'écran (signature tactile). L'agent qui vous a créé est notifié dès que c'est fait.",
+      },
+    ],
+  },
+  {
+    // Visite de l'espace d'un formateur / testeur CACES® R489 (2026-11-12) :
+    // lancée automatiquement à sa première connexion, à la place de la
+    // visite « animateur » (pages/AnimateurSpace.jsx).
+    key: "caces",
+    label: "Formateur / Testeur CACES®",
+    roles: ["animateur"],
+    icon: ListChecks,
+    description: "Validation des questions, planning, sessions, épreuves théoriques et pratiques, documents.",
+    steps: [
+      {
+        title: "Bienvenue dans votre espace",
+        question: "À quoi sert mon espace formateur CACES ?",
+        icon: House,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="animateur-page"]',
+        description:
+          "Votre espace TDL Formation : vous y choisissez vos dates, retrouvez vos sessions CACES®, faites passer les épreuves (théorie sur papier, pratique sur tablette) et retrouvez les documents archivés à votre nom. Cette visite vous montre chaque partie en 2 minutes ; vous pouvez la relancer avec le bouton « Visite guidée ».",
+      },
+      {
+        title: "Validation des questions",
+        question: "Comment valider les questions des grilles théoriques ?",
+        icon: ListChecks,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="tab-revue-caces"]',
+        description:
+          "Première chose à faire : les 4 grilles de 100 questions vrai/faux de l'épreuve théorique R489. Pour chaque question, vérifiez l'affirmation et la réponse attendue, puis cliquez sur « Correcte » ou « À corriger » (avec votre remarque). Vos avis sont enregistrés au fur et à mesure. Quand vous avez fini, cliquez sur « Envoyer mes remarques à l'équipe » : TDL corrige et les questions modifiées reviennent dans « À revoir ».",
+      },
+      {
+        title: "Planning : choisir vos dates",
+        question: "Comment choisir mes dates de session ?",
+        icon: CalendarCheck,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="tab-planning"]',
+        description:
+          "Chaque session CACES® a une place « Formateur » et une place « Testeur ». Dans Planning, cliquez sur « Me placer » sur les sessions qui vous conviennent. Rappel R489 : le testeur ne fait pas passer l'examen aux candidats qu'il a lui-même formés, l'équipe TDL veille à la bonne répartition.",
+      },
+      {
+        title: "Vos sessions",
+        question: "Comment ouvrir une session le jour J ?",
+        icon: Calendar,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="animateur-sessions"]',
+        description:
+          "Vos sessions apparaissent ici. Elles s'ouvrent le jour même à 8h30 (ou plus tôt si l'équipe TDL les ouvre) et se ferment à 16h45. Dans une session ouverte : feuille d'émargement (présence et signature des candidats à l'écran — 10 candidats maximum par session CACES®), puis le bloc « Épreuves de la session », avec 4 onglets : Théorie, Pratique, Examen d'adéquation et Documents.",
+      },
+      {
+        title: "Examen d'adéquation du chariot",
+        question: "Comment faire l'examen d'adéquation du chariot ?",
+        icon: SteeringWheel,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="animateur-sessions"]',
+        description:
+          "Chaque jour d'épreuve pratique, avant de commencer : dans la session, onglet « Examen d'adéquation », cochez la liste de contrôle du chariot (documents, état, équipements). « Chariot apte — enregistrer » archive un PDF à votre nom ; en cas de problème, « Chariot non apte ».",
+      },
+      {
+        title: "Épreuve théorique (papier)",
+        question: "Comment se passe l'épreuve théorique ?",
+        icon: Exam,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="animateur-sessions"]',
+        description:
+          "Le jour de l'examen théorique uniquement (date fixée par TDL), le bouton « Générer les questionnaires » apparaît dans l'onglet « Théorie » de la session : une copie par candidat, grille tirée au sort et questions dans un ordre aléatoire. Imprimez les questionnaires et les corrigés, faites composer sur papier, puis saisissez les réponses de chaque candidat avec « Corriger la copie » : la note et la réussite (70 % et la moyenne dans chaque thème) sont calculées automatiquement.",
+      },
+      {
+        title: "Épreuve pratique (tablette)",
+        question: "Comment remplir la grille d'épreuve pratique ?",
+        icon: PenNib,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="animateur-sessions"]',
+        description:
+          "Dans l'onglet « Pratique », « Noter une épreuve pratique » ouvre pour chaque candidat la grille officielle de la catégorie (1A, 1B, 3, 5…) : notez chaque point pendant l'épreuve, directement sur la tablette. Astuce : « Tout mettre au maximum, puis retirer les points ». Un point à zéro entraîne l'échec. « Enregistrer et archiver » produit le PDF à votre nom, avec votre signature.",
+      },
+      {
+        title: "Documents CACES",
+        question: "Où retrouver les documents de mes épreuves ?",
+        icon: Archive,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="tab-caces-docs"]',
+        description:
+          "Tous les documents produits lors de vos épreuves (questionnaires, corrigés, résultats, grilles pratiques, examens d'adéquation) sont archivés ici, à votre nom, et conservés par TDL.",
+      },
+      {
+        title: "Mon dossier et ma signature",
+        question: "Que dois-je compléter dans mon dossier ?",
+        icon: Signature,
+        route: "/espace-animateur",
+        targetSelector: '[data-testid="tab-dossier"]',
+        description:
+          "Dans « Mon dossier », complétez vos informations et vos justificatifs ; dans « Ma signature », déposez votre signature une fois pour toutes : elle sert à signer les documents d'épreuve. Une question ? Contactez l'équipe TDL Formation.",
       },
     ],
   },

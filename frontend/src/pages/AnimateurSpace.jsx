@@ -14,7 +14,8 @@ import { HELP_CATEGORIES } from "@/constants/helpTours";
 import FormateurPlanningTab from "@/components/FormateurPlanningTab";
 import EmargementPanel from "@/components/stages/EmargementPanel";
 import CacesExamPanel, { DocumentsList } from "@/components/caces/CacesExamPanel";
-import { Archive } from "@phosphor-icons/react";
+import { Archive, ListChecks, Compass } from "@phosphor-icons/react";
+import QuestionsRevueTab from "@/components/caces/QuestionsRevueTab";
 
 // Pièces justifiant le droit d'exercer — doit rester synchronisé avec
 // FORMATEUR_DOC_TYPES côté backend (routers/employees.py). Dossier à
@@ -341,10 +342,18 @@ export default function AnimateurSpace() {
   const { user } = useAuth();
   const { startTour } = useTour();
   const isTesteur = user?.titre === "Testeur CACES";
+  // Formateur CACES (testeur ou non) : onglet de validation des questions et
+  // visite guidée propre au CACES (demande du 2026-11-12).
+  const isCaces = isTesteur || (user?.assigned_categories || []).includes("CACES");
+  const tourKey = isCaces ? "caces" : "animateur";
+  const lancerVisite = () => {
+    const category = HELP_CATEGORIES.find((c) => c.key === tourKey);
+    if (category) startTour(category);
+  };
   // ?tab=planning : ouvert depuis le bouton du rappel « Choisissez vos dates ».
   const [tab, setTab] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
-    return ["sessions", "planning", "dossier", "signature", "caces"].includes(requested) ? requested : "sessions";
+    return ["sessions", "planning", "dossier", "signature", "caces", "revue"].includes(requested) ? requested : "sessions";
   }); // sessions | planning | dossier | signature
   const [stages, setStages] = useState([]);
   const [selected, setSelected] = useState(null);
@@ -378,11 +387,15 @@ export default function AnimateurSpace() {
   // il peut toujours la relancer manuellement depuis le Centre d'aide.
   useEffect(() => {
     if (!user?.id) return;
-    const flagKey = `tour_seen_animateur_${user.id}`;
-    if (localStorage.getItem(flagKey)) return;
-    const category = HELP_CATEGORIES.find((c) => c.key === "animateur");
+    const flagKey = `tour_seen_${tourKey}_${user.id}`;
+    try {
+      if (localStorage.getItem(flagKey)) return;
+      localStorage.setItem(flagKey, "1");
+    } catch {
+      // stockage indisponible : on montre la visite, sans mémoriser
+    }
+    const category = HELP_CATEGORIES.find((c) => c.key === tourKey);
     if (!category) return;
-    localStorage.setItem(flagKey, "1");
     startTour(category);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -407,7 +420,7 @@ export default function AnimateurSpace() {
         <div>
           <p className="overline">Espace animateur</p>
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">
-            {tab === "sessions" ? "Mes sessions" : tab === "planning" ? "Mon planning" : tab === "dossier" ? "Mon dossier" : tab === "caces" ? "Mes documents CACES" : "Ma signature"}
+            {tab === "sessions" ? "Mes sessions" : tab === "planning" ? "Mon planning" : tab === "dossier" ? "Mon dossier" : tab === "caces" ? "Mes documents CACES" : tab === "revue" ? "Validation des questions" : "Ma signature"}
           </h1>
           <p className="text-gray-500 mt-2">Bienvenue {user?.name}. {stages.length} session(s) attribuée(s).</p>
         </div>
@@ -426,8 +439,16 @@ export default function AnimateurSpace() {
               <Archive size={14} className="mr-1" /> Documents CACES
             </Button>
           )}
+          {isCaces && (
+            <Button variant={tab === "revue" ? "default" : "outline"} size="sm" onClick={() => setTab("revue")} className={tab === "revue" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-revue-caces">
+              <ListChecks size={14} className="mr-1" /> Validation des questions
+            </Button>
+          )}
           <Button variant={tab === "signature" ? "default" : "outline"} size="sm" onClick={() => setTab("signature")} className={tab === "signature" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-signature">
             <Signature size={14} className="mr-1" /> Ma signature
+          </Button>
+          <Button variant="ghost" size="sm" onClick={lancerVisite} data-testid="tour-relancer">
+            <Compass size={14} className="mr-1" /> Visite guidée
           </Button>
         </div>
       </div>
@@ -436,9 +457,10 @@ export default function AnimateurSpace() {
       {tab === "dossier" && <DossierTab />}
       {tab === "signature" && <SignatureTab user={user} />}
       {tab === "caces" && <TesteurDocuments />}
+      {tab === "revue" && isCaces && <QuestionsRevueTab />}
 
       {tab === "sessions" && (!selected ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="animateur-sessions">
           {stages.map((s) => {
             const acces = s.acces_formateur || {};
             const ouvert = !!acces.ouvert;

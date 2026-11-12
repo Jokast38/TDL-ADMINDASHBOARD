@@ -85,6 +85,13 @@ export function QuestionBankTab() {
                   </p>
                 ))}
               </div>
+              {g.revue && g.nb_questions > 0 && (
+                <p className="text-xs mt-2" data-testid={`caces-grille-revue-${g.numero}`}>
+                  Revue du formateur : <span className="text-green-700 font-medium">{g.revue.valide} validée(s)</span>
+                  {" · "}<span className={g.revue.a_corriger ? "text-red-700 font-medium" : "text-gray-500"}>{g.revue.a_corriger} à corriger</span>
+                  {" · "}<span className="text-gray-500">{g.revue.a_revoir} à revoir</span>
+                </p>
+              )}
               {g.updated_at && <p className="text-xs text-gray-400 mt-2">Modifiée le {formatDateFR(g.updated_at)}{g.updated_by ? ` par ${g.updated_by}` : ""}</p>}
               <Button size="sm" variant="outline" className="mt-3" onClick={() => setEditing(g.numero)}>
                 <PencilSimple size={14} className="mr-1" /> Voir / modifier
@@ -101,6 +108,8 @@ export function QuestionBankTab() {
 function GridEditor({ numero, themes, onClose, onSaved }) {
   const [questions, setQuestions] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [onlyToFix, setOnlyToFix] = useState(false);
+  const nbToFix = (questions || []).filter((q) => q.revue?.statut === "a_corriger").length;
 
   useEffect(() => {
     api.get(`/caces/theorie/grilles/${numero}`).then((r) => setQuestions(r.data.questions)).catch(() => toast.error("Grille non chargée"));
@@ -130,7 +139,13 @@ function GridEditor({ numero, themes, onClose, onSaved }) {
         <DialogHeader><DialogTitle className="font-display">Grille {numero} — {questions?.length ?? 0} question(s)</DialogTitle></DialogHeader>
         {questions === null ? <p className="text-sm text-gray-400">Chargement…</p> : (
           <div className="space-y-2">
-            {questions.map((q, i) => (
+            {nbToFix > 0 && (
+              <label className="flex items-center gap-2 text-sm text-red-700">
+                <input type="checkbox" checked={onlyToFix} onChange={(e) => setOnlyToFix(e.target.checked)} />
+                Afficher seulement les {nbToFix} question(s) signalée(s) « à corriger » par le formateur
+              </label>
+            )}
+            {questions.map((q, i) => (onlyToFix && q.revue?.statut !== "a_corriger") ? null : (
               <div key={i} className="flex gap-2 items-start border-b border-gray-100 pb-2">
                 <span className="text-xs font-semibold w-7 pt-2">{i + 1}.</span>
                 <div className="flex-1 space-y-1">
@@ -144,7 +159,14 @@ function GridEditor({ numero, themes, onClose, onSaved }) {
                       <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
                       <SelectContent><SelectItem value="V">Vrai</SelectItem><SelectItem value="F">Faux</SelectItem></SelectContent>
                     </Select>
+                    {q.revue?.statut === "valide" && <Badge className="bg-green-100 text-green-700 hover:bg-green-100 self-center">Validée par {q.revue.by_name}</Badge>}
+                    {q.revue?.statut === "a_corriger" && <Badge className="bg-red-100 text-red-700 hover:bg-red-100 self-center">À corriger</Badge>}
                   </div>
+                  {q.revue?.statut === "a_corriger" && (
+                    <p className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">
+                      {q.revue.by_name} : {q.revue.commentaire} <span className="text-red-400">— une fois modifiée, la question repasse « à revoir » pour le formateur.</span>
+                    </p>
+                  )}
                 </div>
                 <Button size="sm" variant="ghost" onClick={() => remove(i)} aria-label="Supprimer"><Trash size={14} /></Button>
               </div>
