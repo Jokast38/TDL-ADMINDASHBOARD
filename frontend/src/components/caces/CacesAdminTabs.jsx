@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UploadSimple, DownloadSimple, PencilSimple, Plus, Trash, Archive } from "@phosphor-icons/react";
+import { UploadSimple, DownloadSimple, PencilSimple, Plus, Trash, Archive, FilePdf } from "@phosphor-icons/react";
 import { formatDateFR } from "@/lib/dateFormat";
 import { toast } from "sonner";
 import { DocumentsList, downloadPdf } from "@/components/caces/CacesExamPanel";
@@ -48,6 +48,7 @@ export function QuestionBankTab() {
   };
 
   if (!data) return <p className="text-sm text-gray-400">Chargement…</p>;
+  const hasQuestions = data.grilles.some((g) => g.nb_questions > 0);
   return (
     <div className="space-y-4">
       <Card className="p-4 border border-gray-200 shadow-none text-sm text-gray-600 space-y-2">
@@ -62,6 +63,12 @@ export function QuestionBankTab() {
           </Button>
           <Button size="sm" variant="outline" onClick={() => downloadPdf("/caces/theorie/modele.xlsx", "modele_questions_caces_r489.xlsx")}>
             <DownloadSimple size={14} className="mr-1" /> Modèle de fichier
+          </Button>
+          <Button size="sm" variant="outline" disabled={!hasQuestions} onClick={() => downloadPdf("/caces/theorie/grilles/toutes/questionnaire.pdf", "questionnaires_caces_4_grilles.pdf")} data-testid="caces-grilles-pdf">
+            <FilePdf size={14} className="mr-1" /> Les 4 grilles à imprimer
+          </Button>
+          <Button size="sm" variant="outline" disabled={!hasQuestions} onClick={() => downloadPdf("/caces/theorie/grilles/toutes/questionnaire.pdf?corrige=true", "corriges_caces_4_grilles.pdf")}>
+            <FilePdf size={14} className="mr-1" /> Corrigés des 4 grilles
           </Button>
           <input ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={onImport} />
         </div>
@@ -93,9 +100,17 @@ export function QuestionBankTab() {
                 </p>
               )}
               {g.updated_at && <p className="text-xs text-gray-400 mt-2">Modifiée le {formatDateFR(g.updated_at)}{g.updated_by ? ` par ${g.updated_by}` : ""}</p>}
-              <Button size="sm" variant="outline" className="mt-3" onClick={() => setEditing(g.numero)}>
-                <PencilSimple size={14} className="mr-1" /> Voir / modifier
-              </Button>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <Button size="sm" variant="outline" onClick={() => setEditing(g.numero)}>
+                  <PencilSimple size={14} className="mr-1" /> Voir / modifier
+                </Button>
+                <Button size="sm" variant="outline" disabled={!g.nb_questions} onClick={() => downloadPdf(`/caces/theorie/grilles/${g.numero}/questionnaire.pdf`, `questionnaire_caces_grille_${g.numero}.pdf`)} data-testid={`caces-grille-pdf-${g.numero}`}>
+                  <FilePdf size={14} className="mr-1" /> Questionnaire
+                </Button>
+                <Button size="sm" variant="outline" disabled={!g.nb_questions} onClick={() => downloadPdf(`/caces/theorie/grilles/${g.numero}/questionnaire.pdf?corrige=true`, `corrige_caces_grille_${g.numero}.pdf`)}>
+                  <FilePdf size={14} className="mr-1" /> Corrigé
+                </Button>
+              </div>
             </Card>
           );
         })}
@@ -243,6 +258,7 @@ export function CacesSessionsTab() {
               <Button size="sm" variant="outline" onClick={() => openArchives(s)}><Archive size={14} className="mr-1" /> Archives</Button>
             </div>
           </div>
+          <EmargementDownload session={s} />
         </Card>
       ))}
       <Dialog open={!!archivesFor} onOpenChange={(o) => { if (!o) setArchivesFor(null); }}>
@@ -251,6 +267,27 @@ export function CacesSessionsTab() {
           <DocumentsList documents={docs} />
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// Feuille d'émargement papier d'un jour de la session, matin / après-midi
+// (demande du 2026-11-16) — GET /caces/sessions/{sid}/emargement.pdf.
+function EmargementDownload({ session }) {
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
+  const debut = (session.date_debut || "").slice(0, 10);
+  const fin = (session.date_fin || session.date_debut || "").slice(0, 10);
+  const [jour, setJour] = useState(today >= debut && today <= fin ? today : debut);
+  return (
+    <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+      <label className="text-xs text-gray-600 flex items-center gap-1">
+        Émargement du
+        <Input type="date" className="w-40 h-8" value={jour} min={debut} max={fin} onChange={(e) => e.target.value && setJour(e.target.value)} />
+      </label>
+      <Button size="sm" variant="outline" onClick={() => downloadPdf(`/caces/sessions/${session.id}/emargement.pdf?date=${jour}`, `emargement_caces_${jour}.pdf`)}
+        data-testid={`caces-emargement-${session.id}`}>
+        <FilePdf size={14} className="mr-1" /> Feuille d'émargement (matin / après-midi)
+      </Button>
     </div>
   );
 }

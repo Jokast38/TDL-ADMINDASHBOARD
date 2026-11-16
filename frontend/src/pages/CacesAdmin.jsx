@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PhotoCapture from "@/components/PhotoCapture";
 import { QuestionBankTab, CacesSessionsTab } from "@/components/caces/CacesAdminTabs";
+import AttestationsFormationTab from "@/components/caces/AttestationsFormationTab";
 import { formatDateFR } from "@/lib/dateFormat";
 import {
   MagnifyingGlass, Plus, PaperPlaneTilt, DownloadSimple, Certificate, Link as LinkIcon, PencilSimple, Camera,
@@ -138,11 +139,12 @@ export default function CacesAdmin() {
 
       <div className="flex flex-wrap items-center gap-3">
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
+          <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="examens">Examens ({attempts.length})</TabsTrigger>
             <TabsTrigger value="cartes">Cartes ({certificates.length})</TabsTrigger>
             <TabsTrigger value="sessions" data-testid="caces-tab-sessions">Sessions</TabsTrigger>
             <TabsTrigger value="questions" data-testid="caces-tab-questions">Questions théoriques</TabsTrigger>
+            <TabsTrigger value="attestations" data-testid="caces-tab-attestations">Attestations de formation</TabsTrigger>
           </TabsList>
         </Tabs>
         {(tab === "examens" || tab === "cartes") && (<>
@@ -160,7 +162,7 @@ export default function CacesAdmin() {
         </>)}
       </div>
 
-      {tab === "sessions" ? <CacesSessionsTab /> : tab === "questions" ? <QuestionBankTab /> : tab === "examens" ? (
+      {tab === "sessions" ? <CacesSessionsTab /> : tab === "questions" ? <QuestionBankTab /> : tab === "attestations" ? <AttestationsFormationTab candidats={candidats} /> : tab === "examens" ? (
         <div className="space-y-2">
           {shownAttempts.length === 0 && <p className="text-sm text-gray-500">Aucun examen CACES.</p>}
           {shownAttempts.map((a) => {

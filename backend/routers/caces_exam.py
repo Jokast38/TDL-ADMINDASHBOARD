@@ -256,6 +256,26 @@ async def get_grille(numero: str, user: dict = Depends(require_role(*ROLES_DOSSI
     return {"numero": numero, "questions": questions}
 
 
+@router.get("/theorie/grilles/{numero}/questionnaire.pdf")
+async def download_grille(numero: str, corrige: bool = False, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Grille à imprimer depuis la page CACES (demande du 2026-11-16) :
+    questionnaire vierge, questions dans l'ordre de la grille, en-tête du
+    candidat à remplir à la main — ou son corrigé. `numero` = « toutes » pour
+    les 4 grilles dans un seul PDF."""
+    numeros = list(GRILLES_THEORIE) if numero == "toutes" else [numero]
+    if any(n not in GRILLES_THEORIE for n in numeros):
+        raise HTTPException(status_code=404, detail="Grille inconnue")
+    docs = {d["numero"]: d for d in await db.caces_theorie_grilles.find({"numero": {"$in": numeros}}, {"_id": 0}).to_list(10)}
+    copies = [{"vierge": True, "grille": n, "numero_copie": n, "questions": docs[n]["questions"]}
+              for n in numeros if (docs.get(n) or {}).get("questions")]
+    if not copies:
+        raise HTTPException(status_code=404, detail="Aucune question saisie dans cette grille")
+    stage = {"formation_titre": "Banque de questions", "lieu_ville": "TDL Formation"}
+    if corrige:
+        return _pdf_response(pdfs.corriges_pdf(copies, stage), f"corrige_caces_grille_{numero}.pdf")
+    return _pdf_response(pdfs.questionnaires_pdf(copies, stage), f"questionnaire_caces_grille_{numero}.pdf")
+
+
 async def _save_grille(numero: str, questions: List[dict], user: dict) -> None:
     await db.caces_theorie_grilles.update_one(
         {"numero": numero},
@@ -572,6 +592,31 @@ async def generate_papers(sid: str, payload: GenerateIn, user: dict = Depends(ge
     await _archive("questionnaires", f"Questionnaires théoriques ({len(copies)} copies)", stage, user, pdfs.questionnaires_pdf(copies, stage))
     await _archive("corriges", f"Corrigés des questionnaires ({len(copies)} copies)", stage, user, pdfs.corriges_pdf(copies, stage))
     return await session_exam_state(sid, user)
+
+
+@router.get("/sessions/{sid}/emargement.pdf")
+async def download_emargement(sid: str, date: Optional[str] = None, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Feuille d'émargement papier d'un jour de la session, matin et
+    après-midi (demande du 2026-11-16) — services/emargement_creneaux_pdf.py."""
+    from core.utils import format_date_long_fr
+    from routers.caces_attestations import _centre, split_name
+    from services.emargement_creneaux_pdf import feuille_pdf
+    stage = await _stage(sid)
+    jour = (date or _today())[:10]
+    if not (stage.get("date_debut", "")[:10] <= jour <= (stage.get("date_fin") or stage.get("date_debut", ""))[:10]):
+        raise HTTPException(status_code=400, detail=f"Le {jour} ne fait pas partie de cette session")
+    apprenants = []
+    for c in await _candidats(stage):
+        nom, prenom = split_name(c.get("student_name") or "")
+        apprenants.append(f"{nom.upper()} {prenom}".strip())
+    apprenants.sort()
+    ids = _stage_animateur_ids(stage)
+    formateurs = [u["name"] for u in await db.users.find({"id": {"$in": ids}}, {"_id": 0, "name": 1}).to_list(10) if u.get("name")] if ids else []
+    centre = (await _centre())["centre"]
+    lieu = ", ".join(p.strip() for p in (stage.get("lieu_adresse"), stage.get("lieu_ville")) if p and p.strip()) or f"{centre['adresse']}, {centre['ville']}"
+    pdf = feuille_pdf(centre, stage.get("formation_titre") or "", format_date_long_fr(jour), lieu, formateurs, apprenants,
+                      stage.get("heure_debut"), stage.get("heure_fin"))
+    return _pdf_response(pdf, f"emargement_{jour}.pdf")
 
 
 @router.get("/sessions/{sid}/theorie/questionnaires.pdf")

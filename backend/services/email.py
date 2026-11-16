@@ -16,6 +16,15 @@ logger = logging.getLogger(__name__)
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+# Apprenants inscrits sans email (2026-11-16) : compte créé avec une adresse
+# factice en « @sans-email.invalid » (domaine réservé, RFC 2606) à remplacer
+# dès que la vraie adresse est connue. Jamais d'envoi vers ces adresses.
+PLACEHOLDER_EMAIL_DOMAIN = "sans-email.invalid"
+
+
+def is_placeholder_email(addr) -> bool:
+    return (addr or "").strip().lower().endswith(".invalid")
+
 # Débit d'envoi o2switch (30/min pour tout le domaine) : voir
 # services/email_rate.py — réserve pour les emails importants, plafond horaire
 # du marketing et compteur partagé entre serveurs (demande du 2026-11-12).
@@ -325,6 +334,12 @@ async def send_email(to: str, subject: str, body: str, extra: dict = None, attac
     # rien, puisqu'aucun serveur mail ne peut délivrer à une adresse mal formée.
     if not _EMAIL_RE.match((to or "").strip()):
         log["status"] = "invalid_email"
+        await db.email_logs.insert_one(log)
+        return log
+    # Adresse factice d'un apprenant inscrit sans email (domaine réservé
+    # « .invalid », voir is_placeholder_email) : rien n'est envoyé.
+    if is_placeholder_email(to):
+        log["status"] = "placeholder_email"
         await db.email_logs.insert_one(log)
         return log
 

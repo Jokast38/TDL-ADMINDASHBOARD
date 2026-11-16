@@ -131,12 +131,19 @@ def questionnaires_pdf(copies: List[dict], stage: dict) -> bytes:
             story.append(PageBreak())
         story += _header("CACES® R.489 — Épreuve théorique",
                          "Chariots de manutention automoteurs à conducteur porté — TDL Formation")
-        story.append(_info_table([
-            ("Candidat", copie.get("student_name") or ""),
-            ("Date de l'épreuve", _date(copie.get("date"))),
-            ("Session", f"{stage.get('formation_titre') or ''} — {stage.get('lieu_ville') or ''}"),
-            ("Copie n°", f"{copie.get('numero_copie')} (grille {copie.get('grille')})"),
-        ]))
+        if copie.get("vierge"):
+            # Grille téléchargée depuis la page CACES : en-tête à remplir à la main.
+            story.append(_info_table([
+                ("Nom et prénom du candidat", ""), ("Date de l'épreuve", ""), ("Lieu", ""),
+                ("Grille", f"Grille n°{copie.get('grille')} — {len(copie['questions'])} questions"),
+            ]))
+        else:
+            story.append(_info_table([
+                ("Candidat", copie.get("student_name") or ""),
+                ("Date de l'épreuve", _date(copie.get("date"))),
+                ("Session", f"{stage.get('formation_titre') or ''} — {stage.get('lieu_ville') or ''}"),
+                ("Copie n°", f"{copie.get('numero_copie')} (grille {copie.get('grille')})"),
+            ]))
         story.append(Spacer(1, 6))
         story.append(_p(
             "Pour chaque affirmation, cochez une seule case : VRAI ou FAUX. Une bonne réponse vaut 1 point ; une "
@@ -178,8 +185,10 @@ def corriges_pdf(copies: List[dict], stage: dict) -> bytes:
         t = Table(rows, colWidths=[1.8 * cm] * 10)
         t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#bbbbbb")),
                                ("FONTSIZE", (0, 0), (-1, -1), 8), ("FONTNAME", (0, 0), (-1, -1), "Helvetica")]))
+        titre = (f"Grille n°{copie.get('grille')}" if copie.get("vierge") else
+                 f"Copie n°{copie.get('numero_copie')} — {copie.get('student_name') or ''} — grille {copie.get('grille')}")
         story.append(KeepTogether([
-            _p(f"Copie n°{copie.get('numero_copie')} — {copie.get('student_name') or ''} — grille {copie.get('grille')}", "h"),
+            _p(titre, "h"),
             t, Spacer(1, 6)]))
     doc.build(story, onFirstPage=_footer("Corrigés — document confidentiel, ne pas distribuer"),
               onLaterPages=_footer("Corrigés — document confidentiel, ne pas distribuer"))
