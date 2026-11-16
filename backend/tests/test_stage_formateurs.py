@@ -117,3 +117,10 @@ def test_modification_complete_ne_remet_plus_l_ancien_formateur(monkeypatch):
     admin = {"id": "a", "name": "Admin", "role": "admin"}
     asyncio.run(stages.update_stage("s1", StageUpdate(animateur_ids=["d"]), admin))
     assert Db.stages.docs[0]["animateur_ids"] == ["d"] and Db.stages.docs[0]["animateur_id"] == "d"
+
+
+def test_alerte_session_complete_sans_formateurs():
+    """« Session complète » : agents et admins seulement (demande du 2026-11-16)."""
+    from routers.stages import ROLES_SESSION_COMPLETE_NOTIF
+    assert "animateur" not in ROLES_SESSION_COMPLETE_NOTIF
+    assert {"admin", "agent_admin", "agent_telephonique", "responsable_admission"} <= set(ROLES_SESSION_COMPLETE_NOTIF)

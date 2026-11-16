@@ -23,6 +23,11 @@ from services.email_template import render_staff_notification
 from services.push import send_push_to_user, send_push_to_users
 from services.convention import regenerate_convention_pdf
 
+# Alerte « Session complète » : agents et admins seulement. Les formateurs
+# n'ont aucune inscription à gérer, l'alerte leur était inutile (demande du
+# 2026-11-16).
+ROLES_SESSION_COMPLETE_NOTIF = tuple(r for r in ROLES_ALL_STAFF if r != "animateur")
+
 router = APIRouter(prefix="/stages", tags=["stages"])
 
 _SAFE_NAME_RE = re.compile(r'[\\/:*?"<>|]')
@@ -430,7 +435,7 @@ async def update_stage(sid: str, payload: StageUpdate, user: dict = Depends(requ
     if update.get("statut") == "complet" and existing.get("statut") != "complet":
         lieu = ", ".join(filter(None, [existing.get("lieu_adresse"), existing.get("lieu_ville")])) or "lieu non précisé"
         staff = await db.users.find(
-            {"role": {"$in": ROLES_ALL_STAFF}, "email": {"$exists": True, "$ne": ""}}, {"_id": 0, "id": 1, "email": 1, "name": 1},
+            {"role": {"$in": ROLES_SESSION_COMPLETE_NOTIF}, "email": {"$exists": True, "$ne": ""}}, {"_id": 0, "id": 1, "email": 1, "name": 1},
         ).to_list(500)
         for member in staff:
             await send_email(
