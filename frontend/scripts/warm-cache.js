@@ -24,7 +24,10 @@ async function fetchPage(url) {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   const html = await res.text();
-  return { status: res.status, rendered: res.ok && /<a\s/i.test(html) };
+  // La page d'erreur (plantage React) contient elle aussi un lien : sans ce
+  // test, elle passait pour un rendu réussi (vu le 2026-11-16).
+  const errorPage = /data-testid="error-page"/.test(html);
+  return { status: res.status, rendered: res.ok && /<a\s/i.test(html) && !errorPage };
 }
 
 async function warm(url) {
@@ -41,7 +44,10 @@ async function warm(url) {
 
 async function main() {
   const xml = await (await fetch(`${SITE_URL}/sitemap.xml`)).text();
-  const urls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1].trim());
+  const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1].trim());
+  // Le site répond aussi sans « www » (et Ahrefs l'explore) : chaque hôte a
+  // son propre cache CDN, on préchauffe donc les deux.
+  const urls = [...new Set(locs.flatMap((u) => [u, u.replace("://www.", "://")]))];
   if (!urls.length) throw new Error(`Aucune URL trouvée dans ${SITE_URL}/sitemap.xml`);
   console.log(`[warm-cache] ${urls.length} pages à préchauffer sur ${SITE_URL}`);
 

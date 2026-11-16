@@ -116,7 +116,17 @@ async function renderHtml(target, state) {
   await state.page.waitForSelector("#root h1, #root a", { timeout: 6000 });
   state.stage = "content";
   await new Promise((r) => setTimeout(r, 300));
-  return state.page.content();
+  const html = await state.page.content();
+  // Plantage React pendant le rendu (ErrorBoundary : statut « Erreur », pas
+  // un code HTTP) : souvent passager (chunk JS non chargé à froid). Servi en
+  // 200 et mis en cache 24h, il remplaçait la vraie page pour tous les robots
+  // (vu le 2026-11-16 sur /formation-caces). On le traite comme un rendu
+  // raté : repli non mis en cache, le passage suivant retente.
+  const code = html.match(/<meta[^>]+name="prerender-status-code"[^>]+content="([^"]*)"/i)?.[1];
+  if (code !== undefined && !/^4\d\d$/.test(code)) {
+    throw new Error(`page d'erreur rendue (statut « ${code} »)`);
+  }
+  return html;
 }
 
 module.exports = async (req, res) => {
