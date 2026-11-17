@@ -23,6 +23,22 @@ function monthGrid(anchor) {
   return Array.from({ length: 42 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
 }
 
+// Lieu de la session (2026-11-17) : Épinay et Creil ont chacun leur planning ;
+// les variantes d'écriture (« Épinay-sur-Seine (93) », « Epinay… ») sont regroupées.
+const LIEUX = [
+  { key: "tous", label: "Tous les lieux" },
+  { key: "epinay", label: "Épinay-sur-Seine" },
+  { key: "creil", label: "Creil" },
+  { key: "autre", label: "Autres lieux" },
+];
+const lieuOf = (s) => {
+  const v = (s.lieu_ville || "").toLowerCase();
+  if (v.includes("creil")) return "creil";
+  if (v.includes("pinay")) return "epinay";
+  return "autre";
+};
+const LIEU_COURT = { epinay: "Épinay", creil: "Creil" };
+
 const placesLibres = (s) => Object.values(s.places).filter((holders) => !holders.length).length;
 const placesPourvues = (s) => Object.values(s.places).filter((holders) => holders.length).length;
 
@@ -42,6 +58,7 @@ export default function FormateursAgenda({ formateurs }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtre, setFiltre] = useState("tous");
+  const [lieu, setLieu] = useState("tous");
   const [selected, setSelected] = useState(null);
 
   const days = useMemo(() => monthGrid(anchor), [anchor]);
@@ -55,10 +72,11 @@ export default function FormateursAgenda({ formateurs }) {
   }, [days]);
 
   const visibles = useMemo(() => sessions.filter((s) => {
+    if (lieu !== "tous" && lieuOf(s) !== lieu) return false;
     if (filtre === "tous") return true;
     if (filtre === "a_pourvoir") return placesLibres(s) > 0;
     return Object.values(s.places).some((holders) => holders.some((h) => h.id === filtre));
-  }), [sessions, filtre]);
+  }), [sessions, filtre, lieu]);
 
   const byDay = useMemo(() => {
     const map = new Map();
@@ -69,7 +87,7 @@ export default function FormateursAgenda({ formateurs }) {
     return map;
   }, [days, visibles]);
 
-  const aPourvoir = sessions.filter((s) => placesLibres(s) > 0 && s.date_debut.slice(0, 7) === toISO(anchor).slice(0, 7)).length;
+  const aPourvoir = sessions.filter((s) => (lieu === "tous" || lieuOf(s) === lieu) && placesLibres(s) > 0 && s.date_debut.slice(0, 7) === toISO(anchor).slice(0, 7)).length;
   const todayIso = toISO(new Date());
   const shift = (n) => setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + n, 1));
 
@@ -84,14 +102,23 @@ export default function FormateursAgenda({ formateurs }) {
           </h2>
           <Button variant="ghost" size="sm" onClick={() => { const d = new Date(); setAnchor(new Date(d.getFullYear(), d.getMonth(), 1)); }}>Aujourd'hui</Button>
         </div>
-        <Select value={filtre} onValueChange={setFiltre}>
-          <SelectTrigger className="w-60" data-testid="agenda-filtre"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="tous">Toutes les sessions</SelectItem>
-            <SelectItem value="a_pourvoir">Sessions à pourvoir</SelectItem>
-            {formateurs.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={lieu} onValueChange={setLieu}>
+            <SelectTrigger className="w-48" data-testid="agenda-lieu"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {LIEUX.filter((l) => l.key !== "autre" || sessions.some((s) => lieuOf(s) === "autre"))
+                .map((l) => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filtre} onValueChange={setFiltre}>
+            <SelectTrigger className="w-60" data-testid="agenda-filtre"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="tous">Toutes les sessions</SelectItem>
+              <SelectItem value="a_pourvoir">Sessions à pourvoir</SelectItem>
+              {formateurs.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
@@ -128,6 +155,7 @@ export default function FormateursAgenda({ formateurs }) {
                         data-testid={`formateurs-agenda-session-${s.id}`}
                       >
                         <span className="block truncate font-medium">{s.is_test ? "TEST · " : ""}{s.formation_titre}</span>
+                        {lieu === "tous" && LIEU_COURT[lieuOf(s)] && <span className="block truncate text-[9px] uppercase tracking-wide opacity-70">{LIEU_COURT[lieuOf(s)]}</span>}
                         {noms.map((n) => <span key={n} className="block truncate font-semibold">{n}</span>)}
                         {manquants.map((m) => <span key={m} className="block truncate">{m}</span>)}
                       </button>
