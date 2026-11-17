@@ -649,6 +649,23 @@ async def startup():
     asyncio.create_task(_satisfaction_froid_loop())
     asyncio.create_task(_review_requests_loop())
     asyncio.create_task(_session_eve_reminders_loop())
+    asyncio.create_task(_meta_leads_sync_loop())
+
+
+async def _meta_leads_sync_loop():
+    """Toutes les 15 minutes, récupère les nouveaux leads des formulaires
+    Meta (services/meta_leads_sync.py) et prévient l'équipe par push."""
+    from services.meta_leads_sync import SYNC_INTERVAL_SECONDS, sync_meta_leads
+    log = logging.getLogger(__name__)
+    await asyncio.sleep(60)
+    while True:
+        try:
+            result = await sync_meta_leads()
+            if result["crees"]:
+                log.info(f"Leads Meta synchronisés : {result['crees']} nouveau(x) sur {result['lus']} lu(s)")
+        except Exception as e:
+            log.warning(f"Synchronisation des leads Meta : erreur — {e}")
+        await asyncio.sleep(SYNC_INTERVAL_SECONDS)
 
 
 async def _convocations_loop():

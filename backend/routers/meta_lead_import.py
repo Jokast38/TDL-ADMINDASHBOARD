@@ -155,6 +155,25 @@ def _parse_csv(data: bytes) -> list[dict]:
     return rows
 
 
+@router.post("/sync")
+async def sync_now(user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Synchronisation immédiate des leads Meta (sinon automatique toutes les
+    15 minutes, voir services/meta_leads_sync.py)."""
+    from services.meta_leads_sync import sync_meta_leads
+    try:
+        result = await sync_meta_leads()
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=f"Meta : {e}")
+    await log_action(user, "sync_leads_meta", "lead", None, result)
+    return result
+
+
+@router.get("/sync")
+async def sync_status(user: dict = Depends(require_role(*ROLES_LEADS))):
+    s = await db.settings.find_one({"id": "global"}, {"_id": 0, "meta_leads_sync_last_run": 1, "meta_leads_sync_last_result": 1}) or {}
+    return {"last_run": s.get("meta_leads_sync_last_run"), "last_result": s.get("meta_leads_sync_last_result")}
+
+
 @router.get("/qualification-options")
 async def qualification_options(user: dict = Depends(require_role(*ROLES_LEADS))):
     return QUALIFICATION_LABELS

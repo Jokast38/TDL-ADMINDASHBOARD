@@ -82,13 +82,21 @@ def _extract_fields(field_data: list) -> dict:
         vals = f.get("values") or []
         values[key] = vals[0] if vals else ""
 
-    name = values.get("full_name") or " ".join(
-        p for p in [values.get("first_name"), values.get("last_name")] if p
-    ).strip()
-    email = values.get("email")
-    phone = values.get("phone_number") or values.get("phone")
+    # Les formulaires en français renvoient « nom_complet », « e-mail »,
+    # « numéro_de_téléphone » (constaté le 2026-11-17 : ces leads passaient
+    # pour « sans email ni téléphone » et étaient ignorés).
+    def first(*keys):
+        return next((values[k] for k in keys if values.get(k)), "")
 
-    known = {"full_name", "first_name", "last_name", "email", "phone_number", "phone"}
+    name = first("full_name", "nom_complet", "nom_et_prénom") or " ".join(
+        p for p in [first("first_name", "prénom", "prenom"), first("last_name", "nom")] if p
+    ).strip()
+    email = first("email", "e-mail", "courriel", "adresse_e-mail")
+    phone = first("phone_number", "phone", "numéro_de_téléphone", "téléphone", "telephone")
+
+    known = {"full_name", "nom_complet", "nom_et_prénom", "first_name", "prénom", "prenom", "last_name", "nom",
+             "email", "e-mail", "courriel", "adresse_e-mail",
+             "phone_number", "phone", "numéro_de_téléphone", "téléphone", "telephone"}
     extra_notes = "\n".join(f"{k} : {v}" for k, v in values.items() if k not in known and v)
 
     answers = {k: v for k, v in values.items() if k not in known and v}
