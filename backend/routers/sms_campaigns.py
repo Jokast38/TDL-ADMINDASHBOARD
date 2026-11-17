@@ -165,7 +165,9 @@ async def gateway_status(user: dict = Depends(require_role(*ROLES_LEADS))):
     window_open, why = smsgate.sending_window_open()
     out = {"configured": smsgate.is_configured(cfg), "window_open": window_open, "window_reason": why,
            "daily_cap": cfg["daily_cap"], "sent_today": await svc._sent_today(),
-           "optouts": await db.sms_optouts.count_documents({})}
+           "optouts": await db.sms_optouts.count_documents({}),
+           "webhook_last": ((await db.settings.find_one({"id": "global"}, {"_id": 0, "sms_webhook_last": 1})) or {}).get("sms_webhook_last"),
+           "replies_received": await db.sms_inbound.count_documents({})}
     out["mode"] = cfg["mode"]
     if out["configured"] and cfg["mode"] == "dispatcher":
         try:
@@ -222,20 +224,36 @@ async def register_webhooks(request: Request, user: dict = Depends(require_role(
     return {"url": url, "results": results}
 
 
+async def _mark_webhook(seen: dict, result: str) -> None:
+    try:
+        await db.settings.update_one({"id": "global"}, {"$set": {"sms_webhook_last": {**seen, "result": result}}}, upsert=True)
+    except Exception:
+        pass
+
+
 @router.post("/sms/gateway-webhook", include_in_schema=False)
 async def gateway_webhook(request: Request):
     """Appelé par le téléphone (via SMS Gate) : statuts des SMS et réponses (STOP)."""
     cfg = await smsgate.gateway_config()
     raw = await request.body()
-    if not cfg["webhook_secret"]:
-        raise HTTPException(503, "Clé de signature non configurée")
-    if not smsgate.valid_signature(cfg["webhook_secret"], raw, request.headers.get("x-timestamp"),
-                                   request.headers.get("x-signature")):
-        raise HTTPException(401, "Signature invalide")
     try:
         data = json.loads(raw)
     except ValueError:
+        data = None
+    # Témoin du dernier appel (Paramètres → SMS → État) : permet de voir si le
+    # serveur SMS nous joint et si la clé de signature correspond (2026-11-17).
+    seen = {"at": now_iso(), "event": (data or {}).get("event") if isinstance(data, dict) else None}
+    if not cfg["webhook_secret"]:
+        await _mark_webhook(seen, "refusé : clé de signature non configurée dans le CRM")
+        raise HTTPException(503, "Clé de signature non configurée")
+    if not smsgate.valid_signature(cfg["webhook_secret"], raw, request.headers.get("x-timestamp"),
+                                   request.headers.get("x-signature")):
+        await _mark_webhook(seen, "refusé : signature invalide (le « secret callback » du serveur SMS "
+                                  "est différent de la clé de signature du CRM)")
+        raise HTTPException(401, "Signature invalide")
+    if not isinstance(data, dict):
         raise HTTPException(400, "JSON invalide")
+    await _mark_webhook(seen, "accepté")
     event, p = data.get("event", ""), data.get("payload") or {}
     # Format du serveur SMS personnel (SMS-SERVER) : {"event": "sms.status"|"sms.reply"|"sms.received", "data": {...}}
     d = data.get("data") or {}

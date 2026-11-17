@@ -47,23 +47,27 @@ DEFAULT_SCENARIOS = {
         "label": "Formation VTC",
         "category": "VTC_TAXI",
         "steps": [
+            # Scénario validé par l'équipe en prod le 2026-11-17 (délai puis
+            # financement), raccourci pour tenir en 1 SMS avec le préfixe
+            # « TDL FORMATION : » et la mention « STOP SMS: répondez STOP ».
             {
-                "id": "financement",
-                "question": "Bonjour {prenom}, vous vous étiez renseigné(e) sur la formation VTC. Pour vous orienter, "
-                            "répondez 1 si vous avez un compte CPF et un compte CMA, 2 si vous avez seulement le CPF, "
-                            "3 si vous n'avez ni l'un ni l'autre.",
+                "id": "delai",
+                "question": "Bonjour {prenom}, quand voulez-vous commencer la formation VTC ? "
+                            "Répondez 1 au plus vite, 2 dans 1 mois, 3 plus tard",
                 "options": {
-                    "1": {"label": "CPF + compte CMA", "keys": ["1"]},
-                    "2": {"label": "CPF seulement", "keys": ["2"]},
-                    "3": {"label": "Ni CPF ni compte CMA", "keys": ["3"]},
+                    "1": {"label": "Dès que possible", "keys": ["1"]},
+                    "2": {"label": "Dans 1 mois", "keys": ["2"]},
+                    "3": {"label": "Dans plus de 2 mois", "keys": ["3"]},
                 },
             },
             {
-                "id": "interet",
-                "question": "Merci ! Etes-vous toujours intéressé(e) par la formation VTC ? Répondez OUI ou NON.",
+                "id": "financement",
+                "question": "Merci ! Comment comptez-vous la financer ? "
+                            "Répondez 1: mon CPF, 2: financement personnel, 3: voir avec un conseiller",
                 "options": {
-                    "oui": {"label": "Toujours intéressé", "keys": _OUI},
-                    "non": {"label": "Plus intéressé", "keys": _NON, "fin": "refus"},
+                    "1": {"label": "Mon CPF", "keys": ["1"]},
+                    "2": {"label": "Financement personnel", "keys": ["2"]},
+                    "3": {"label": "Voir avec un conseiller", "keys": ["3"]},
                 },
             },
         ],

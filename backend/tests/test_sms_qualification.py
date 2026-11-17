@@ -74,7 +74,7 @@ class _Db:
 PHONE = "+33612345678"
 
 
-def _setup(monkeypatch):
+def _setup(monkeypatch, scenario_key="vtc"):
     fake = _Db()
     for mod in (q, sms_campaigns):
         monkeypatch.setattr(mod, "db", fake)
@@ -94,7 +94,7 @@ def _setup(monkeypatch):
     monkeypatch.setattr(smsgate, "send", _send)
     monkeypatch.setattr(staff_notify, "notify_new_contact", _notify)
     monkeypatch.setattr(leads_router, "_leads_cache_clear", lambda: None)
-    campaign = {"id": "C1", "scenario_key": "vtc", "scenario": q.DEFAULT_SCENARIOS["vtc"]}
+    campaign = {"id": "C1", "scenario_key": scenario_key, "scenario": q.DEFAULT_SCENARIOS[scenario_key]}
     fake.sms_campaigns.docs.append(dict(campaign))
     asyncio.run(q.start_conversation(campaign, {"lead_id": "L1", "phone": PHONE, "prenom": "Karim"}))
     return fake, sent, notified
@@ -105,7 +105,7 @@ def _reply(text):
 
 
 def test_reconnaissance_des_reponses():
-    step = q.DEFAULT_SCENARIOS["vtc"]["steps"][1]
+    step = q.DEFAULT_SCENARIOS["caces"]["steps"][1]
     assert q.match_option(step, " Oui ! ") == "oui"
     assert q.match_option(step, "ok merci") == "oui"
     assert q.match_option(step, "Non merci") == "non"
@@ -117,11 +117,11 @@ def test_reconnaissance_des_reponses():
 def test_parcours_complet_qualifie_et_alerte_equipe(monkeypatch):
     fake, sent, notified = _setup(monkeypatch)
     assert _reply("1")
-    assert "toujours intéressé" in sent[-1][1]
-    assert _reply("OUI")
+    assert "financer" in sent[-1][1]
+    assert _reply("3 merci")
     lead = fake.leads.docs[0]
     assert lead["sms_qualification"]["status"] == "qualifie"
-    assert [a["label"] for a in lead["sms_qualification"]["answers"]] == ["CPF + compte CMA", "Toujours intéressé"]
+    assert [a["label"] for a in lead["sms_qualification"]["answers"]] == ["Dès que possible", "Voir avec un conseiller"]
     assert (lead["statut"], lead["chaleur"]) == ("a_relancer", "chaud")
     assert "Qualification SMS" in lead["notes"]
     cb = fake.callback_requests.docs[0]
@@ -133,7 +133,7 @@ def test_parcours_complet_qualifie_et_alerte_equipe(monkeypatch):
 
 
 def test_refus_classe_non_interesse_sans_alerte(monkeypatch):
-    fake, sent, notified = _setup(monkeypatch)
+    fake, sent, notified = _setup(monkeypatch, "caces")
     _reply("3")
     _reply("non")
     lead = fake.leads.docs[0]
@@ -161,7 +161,7 @@ def test_stop_ferme_la_conversation_et_exclut_le_numero(monkeypatch):
 
 
 def test_fiche_inscrite_jamais_declassee(monkeypatch):
-    fake, sent, notified = _setup(monkeypatch)
+    fake, sent, notified = _setup(monkeypatch, "caces")
     fake.leads.docs[0]["statut"] = "paye"
     _reply("2")
     _reply("non")
@@ -195,3 +195,11 @@ def test_caracteres_adaptes_pour_rester_a_160_par_sms():
     assert all(c in smsgate.GSM7 or c in smsgate.GSM7_EXT for c in out)
     text = sms_campaigns.render_text({"prefix": "TDL FORMATION", "stop_text": "STOP SMS: Répondez STOP pour arrêter"}, "Bonjour {prenom}", "Jérôme")
     assert text == "TDL FORMATION : Bonjour Jérome\nSTOP SMS: Répondez STOP pour arreter"
+
+
+def test_scenario_vtc_tient_en_un_sms():
+    cfg = {"prefix": "TDL FORMATION", "stop_text": "STOP SMS: répondez STOP"}
+    first = sms_campaigns.render_text(cfg, q.DEFAULT_SCENARIOS["vtc"]["steps"][0]["question"], "Christophe")
+    assert len(first) <= 160, len(first)
+    for text in [q.DEFAULT_SCENARIOS["vtc"]["steps"][1]["question"], q.DEFAULT_SCENARIOS["vtc"]["final"]]:
+        assert len(smsgate.gsm_safe(text)) <= 160

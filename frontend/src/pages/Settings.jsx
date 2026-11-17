@@ -551,6 +551,14 @@ function SmsGatewayCard({ s, update }) {
                 Aujourd'hui : {status.sent_today}/{status.daily_cap} SMS · {status.optouts} numéro(s) STOP ·
                 {status.window_open ? " créneau d'envoi ouvert" : ` envoi en pause (${status.window_reason})`}
               </p>
+              <p className="text-gray-500" data-testid="smsgate-webhook-last">
+                Retours du serveur SMS (réponses des prospects, statuts) :{" "}
+                {status.webhook_last
+                  ? <>dernier appel le {new Date(status.webhook_last.at).toLocaleString("fr-FR")} ({status.webhook_last.event || "?"}) —{" "}
+                      <b className={status.webhook_last.result === "accepté" ? "text-green-700" : "text-red-600"}>{status.webhook_last.result}</b></>
+                  : <b className="text-red-600">aucun appel reçu — l'URL de callback n'est pas renseignée dans le serveur SMS</b>}
+                {" "}· {status.replies_received} réponse(s) reçue(s)
+              </p>
             </>
           )}
           <Button size="sm" variant="outline" onClick={registerHooks} disabled={!status?.configured}>
