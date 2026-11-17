@@ -1145,11 +1145,14 @@ def planning_reminder_message(name: str, year: int, deadline_fr: str) -> str:
     )
 
 
-async def send_formateur_planning_reminders() -> int:
+async def send_formateur_planning_reminders(force: bool = False, skip_ids: Optional[set] = None) -> int:
     """Rappel hebdomadaire, du 1er août au 30 novembre, aux formateurs qui n'ont
     choisi aucune date pour l'année suivante, avec un récapitulatif aux agents
     (voir core/placement_rules.py). Rien n'est envoyé tant qu'aucune date de
-    cette année n'est ouverte à un formateur : il ne pourrait rien choisir."""
+    cette année n'est ouverte à un formateur : il ne pourrait rien choisir.
+    `force` : relance manuelle depuis la page Formateurs, sans attendre la
+    semaine écoulée (toujours dans la période d'envoi). `skip_ids` : formateurs
+    déjà prévenus autrement (pas de second email)."""
     from services.formateur_placement import planning_for, planning_overview
 
     today = datetime.now(timezone.utc).date()
@@ -1157,7 +1160,7 @@ async def send_formateur_planning_reminders() -> int:
         return 0
     settings = await db.settings.find_one({"id": "global"}, {"_id": 0, "planning_reminder_last_sent_on": 1}) or {}
     last_sent = settings.get("planning_reminder_last_sent_on")
-    if last_sent and (today - datetime.fromisoformat(last_sent).date()) < timedelta(days=PLANNING_REMINDER_INTERVAL_DAYS):
+    if not force and last_sent and (today - datetime.fromisoformat(last_sent).date()) < timedelta(days=PLANNING_REMINDER_INTERVAL_DAYS):
         return 0
 
     year = planning_year(today)
@@ -1167,7 +1170,7 @@ async def send_formateur_planning_reminders() -> int:
 
     relances = []
     for a in animateurs:
-        if jours.get(a["id"]):
+        if jours.get(a["id"]) or a.get("is_test") or a["id"] in (skip_ids or set()):
             continue
         planning = await planning_for(a, year)
         if not any(s["peut_choisir"] for s in planning["sessions"]):

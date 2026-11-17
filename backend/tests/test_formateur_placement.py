@@ -253,3 +253,25 @@ def test_pas_de_rappel_apres_le_30_novembre(db, monkeypatch):
     db.stages.docs = [_stage("s1", "2027-03-01", "2027-03-02")]
     assert _run(staff_notify.send_formateur_planning_reminders()) == 0
     assert sent == []
+
+
+def test_annee_en_cours_fermee_au_placement_par_le_formateur(db):
+    """2026-11-17 : le planning de l'année en cours est fait sur place par
+    l'équipe ; le formateur ne se place (ni ne se retire) que sur l'année suivante."""
+    db.stages.docs = [_stage("s2026", "2026-12-07", "2026-12-08"), _stage("mien2026", "2026-12-14", "2026-12-15", ids=["bafm"])]
+    assert _status(fp.place_formateur(BAFM, "s2026")) == 403
+    assert _status(fp.retirer_formateur(BAFM, "mien2026")) == 403
+    planning = _run(fp.planning_for(BAFM, 2026))
+    assert planning["placement_ouvert"] is False
+    assert not any(s["peut_choisir"] or s["peut_retirer"] for s in planning["sessions"])
+    assert _run(fp.planning_for(BAFM, 2027))["placement_ouvert"] is True
+
+
+def test_relance_manuelle_sans_attendre_la_semaine_et_formateurs_exclus(db, monkeypatch):
+    sent = _capture_emails(monkeypatch)
+    _freeze_notify(monkeypatch, TODAY)
+    db.stages.docs = [_stage("s1")]
+    assert _run(staff_notify.send_formateur_planning_reminders()) > 0
+    sent.clear()
+    assert _run(staff_notify.send_formateur_planning_reminders(force=True, skip_ids={"psy"})) == 2
+    assert {to for to, _ in sent} == {"bafm@test", "bafm2@test"}

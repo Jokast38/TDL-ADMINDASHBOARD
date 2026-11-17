@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from core.database import db
 from core.placement_rules import (
     formateur_categories, place_for, places_occupees, places_of_category, planning_deadline,
-    quota_depasse, stage_nb_jours, stages_overlap,
+    planning_ouvert, quota_depasse, stage_nb_jours, stages_overlap,
 )
 from core.utils import now_iso
 from services.activity import log_action
@@ -80,7 +80,7 @@ async def planning_for(user: dict, year: int) -> dict:
         occupied = _occupied(s, category, titres, exclude=user["id"])
         my_place = place_for(user.get("titre"), category)
         is_mine = s["id"] in mine_ids
-        a_venir = s["date_debut"][:10] > today.isoformat()
+        a_venir = s["date_debut"][:10] > today.isoformat() and planning_ouvert(year, today)
         conflict = not is_mine and any(stages_overlap(s, m) for m in mine)
         items.append({
             "id": s["id"], "formation_titre": s.get("formation_titre"), "category": category,
@@ -97,6 +97,7 @@ async def planning_for(user: dict, year: int) -> dict:
     return {
         "year": year, "date_limite": deadline.isoformat(), "jours_places": jours,
         "quota_jours_annuel": quota, "sessions": items,
+        "placement_ouvert": planning_ouvert(year, today),
     }
 
 
@@ -106,6 +107,12 @@ async def _stage_ouvert(stage_id: str) -> tuple:
         raise HTTPException(status_code=404, detail="Session introuvable")
     if stage["date_debut"][:10] <= _today().isoformat():
         raise HTTPException(status_code=400, detail="Cette session a déjà commencé — contactez un agent")
+    year = int(stage["date_debut"][:4])
+    if not planning_ouvert(year, _today()):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Le planning {year} a été fait sur place par l'équipe — placez-vous uniquement sur {_today().year + 1}",
+        )
     formation = await db.formations.find_one({"id": stage.get("formation_id")}, {"_id": 0, "category": 1})
     return stage, (formation or {}).get("category")
 

@@ -102,6 +102,15 @@ export default function FormateurPlanningTab() {
         </div>
       )}
 
+      {planning && planning.placement_ouvert === false && (
+        <Card className="p-4 border border-[#F5A623]/40 bg-[#F5A623]/5 shadow-none" data-testid="planning-ferme">
+          <p className="text-sm">
+            Le planning {year} a été établi sur place par l'équipe : vos dates {year} sont celles affichées « Vous êtes placé ».
+            Vous ne pouvez vous placer que sur {currentYear + 1}.
+          </p>
+        </Card>
+      )}
+
       {planning && !months.length && (
         <Card className="p-12 text-center border-dashed">
           <p className="text-gray-500">Aucune session ouverte pour {year} pour le moment.</p>
@@ -139,7 +148,7 @@ export default function FormateurPlanningTab() {
                 ) : s.peut_choisir ? (
                   <Button size="sm" disabled={busyId === s.id} onClick={() => toggle(s)} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid={`planning-choose-${s.id}`}>Me placer</Button>
                 ) : (
-                  <span className="text-xs text-gray-400">{s.conflit ? "Déjà placé à ces dates" : "Indisponible"}</span>
+                  <span className="text-xs text-gray-400">{planning.placement_ouvert === false ? "Planning fait par l'équipe" : s.conflit ? "Déjà placé à ces dates" : "Indisponible"}</span>
                 )}
               </Card>
             ))}

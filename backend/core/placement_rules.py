@@ -7,6 +7,7 @@ voir services/formateur_placement.py pour leur utilisation).
 - Le formateur ne voit que si une place est libre, jamais qui l'occupe.
 - Le planning d'une année se choisit l'année précédente, avec le 30 novembre
   comme date limite (demande du 2026-11-02) : rappels à partir du 1er août.
+  L'année en cours est fermée au placement par le formateur (2026-11-17).
 - Le quota annuel (en jours) ne limite que le placement par le formateur
   lui-même — un agent peut le dépasser depuis la page Sessions de formation.
 """
@@ -74,6 +75,14 @@ def quota_depasse(jours_places: int, nb_jours: int, quota: Optional[int]) -> boo
 
 def planning_year(today: date) -> int:
     return today.year + 1
+
+
+def planning_ouvert(year: int, today: date) -> bool:
+    """Le formateur ne se place (ou ne se retire) que sur l'année suivante :
+    le planning de l'année en cours est fait sur place par l'équipe, qui le
+    saisit via « Changer » sur la session (demande du 2026-11-17, placements
+    2026 de formateurs remplacés par l'agenda papier)."""
+    return year > today.year
 
 
 def planning_deadline(year: int) -> date:

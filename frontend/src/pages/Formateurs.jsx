@@ -69,12 +69,34 @@ export default function Formateurs() {
   const [savingMatricule, setSavingMatricule] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [uploadDocType, setUploadDocType] = useState(Object.keys(DOC_TYPE_LABELS)[0]);
+  // Filtre « 0 jour » : formateurs sans aucune date sur l'année de planning
+  // (demande du 2026-11-17), pour les relancer.
+  const [sansDate, setSansDate] = useState(false);
+  const [relancing, setRelancing] = useState(false);
 
   const load = () => api.get("/employees").then((r) => setItems(r.data.filter((u) => u.role === "animateur")));
   useEffect(() => {
     load();
     api.get("/formateurs/planning-overview").then((r) => setPlanningOverview(r.data)).catch(() => {});
   }, []);
+
+  const joursOf = (u) => planningOverview?.jours?.[u.id] || 0;
+  const sansDateCount = planningOverview ? items.filter((u) => !joursOf(u)).length : 0;
+  const visibles = sansDate && planningOverview ? items.filter((u) => !joursOf(u)) : items;
+
+  const relancer = async () => {
+    setRelancing(true);
+    try {
+      const { data } = await api.post("/formateurs/planning-reminder");
+      toast.success(data.notified
+        ? `${data.notified} formateur(s) relancé(s) pour ${data.year} (email + notification)`
+        : "Aucun formateur à relancer (tous ont au moins une date, ou aucune session ouverte)");
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Erreur");
+    } finally {
+      setRelancing(false);
+    }
+  };
 
   const save = async () => {
     const nom = form.nom.trim();
@@ -294,8 +316,41 @@ export default function Formateurs() {
           <FormateursAgenda formateurs={items} />
         </TabsContent>
         <TabsContent value="repertoire" className="mt-4">
+          {planningOverview && (
+            <div className="flex items-center gap-2 flex-wrap mb-4" data-testid="formateurs-filtre-planning">
+              <button type="button" onClick={() => setSansDate(false)} data-testid="formateurs-filtre-tous"
+                className={`text-xs px-3 py-1.5 rounded-full border ${!sansDate ? "bg-[#0a0a0a] text-white border-[#0a0a0a]" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                Tous ({items.length})
+              </button>
+              <button type="button" onClick={() => setSansDate(true)} data-testid="formateurs-filtre-sans-date"
+                className={`text-xs px-3 py-1.5 rounded-full border ${sansDate ? "bg-[#0a0a0a] text-white border-[#0a0a0a]" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                0 jour en {planningOverview.year} ({sansDateCount})
+              </button>
+              {sansDate && sansDateCount > 0 && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button size="sm" variant="outline" disabled={relancing} data-testid="formateurs-relancer">
+                      {relancing ? "Envoi..." : `Relancer pour ${planningOverview.year}`}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Relancer les formateurs sans date ?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Chaque formateur sans aucune date en {planningOverview.year} reçoit le rappel « Choisissez vos dates » par email et notification. Les agents reçoivent la liste.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Annuler</AlertDialogCancel>
+                      <AlertDialogAction onClick={relancer}>Envoyer le rappel</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {items.map((u) => (
+            {visibles.map((u) => (
               <Card
                 key={u.id}
                 className="p-5 border border-gray-200 rounded-md shadow-none hover:-translate-y-1 hover:shadow-lg hover:border-gray-300 transition-all cursor-pointer"
@@ -319,6 +374,11 @@ export default function Formateurs() {
                 <div className="mt-2"><DossierBadge u={u} /></div>
               </Card>
             ))}
+            {sansDate && items.length > 0 && !visibles.length && (
+              <Card className="col-span-full p-12 text-center border-dashed">
+                <p className="text-gray-500">Tous les formateurs ont au moins une date en {planningOverview?.year}.</p>
+              </Card>
+            )}
             {!items.length && (
               <Card className="col-span-full p-12 text-center border-dashed">
                 <p className="text-gray-500">Aucun formateur. Cliquez sur "Nouveau formateur" pour en créer un.</p>
