@@ -482,6 +482,7 @@ async def list_leads(
     assigned_to: Optional[str] = None,
     origin: Optional[str] = None,
     category: Optional[str] = None,
+    sms_qualif: Optional[str] = None,
     sort: Optional[str] = None,
     page: int = 1,
     page_size: int = 50,
@@ -521,6 +522,12 @@ async def list_leads(
     # montrer que les prospects VTC/Taxi", etc. sans dépendre d'un champ
     # formation_id qui n'existe pas sur les leads.
     if category: query["category"] = category
+    # Réponse au scénario SMS (services/sms_qualification.py) : qualifie,
+    # a_rappeler, pas_interesse, ou « repondu » pour tous ceux qui ont répondu.
+    if sms_qualif == "repondu":
+        query["sms_qualification.status"] = {"$in": ["qualifie", "a_rappeler", "pas_interesse"]}
+    elif sms_qualif:
+        query["sms_qualification.status"] = sms_qualif
     if origin:
         # `origin` regroupe plusieurs valeurs brutes de `source` (voir
         # core.config.canonicalize_lead_origin) — on résout dynamiquement
@@ -579,7 +586,7 @@ async def list_leads(
 
     cache_key = ("list", tag, status, contacted, has_email, has_phone, q, interest_in, date_from, date_to, source, campaign, ville, qualification,
                  statut, pipeline_status, assigned_to, origin, category, page, page_size,
-                 tuple(sorted(assigned)) if scoped else None, sort)
+                 tuple(sorted(assigned)) if scoped else None, sort, sms_qualif)
     cached = _leads_cache_get(cache_key)
     if cached is not None:
         return cached

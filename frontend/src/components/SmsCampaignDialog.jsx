@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChatText, WarningCircle, CheckCircle } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -43,6 +44,22 @@ export default function SmsCampaignDialog({ leadIds, onDone }) {
   const [consent, setConsent] = useState(false);
   const [sending, setSending] = useState(false);
   const [campaigns, setCampaigns] = useState([]);
+  const [scenarios, setScenarios] = useState([]);
+  const [scenarioKey, setScenarioKey] = useState("aucun");
+  const [replies, setReplies] = useState({});
+  const scenario = scenarios.find((s) => s.key === scenarioKey);
+
+  const chooseScenario = (key) => {
+    setScenarioKey(key);
+    const sc = scenarios.find((s) => s.key === key);
+    setBody(sc ? sc.steps[0].question : "Bonjour {prenom}, ");
+  };
+
+  const toggleReplies = (id) => {
+    if (replies[id]) { setReplies(({ [id]: _, ...rest }) => rest); return; }
+    api.get(`/sms-campaigns/${id}/reponses`).then(({ data }) => setReplies((r) => ({ ...r, [id]: data })))
+      .catch(() => toast.error("Impossible de charger les réponses"));
+  };
 
   const loadCampaigns = () => api.get("/sms-campaigns").then(({ data }) => setCampaigns(data)).catch(() => {});
 
@@ -54,6 +71,7 @@ export default function SmsCampaignDialog({ leadIds, onDone }) {
       .then(({ data }) => setPreview(data))
       .catch((e) => toast.error(e.response?.data?.detail || "Impossible de préparer la campagne"));
     loadCampaigns();
+    api.get("/sms-campaigns/scenarios").then(({ data }) => setScenarios(data)).catch(() => {});
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const example = useMemo(() => {
@@ -66,7 +84,7 @@ export default function SmsCampaignDialog({ leadIds, onDone }) {
   const launch = async () => {
     setSending(true);
     try {
-      const { data } = await api.post("/sms-campaigns", { lead_ids: leadIds, body, label: label || undefined, consent_confirmed: consent });
+      const { data } = await api.post("/sms-campaigns", { lead_ids: leadIds, body, label: label || undefined, consent_confirmed: consent, scenario: scenario ? scenario.key : undefined });
       toast.success(`Campagne créée : ${data.total} SMS en file d'envoi`);
       loadCampaigns();
       onDone?.();
@@ -123,6 +141,30 @@ export default function SmsCampaignDialog({ leadIds, onDone }) {
             </div>
 
             <div>
+              <label className="text-sm font-medium">Réponses par SMS</label>
+              <Select value={scenarioKey} onValueChange={chooseScenario}>
+                <SelectTrigger data-testid="sms-campaign-scenario"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="aucun">Aucun scénario (message simple)</SelectItem>
+                  {scenarios.map((s) => <SelectItem key={s.key} value={s.key}>Qualification — {s.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {scenario && (
+                <div className="mt-2 text-xs bg-blue-50 border border-blue-200 rounded-md p-3 space-y-1.5">
+                  <p className="font-semibold">Le prospect répond, la suite part toute seule :</p>
+                  {scenario.steps.map((st, i) => (
+                    <p key={i}><b>{i === 0 ? "SMS 1" : `Puis SMS ${i + 1}`}</b> — réponses : {Object.entries(st.options).map(([c, l]) => `${c.toUpperCase()} = ${l}`).join(" · ")}
+                      {i > 0 && <span className="block text-gray-600">« {st.question} »</span>}</p>
+                  ))}
+                  <p><b>Toujours intéressé</b> → « {scenario.final} »</p>
+                  <p className="text-gray-600">→ fiche qualifiée, demande de rappel créée et alerte push « à rappeler » à l'équipe.</p>
+                  <p><b>Plus intéressé</b> → « {scenario.refus} »</p>
+                  <p className="text-gray-600">Réponse incomprise deux fois (souvent une question) → transmise à l'équipe pour rappel.</p>
+                </div>
+              )}
+            </div>
+
+            <div>
               <label className="text-sm font-medium">Message — <code>{"{prenom}"}</code> est remplacé par le prénom</label>
               <Textarea rows={5} value={body} onChange={(e) => setBody(e.target.value)} maxLength={600} data-testid="sms-campaign-body" />
             </div>
@@ -163,6 +205,26 @@ export default function SmsCampaignDialog({ leadIds, onDone }) {
                       {c.total} prévus · {c.stats.a_envoyer} à envoyer · {c.stats.pending} en cours ·{" "}
                       <CheckCircle size={11} className="inline" /> {c.stats.delivered} délivrés · {c.stats.sent} envoyés · {c.stats.failed} échecs
                     </p>
+                    {c.reponses && (
+                      <div className="mt-1">
+                        <p className="text-gray-600">
+                          {c.scenario_label} : {c.reponses.ont_repondu} ont répondu · <b className="text-green-700">{c.reponses.qualifie} qualifiés</b>
+                          {" "}· {c.reponses.a_rappeler} réponses libres · {c.reponses.pas_interesse} plus intéressés · {c.reponses.stop} STOP
+                          {" "}<button type="button" className="underline" onClick={() => toggleReplies(c.id)}>{replies[c.id] ? "masquer" : "détail"}</button>
+                        </p>
+                        {replies[c.id] && (
+                          <div className="mt-1 max-h-48 overflow-y-auto border-t border-gray-100">
+                            {replies[c.id].filter((r) => r.status !== "en_attente" || r.answers.length || r.message).map((r) => (
+                              <p key={r.phone} className="py-0.5">
+                                <a className="underline" href={`/admin/leads?q=${encodeURIComponent(r.phone)}`}>{r.prenom || r.phone}</a>
+                                {" "}— {r.statut_label}{r.answers.length ? ` : ${r.answers.join(" · ")}` : ""}{r.message ? ` — « ${r.message} »` : ""}
+                              </p>
+                            ))}
+                            {!replies[c.id].some((r) => r.status !== "en_attente" || r.answers.length || r.message) && <p className="text-gray-400 py-0.5">Aucune réponse pour l'instant.</p>}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {(c.status === "en_cours" || c.status === "en_pause") && (
                       <div className="flex gap-2 mt-1">
                         {c.status === "en_cours"

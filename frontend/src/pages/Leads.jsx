@@ -537,6 +537,8 @@ export default function Leads() {
   // import Excel crée une valeur par onglet mensuel).
   const [origins, setOrigins] = useState([]);
   const [originFilter, setOriginFilter] = useState("all");
+  // Réponse aux SMS de qualification (backend/services/sms_qualification.py).
+  const [smsQualifFilter, setSmsQualifFilter] = useState("all");
   const loadOrigins = () => api.get("/leads/origins").then(({ data }) => setOrigins(data || [])).catch(() => {});
 
   // Cartes KPI + CA potentiel (maquette fournie par l'équipe) — rechargées
@@ -578,6 +580,7 @@ export default function Leads() {
       if (dateTo) params.date_to = dateTo;
       if (villeFilter !== "all") params.ville = villeFilter;
       if (originFilter !== "all") params.origin = originFilter;
+      if (smsQualifFilter !== "all") params.sms_qualif = smsQualifFilter;
       if (interestFilter !== "all") {
         // Le regroupement (VTC, Taxi, ...) est calculé côté client via
         // canonicalizeInterest() ; on envoie au backend les valeurs brutes
@@ -608,7 +611,7 @@ export default function Leads() {
   useEffect(() => {
     if (isFirstFilterRun.current) { isFirstFilterRun.current = false; return; }
     if (page === 1) load(1); else setPage(1);
-  }, [statutQuickFilter, contactedFilter, callOnlyFilter, interestFilter, villeFilter, originFilter, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [statutQuickFilter, contactedFilter, callOnlyFilter, interestFilter, villeFilter, originFilter, smsQualifFilter, dateFrom, dateTo]); // eslint-disable-line react-hooks/exhaustive-deps
   // Recherche texte : debounce, et retour à la page 1 (sinon "page 3" pourrait
   // se retrouver vide après une nouvelle recherche plus étroite).
   useEffect(() => {
@@ -1663,6 +1666,16 @@ export default function Leads() {
             {o.label} <span className="opacity-60">({o.count})</span>
           </button>
         ))}
+        <Select value={smsQualifFilter} onValueChange={setSmsQualifFilter}>
+          <SelectTrigger className="h-8 w-auto ml-auto text-xs" data-testid="leads-sms-qualif"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Réponse SMS : toutes</SelectItem>
+            <SelectItem value="qualifie">Qualifiés par SMS — à rappeler</SelectItem>
+            <SelectItem value="a_rappeler">Réponse libre — à rappeler</SelectItem>
+            <SelectItem value="pas_interesse">Plus intéressés (SMS)</SelectItem>
+            <SelectItem value="repondu">Ont répondu</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* ── Cartes KPI + CA potentiel ── */}

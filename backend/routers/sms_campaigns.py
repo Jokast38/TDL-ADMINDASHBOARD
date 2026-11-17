@@ -1,17 +1,19 @@
 """Campagnes SMS par la passerelle personnelle (services/sms_campaigns.py)."""
 import json
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from core.config import ROLES_LEADS
+from core.config import ROLES_LEADS, ROLES_TEAM_MGMT
 from core.database import db
 from core.security import require_role
 from core.utils import now_iso
 from services import smsgate
 from services import sms_campaigns as svc
+from services import sms_qualification
 
 router = APIRouter(tags=["sms-campaigns"])
 
@@ -24,6 +26,8 @@ class CampaignIn(LeadIdsIn):
     label: Optional[str] = Field(None, max_length=120)
     body: str = Field(..., min_length=1, max_length=600)
     consent_confirmed: bool = False
+    # Scénario de qualification (services/sms_qualification.py) : « vtc », « caces »…
+    scenario: Optional[str] = Field(None, max_length=40)
 
 
 @router.post("/sms-campaigns/preview")
@@ -48,7 +52,105 @@ async def create(payload: CampaignIn, user: dict = Depends(require_role(*ROLES_L
     if not smsgate.is_configured(cfg):
         raise HTTPException(400, "Passerelle SMS non configurée (Paramètres → SMS → Passerelle SMS).")
     label = payload.label or f"Campagne SMS du {datetime.now(smsgate.PARIS):%d/%m/%Y %H:%M}"
-    return await svc.create_campaign(label, payload.body.strip(), payload.lead_ids, user)
+    scenario = None
+    if payload.scenario:
+        if not (await sms_qualification.config())["enabled"]:
+            raise HTTPException(400, "Réponses automatiques désactivées (Paramètres → SMS).")
+        scenario = (await sms_qualification.scenarios(active_only=True)).get(payload.scenario)
+        if not scenario:
+            raise HTTPException(400, "Scénario de réponses inconnu")
+        # Le 1er SMS reste modifiable, mais doit garder la consigne de réponse.
+        codes = [c for c in scenario["steps"][0]["options"]]
+        if not all(re.search(rf"\b{re.escape(c)}\b",payload.body, re.IGNORECASE) for c in codes):
+            raise HTTPException(400, "Le message doit indiquer les réponses possibles (" + ", ".join(c.upper() for c in codes) + ").")
+    return await svc.create_campaign(label, payload.body.strip(), payload.lead_ids, user,
+                                     scenario_key=payload.scenario, scenario=scenario)
+
+
+class OptionIn(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20)
+    label: str = Field(..., min_length=1, max_length=80)
+    fin: bool = False  # « plus intéressé » : clôt la conversation
+
+
+class StepIn(BaseModel):
+    id: Optional[str] = Field(None, max_length=40)
+    question: str = Field(..., min_length=5, max_length=600)
+    options: List[OptionIn] = Field(..., min_length=2, max_length=9)
+
+
+class ScenarioIn(BaseModel):
+    key: str = Field(..., min_length=1, max_length=40)
+    label: str = Field(..., min_length=1, max_length=80)
+    category: Optional[str] = Field(None, max_length=30)
+    actif: bool = True
+    steps: List[StepIn] = Field(..., min_length=1, max_length=5)
+    final: str = Field(..., min_length=5, max_length=600)
+    refus: str = Field(..., min_length=5, max_length=600)
+
+
+class ScenariosConfigIn(BaseModel):
+    enabled: bool
+    scenarios: List[ScenarioIn] = Field(default_factory=list, max_length=20)
+
+
+@router.get("/sms-campaigns/scenarios/config")
+async def get_scenarios_config(user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Éditeur Paramètres → SMS → Réponses automatiques."""
+    cfg = await sms_qualification.config()
+    return {"enabled": cfg["enabled"], "scenarios": [
+        {"key": k, "label": sc["label"], "category": sc.get("category"), "actif": sc.get("actif", True),
+         "steps": [{"id": st.get("id"), "question": st["question"],
+                    "options": [{"code": c, "label": o["label"], "fin": o.get("fin") == "refus"} for c, o in st["options"].items()]}
+                   for st in sc["steps"]],
+         "final": sc["final"], "refus": sc["refus"]}
+        for k, sc in cfg["scenarios"].items()]}
+
+
+@router.put("/sms-campaigns/scenarios/config")
+async def save_scenarios_config(payload: ScenariosConfigIn, user: dict = Depends(require_role(*ROLES_TEAM_MGMT, "responsable_admission"))):
+    saved = {}
+    for sc in payload.scenarios:
+        key = sms_qualification.normalize_answer(sc.key).replace(" ", "_")
+        if not key or key in saved:
+            raise HTTPException(400, f"Identifiant de scénario vide ou en double : « {sc.key} »")
+        steps = []
+        for i, st in enumerate(sc.steps):
+            options = sms_qualification.build_options([o.model_dump() for o in st.options])
+            if len(options) < 2:
+                raise HTTPException(400, f"{sc.label}, question {i + 1} : au moins deux réponses différentes.")
+            missing = [c for c in options if not re.search(rf"\b{re.escape(c)}\b", st.question, re.IGNORECASE)]
+            if missing:
+                raise HTTPException(400, f"{sc.label}, question {i + 1} : le texte doit citer les réponses " + ", ".join(m.upper() for m in missing) + ".")
+            steps.append({"id": st.id or f"q{i + 1}", "question": st.question.strip(), "options": options})
+        saved[key] = {"label": sc.label.strip(), "category": sc.category or None, "actif": sc.actif,
+                      "steps": steps, "final": sc.final.strip(), "refus": sc.refus.strip()}
+    await db.settings.update_one({"id": "global"}, {"$set": {
+        "sms_scenarios": saved, "sms_qualification_enabled": payload.enabled, "updated_at": now_iso()}}, upsert=True)
+    return await get_scenarios_config(user)
+
+
+@router.get("/sms-campaigns/scenarios")
+async def list_scenarios(user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Scénarios actifs proposés dans la fenêtre « Campagne SMS » (vide si
+    les réponses automatiques sont désactivées)."""
+    if not (await sms_qualification.config())["enabled"]:
+        return []
+    return [{"key": k, "label": sc["label"], "category": sc.get("category"),
+             "steps": [{"question": st["question"], "options": {c: o["label"] for c, o in st["options"].items()}}
+                       for st in sc["steps"]],
+             "final": sc["final"], "refus": sc["refus"]}
+            for k, sc in (await sms_qualification.scenarios(active_only=True)).items()]
+
+
+@router.get("/sms-campaigns/{campaign_id}/reponses")
+async def campaign_replies(campaign_id: str, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Détail des réponses d'une campagne à scénario (qui a répondu quoi)."""
+    convs = await db.sms_conversations.find({"campaign_id": campaign_id}, {"_id": 0}).sort("updated_at", -1).to_list(5000)
+    return [{"lead_id": c.get("lead_id"), "phone": c.get("phone"), "prenom": c.get("prenom"),
+             "status": c.get("status"), "statut_label": sms_qualification.STATUTS.get(c.get("status"), c.get("status")),
+             "answers": [a.get("label") for a in c.get("answers") or []], "message": c.get("last_message"),
+             "updated_at": c.get("updated_at")} for c in convs]
 
 
 @router.get("/sms-campaigns")

@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { CreditCard, EnvelopeSimple, Kanban, Plugs, ChartBar, MagnifyingGlass, Robot, Signature, UploadSimple, CheckCircle, ChatText } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import EmailDebitCard from "@/components/EmailDebitCard";
+import SmsScenariosCard from "@/components/SmsScenariosCard";
 
 // Types de SMS activables un par un — mêmes clés et mêmes valeurs par défaut
 // que backend/services/sms.py:SMS_CATEGORIES (budget limité : seuls les liens
@@ -230,6 +231,7 @@ export default function Settings() {
             </div>
           </Card>
           <SmsGatewayCard s={s} update={update} />
+          <SmsScenariosCard />
         </TabsContent>
 
         <TabsContent value="stripe">
@@ -522,6 +524,12 @@ function SmsGatewayCard({ s, update }) {
         <Field label="Début de chaque SMS (identifie l'expéditeur)" value={s.sms_campaign_prefix} onChange={(v) => update("sms_campaign_prefix", v)} testid="smsgate-prefix" placeholder="TDL Formation : " />
         <Field label="Mention de désinscription (fin de chaque SMS)" value={s.sms_campaign_stop_text} onChange={(v) => update("sms_campaign_stop_text", v)} testid="smsgate-stop" placeholder="STOP SMS : répondez STOP" />
         <Field label="SMS de campagne maximum par jour (protège la ligne)" value={s.sms_campaign_daily_cap} onChange={(v) => update("sms_campaign_daily_cap", v === "" ? null : Number(v))} testid="smsgate-cap" type="number" placeholder="100" />
+
+        <div className="text-xs text-gray-600 bg-blue-50 border border-blue-200 rounded-md p-3 space-y-1">
+          <p><b>URL de callback</b> à coller dans le dashboard du serveur SMS personnel (statuts + réponses des prospects) :</p>
+          <code className="block break-all bg-white border border-gray-200 rounded px-2 py-1">https://api.tdl-formation.fr/api/sms/gateway-webhook</code>
+          <p>Le « secret callback » du serveur doit être identique à la clé de signature ci-dessus.</p>
+        </div>
 
         <div className="pt-4 border-t border-gray-200 space-y-2 text-sm">
           <div className="flex items-center justify-between">

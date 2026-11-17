@@ -70,15 +70,22 @@ async def select_recipients(lead_ids: List[str]) -> dict:
 def render_text(cfg: dict, body: str, prenom: str) -> str:
     text = body.replace("{prenom}", prenom or "").replace("{{prenom}}", prenom or "")
     text = re.sub(r"[ \t]{2,}", " ", text).strip()
-    out = (cfg.get("prefix") or "") + text
+    prefix = cfg.get("prefix") or ""
+    if prefix and prefix[-1].isalnum():
+        prefix += " : "  # préfixe saisi sans séparateur (« TDL FORMATION »)
+    out = prefix + text
     if cfg.get("stop_text"):
         out += "\n" + cfg["stop_text"]
     return out
 
 
-async def create_campaign(label: str, body: str, lead_ids: List[str], user: dict) -> dict:
+async def create_campaign(label: str, body: str, lead_ids: List[str], user: dict,
+                          scenario_key: Optional[str] = None, scenario: Optional[dict] = None) -> dict:
     sel = await select_recipients(lead_ids)
     doc = {
+        # Scénario de qualification (services/sms_qualification.py) : copie
+        # figée, pour que les conversations en cours ne changent pas de questions.
+        "scenario_key": scenario_key, "scenario": scenario,
         "id": str(uuid.uuid4()), "label": label, "body": body, "recipients": sel["recipients"],
         "total": len(sel["recipients"]), "next_index": 0, "status": "en_cours" if sel["recipients"] else "terminee",
         "excluded": sel["excluded"], "created_by": user.get("id"), "created_by_name": user.get("name"),
@@ -97,6 +104,11 @@ async def public(doc: dict) -> dict:
         if l.get("status") in counts:
             counts[l["status"]] += 1
     d["stats"] = {**counts, "a_envoyer": max(0, d.get("total", 0) - d.get("next_index", 0))}
+    d.pop("scenario", None)
+    if doc.get("scenario"):
+        from services.sms_qualification import campaign_stats
+        d["scenario_label"] = doc["scenario"].get("label")
+        d["reponses"] = await campaign_stats(doc["id"])
     return d
 
 
@@ -158,6 +170,9 @@ async def process_campaigns() -> int:
                     res = await smsgate.send(cfg, msg_id, r["phone"], text)
                     log["gateway_id"] = res.get("id") or msg_id
                     log["status"] = "pending"
+                    if campaign.get("scenario"):
+                        from services.sms_qualification import start_conversation
+                        await start_conversation(campaign, r)
                 except smsgate.GatewayError as e:
                     if e.retryable:
                         logger.warning(f"Campagne SMS {campaign['id']} : {e} — reprise au prochain passage")
@@ -225,14 +240,50 @@ async def poll_statuses() -> int:
     return changed
 
 
+def phone_variants(phone: str) -> list:
+    """Formes sous lesquelles un numéro +33… peut être stocké sur une fiche
+    (+33612345678, 0612345678, 06 12 34 56 78)."""
+    if not phone.startswith("+33") or len(phone) != 12:
+        return [phone]
+    local = "0" + phone[3:]
+    return [phone, local, " ".join(local[i:i + 2] for i in range(0, 10, 2)), phone[1:]]
+
+
 async def handle_inbound(sender: str, message: str) -> bool:
-    """Réponse STOP → numéro exclu de toutes les campagnes suivantes."""
-    if not STOP_RE.match(message or ""):
-        return False
+    """Réponse STOP → numéro exclu de toutes les campagnes suivantes ; autre
+    réponse → scénario de qualification en cours (services/sms_qualification.py),
+    sinon l'équipe est prévenue qu'un prospect a répondu."""
     phone = normalize_phone_fr(sender or "")
     if not phone:
         return False
+    lead = await db.leads.find_one({"phone": {"$in": phone_variants(phone)}}, {"_id": 0, "id": 1, "name": 1, "category": 1})
+    await db.sms_inbound.insert_one({"id": uuid.uuid4().hex, "phone": phone, "message": (message or "")[:1000],
+                                     "lead_id": (lead or {}).get("id"), "created_at": now_iso()})
+    from services import sms_qualification
+    if not STOP_RE.match(message or ""):
+        if await sms_qualification.handle_reply(phone, message or ""):
+            return True
+        await _notify_free_reply(phone, message or "", lead)
+        return False
+    await sms_qualification.close_on_stop(phone)
     if not await db.sms_optouts.find_one({"phone": phone}, {"_id": 0}):
         await db.sms_optouts.insert_one({"phone": phone, "message": (message or "")[:160], "created_at": now_iso()})
         logger.info(f"SMS STOP reçu de {phone} : exclu des campagnes")
     return True
+
+
+async def _notify_free_reply(phone: str, message: str, lead: Optional[dict]) -> None:
+    """Réponse à une campagne sans scénario (ou après la fin de la conversation) :
+    push à l'équipe (le texte est dans la fiche via db.sms_inbound)."""
+    if not message.strip():
+        return
+    from urllib.parse import quote
+    from services.staff_notify import CALLBACK_NOTIFY_ROLES, notify_new_contact
+    name = (lead or {}).get("name") or phone
+    await notify_new_contact(
+        category=(lead or {}).get("category"), roles=CALLBACK_NOTIFY_ROLES,
+        email_subject=f"💬 Réponse SMS de {name}",
+        email_body_html=f"<p><b>{name}</b> ({phone}) a répondu à un SMS :</p><p>« {message[:500]} »</p>",
+        push_title=f"💬 Réponse SMS — {name}", push_body=message[:120],
+        push_url=f"/admin/leads?q={quote(phone)}", email_now=False,
+    )
