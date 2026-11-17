@@ -18,6 +18,31 @@ const GSM7 = new Set(
 );
 const GSM7_EXT = new Set("^{}\\[~]|€\f");
 
+// Même remplacement que le serveur (backend/services/smsgate.py → gsm_safe) :
+// un seul ê, ç, ’ ou emoji ferait passer tout le SMS à 70 caractères.
+const GSM_REPLACE = {
+  "â": "a", "ê": "e", "î": "i", "ô": "o", "û": "u", "ë": "e", "ï": "i", "ÿ": "y", "á": "a", "í": "i", "ó": "o", "ú": "u",
+  "Â": "A", "Ê": "E", "Î": "I", "Ô": "O", "Û": "U", "Ë": "E", "Ï": "I", "À": "A", "È": "E", "Ù": "U", "Á": "A",
+  "ç": "c", "œ": "oe", "Œ": "OE", "’": "'", "‘": "'", "‚": ",", "´": "'", "`": "'",
+  "“": '"', "”": '"', "«": '"', "»": '"', "„": '"', "–": "-", "—": "-", "‑": "-",
+  "…": "...", " ": " ", " ": " ", " ": " ", "\t": " ", "•": "-", "·": "-", "°": "o", "²": "2", "³": "3",
+};
+
+function gsmSafe(text) {
+  const changed = new Set();
+  const out = Array.from(text).map((c) => {
+    if (GSM7.has(c) || GSM7_EXT.has(c)) return c;
+    let r = GSM_REPLACE[c];
+    if (r === undefined) {
+      const base = c.normalize("NFKD").replace(/[̀-ͯ]/g, "");
+      r = base && Array.from(base).every((b) => GSM7.has(b)) ? base : "";
+    }
+    changed.add(r ? `${c} → ${r}` : `${c} retiré`);
+    return r;
+  }).join("");
+  return { text: out, changed: [...changed] };
+}
+
 function segments(text) {
   const chars = Array.from(text);
   const gsm = chars.every((c) => GSM7.has(c) || GSM7_EXT.has(c));
@@ -74,11 +99,16 @@ export default function SmsCampaignDialog({ leadIds, onDone }) {
     api.get("/sms-campaigns/scenarios").then(({ data }) => setScenarios(data)).catch(() => {});
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const example = useMemo(() => {
-    if (!preview) return "";
+  // Texte réellement envoyé : séparateur après le préfixe et caractères
+  // adaptés, comme le serveur (services/sms_campaigns.py → render_text).
+  const adapted = useMemo(() => {
+    if (!preview) return { text: "", changed: [] };
     const txt = body.replaceAll("{prenom}", preview.exemple_prenom || "Karim").replace(/[ \t]{2,}/g, " ").trim();
-    return (preview.prefix || "") + txt + (preview.stop_text ? `\n${preview.stop_text}` : "");
+    let prefix = preview.prefix || "";
+    if (/[\p{L}\p{N}]$/u.test(prefix)) prefix += " : ";
+    return gsmSafe(prefix + txt + (preview.stop_text ? `\n${preview.stop_text}` : ""));
   }, [body, preview]);
+  const example = adapted.text;
   const seg = segments(example);
 
   const launch = async () => {
@@ -172,10 +202,15 @@ export default function SmsCampaignDialog({ leadIds, onDone }) {
             <div>
               <p className="text-xs text-gray-500 mb-1">Aperçu du SMS reçu :</p>
               <pre className="whitespace-pre-wrap text-sm bg-white border border-gray-200 rounded-md p-3 font-sans">{example}</pre>
-              <p className={`text-xs mt-1 ${seg.parts > 2 ? "text-amber-700" : "text-gray-500"}`}>
+              <p className={`text-xs mt-1 ${seg.parts > 1 ? "text-amber-700" : "text-green-700"}`} data-testid="sms-campaign-count">
                 {seg.len} caractères · {seg.parts} SMS par destinataire
-                {!seg.gsm && " · caractères spéciaux (emoji, certains accents) : 70 caractères par SMS"}
+                {seg.parts > 1 && ` — retirez ${seg.len - 160} caractère(s) pour tenir en 1 SMS`}
               </p>
+              {adapted.changed.length > 0 && (
+                <p className="text-xs mt-1 text-blue-700" data-testid="sms-campaign-adapted">
+                  Adapté automatiquement pour rester à 160 caractères par SMS : {adapted.changed.join(", ")}.
+                </p>
+              )}
             </div>
 
             <label className="flex items-start gap-2 text-sm">

@@ -187,3 +187,11 @@ def test_scenarios_personnalises_remplacent_les_modeles(monkeypatch):
     assert asyncio.run(q.scenarios(active_only=True)) == {}
     opts = q.build_options([{"code": "OUI", "label": "Intéressé"}, {"code": "Non", "label": "Pas intéressé", "fin": True}])
     assert opts["oui"]["keys"][0] == "oui" and "ok" in opts["oui"]["keys"] and opts["non"]["fin"] == "refus"
+
+
+def test_caracteres_adaptes_pour_rester_a_160_par_sms():
+    out = smsgate.gsm_safe("Répondez STOP pour arrêter · l\u2019offre « VTC » \u2026 🚗 Garçon é è à")
+    assert out == "Répondez STOP pour arreter - l'offre \" VTC \" ...  Garcon é è à"
+    assert all(c in smsgate.GSM7 or c in smsgate.GSM7_EXT for c in out)
+    text = sms_campaigns.render_text({"prefix": "TDL FORMATION", "stop_text": "STOP SMS: Répondez STOP pour arrêter"}, "Bonjour {prenom}", "Jérôme")
+    assert text == "TDL FORMATION : Bonjour Jérome\nSTOP SMS: Répondez STOP pour arreter"

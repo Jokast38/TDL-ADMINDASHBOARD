@@ -76,7 +76,7 @@ def render_text(cfg: dict, body: str, prenom: str) -> str:
     out = prefix + text
     if cfg.get("stop_text"):
         out += "\n" + cfg["stop_text"]
-    return out
+    return smsgate.gsm_safe(out)  # 160 caractères par SMS, jamais 70
 
 
 async def create_campaign(label: str, body: str, lead_ids: List[str], user: dict,

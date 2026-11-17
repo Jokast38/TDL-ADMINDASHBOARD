@@ -100,9 +100,41 @@ async def call(cfg: dict, method: str, path: str, json_data: dict | None = None)
     return r.json() if r.content else {}
 
 
+# ── Alphabet SMS standard (GSM 03.38) ───────────────────────────────────────
+# Un seul caractère hors de cet alphabet (ê, ç, ’, emoji…) fait passer TOUT le
+# SMS à 70 caractères par segment au lieu de 160 (demande du 2026-11-17) : on
+# remplace donc ces caractères par leur équivalent le plus proche avant l'envoi.
+GSM7 = set("@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡"
+           "ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà")
+GSM7_EXT = set("^{}\\[~]|€\f")  # comptent double, mais restent en 160
+_GSM_REPLACE = {
+    "â": "a", "ê": "e", "î": "i", "ô": "o", "û": "u", "ë": "e", "ï": "i", "ÿ": "y", "á": "a", "í": "i", "ó": "o", "ú": "u",
+    "Â": "A", "Ê": "E", "Î": "I", "Ô": "O", "Û": "U", "Ë": "E", "Ï": "I", "À": "A", "È": "E", "Ù": "U", "Á": "A",
+    "ç": "c", "œ": "oe", "Œ": "OE", "\u2019": "'", "\u2018": "'", "\u201a": ",", "\u00b4": "'", "`": "'",
+    "\u201c": '"', "\u201d": '"', "«": '"', "»": '"', "\u201e": '"', "\u2013": "-", "\u2014": "-", "\u2011": "-",
+    "\u2026": "...", "\u00a0": " ", "\u202f": " ", "\u2009": " ", "\t": " ", "\u2022": "-", "\u00b7": "-", "°": "o", "²": "2", "³": "3",
+}
+
+
+def gsm_safe(text: str) -> str:
+    """Texte garanti dans l'alphabet SMS standard (160 caractères par SMS)."""
+    out = []
+    for c in text or "":
+        if c in GSM7 or c in GSM7_EXT:
+            out.append(c)
+        elif c in _GSM_REPLACE:
+            out.append(_GSM_REPLACE[c])
+        else:
+            import unicodedata
+            base = "".join(b for b in unicodedata.normalize("NFKD", c) if not unicodedata.combining(b))
+            out.append(base if base and all(b in GSM7 for b in base) else "")  # emoji & co : retirés
+    return "".join(out)
+
+
 async def send(cfg: dict, msg_id: str, phone: str, text: str) -> dict:
     """Confie le SMS à la passerelle, qui le garde tant que le téléphone est hors
     ligne. Renvoie {"id": identifiant à suivre pour les statuts}."""
+    text = gsm_safe(text)
     if cfg.get("mode") == "dispatcher":
         # Le préfixe « TDL Formation : » est déjà dans le texte : pas de second préfixe
         res = await call(cfg, "POST", "/api/v1/sms", {"to": phone, "message": text, "use_prefix": False, "reference": msg_id})
