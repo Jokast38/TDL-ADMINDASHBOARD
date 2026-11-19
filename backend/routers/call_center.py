@@ -352,7 +352,25 @@ async def list_rendez_vous(
         a["date_paris"], a["heure_paris"] = d.date().isoformat(), d.strftime("%H:%M")
         out.append(a)
     await _avec_qualification(out)
+    await _avec_auteur(out)
     return {"items": out, "statuts": rdv_suivi.STATUTS, "date_from": date_from, "date_to": date_to}
+
+
+async def _avec_auteur(appts: list) -> None:
+    """Qui a placé chaque RDV et quand (demande du 2026-11-19) : la personne
+    qui l'a créé, ou, pour un créneau Cosmosia, l'agent qui se l'est attribué.
+    Les RDV antérieurs n'ont que l'identifiant : le nom est retrouvé ici."""
+    ids = list({a.get("created_by") for a in appts if a.get("created_by") and not a.get("created_by_name")})
+    names = {}
+    if ids:
+        for u in await db.users.find({"id": {"$in": ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(len(ids)):
+            names[u["id"]] = u.get("name") or ""
+    for a in appts:
+        if a.get("claimed_at"):
+            a["place_par_name"], a["place_le"] = a.get("commercial_name") or "", a["claimed_at"]
+        else:
+            a["place_par_name"] = a.get("created_by_name") or names.get(a.get("created_by")) or ""
+            a["place_le"] = a.get("created_at")
 
 
 async def _avec_qualification(appts: list) -> None:
@@ -409,6 +427,7 @@ async def qualifier_rendez_vous(appointment_id: str, payload: RdvQualificationIn
     if d:
         appt["date_paris"], appt["heure_paris"] = d.date().isoformat(), d.strftime("%H:%M")
     await _avec_qualification([appt])
+    await _avec_auteur([appt])
     return appt
 
 
@@ -590,7 +609,8 @@ async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depen
         "status": "planifie", "reminder_sent": False, "source": "manuel", "person_type": person_type,
         "kind": payload.kind or "appel", "location": payload.location,
         "formation_id": payload.formation_id, "formation_titre": payload.formation_titre,
-        "created_by": user["id"], "created_at": now_iso(), "updated_at": now_iso(),
+        "created_by": user["id"], "created_by_name": user.get("name", ""),
+        "created_at": now_iso(), "updated_at": now_iso(),
     }
     await db.call_appointments.insert_one(appt)
     if person_type == "prospect":

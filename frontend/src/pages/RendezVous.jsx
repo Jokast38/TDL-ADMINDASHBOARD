@@ -190,6 +190,7 @@ export default function RendezVous() {
                 <th className="py-2.5 px-4 overline">Date</th>
                 <th className="py-2.5 px-4 overline">Heure</th>
                 <th className="py-2.5 px-4 overline">Assigné à</th>
+                <th className="py-2.5 px-4 overline">Placé par</th>
                 <th className="py-2.5 px-4 overline">Statut</th>
                 <th className="py-2.5 px-4 overline">Qualification</th>
                 <th className="py-2.5 px-4 overline">Notes</th>
@@ -198,7 +199,7 @@ export default function RendezVous() {
             </thead>
             <tbody>
               {!items.length && (
-                <tr><td colSpan="8" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="9" className="py-10 text-center text-gray-400">
                   {qualifFilter !== "all" && allItems.length ? "Aucun rendez-vous avec cette qualification."
                     : vue === "moi" ? "Aucun rendez-vous ce jour-là." : "Aucun rendez-vous sur cette période."}
                 </td></tr>
@@ -220,6 +221,10 @@ export default function RendezVous() {
                     <td className="py-2.5 px-4 whitespace-nowrap">{formatDateFR(a.date_paris)}</td>
                     <td className="py-2.5 px-4 font-mono">{a.heure_paris}</td>
                     <td className="py-2.5 px-4 text-gray-700">{a.commercial_name || "—"}</td>
+                    <td className="py-2.5 px-4 whitespace-nowrap" data-testid={`rdv-place-par-${a.id}`}>
+                      <p className="text-gray-700">{a.place_par_name || "—"}</p>
+                      {a.place_le && <p className="text-xs text-gray-400">le {formatDateTimeFR(a.place_le)}</p>}
+                    </td>
                     <td className="py-2.5 px-4">
                       <Badge className={`${STATUT_STYLE[a.statut_suivi] || "bg-gray-100"} hover:${STATUT_STYLE[a.statut_suivi] || ""}`}>
                         {data.statuts?.[a.statut_suivi] || a.statut_suivi}
