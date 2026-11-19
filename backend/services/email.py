@@ -124,6 +124,23 @@ async def _send_via_resend(api_key: str, from_addr: str, to: str, subject: str, 
         return f"error: {e}"
 
 
+def html_to_text(html: str) -> str:
+    """Version texte d'un email HTML (partie text/plain) : paragraphes et
+    retours à la ligne gardés, liens affichés « texte (adresse) »."""
+    import html as _html
+    import re as _re
+    t = _re.sub(r"(?is)<(style|script|head)[^>]*>.*?</\1>", "", html or "")
+    t = _re.sub(r'(?is)<a\s[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+                lambda m: (f"{m.group(2)} ({m.group(1)})" if m.group(1) not in m.group(2) else m.group(2)), t)
+    t = _re.sub(r"(?i)<br\s*/?>", "\n", t)
+    t = _re.sub(r"(?i)</(p|h[1-6]|table)>", "\n\n", t)
+    t = _re.sub(r"(?i)</(div|tr|li)>", "\n", t)
+    t = _re.sub(r"(?i)<li[^>]*>", "- ", t)
+    t = _html.unescape(_re.sub(r"<[^>]+>", "", t))
+    t = _re.sub(r"[ \t ]+", " ", t)
+    return _re.sub(r"\n\s*\n\s*\n+", "\n\n", "\n".join(line.strip() for line in t.splitlines())).strip()
+
+
 def _smtp_send(host: str, port: int, use_tls: bool, user: str, password: str,
                from_addr: str, to: str, subject: str, body: str, attachment: dict = None, cc: list = None):
     import base64
@@ -132,14 +149,21 @@ def _smtp_send(host: str, port: int, use_tls: bool, user: str, password: str,
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
     from email.mime.application import MIMEApplication
+    from email.utils import formatdate, make_msgid, parseaddr
     msg = MIMEMultipart("mixed")
     msg["Subject"] = subject
     msg["From"] = from_addr
     msg["To"] = to
     if cc:
         msg["Cc"] = ", ".join(cc)
+    # Anti-spam (2026-11-19) : Date et Message-ID absents, et HTML sans
+    # version texte, font partie des signaux qui envoient un email en spam.
+    domain = (parseaddr(from_addr)[1].rpartition("@")[2] or "tdl-formation.fr").lower()
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain=domain)
     alt = MIMEMultipart("alternative")
-    alt.attach(MIMEText(body, "html"))
+    alt.attach(MIMEText(html_to_text(body), "plain", "utf-8"))
+    alt.attach(MIMEText(body, "html", "utf-8"))
     msg.attach(alt)
     if attachment:
         part = MIMEApplication(base64.b64decode(attachment["content_b64"]), Name=attachment["filename"])
