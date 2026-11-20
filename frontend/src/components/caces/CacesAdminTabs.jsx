@@ -11,10 +11,11 @@ import { UploadSimple, DownloadSimple, PencilSimple, Plus, Trash, Archive, FileP
 import { formatDateFR } from "@/lib/dateFormat";
 import { toast } from "sonner";
 import { DocumentsList, downloadPdf } from "@/components/caces/CacesExamPanel";
+import CacesIllustration from "@/components/caces/CacesIllustration";
 
 // Page CACES, côté équipe (demande du 2026-11-10) — backend routers/caces_exam.py :
-// - « Questions théoriques » : les 4 grilles vrai/faux, saisies ici ou
-//   importées d'un fichier Excel/CSV ;
+// - « Questions théoriques » : les 5 grilles officielles vrai/faux (R.489
+//   V1 - 12/2024, chargées en un clic le 2026-11-19), ou saisies / importées ;
 // - « Sessions » : jour de l'examen théorique (déverrouille les
 //   questionnaires du testeur ce jour-là) et archives de chaque session.
 
@@ -24,7 +25,22 @@ export function QuestionBankTab() {
   const [data, setData] = useState(null);
   const [editing, setEditing] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [loadingOfficial, setLoadingOfficial] = useState(false);
   const fileRef = useRef(null);
+
+  const loadOfficial = async () => {
+    if (!window.confirm("Remplacer les 5 grilles par les grilles officielles CACES® R.489 (V1 - 12/2024) : énoncés, réponses et illustrations ? Les questions saisies jusqu'ici seront remplacées.")) return;
+    setLoadingOfficial(true);
+    try {
+      const { data: res } = await api.post("/caces/theorie/grilles/officielles");
+      setData(res);
+      toast.success("Grilles officielles R.489 chargées : 5 grilles de 100 questions");
+    } catch (err) {
+      toast.error(errorDetail(err, "Chargement impossible"));
+    } finally {
+      setLoadingOfficial(false);
+    }
+  };
 
   const load = () => api.get("/caces/theorie/grilles").then((r) => setData(r.data)).catch(() => toast.error("Grilles non chargées"));
   useEffect(() => { load(); }, []);
@@ -53,22 +69,26 @@ export function QuestionBankTab() {
     <div className="space-y-4">
       <Card className="p-4 border border-gray-200 shadow-none text-sm text-gray-600 space-y-2">
         <p>
-          4 grilles de questions vrai/faux (recommandation R.489, annexe A3/1 : 100 questions par grille — 15 en
+          5 grilles officielles de questions vrai/faux (recommandation R.489, V1 - 12/2024 : 100 questions par grille — 15 en
           connaissances générales, 25 en technologie, 10 en abaque, 50 en exploitation). Le jour de l'examen, le testeur
-          imprime une copie par candidat : grille tirée au sort, questions dans un ordre aléatoire.
+          imprime une copie par candidat : grille tirée au sort, imprimée à l'identique de la grille officielle (logo TDL,
+          nom du candidat, colonnes VRAI / FAUX à cocher).
         </p>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => fileRef.current?.click()} disabled={importing} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+          <Button size="sm" onClick={loadOfficial} disabled={loadingOfficial} className="bg-[#0052CC] hover:bg-[#0041a3] text-white" data-testid="caces-grilles-officielles">
+            <Archive size={14} className="mr-1" /> {loadingOfficial ? "Chargement…" : "Charger les grilles officielles R.489"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={importing}>
             <UploadSimple size={14} className="mr-1" /> {importing ? "Import…" : "Importer un fichier (Excel / CSV)"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => downloadPdf("/caces/theorie/modele.xlsx", "modele_questions_caces_r489.xlsx")}>
             <DownloadSimple size={14} className="mr-1" /> Modèle de fichier
           </Button>
-          <Button size="sm" variant="outline" disabled={!hasQuestions} onClick={() => downloadPdf("/caces/theorie/grilles/toutes/questionnaire.pdf", "questionnaires_caces_4_grilles.pdf")} data-testid="caces-grilles-pdf">
-            <FilePdf size={14} className="mr-1" /> Les 4 grilles à imprimer
+          <Button size="sm" variant="outline" disabled={!hasQuestions} onClick={() => downloadPdf("/caces/theorie/grilles/toutes/questionnaire.pdf", "grilles_caces_r489.pdf")} data-testid="caces-grilles-pdf">
+            <FilePdf size={14} className="mr-1" /> Les 5 grilles à imprimer
           </Button>
-          <Button size="sm" variant="outline" disabled={!hasQuestions} onClick={() => downloadPdf("/caces/theorie/grilles/toutes/questionnaire.pdf?corrige=true", "corriges_caces_4_grilles.pdf")}>
-            <FilePdf size={14} className="mr-1" /> Corrigés des 4 grilles
+          <Button size="sm" variant="outline" disabled={!hasQuestions} onClick={() => downloadPdf("/caces/theorie/grilles/toutes/questionnaire.pdf?corrige=true", "corriges_caces_r489.pdf")}>
+            <FilePdf size={14} className="mr-1" /> Corrigés des 5 grilles
           </Button>
           <input ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={onImport} />
         </div>
@@ -162,8 +182,14 @@ function GridEditor({ numero, themes, onClose, onSaved }) {
             )}
             {questions.map((q, i) => (onlyToFix && q.revue?.statut !== "a_corriger") ? null : (
               <div key={i} className="flex gap-2 items-start border-b border-gray-100 pb-2">
-                <span className="text-xs font-semibold w-7 pt-2">{i + 1}.</span>
+                <span className="text-xs font-semibold w-12 pt-2" title={q.numero ? `Thème ${q.theme_num}, question ${q.numero}` : undefined}>
+                  {q.numero ? `T${q.theme_num}·${q.numero}` : `${i + 1}.`}
+                </span>
                 <div className="flex-1 space-y-1">
+                  {(q.rubrique || q.sous_rubrique) && (
+                    <p className="text-[11px] text-gray-500">{[q.rubrique, q.sous_rubrique].filter(Boolean).join(" — ")}{q.points ? ` (${q.points} pts)` : ""}</p>
+                  )}
+                  {q.illustration && <CacesIllustration name={q.illustration} className="max-w-md" />}
                   <Textarea rows={2} value={q.enonce} onChange={(e) => update(i, { enonce: e.target.value })} placeholder="Affirmation" />
                   <div className="flex flex-wrap gap-2">
                     <Select value={q.theme} onValueChange={(v) => update(i, { theme: v })}>

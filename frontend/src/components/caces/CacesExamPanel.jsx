@@ -146,8 +146,13 @@ export default function CacesExamPanel({ stage }) {
                   <div className="flex items-center gap-2">
                     {r && (
                       <Badge className={r.passed ? "bg-green-100 text-green-700 hover:bg-green-100" : "bg-red-100 text-red-700 hover:bg-red-100"}>
-                        {r.passed ? "Réussie" : "Échouée"} — {r.pct} %
+                        {r.passed ? "Réussie" : "Échouée"} — {r.bonnes}/{r.total}
                       </Badge>
+                    )}
+                    {c.copie?.copie_pdf && (
+                      <Button size="sm" variant="ghost" onClick={() => downloadPdf(`/caces/sessions/${stage.id}/theorie/copies/${c.copie.id}/copie.pdf`, `copie_corrigee_${c.copie.numero_copie}.pdf`)}>
+                        <FilePdf size={14} className="mr-1" /> Copie corrigée
+                      </Button>
                     )}
                     {isTesteur && c.copie && (
                       <Button size="sm" variant="outline" onClick={() => setCorrecting(c)} data-testid={`caces-correct-${c.inscription_id}`}>
@@ -222,7 +227,108 @@ export function DocumentsList({ documents }) {
   );
 }
 
-function CorrectionDialog({ stage, candidat, onClose, onSaved }) {
+function CorrectionDialog(props) {
+  if (!props.candidat) return null;
+  return props.candidat.copie?.officielle ? <TrueFalseCorrection {...props} /> : <ErrorsCorrection {...props} />;
+}
+
+// Copie d'une grille officielle R.489 (2026-11-19) : le testeur recopie les
+// cases cochées par le candidat, VRAI ou FAUX, question par question, dans
+// l'ordre de la grille papier ; les erreurs et la note sont calculées, et la
+// copie corrigée est regénérée en PDF (croix du candidat, erreurs entourées).
+function TrueFalseCorrection({ stage, candidat, onClose, onSaved }) {
+  const copie = candidat.copie;
+  const [grille, setGrille] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [result, setResult] = useState(copie?.resultat || null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get(`/caces/sessions/${stage.id}/theorie/copies/${copie.id}/grille`)
+      .then((r) => { setGrille(r.data); setAnswers(r.data.reponses || {}); })
+      .catch((e) => toast.error(e.response?.data?.detail || "Copie non chargée"));
+  }, [stage.id, copie.id]);
+
+  const total = (grille?.themes || []).reduce((n, t) => n + t.questions.length, 0);
+  const filled = Object.values(answers).filter((v) => v === true || v === false).length;
+  const set = (key, value) => setAnswers((a) => ({ ...a, [key]: a[key] === value ? null : value }));
+
+  const save = async () => {
+    if (filled < total && !window.confirm(`${total - filled} question(s) sans réponse : elles compteront comme fausses. Enregistrer quand même ?`)) return;
+    setSaving(true);
+    try {
+      const { data } = await api.post(`/caces/sessions/${stage.id}/theorie/copies/${copie.id}/correction`, { reponses: answers });
+      setResult(data);
+      toast.success(data.passed ? "Théorie réussie — copie corrigée enregistrée" : "Théorie échouée — copie corrigée enregistrée");
+      onSaved();
+    } catch (e) {
+      toast.error(await errorDetail(e, "Correction non enregistrée"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-display">
+            Correction — {candidat.student_name} (copie n°{copie.numero_copie}, grille {copie.grille})
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-gray-600">
+          Recopiez les cases cochées par le candidat sur sa grille papier : <b>VRAI</b> ou <b>FAUX</b> pour chaque question.
+          {" "}{filled}/{total} réponse(s) saisie(s). Une question laissée vide compte comme fausse.
+        </p>
+        {!grille ? <p className="text-sm text-gray-400">Chargement…</p> : (
+          <div className="space-y-4" data-testid="caces-correction-vf">
+            {grille.themes.map((t) => (
+              <div key={t.num}>
+                <p className="text-xs font-semibold bg-[#17375e] text-white px-2 py-1 rounded-t">THÈME {t.num} : {t.label.toUpperCase()}</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 border border-t-0 border-gray-200 rounded-b p-2">
+                  {t.questions.map((q) => (
+                    <div key={q.key} className="flex items-center justify-between gap-2 py-0.5 border-b border-dashed border-gray-100">
+                      <span className="text-sm font-medium w-8 text-right">{q.numero}</span>
+                      <div className="flex gap-1">
+                        {[[true, "VRAI"], [false, "FAUX"]].map(([v, label]) => (
+                          <button key={label} type="button" onClick={() => set(q.key, v)} data-testid={`caces-vf-${q.key}-${label}`}
+                            className={`text-[11px] font-semibold w-12 h-7 rounded border ${answers[q.key] === v
+                              ? "bg-[#0052CC] text-white border-[#0052CC]" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {result && (
+          <Card className={`p-3 shadow-none border ${result.passed ? "border-green-300 bg-green-50" : "border-red-300 bg-red-50"}`}>
+            <p className="font-medium text-sm">{result.passed ? "Favorable" : "Défavorable"} — {result.bonnes}/{result.total}</p>
+            {Object.values(result.par_theme || {}).map((t) => (
+              <p key={t.label} className="text-xs">{t.label} : {t.bonnes}/{t.total}{t.pct !== null && t.pct < 50 ? " — sous la moyenne" : ""}</p>
+            ))}
+            <Button size="sm" variant="outline" className="mt-2"
+              onClick={() => downloadPdf(`/caces/sessions/${stage.id}/theorie/copies/${copie.id}/copie.pdf`, `copie_corrigee_${copie.numero_copie}.pdf`)}>
+              <FilePdf size={14} className="mr-1" /> Copie corrigée (PDF)
+            </Button>
+          </Card>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>Fermer</Button>
+          <Button onClick={save} disabled={saving || !grille} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="caces-correction-save">
+            Enregistrer la correction
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ErrorsCorrection({ stage, candidat, onClose, onSaved }) {
   const copie = candidat?.copie;
   const [wrong, setWrong] = useState(new Set());
   const [result, setResult] = useState(null);
@@ -293,9 +399,14 @@ function PracticalDialog({ stage, candidat, categories, onClose, onSaved }) {
   const [notes, setNotes] = useState({});
   const [chariot, setChariot] = useState("");
   const [observations, setObservations] = useState("");
+  // Fiche officielle TDL : horaires et temps des 3 séquences (prise de poste, conduite + manœuvres, fin de poste).
+  const [horaires, setHoraires] = useState({ heure_debut: "", heure_fin: "", T1: "", T2: "", T3: "" });
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setCategory(""); setGrille(null); setNotes({}); setChariot(""); setObservations(""); }, [candidat]);
+  useEffect(() => {
+    setCategory(""); setGrille(null); setNotes({}); setChariot(""); setObservations("");
+    setHoraires({ heure_debut: "", heure_fin: "", T1: "", T2: "", T3: "" });
+  }, [candidat]);
   useEffect(() => {
     if (!category) return;
     api.get(`/caces/grilles-pratiques/${category}`).then((r) => { setGrille(r.data); setNotes({}); }).catch(() => toast.error("Grille non chargée"));
@@ -338,6 +449,8 @@ function PracticalDialog({ stage, candidat, categories, onClose, onSaved }) {
       const clean = Object.fromEntries(Object.entries(notes).map(([k, v]) => [k, Number(v) || 0]));
       const { data } = await api.post(`/caces/sessions/${stage.id}/pratique`, {
         inscription_id: candidat.inscription_id, category, notes: clean, chariot: chariot || null, observations: observations || null,
+        heure_debut: horaires.heure_debut || null, heure_fin: horaires.heure_fin || null,
+        temps: { T1: horaires.T1, T2: horaires.T2, T3: horaires.T3 },
       });
       toast.success(data.passed ? `Pratique cat. ${category} réussie (${data.total}/100)` : `Pratique cat. ${category} échouée (${data.total}/100)`);
       onSaved();
@@ -361,6 +474,19 @@ function PracticalDialog({ stage, candidat, categories, onClose, onSaved }) {
             <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>Catégorie {c}</SelectItem>)}</SelectContent>
           </Select>
           <Input placeholder="Chariot utilisé (marque, modèle, n°)" value={chariot} onChange={(e) => setChariot(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2" data-testid="caces-practical-horaires">
+          <label className="text-[11px] text-gray-500">Début
+            <Input type="time" value={horaires.heure_debut} onChange={(e) => setHoraires({ ...horaires, heure_debut: e.target.value })} />
+          </label>
+          <label className="text-[11px] text-gray-500">Fin
+            <Input type="time" value={horaires.heure_fin} onChange={(e) => setHoraires({ ...horaires, heure_fin: e.target.value })} />
+          </label>
+          {[["T1", "T1 prise de poste"], ["T2", "T2 conduite + manœuvres"], ["T3", "T3 fin de poste"]].map(([k, label]) => (
+            <label key={k} className="text-[11px] text-gray-500">{label}
+              <Input placeholder="ex. 4 min" value={horaires[k]} onChange={(e) => setHoraires({ ...horaires, [k]: e.target.value })} />
+            </label>
+          ))}
         </div>
         {grille && (
           <>
@@ -414,27 +540,33 @@ function PracticalDialog({ stage, candidat, categories, onClose, onSaved }) {
   );
 }
 
-const EMPTY_ADEQUATION = {
-  categories: "", chariot_type: "", chariot_marque: "", chariot_modele: "", chariot_numero: "",
-  chariot_capacite: "", vgp_date: "", observations: "",
-};
-
+// Examen d'adéquation sur le document officiel TDL 4.5.2 (2026-11-19) : à
+// remplir chaque jour de test, en début de journée. Le testeur coche les
+// catégories du jour ; seules les vérifications de ces catégories sont
+// proposées (zone d'évolution, charges, palettier, camion) avec les documents
+// de chaque machine. Le document est regénéré à l'identique, cases cochées.
 function AdequationForm({ stage, state, isTesteur, onSaved }) {
-  const [form, setForm] = useState(EMPTY_ADEQUATION);
-  const [checks, setChecks] = useState({});
+  const items = state.adequation_officielle || [];
+  const [cases, setCases] = useState(new Set());
+  const [observations, setObservations] = useState("");
   const [saving, setSaving] = useState(false);
   const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
   const todayEntries = state.adequations.filter((a) => a.date === today);
-  const allOk = state.checklist.every((c) => checks[c.key]);
-  const groups = state.checklist.reduce((acc, c) => { (acc[c.groupe] = acc[c.groupe] || []).push(c); return acc; }, {});
+  const categories = items.filter((c) => c.section === "categories");
+  const selectedCats = categories.filter((c) => cases.has(c.key)).map((c) => c.categories[0]);
+  const required = items.filter((c) => c.section === "documents"
+    || (c.section !== "categories" && c.categories.some((cat) => selectedCats.includes(cat))));
+  const missing = required.filter((c) => !cases.has(c.key));
+  const sections = required.reduce((acc, c) => { (acc[c.section_label] = acc[c.section_label] || []).push(c); return acc; }, {});
+  const toggle = (key) => setCases((x) => { const n = new Set(x); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   const save = async (conforme) => {
     setSaving(true);
     try {
-      await api.post(`/caces/sessions/${stage.id}/adequation`, { ...form, vgp_date: form.vgp_date || null, checks, conforme });
-      toast.success("Examen d'adéquation enregistré et archivé");
-      setForm(EMPTY_ADEQUATION);
-      setChecks({});
+      await api.post(`/caces/sessions/${stage.id}/adequation`, { cases: [...cases], conforme, observations });
+      toast.success("Examen d'adéquation enregistré — document archivé");
+      setCases(new Set());
+      setObservations("");
       onSaved();
     } catch (e) {
       toast.error(await errorDetail(e, "Non enregistré"));
@@ -447,39 +579,49 @@ function AdequationForm({ stage, state, isTesteur, onSaved }) {
     <div className="space-y-4">
       <div className={`p-3 rounded-md text-sm ${todayEntries.length ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-800"}`}>
         {todayEntries.length
-          ? `${todayEntries.length} chariot(s) vérifié(s) aujourd'hui : ${todayEntries.map((a) => a.chariot_modele || a.chariot_numero).join(", ")}`
-          : "À faire avant les épreuves pratiques : vérifiez chaque chariot utilisé aujourd'hui."}
+          ? `Examen d'adéquation fait aujourd'hui (${todayEntries.map((a) => a.categories || a.chariot_modele || a.chariot_numero).join(" ; ")}).`
+          : "À faire chaque jour de test, en début de journée, avant les épreuves pratiques."}
       </div>
       {isTesteur && (
-        <Card className="p-4 border border-gray-200 shadow-none space-y-3">
-          <div className="grid sm:grid-cols-3 gap-2">
-            <Input placeholder="Catégorie(s) testée(s)" value={form.categories} onChange={(e) => setForm({ ...form, categories: e.target.value })} />
-            <Input placeholder="Type (frontal, gerbeur…)" value={form.chariot_type} onChange={(e) => setForm({ ...form, chariot_type: e.target.value })} />
-            <Input placeholder="Marque" value={form.chariot_marque} onChange={(e) => setForm({ ...form, chariot_marque: e.target.value })} />
-            <Input placeholder="Modèle" value={form.chariot_modele} onChange={(e) => setForm({ ...form, chariot_modele: e.target.value })} />
-            <Input placeholder="N° de série / identification" value={form.chariot_numero} onChange={(e) => setForm({ ...form, chariot_numero: e.target.value })} />
-            <Input placeholder="Capacité / hauteur de levée" value={form.chariot_capacite} onChange={(e) => setForm({ ...form, chariot_capacite: e.target.value })} />
-          </div>
-          <label className="text-xs text-gray-600 flex items-center gap-2">
-            Date de la dernière vérification générale périodique
-            <Input type="date" className="w-44" value={form.vgp_date} onChange={(e) => setForm({ ...form, vgp_date: e.target.value })} />
-          </label>
-          {Object.entries(groups).map(([groupe, items]) => (
-            <div key={groupe}>
-              <p className="text-sm font-semibold mb-1">{groupe}</p>
-              {items.map((c) => (
+        <Card className="p-4 border border-gray-200 shadow-none space-y-4" data-testid="caces-adequation-form">
+          <div>
+            <p className="text-sm font-semibold mb-1">1. Catégories testées aujourd'hui</p>
+            <div className="grid sm:grid-cols-2 gap-x-4">
+              {categories.map((c) => (
                 <label key={c.key} className="flex items-start gap-2 py-1 text-sm cursor-pointer">
-                  <Checkbox checked={!!checks[c.key]} onCheckedChange={(v) => setChecks((x) => ({ ...x, [c.key]: !!v }))} className="mt-0.5" />
+                  <Checkbox checked={cases.has(c.key)} onCheckedChange={() => toggle(c.key)} className="mt-0.5" data-testid={`caces-adeq-${c.key}`} />
                   {c.label}
                 </label>
               ))}
             </div>
-          ))}
-          <Textarea placeholder="Observations" value={form.observations} onChange={(e) => setForm({ ...form, observations: e.target.value })} />
+          </div>
+          {selectedCats.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold mb-1">2. Vérifications du site et du matériel ({missing.length ? `${missing.length} restante(s)` : "tout est coché"})</p>
+              {Object.entries(sections).map(([label, list]) => (
+                <div key={label} className="mb-2">
+                  <p className="text-xs font-semibold text-[#17375e] bg-[#dbe5f1] px-2 py-0.5 rounded">{label}</p>
+                  {list.map((c) => (
+                    <label key={c.key} className="flex items-start gap-2 py-1 text-sm cursor-pointer">
+                      <Checkbox checked={cases.has(c.key)} onCheckedChange={() => toggle(c.key)} className="mt-0.5" data-testid={`caces-adeq-${c.key}`} />
+                      <span>
+                        {c.categories.length > 0 && <Badge variant="outline" className="mr-1 text-[10px]">{c.categories.join(", ")}</Badge>}
+                        {c.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+          <Textarea placeholder="Observations (facultatif)" value={observations} onChange={(e) => setObservations(e.target.value)} />
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="outline" disabled={saving} onClick={() => save(false)} className="text-red-700">Chariot non apte</Button>
-            <Button disabled={saving || !allOk} onClick={() => save(true)} className="bg-[#0B7238] hover:bg-[#095c2d] text-white" data-testid="caces-adequation-ok">
-              <CheckCircle size={14} className="mr-1" /> Chariot apte — enregistrer
+            <Button variant="outline" disabled={saving || !selectedCats.length} onClick={() => save(false)} className="text-red-700">
+              Non adapté — enregistrer
+            </Button>
+            <Button disabled={saving || !selectedCats.length || missing.length > 0} onClick={() => save(true)}
+              className="bg-[#0B7238] hover:bg-[#095c2d] text-white" data-testid="caces-adequation-ok">
+              <CheckCircle size={14} className="mr-1" /> Adapté — enregistrer et générer le document
             </Button>
           </div>
         </Card>
@@ -487,9 +629,9 @@ function AdequationForm({ stage, state, isTesteur, onSaved }) {
       <div className="space-y-1">
         {state.adequations.map((a) => (
           <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 py-2 text-sm">
-            <span>{formatDateFR(a.date)} — {[a.chariot_marque, a.chariot_modele, a.chariot_numero].filter(Boolean).join(" ")} — {a.testeur_name}</span>
+            <span>{formatDateFR(a.date)} — {a.officiel ? `catégories ${a.categories}` : [a.chariot_marque, a.chariot_modele, a.chariot_numero].filter(Boolean).join(" ")} — {a.testeur_name}</span>
             <span className="flex items-center gap-2">
-              <Badge className={a.conforme ? "bg-green-100 text-green-700 hover:bg-green-100" : "bg-red-100 text-red-700 hover:bg-red-100"}>{a.conforme ? "Apte" : "Non apte"}</Badge>
+              <Badge className={a.conforme ? "bg-green-100 text-green-700 hover:bg-green-100" : "bg-red-100 text-red-700 hover:bg-red-100"}>{a.conforme ? (a.officiel ? "Adapté" : "Apte") : (a.officiel ? "Non adapté" : "Non apte")}</Badge>
               {a.document_id && (
                 <Button size="sm" variant="ghost" onClick={() => downloadPdf(`/caces/documents/${a.document_id}/download`, `adequation_${a.date}.pdf`)}>
                   <FilePdf size={14} />

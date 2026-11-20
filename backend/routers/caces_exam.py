@@ -1,7 +1,7 @@
 """Épreuves CACES® R.489 pendant la session (demande du 2026-11-10).
 
 Côté équipe (page CACES) :
-- banque des 4 grilles de questions théoriques vrai/faux (saisie ou import
+- banque des 5 grilles officielles de questions vrai/faux (chargement, saisie ou import
   d'un fichier Excel/CSV) ;
 - jour d'examen de chaque session CACES et archives des documents.
 
@@ -40,6 +40,9 @@ from core.utils import now_iso
 from models.caces import CACES_CATEGORIES, CACES_MAX_CANDIDATS
 from routers.stages import _stage_animateur_ids, require_formateur_access
 from services import caces_exam_pdf as pdfs
+from services import caces_r489_pdf as r489
+from services import caces_adequation_pdf as adequation_doc
+from services import caces_pratique_pdf as pratique_doc
 from services.caces import compute_attempt_status, today_iso
 
 router = APIRouter(prefix="/caces", tags=["caces-examen"])
@@ -183,6 +186,14 @@ class QuestionIn(BaseModel):
     theme: str
     enonce: str
     reponse: bool
+    # Repères de la grille officielle (numérotation par thème, rubrique,
+    # illustration) — gardés tels quels quand l'équipe modifie une question.
+    theme_num: Optional[int] = None
+    numero: Optional[int] = None
+    rubrique: Optional[str] = None
+    sous_rubrique: Optional[str] = None
+    points: Optional[int] = None
+    illustration: Optional[str] = None
 
 
 class GrilleIn(BaseModel):
@@ -270,10 +281,52 @@ async def download_grille(numero: str, corrige: bool = False, user: dict = Depen
               for n in numeros if (docs.get(n) or {}).get("questions")]
     if not copies:
         raise HTTPException(status_code=404, detail="Aucune question saisie dans cette grille")
+    if all(_officielle(c["questions"], c["grille"]) for c in copies):
+        doc = None
+        for c in copies:
+            doc = r489.render(c["grille"], "corrige" if corrige else "vierge",
+                              reponses_bank=_bank_answers(c["questions"]), out=doc)
+        name = f"{'corrige' if corrige else 'grille'}_caces_r489_{numero}.pdf"
+        return _pdf_response(r489.pdf_bytes(doc), name)
     stage = {"formation_titre": "Banque de questions", "lieu_ville": "TDL Formation"}
     if corrige:
         return _pdf_response(pdfs.corriges_pdf(copies, stage), f"corrige_caces_grille_{numero}.pdf")
     return _pdf_response(pdfs.questionnaires_pdf(copies, stage), f"questionnaire_caces_grille_{numero}.pdf")
+
+
+def _officielle(questions: List[dict], grille: str) -> bool:
+    """Copie tirée d'une grille officielle R.489 (questions numérotées comme
+    sur le PDF d'origine) : imprimée à l'identique (services/caces_r489_pdf.py)."""
+    return grille in GRILLES_THEORIE and bool(questions) and all(q.get("numero") and q.get("theme_num") for q in questions)
+
+
+def _bank_answers(questions: List[dict]) -> Dict[str, bool]:
+    return {r489.qkey(q): bool(q.get("reponse")) for q in questions}
+
+
+@router.post("/theorie/grilles/officielles")
+async def load_official_grids(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Remplace la banque par les 5 grilles officielles R.489 (V1 - 12/2024) :
+    énoncés, réponses, rubriques et illustrations, dans l'ordre de la grille."""
+    keep = ("theme", "theme_num", "numero", "rubrique", "sous_rubrique", "points", "enonce", "reponse", "illustration")
+    for numero in GRILLES_THEORIE:
+        questions = [{k: q.get(k) for k in keep if q.get(k) is not None} for q in r489.official_questions(numero)]
+        await _save_grille(numero, questions, {**user, "name": f"{user.get('name')} (grilles officielles R.489 {r489.grilles()['version']})"})
+    return await list_grilles(user)
+
+
+@router.get("/theorie/illustrations/{name}")
+async def question_illustration(name: str, user: dict = Depends(get_current_user)):
+    """Illustration d'une question (image ou schéma de la grille officielle) :
+    équipe et formateurs CACES uniquement — le contenu de l'examen ne sort pas."""
+    import re as _re
+    _require_revue(user)
+    if not _re.fullmatch(r"g[1-5]_t[1-4]_q\d{1,2}\.png", name):
+        raise HTTPException(status_code=404, detail="Illustration inconnue")
+    path = r489.BASE / "images" / name
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Illustration inconnue")
+    return Response(content=path.read_bytes(), media_type="image/png", headers={"Cache-Control": "private, max-age=86400"})
 
 
 async def _save_grille(numero: str, questions: List[dict], user: dict) -> None:
@@ -294,14 +347,16 @@ async def save_grille(numero: str, payload: GrilleIn, user: dict = Depends(requi
             raise HTTPException(status_code=400, detail=f"Question {i} : thème inconnu")
         if not q.enonce.strip():
             raise HTTPException(status_code=400, detail=f"Question {i} : énoncé vide")
-        questions.append({"theme": q.theme, "enonce": q.enonce.strip(), "reponse": q.reponse})
+        meta = {k: getattr(q, k) for k in ("theme_num", "numero", "rubrique", "sous_rubrique", "points", "illustration")
+                if getattr(q, k) is not None}
+        questions.append({"theme": q.theme, "enonce": q.enonce.strip(), "reponse": q.reponse, **meta})
     await _save_grille(numero, questions, user)
     return _grille_summary(numero, {"questions": questions, "updated_at": now_iso(), "updated_by": user.get("name")})
 
 
 @router.get("/theorie/revue")
 async def revue_grilles(user: dict = Depends(get_current_user)):
-    """Les 4 grilles avec la revue de chaque question (espace formateur,
+    """Les 5 grilles avec la revue de chaque question (espace formateur,
     onglet « Validation des questions »)."""
     _require_revue(user)
     docs = {d["numero"]: d for d in await db.caces_theorie_grilles.find({}, {"_id": 0}).to_list(10)}
@@ -312,7 +367,9 @@ async def revue_grilles(user: dict = Depends(get_current_user)):
         grilles.append({
             "numero": n, "stats": _revue_stats(n, qs, reviews),
             "questions": [{"qid": _qid(q), "numero_question": i, "theme": q["theme"], "enonce": q["enonce"],
-                           "reponse": q["reponse"], "revue": reviews.get((n, _qid(q)))} for i, q in enumerate(qs, start=1)],
+                           "reponse": q["reponse"], "revue": reviews.get((n, _qid(q))),
+                           "theme_num": q.get("theme_num"), "numero": q.get("numero"), "illustration": q.get("illustration"),
+                           "sous_rubrique": q.get("sous_rubrique")} for i, q in enumerate(qs, start=1)],
         })
     return {"themes": [{"key": k, "label": l} for k, l, _ in THEMES_THEORIE], "grilles": grilles}
 
@@ -522,7 +579,11 @@ async def session_exam_state(sid: str, user: dict = Depends(get_current_user)):
     candidats = await _candidats(stage)
     copies = {}
     for c in await db.caces_theorie_copies.find({"stage_id": sid}, {"_id": 0}).to_list(200):
-        c["nb_questions"] = len(c.pop("questions", None) or [])  # le contenu des questions ne sort pas d'ici
+        qs = c.pop("questions", None) or []  # le contenu des questions ne sort pas d'ici
+        c["nb_questions"] = len(qs)
+        c["officielle"] = _officielle(qs, c.get("grille"))
+        c["copie_pdf"] = bool((c.get("resultat") or {}).get("reponses"))
+        (c.get("resultat") or {}).pop("reponses", None)
         copies[c["inscription_id"]] = c
     evals = await db.caces_pratique_evaluations.find({"stage_id": sid}, {"_id": 0, "notes": 0}).sort("created_at", 1).to_list(500)
     attempts = await db.caces_exam_attempts.find({"student_id": {"$in": [c["student_id"] for c in candidats if c.get("student_id")]}}, {"_id": 0}).to_list(500)
@@ -540,6 +601,7 @@ async def session_exam_state(sid: str, user: dict = Depends(get_current_user)):
         "adequations": await db.caces_adequations.find({"stage_id": sid}, {"_id": 0}).sort("created_at", -1).to_list(100),
         "documents": await db.caces_documents.find(doc_query, {"_id": 0, "path": 0}).sort("created_at", -1).to_list(300),
         "checklist": [{"key": k, "label": l, "groupe": g} for k, l, g in ADEQUATION_CHECKLIST],
+        "adequation_officielle": adequation_doc.checklist(),
     }
 
 
@@ -553,6 +615,32 @@ class GenerateIn(BaseModel):
 
 async def _copies(sid: str) -> List[dict]:
     return await db.caces_theorie_copies.find({"stage_id": sid}, {"_id": 0}).sort("numero_copie", 1).to_list(200)
+
+
+def _entete(copie: dict, stage: dict) -> dict:
+    d = copie.get("date") or ""
+    return {"candidat": copie.get("student_name"), "numero_copie": copie.get("numero_copie"),
+            "date": f"{d[8:10]}/{d[5:7]}/{d[:4]}" if len(d) >= 10 else "", "testeur": copie.get("testeur_name")}
+
+
+def _papers_pdf(copies: List[dict], stage: dict, corrige: bool) -> bytes:
+    """Questionnaires (ou corrigés) de la session : grilles officielles à
+    l'identique avec le nom du candidat ; ancien format pour les copies tirées
+    d'une grille saisie à la main."""
+    if not all(_officielle(c.get("questions") or [], c.get("grille")) for c in copies):
+        return pdfs.corriges_pdf(copies, stage) if corrige else pdfs.questionnaires_pdf(copies, stage)
+    doc = None
+    for c in copies:
+        doc = r489.render(c["grille"], "corrige" if corrige else "vierge", _entete(c, stage),
+                          reponses_bank=_bank_answers(c["questions"]), out=doc)
+    return r489.pdf_bytes(doc)
+
+
+def copie_corrigee_pdf(copie: dict, stage: dict) -> bytes:
+    res = copie.get("resultat") or {}
+    doc = r489.render(copie["grille"], "copie", _entete(copie, stage), reponses_bank=_bank_answers(copie["questions"]),
+                      reponses_candidat=res.get("reponses") or {}, resultat=res)
+    return r489.pdf_bytes(doc)
 
 
 @router.post("/sessions/{sid}/theorie/generer")
@@ -576,7 +664,8 @@ async def generate_papers(sid: str, payload: GenerateIn, user: dict = Depends(ge
             continue
         numero = _rng.choice(sorted(grilles))
         questions = list(grilles[numero])
-        _rng.shuffle(questions)
+        if not _officielle(questions, numero):
+            _rng.shuffle(questions)  # grille officielle : ordre et pages de la grille d'origine
         doc = {
             "id": old["id"] if old else str(uuid.uuid4()), "stage_id": sid, "inscription_id": cand["inscription_id"],
             "student_id": cand.get("student_id"), "student_name": cand.get("student_name"),
@@ -589,8 +678,8 @@ async def generate_papers(sid: str, payload: GenerateIn, user: dict = Depends(ge
             next_num += 1
         await db.caces_theorie_copies.replace_one({"id": doc["id"]}, doc, upsert=True)
     copies = await _copies(sid)
-    await _archive("questionnaires", f"Questionnaires théoriques ({len(copies)} copies)", stage, user, pdfs.questionnaires_pdf(copies, stage))
-    await _archive("corriges", f"Corrigés des questionnaires ({len(copies)} copies)", stage, user, pdfs.corriges_pdf(copies, stage))
+    await _archive("questionnaires", f"Questionnaires théoriques ({len(copies)} copies)", stage, user, _papers_pdf(copies, stage, False))
+    await _archive("corriges", f"Corrigés des questionnaires ({len(copies)} copies)", stage, user, _papers_pdf(copies, stage, True))
     return await session_exam_state(sid, user)
 
 
@@ -626,7 +715,7 @@ async def download_papers(sid: str, user: dict = Depends(get_current_user)):
     copies = await _copies(sid)
     if not copies:
         raise HTTPException(status_code=404, detail="Questionnaires pas encore générés")
-    return _pdf_response(pdfs.questionnaires_pdf(copies, stage), f"questionnaires_caces_{exam_date(stage)}.pdf")
+    return _pdf_response(_papers_pdf(copies, stage, False), f"questionnaires_caces_{exam_date(stage)}.pdf")
 
 
 @router.get("/sessions/{sid}/theorie/corriges.pdf")
@@ -636,11 +725,14 @@ async def download_answer_keys(sid: str, user: dict = Depends(get_current_user))
     copies = await _copies(sid)
     if not copies:
         raise HTTPException(status_code=404, detail="Questionnaires pas encore générés")
-    return _pdf_response(pdfs.corriges_pdf(copies, stage), f"corriges_caces_{exam_date(stage)}.pdf")
+    return _pdf_response(_papers_pdf(copies, stage, True), f"corriges_caces_{exam_date(stage)}.pdf")
 
 
 class CorrectionIn(BaseModel):
     erreurs: List[int] = []
+    # Réponses cochées par le candidat, question par question (clé « t{thème}_{numéro} »
+    # de la grille officielle) : le testeur recopie la copie, les erreurs sont déduites.
+    reponses: Optional[Dict[str, Optional[bool]]] = None
 
 
 async def _apply_result(student_id: str, category: Optional[str], field: str, result: dict) -> List[dict]:
@@ -671,10 +763,19 @@ async def correct_paper(sid: str, cid: str, payload: CorrectionIn, user: dict = 
     if not copie:
         raise HTTPException(status_code=404, detail="Copie introuvable")
     n = len(copie["questions"])
-    if any(e < 1 or e > n for e in payload.erreurs):
+    erreurs = payload.erreurs
+    if payload.reponses is not None:
+        if not _officielle(copie["questions"], copie.get("grille")):
+            raise HTTPException(status_code=400, detail="Cette copie se corrige par numéros d'erreurs")
+        # Réponse fausse ou absente = erreur (numérotation de la copie, 1..N).
+        erreurs = [i for i, q in enumerate(copie["questions"], start=1)
+                   if payload.reponses.get(r489.qkey(q)) is None or bool(payload.reponses.get(r489.qkey(q))) != bool(q.get("reponse"))]
+    if any(e < 1 or e > n for e in erreurs):
         raise HTTPException(status_code=400, detail=f"Numéros de questions entre 1 et {n}")
-    result = score_theorie(copie["questions"], payload.erreurs)
+    result = score_theorie(copie["questions"], erreurs)
     result.update({"date": today_iso(), "testeur_id": user["id"], "testeur_name": user.get("name"), "corrige_at": now_iso()})
+    if payload.reponses is not None:
+        result["reponses"] = {r489.qkey(q): payload.reponses.get(r489.qkey(q)) for q in copie["questions"]}
     await db.caces_theorie_copies.update_one({"id": cid}, {"$set": {"resultat": result}})
     if copie.get("student_id"):
         await _apply_result(copie["student_id"], None, "theorie", {
@@ -683,7 +784,39 @@ async def correct_paper(sid: str, cid: str, payload: CorrectionIn, user: dict = 
     await _archive("resultat_theorie", f"Résultat théorique — {copie.get('student_name')}", stage, user,
                    pdfs.resultat_theorie_pdf(copie, result, stage, user.get("name") or "", await _signature(user["id"])),
                    student_name=copie.get("student_name"))
+    if result.get("reponses"):
+        await _archive("copie_theorie", f"Copie corrigée (grille {copie['grille']}) — {copie.get('student_name')}", stage, user,
+                       copie_corrigee_pdf({**copie, "resultat": result}, stage), student_name=copie.get("student_name"))
     return result
+
+
+@router.get("/sessions/{sid}/theorie/copies/{cid}/grille")
+async def copie_grille(sid: str, cid: str, user: dict = Depends(get_current_user)):
+    """Questions d'une copie pour la saisie VRAI / FAUX du testeur : numéro et
+    thème — sans l'énoncé ni la réponse attendue."""
+    stage = await _stage(sid)
+    _require_testeur(user, stage)
+    copie = await db.caces_theorie_copies.find_one({"id": cid, "stage_id": sid}, {"_id": 0})
+    if not copie:
+        raise HTTPException(status_code=404, detail="Copie introuvable")
+    if not _officielle(copie["questions"], copie.get("grille")):
+        return {"officielle": False, "nb_questions": len(copie["questions"])}
+    return {"officielle": True, "grille": copie["grille"], "student_name": copie.get("student_name"),
+            "reponses": ((copie.get("resultat") or {}).get("reponses") or {}),
+            "themes": [{"num": n, "label": label, "questions": [{"key": r489.qkey(q), "numero": q["numero"]}
+                                                              for q in copie["questions"] if q.get("theme_num") == n]}
+                       for n, (_k, label, _b) in enumerate(THEMES_THEORIE, start=1)]}
+
+
+@router.get("/sessions/{sid}/theorie/copies/{cid}/copie.pdf")
+async def copie_corrigee(sid: str, cid: str, user: dict = Depends(get_current_user)):
+    stage = await _stage(sid)
+    if not _is_staff(user):
+        _require_testeur(user, stage)
+    copie = await db.caces_theorie_copies.find_one({"id": cid, "stage_id": sid}, {"_id": 0})
+    if not copie or not (copie.get("resultat") or {}).get("reponses"):
+        raise HTTPException(status_code=404, detail="Copie pas encore corrigée case par case")
+    return _pdf_response(copie_corrigee_pdf(copie, stage), f"copie_corrigee_{copie.get('numero_copie')}.pdf")
 
 
 # ---------------------------------------------------------------------------
@@ -704,6 +837,11 @@ class PratiqueIn(BaseModel):
     notes: Dict[str, float] = {}
     chariot: Optional[str] = None
     observations: Optional[str] = None
+    # Fiche officielle TDL (2026-11-19) : horaires de l'épreuve et temps des
+    # trois séquences (prise de poste, conduite + manœuvres, fin de poste).
+    heure_debut: Optional[str] = None
+    heure_fin: Optional[str] = None
+    temps: Dict[str, str] = {}
 
 
 @router.post("/sessions/{sid}/pratique")
@@ -740,6 +878,8 @@ async def record_practical(sid: str, payload: PratiqueIn, user: dict = Depends(g
         "id": str(uuid.uuid4()), "stage_id": sid, "inscription_id": cand["inscription_id"], "student_id": cand["student_id"],
         "student_name": cand.get("student_name"), "category": payload.category, "notes": payload.notes,
         "chariot": payload.chariot, "observations": payload.observations, "date": today_iso(),
+        "heure_debut": payload.heure_debut, "heure_fin": payload.heure_fin,
+        "temps": {k: v for k, v in (payload.temps or {}).items() if k in ("T1", "T2", "T3") and v},
         "total": score["total"], "passed": score["passed"], "detail": score["volets"],
         "testeur_id": user["id"], "testeur_name": user.get("name"), "attempt_id": attempt["id"], "created_at": now_iso(),
     }
@@ -747,8 +887,13 @@ async def record_practical(sid: str, payload: PratiqueIn, user: dict = Depends(g
     await _apply_result(cand["student_id"], payload.category, "pratique", {
         "passed": score["passed"], "date": evaluation["date"], "testeur_name": user.get("name"),
         "total": score["total"], "evaluation_id": evaluation["id"]})
-    await _archive("grille_pratique", f"Grille pratique cat. {payload.category} — {cand.get('student_name')}", stage, user,
-                   pdfs.grille_pratique_pdf(evaluation, grille, score, stage, user.get("name") or "", await _signature(user["id"])),
+    signature = await _signature(user["id"])
+    d = evaluation["date"]
+    # Fiche officielle TDL (catégories 1B, 3, 5) remplie à l'identique, sinon la grille générique.
+    pdf = pratique_doc.render(payload.category, grille, payload.notes, score, {
+        "candidat": cand.get("student_name"), "date": f"{d[8:10]}/{d[5:7]}/{d[:4]}", "debut": payload.heure_debut,
+        "fin": payload.heure_fin, "testeur": user.get("name")}, evaluation["temps"], signature) or pdfs.grille_pratique_pdf(evaluation, grille, score, stage, user.get("name") or "", signature)
+    await _archive("grille_pratique", f"Évaluation pratique cat. {payload.category} — {cand.get('student_name')}", stage, user, pdf,
                    student_name=cand.get("student_name"), category=payload.category)
     evaluation.pop("notes", None)
     return evaluation
@@ -769,12 +914,17 @@ class AdequationIn(BaseModel):
     checks: Dict[str, bool] = {}
     conforme: bool
     observations: Optional[str] = None
+    # Document officiel TDL 4.5.2 (2026-11-19) : clés des cases cochées
+    # (services/caces_adequation_pdf.py) — remplace la liste ci-dessus.
+    cases: Optional[List[str]] = None
 
 
 @router.post("/sessions/{sid}/adequation")
 async def record_adequation(sid: str, payload: AdequationIn, user: dict = Depends(get_current_user)):
     stage = await _stage(sid)
     _require_testeur(user, stage)
+    if payload.cases is not None:
+        return await _record_adequation_officielle(stage, payload, user)
     if not (payload.chariot_numero or payload.chariot_modele):
         raise HTTPException(status_code=400, detail="Identifiez le chariot (modèle ou numéro de série)")
     checks = {k: bool(payload.checks.get(k)) for k in _CHECK_KEYS}
@@ -784,6 +934,31 @@ async def record_adequation(sid: str, payload: AdequationIn, user: dict = Depend
              "testeur_id": user["id"], "testeur_name": user.get("name"), "created_at": now_iso()}
     pdf = pdfs.adequation_pdf(entry, ADEQUATION_CHECKLIST, stage, user.get("name") or "", await _signature(user["id"]))
     archived = await _archive("adequation", f"Examen d'adéquation — {entry.get('chariot_modele') or entry.get('chariot_numero')}",
+                              stage, user, pdf)
+    entry["document_id"] = archived["id"]
+    await db.caces_adequations.insert_one(dict(entry))
+    return entry
+
+
+async def _record_adequation_officielle(stage: dict, payload: AdequationIn, user: dict) -> dict:
+    """Examen d'adéquation sur le document officiel : cases cochées par le
+    testeur, document regénéré à l'identique (nom, date, signature)."""
+    unknown = [c for c in payload.cases if c not in adequation_doc.KEYS]
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"Cases inconnues : {', '.join(unknown)}")
+    cases = list(dict.fromkeys(payload.cases))
+    resume = adequation_doc.summary(cases)
+    if not resume["categories"]:
+        raise HTTPException(status_code=400, detail="Cochez au moins une catégorie testée aujourd'hui")
+    if payload.conforme and resume["manquantes"]:
+        raise HTTPException(status_code=400, detail=f"{len(resume['manquantes'])} vérification(s) non cochée(s) : "
+                                                    "le site et le matériel ne peuvent pas être déclarés adaptés")
+    today = _today()
+    entry = {"id": str(uuid.uuid4()), "stage_id": stage["id"], "date": today, "officiel": True, "cases": cases,
+             "categories": ", ".join(resume["categories"]), "manquantes": resume["manquantes"], "conforme": payload.conforme,
+             "observations": payload.observations, "testeur_id": user["id"], "testeur_name": user.get("name"), "created_at": now_iso()}
+    pdf = adequation_doc.render(cases, user.get("name") or "", f"{today[8:10]}/{today[5:7]}/{today[:4]}", await _signature(user["id"]))
+    archived = await _archive("adequation", f"Examen d'adéquation du {today[8:10]}/{today[5:7]}/{today[:4]} — catégories {entry['categories']}",
                               stage, user, pdf)
     entry["document_id"] = archived["id"]
     await db.caces_adequations.insert_one(dict(entry))

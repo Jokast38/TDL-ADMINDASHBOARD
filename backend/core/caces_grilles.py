@@ -2,7 +2,7 @@
 calcul des résultats — demande du 2026-11-10.
 
 - Théorie (annexe A3/1) : 4 thèmes notés sur 100. Les questions elles-mêmes
-  (4 grilles de questions vrai/faux) sont saisies ou importées par l'équipe
+  (5 grilles officielles de questions vrai/faux) sont chargées ou importées par l'équipe
   (routers/caces_exam.py) : elles ne sont pas dans le code.
 - Pratique (annexe A3/2) : une grille par catégorie, recopiée de la
   recommandation (points d'évaluation, critères et barème).
@@ -19,7 +19,9 @@ from typing import Dict, List, Optional
 # Théorie
 # ---------------------------------------------------------------------------
 
-GRILLES_THEORIE = ("1", "2", "3", "4")
+# 5 grilles officielles R.489 (V1 - 12/2024), fournies le 2026-11-19 :
+# assets/caces_r489/ (texte, réponses, illustrations, PDF d'origine).
+GRILLES_THEORIE = ("1", "2", "3", "4", "5")
 
 # (clé, libellé, barème sur 100) — annexe A3/1.
 THEMES_THEORIE = (

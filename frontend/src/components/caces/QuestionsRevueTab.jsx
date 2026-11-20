@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle, WarningCircle, PaperPlaneTilt, ArrowCounterClockwise } from "@phosphor-icons/react";
+import CacesIllustration from "@/components/caces/CacesIllustration";
 
 const FILTRES = [
   { key: "a_revoir", label: "À revoir" },
@@ -82,7 +83,7 @@ export default function QuestionsRevueTab() {
     <div className="space-y-4 max-w-4xl" data-testid="caces-revue-tab">
       <Card className="p-4 border border-gray-200 shadow-none space-y-3">
         <p className="text-sm text-gray-600">
-          Voici les questions vrai/faux des 4 grilles de l'épreuve théorique CACES® R489, utilisées pour les questionnaires
+          Voici les questions vrai/faux des 5 grilles officielles de l'épreuve théorique CACES® R489, utilisées pour les questionnaires
           papier. Pour chaque question, vérifiez l'affirmation <b>et la réponse attendue</b> : cliquez sur <b>« Correcte »</b>,
           ou sur <b>« À corriger »</b> en expliquant ce qui ne va pas. L'équipe TDL corrige ensuite la question, qui
           revient dans « À revoir ».
@@ -130,8 +131,12 @@ export default function QuestionsRevueTab() {
               data-testid={`caces-revue-q-${q.numero_question}`}>
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] text-gray-400">Question {q.numero_question} · {themes[q.theme] || q.theme}</p>
+                  <p className="text-[11px] text-gray-400">
+                    {q.numero ? `Thème ${q.theme_num} · question ${q.numero}` : `Question ${q.numero_question}`} · {themes[q.theme] || q.theme}
+                    {q.sous_rubrique ? ` · ${q.sous_rubrique}` : ""}
+                  </p>
                   <p className="text-sm mt-1">{q.enonce}</p>
+                  {q.illustration && <CacesIllustration name={q.illustration} className="mt-2 max-w-md" />}
                   <p className="text-xs mt-1.5">Réponse attendue : <Badge variant="outline" className={q.reponse ? "border-green-600 text-green-700" : "border-red-600 text-red-700"}>{q.reponse ? "VRAI" : "FAUX"}</Badge></p>
                   {statut === "a_corriger" && <p className="text-xs text-red-700 mt-1.5">Votre remarque : {q.revue.commentaire}</p>}
                 </div>
