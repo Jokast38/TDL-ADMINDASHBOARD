@@ -25,6 +25,9 @@ PLANNING_REMINDER_INTERVAL_DAYS = 7
 
 # Rôles concernés par les demandes de rappel (mêmes que _NOTIFY_ROLES dans
 # routers/callback.py — dupliqué ici pour éviter un import circulaire).
+# Alertes sur le remplissage des sessions (sous-effectif, session complète) :
+# toute l'équipe sauf les formateurs.
+ROLES_SESSION_FILL_NOTIF = tuple(r for r in ROLES_ALL_STAFF if r != "animateur")
 CALLBACK_NOTIFY_ROLES = ("responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique")
 
 
@@ -907,7 +910,7 @@ async def send_understaffed_session_alerts() -> int:
     """Alerte de sous-effectif — pour chaque session de stage qui commence
     dans UNDERSTAFFED_ALERT_DAYS_BEFORE jours (10) avec moins de
     UNDERSTAFFED_ALERT_MIN_INSCRITS (10) inscrits actifs, prévient TOUT le
-    personnel (voir _understaffed_session_alerts_loop dans server.py) pour
+    personnel hors formateurs (voir _understaffed_session_alerts_loop dans server.py) pour
     qu'une relance commerciale puisse encore être tentée avant la date.
     Un seul envoi par session (`understaffed_alert_sent_at` posé sur le
     stage), pas de relance en boucle même si le sous-effectif persiste."""
@@ -919,8 +922,10 @@ async def send_understaffed_session_alerts() -> int:
     if not stages:
         return 0
 
+    # Agents et admins seulement : le remplissage d'une session ne regarde pas
+    # les formateurs (demande du 2026-11-22, comme « Session complète »).
     staff = await db.users.find(
-        {"active": True, "role": {"$in": list(ROLES_ALL_STAFF)}}, {"_id": 0, "id": 1, "email": 1, "name": 1}
+        {"active": True, "role": {"$in": list(ROLES_SESSION_FILL_NOTIF)}}, {"_id": 0, "id": 1, "email": 1, "name": 1}
     ).to_list(500)
     if not staff:
         return 0

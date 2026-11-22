@@ -124,3 +124,35 @@ def test_alerte_session_complete_sans_formateurs():
     from routers.stages import ROLES_SESSION_COMPLETE_NOTIF
     assert "animateur" not in ROLES_SESSION_COMPLETE_NOTIF
     assert {"admin", "agent_admin", "agent_telephonique", "responsable_admission"} <= set(ROLES_SESSION_COMPLETE_NOTIF)
+
+
+def test_alerte_sous_effectif_sans_formateurs(monkeypatch):
+    """« Sous-effectif » (session incomplète à 10 jours) : pas aux formateurs (2026-11-22)."""
+    from datetime import datetime, timedelta, timezone
+    from services import staff_notify as sn
+
+    day = (datetime.now(timezone.utc) + timedelta(days=sn.UNDERSTAFFED_ALERT_DAYS_BEFORE)).date().isoformat()
+    team = [{"id": "f1", "email": "formateur@x.fr", "role": "animateur", "active": True},
+             {"id": "a1", "email": "agent@x.fr", "role": "agent_admin", "active": True}]
+
+    class _Coll:
+        def __init__(self, docs): self.docs = docs
+        def find(self, q, _p=None): return _Cursor([d for d in self.docs if _match(d, q)])
+        async def update_one(self, *_a, **_k): return None
+        async def count_documents(self, _q): return 2
+
+    class _Db:
+        stages = _Coll([{"id": "s1", "date_debut": day, "formation_titre": "Stage"}])
+        users = _Coll(team)
+        inscriptions = _Coll([])
+
+    mails, pushes = [], []
+
+    async def _mail(to, *_a, **_k): mails.append(to)
+    async def _push(ids, *_a, **_k): pushes.extend(ids)
+
+    monkeypatch.setattr(sn, "db", _Db())
+    monkeypatch.setattr(sn, "send_email", _mail)
+    monkeypatch.setattr(sn, "send_push_to_users", _push)
+    asyncio.run(sn.send_understaffed_session_alerts())
+    assert mails == ["agent@x.fr"] and pushes == ["a1"]

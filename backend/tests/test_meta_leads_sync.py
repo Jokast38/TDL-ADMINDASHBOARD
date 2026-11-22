@@ -50,6 +50,8 @@ class _Db:
 
 def test_synchro_cree_les_nouveaux_avance_le_curseur_et_notifie(monkeypatch):
     fake = _Db()
+    # Curseur fixé : sans lui, la 1re synchro part de « maintenant - 3 jours » et le test dépendrait de la date du jour.
+    fake.settings.doc["meta_leads_sync_since"] = "2026-11-16T00:00:00+0000"
     monkeypatch.setattr(sync, "db", fake)
     leads = [({"name": "Épinay | Stage points"}, {"id": str(i), "created_time": f"2026-11-17T0{i}:00:00+0000"}) for i in range(3)]
     monkeypatch.setattr(sync, "_fetch_new_leads", lambda since: leads)

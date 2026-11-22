@@ -26,7 +26,7 @@ from services.convention import regenerate_convention_pdf
 # Alerte « Session complète » : agents et admins seulement. Les formateurs
 # n'ont aucune inscription à gérer, l'alerte leur était inutile (demande du
 # 2026-11-16).
-ROLES_SESSION_COMPLETE_NOTIF = tuple(r for r in ROLES_ALL_STAFF if r != "animateur")
+from services.staff_notify import ROLES_SESSION_FILL_NOTIF as ROLES_SESSION_COMPLETE_NOTIF  # noqa: E402
 
 router = APIRouter(prefix="/stages", tags=["stages"])
 
