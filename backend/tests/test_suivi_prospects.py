@@ -116,3 +116,27 @@ def test_tentatives_de_rappel_et_historique_du_prospect(monkeypatch):
 def test_statut_des_anciennes_demandes_de_rappel():
     assert cc.rappel_statut({"handled": True}) == "traite"
     assert cc.rappel_statut({}) == "a_rappeler"
+
+
+def test_rendez_vous_par_employe():
+    from datetime import datetime
+    from core.rdv_suivi import PARIS
+    now = datetime(2026, 11, 24, 18, 0, tzinfo=PARIS)
+    base = {"commercial_id": "k", "commercial_name": "Karim", "created_at": "2026-11-20T09:00:00+00:00"}
+    appts = [
+        # 10h Paris, résultat saisi 30 min après la fin (10h30) -> délai 30 min ; inscrit ensuite.
+        {**base, "id": "a", "lead_id": "L1", "scheduled_at": "2026-11-24T09:00:00Z", "status": "effectue",
+         "resultat_at": "2026-11-24T10:00:00Z", "lead_email": "ali@mail.fr"},
+        {**base, "id": "b", "lead_id": "L2", "scheduled_at": "2026-11-24T13:00:00Z", "status": "planifie"},  # sans retour
+        {**base, "id": "c", "lead_id": "L3", "scheduled_at": "2026-11-24T15:00:00Z", "status": "absent",
+         "resultat_at": "2026-11-24T16:00:00Z", "lead_phone": "06 11 22 33 44"},
+        {**base, "id": "d", "scheduled_at": "2026-11-24T08:00:00Z", "status": "annule"},
+        {**base, "id": "e", "scheduled_at": "2026-11-20T08:00:00Z", "status": "planifie"},  # hors période
+    ]
+    inscriptions = [{"id": "I1", "student_email": "ALI@mail.fr", "created_at": "2026-11-24T12:00:00+00:00"},
+                    {"id": "I2", "student_phone": "+33611223344", "created_at": "2026-11-01T12:00:00+00:00"}]  # avant le RDV
+    r = sp.rdv_par_employe(appts, "2026-11-24", "2026-11-24", now, inscriptions, {})["k"]
+    assert (r["rdv_prevus"], r["rdv_traites"], r["rdv_effectues"], r["rdv_absents"], r["rdv_sans_retour"],
+            r["rdv_inscriptions"], r["delai_retour_min"]) == (3, 2, 1, 1, 1, 1, 30)
+    res = sp.fusion_rdv(sp.classement_from_entries([]), {"k": r})
+    assert res["classement"][0]["user_name"] == "Karim" and res["classement"][0]["par_jour"][0]["rdv_prevus"] == 3

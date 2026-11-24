@@ -164,6 +164,118 @@ def classement_from_entries(entries: Iterable[dict]) -> dict:
     return {"classement": classement, "jours": jours}
 
 
+# ---- Rendez-vous par employé (demande du 2026-11-24, suite) ----
+_RDV_TRAITES = ("effectue", "absent", "traite", "fait")
+
+
+def rdv_par_employe(appts: Iterable[dict], date_from: str, date_to: str, now: datetime,
+                    inscriptions: Iterable[dict], leads: Dict[str, dict]) -> Dict[str, dict]:
+    """Pour la personne qui assure chaque RDV (commercial_id), RDV prévus sur
+    la période (date du RDV), traités (résultat saisi), sans retour, ayant
+    conduit à une inscription, et délai moyen de saisie du résultat après la
+    fin du RDV. Une inscription compte si elle est liée au prospect
+    (inscription_id) ou a le même email / téléphone, et date d'après la
+    prise du RDV."""
+    from core import rdv_suivi
+    from services.meta_rapprochement import norm_email, norm_phone
+    insc_email: Dict[str, list] = defaultdict(list)
+    insc_phone: Dict[str, list] = defaultdict(list)
+    insc_id: Dict[str, dict] = {}
+    for i in inscriptions:
+        insc_id[i["id"]] = i
+        if norm_email(i.get("student_email")):
+            insc_email[norm_email(i["student_email"])].append(i)
+        if norm_phone(i.get("student_phone")):
+            insc_phone[norm_phone(i["student_phone"])].append(i)
+
+    def inscrit_apres(a: dict) -> bool:
+        lead = leads.get(a.get("lead_id")) or {}
+        depuis = a.get("created_at") or a.get("scheduled_at") or ""
+        cands = list(insc_email.get(norm_email(a.get("lead_email") or lead.get("email")), [])) +             list(insc_phone.get(norm_phone(a.get("lead_phone") or lead.get("phone")), []))
+        if lead.get("inscription_id") in insc_id:
+            cands.append(insc_id[lead["inscription_id"]])
+        return any((i.get("created_at") or "") >= depuis[:10] for i in cands)
+
+    out: Dict[str, dict] = {}
+    for a in appts:
+        if a.get("status") in ("annule", "disponible") or not a.get("commercial_id"):
+            continue
+        debut = rdv_suivi.parse(a.get("scheduled_at"))
+        if not debut or not (date_from <= debut.date().isoformat() <= date_to):
+            continue
+        jour = debut.date().isoformat()
+        u = out.setdefault(a["commercial_id"], {"user_name": a.get("commercial_name") or "", "rdv_prevus": 0,
+                                                "rdv_traites": 0, "rdv_effectues": 0, "rdv_absents": 0,
+                                                "rdv_sans_retour": 0, "rdv_inscriptions": 0, "_delais": [],
+                                                "par_jour": defaultdict(int)})
+        u["rdv_prevus"] += 1
+        u["par_jour"][jour] += 1
+        statut = rdv_suivi.statut_suivi(a, now)
+        if statut in _RDV_TRAITES:
+            u["rdv_traites"] += 1
+            u["rdv_effectues" if statut in ("effectue", "fait", "traite") else "rdv_absents"] += 1
+            fin, saisi = rdv_suivi.fin(a), rdv_suivi.parse(a.get("resultat_at"))
+            if fin and saisi:
+                u["_delais"].append(max(0, (saisi - fin).total_seconds() / 60))
+        elif statut == "retour_a_renseigner":
+            u["rdv_sans_retour"] += 1
+        if inscrit_apres(a):
+            u["rdv_inscriptions"] += 1
+    for u in out.values():
+        d = u.pop("_delais")
+        u["delai_retour_min"] = round(sum(d) / len(d)) if d else None
+        u["par_jour"] = dict(u["par_jour"])
+    return out
+
+
+async def _rdv_stats(date_from: str, date_to: str) -> Dict[str, dict]:
+    appts = await db.call_appointments.find(
+        {"status": {"$nin": ["annule", "disponible"]}},
+        {"_id": 0, "id": 1, "lead_id": 1, "lead_email": 1, "lead_phone": 1, "commercial_id": 1, "commercial_name": 1,
+         "scheduled_at": 1, "status": 1, "resultat_at": 1, "created_at": 1},
+    ).to_list(50000)
+    lead_ids = list({a.get("lead_id") for a in appts if a.get("lead_id")})
+    leads = {}
+    if lead_ids:
+        for l in await db.leads.find({"id": {"$in": lead_ids}}, {"_id": 0, "id": 1, "email": 1, "phone": 1, "inscription_id": 1}).to_list(len(lead_ids)):
+            leads[l["id"]] = l
+    inscriptions = await db.inscriptions.find(
+        {}, {"_id": 0, "id": 1, "student_email": 1, "student_phone": 1, "created_at": 1}).to_list(50000)
+    return rdv_par_employe(appts, date_from, date_to, datetime.now(PARIS), inscriptions, leads)
+
+
+RDV_KEYS = ("rdv_prevus", "rdv_traites", "rdv_effectues", "rdv_absents", "rdv_sans_retour", "rdv_inscriptions", "delai_retour_min")
+
+
+def fusion_rdv(res: dict, rdv: Dict[str, dict]) -> dict:
+    """Ajoute les chiffres RDV au classement (et les personnes qui n'ont que
+    des RDV sur la période)."""
+    par_id = {u.get("user_id"): u for u in res["classement"]}
+    for uid, r in rdv.items():
+        u = par_id.get(uid)
+        if u is None:
+            u = {"user_id": uid, "user_name": r["user_name"], "leads_traites": 0, "actions": 0, "notes": 0,
+                 "qualifications": 0, "rdv": 0, "rappels": 0, "appels": 0, "jours_actifs": 0,
+                 "moyenne_par_jour": 0, "par_jour": []}
+            res["classement"].append(u)
+            par_id[uid] = u
+        jours = {d["jour"]: d for d in u["par_jour"]}
+        for jour, n in r["par_jour"].items():
+            if jour not in jours:
+                jours[jour] = {"user_id": uid, "user_name": u["user_name"], "jour": jour, "leads_traites": 0, "actions": 0, "notes": 0}
+            jours[jour]["rdv_prevus"] = n
+        u["par_jour"] = sorted(jours.values(), key=lambda d: d["jour"], reverse=True)
+        for k in RDV_KEYS:
+            u[k] = r[k]
+    for u in res["classement"]:
+        for k in RDV_KEYS:
+            u.setdefault(k, None if k == "delai_retour_min" else 0)
+    res["classement"].sort(key=lambda u: (-u["leads_traites"], -u["actions"], -u["rdv_prevus"], (u["user_name"] or "").lower()))
+    for i, u in enumerate(res["classement"], 1):
+        u["rang"] = i
+    return res
+
+
 async def classement(date_from: str, date_to: str) -> dict:
     start = datetime.fromisoformat(date_from).replace(tzinfo=PARIS)
     end = datetime.fromisoformat(date_to).replace(tzinfo=PARIS) + timedelta(days=1)
@@ -174,4 +286,5 @@ async def classement(date_from: str, date_to: str) -> dict:
         {"_id": 0, "target_id": 1, "target_type": 1, "action": 1, "user_id": 1, "user_name": 1, "at": 1},
     ).to_list(100000)
     entries = [e for e in entries if date_from <= (jour_paris(e.get("at")) or "") <= date_to]
-    return {**classement_from_entries(entries), "date_from": date_from, "date_to": date_to}
+    res = fusion_rdv(classement_from_entries(entries), await _rdv_stats(date_from, date_to))
+    return {**res, "date_from": date_from, "date_to": date_to}

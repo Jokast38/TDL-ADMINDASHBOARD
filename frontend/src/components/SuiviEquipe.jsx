@@ -25,6 +25,31 @@ const PERIODES = [
 ];
 const MEDAILLES = ["🥇", "🥈", "🥉"];
 
+// Niveau de criticité d'une personne (demande du 2026-11-24) : RDV traités
+// (résultat saisi) face aux RDV restants sans retour.
+// - critique (rouge) : 3 RDV sans retour ou plus, ou moins de la moitié traités ;
+// - à surveiller (orange) : au moins 1 RDV sans retour ;
+// - à jour (vert) : tous les RDV passés sont renseignés.
+export function niveauCritique(u) {
+  const reste = u.rdv_sans_retour || 0;
+  const faits = u.rdv_traites || 0;
+  if (!reste && !faits) return null;
+  if (reste >= 3 || faits / (faits + reste) < 0.5) return "critique";
+  if (reste > 0) return "attention";
+  return "ok";
+}
+const NIVEAUX = {
+  critique: { row: "bg-red-50 hover:bg-red-100/70 border-l-4 border-l-red-500", badge: "bg-red-100 text-red-700", label: "Critique" },
+  attention: { row: "bg-amber-50 hover:bg-amber-100/70 border-l-4 border-l-amber-400", badge: "bg-amber-100 text-amber-800", label: "À surveiller" },
+  ok: { row: "bg-green-50/60 hover:bg-green-100/60 border-l-4 border-l-green-500", badge: "bg-green-100 text-green-700", label: "À jour" },
+};
+const fmtDelai = (m) => {
+  if (m === null || m === undefined) return "—";
+  if (m < 60) return `${m} min`;
+  if (m < 1440) return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+  return `${Math.round(m / 144) / 10} j`;
+};
+
 export default function SuiviEquipe() {
   const [from, setFrom] = useState(iso(new Date()));
   const [to, setTo] = useState(iso(new Date()));
@@ -56,8 +81,9 @@ export default function SuiviEquipe() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        {[["Prospects traités", "leads_traites"], ["Notes", "notes"], ["Qualifications", "qualifications"], ["RDV placés", "rdv"], ["Rappels", "rappels"]].map(([label, k]) => (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {[["Prospects traités", "leads_traites"], ["Notes", "notes"], ["RDV prévus", "rdv_prevus"], ["RDV traités", "rdv_traites"],
+          ["RDV sans retour", "rdv_sans_retour"], ["RDV → inscription", "rdv_inscriptions"]].map(([label, k]) => (
           <Card key={k} className="p-3 border border-gray-200 shadow-none">
             <p className="text-xs text-gray-500">{label}</p>
             <p className="text-2xl font-bold">{data ? total(k) : "…"}</p>
@@ -82,20 +108,29 @@ export default function SuiviEquipe() {
                 <th className="py-2.5 px-4 overline text-right">Qualifications</th>
                 <th className="py-2.5 px-4 overline text-right">RDV placés</th>
                 <th className="py-2.5 px-4 overline text-right">Rappels</th>
+                <th className="py-2.5 px-4 overline text-right border-l border-gray-200" title="RDV assurés par la personne, à la date du RDV">RDV prévus</th>
+                <th className="py-2.5 px-4 overline text-right" title="Résultat saisi (effectué / lead absent)">RDV traités</th>
+                <th className="py-2.5 px-4 overline text-right" title="RDV passés sans résultat saisi">Sans retour</th>
+                <th className="py-2.5 px-4 overline text-right" title="Prospect inscrit après le RDV">→ Inscription</th>
+                <th className="py-2.5 px-4 overline text-right" title="Temps moyen entre la fin du RDV et la saisie du résultat">Délai de retour</th>
+                <th className="py-2.5 px-4 overline">Niveau</th>
                 <th className="py-2.5 px-4 overline text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {!data && <tr><td colSpan="9" className="py-8 text-center text-gray-400">Chargement...</td></tr>}
+              {!data && <tr><td colSpan="15" className="py-8 text-center text-gray-400">Chargement...</td></tr>}
               {data && !data.classement.length && (
-                <tr><td colSpan="9" className="py-8 text-center text-gray-400">Aucun traitement de prospect sur cette période.</td></tr>
+                <tr><td colSpan="15" className="py-8 text-center text-gray-400">Aucun traitement de prospect sur cette période.</td></tr>
               )}
               {(data?.classement || []).map((u) => {
                 const key = u.user_id || u.user_name;
                 const isOpen = ouvert === key;
+                const niveau = niveauCritique(u);
+                const style = NIVEAUX[niveau];
                 return (
                   <Fragment key={key}>
-                    <tr className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => setOuvert(isOpen ? null : key)}>
+                    <tr className={`border-b border-gray-100 cursor-pointer ${style ? style.row : "hover:bg-gray-50"}`}
+                      onClick={() => setOuvert(isOpen ? null : key)} data-testid={`suivi-equipe-row-${key}`} data-niveau={niveau || "aucun"}>
                       <td className="py-2.5 px-4 font-semibold">{MEDAILLES[u.rang - 1] || u.rang}</td>
                       <td className="py-2.5 px-4 font-medium">
                         <span className="inline-flex items-center gap-1">
@@ -110,6 +145,20 @@ export default function SuiviEquipe() {
                       <td className="py-2.5 px-4 text-right">{u.qualifications}</td>
                       <td className="py-2.5 px-4 text-right">{u.rdv}</td>
                       <td className="py-2.5 px-4 text-right">{u.rappels}</td>
+                      <td className="py-2.5 px-4 text-right border-l border-gray-200 font-medium">{u.rdv_prevus || 0}</td>
+                      <td className="py-2.5 px-4 text-right">
+                        {u.rdv_traites || 0}
+                        {u.rdv_traites > 0 && <p className="text-[10px] text-gray-400">{u.rdv_effectues} eff. · {u.rdv_absents} abs.</p>}
+                      </td>
+                      <td className={`py-2.5 px-4 text-right ${u.rdv_sans_retour ? "font-bold text-red-700" : ""}`}>{u.rdv_sans_retour || 0}</td>
+                      <td className="py-2.5 px-4 text-right">
+                        {u.rdv_inscriptions || 0}
+                        {u.rdv_prevus > 0 && <p className="text-[10px] text-gray-400">{Math.round((100 * (u.rdv_inscriptions || 0)) / u.rdv_prevus)} %</p>}
+                      </td>
+                      <td className="py-2.5 px-4 text-right whitespace-nowrap">{fmtDelai(u.delai_retour_min)}</td>
+                      <td className="py-2.5 px-4">
+                        {style ? <span className={`text-[11px] font-medium rounded px-2 py-0.5 ${style.badge}`}>{style.label}</span> : <span className="text-xs text-gray-300">—</span>}
+                      </td>
                       <td className="py-2.5 px-4 text-right text-gray-500">{u.actions}</td>
                     </tr>
                     {isOpen && u.par_jour.map((d) => (
@@ -120,6 +169,8 @@ export default function SuiviEquipe() {
                         <td />
                         <td className="py-1.5 px-4 text-right">{d.notes}</td>
                         <td colSpan="3" />
+                        <td className="py-1.5 px-4 text-right border-l border-gray-200">{d.rdv_prevus || 0}</td>
+                        <td colSpan="5" />
                         <td className="py-1.5 px-4 text-right text-gray-500">{d.actions}</td>
                       </tr>
                     ))}
@@ -133,6 +184,12 @@ export default function SuiviEquipe() {
           Un prospect traité = un prospect sur lequel l'employé a fait au moins une action ce jour-là (note, qualification,
           appel, RDV, rappel, lien de paiement...). Cliquez sur une ligne pour le détail par jour.
         </p>
+        <div className="flex flex-wrap items-center gap-3 px-4 pb-3 text-[11px] text-gray-500" data-testid="suivi-equipe-legende">
+          <span className="font-medium">Couleur de la ligne (RDV traités / restants sans retour) :</span>
+          <span className={`rounded px-2 py-0.5 ${NIVEAUX.ok.badge}`}>À jour : tout est renseigné</span>
+          <span className={`rounded px-2 py-0.5 ${NIVEAUX.attention.badge}`}>À surveiller : 1 ou 2 RDV sans retour</span>
+          <span className={`rounded px-2 py-0.5 ${NIVEAUX.critique.badge}`}>Critique : 3 sans retour ou plus, ou moins de la moitié traités</span>
+        </div>
       </Card>
 
       <RapprochementMeta />
