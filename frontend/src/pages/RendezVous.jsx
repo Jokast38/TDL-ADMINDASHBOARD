@@ -10,7 +10,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CheckCircle, UserMinus, XCircle, Phone, MapPin, NotePencil } from "@phosphor-icons/react";
+import { CheckCircle, UserMinus, XCircle, Phone, MapPin, NotePencil, Plus } from "@phosphor-icons/react";
+import BookAppointmentDialog from "@/components/BookAppointmentDialog";
 import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import { toast } from "sonner";
 
@@ -18,7 +19,9 @@ import { toast } from "sonner";
 // du jour et vue d'équipe, statut de chaque RDV et saisie du résultat par la
 // personne assignée. Backend : routers/call_center.py (/call-center/rendez-vous),
 // règles : core/rdv_suivi.py. Les RDV se prennent depuis l'onglet Leads
-// (bouton « Prendre un rendez-vous »).
+// (bouton « Prendre un rendez-vous ») ou ici, « Nouveau rendez-vous », y
+// compris pour une personne pas encore dans le CRM (2026-11-24). Onglets par
+// catégorie de formation et colonne « Formation » (formation qui intéresse).
 
 const STATUT_STYLE = {
   planifie: "bg-blue-100 text-blue-700",
@@ -61,6 +64,8 @@ export default function RendezVous() {
   const [notesFor, setNotesFor] = useState(null); // RDV dont on ouvre les notes
   const [qualifOptions, setQualifOptions] = useState({});
   const [qualifFilter, setQualifFilter] = useState("all");
+  const [categorie, setCategorie] = useState("all");
+  const [newOpen, setNewOpen] = useState(false);
 
   // Lien « Renseigner le rendez-vous » de la notification : on ouvre la
   // bonne journée et la bonne vue pour que la ligne soit visible.
@@ -96,9 +101,10 @@ export default function RendezVous() {
   const load = () => {
     const p = vue === "moi" ? { vue, date_from: dateFrom, date_to: dateFrom } : { vue, date_from: dateFrom, date_to: dateTo };
     if (vue === "equipe" && assignee !== "all") p.commercial_id = assignee;
+    if (categorie !== "all") p.categorie = categorie;
     api.get("/call-center/rendez-vous", { params: p }).then((r) => setData(r.data)).catch(() => toast.error("Rendez-vous non chargés"));
   };
-  useEffect(load, [vue, dateFrom, dateTo, assignee]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [vue, dateFrom, dateTo, assignee, categorie]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setResult = async (a, resultat) => {
     setBusy(a.id);
@@ -133,10 +139,28 @@ export default function RendezVous() {
 
   return (
     <div className="space-y-6" data-testid="rendez-vous-page">
-      <div>
-        <p className="overline">CRM</p>
-        <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Rendez-vous</h1>
-        <p className="text-gray-500 mt-2">Les rendez-vous se prennent depuis l'onglet Leads (« Prendre un rendez-vous »).</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="overline">CRM</p>
+          <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">Rendez-vous</h1>
+          <p className="text-gray-500 mt-2">Depuis l'onglet Leads (« Prendre un rendez-vous ») ou ici, même pour une personne pas encore dans le CRM.</p>
+        </div>
+        <Button onClick={() => setNewOpen(true)} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="rdv-nouveau">
+          <Plus size={16} className="mr-1" /> Nouveau rendez-vous
+        </Button>
+      </div>
+
+      {/* Onglets par catégorie de formation (2026-11-24) : nombre de RDV de la période. */}
+      <div className="flex flex-wrap gap-1.5" data-testid="rdv-categories">
+        {[["all", "Toutes les formations", Object.values(data.categories || {}).reduce((s, n) => s + n, 0)],
+          ...Object.entries(data.categories || {}).sort((a, b) => b[1] - a[1]).map(([k, n]) => [k, data.categorie_labels?.[k] || k, n]),
+          ...(categorie !== "all" && !(data.categories || {})[categorie] ? [[categorie, data.categorie_labels?.[categorie] || categorie, 0]] : []),
+        ].map(([k, label, n]) => (
+          <button key={k} type="button" onClick={() => setCategorie(k)} data-testid={`rdv-cat-${k}`}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap ${categorie === k ? "bg-[#0a0a0a] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+            {label} <span className="opacity-60">({n})</span>
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -187,6 +211,7 @@ export default function RendezVous() {
             <thead className="bg-gray-50 text-left border-b border-gray-200">
               <tr>
                 <th className="py-2.5 px-4 overline">Lead</th>
+                <th className="py-2.5 px-4 overline">Formation</th>
                 <th className="py-2.5 px-4 overline">Date</th>
                 <th className="py-2.5 px-4 overline">Heure</th>
                 <th className="py-2.5 px-4 overline">Assigné à</th>
@@ -199,7 +224,7 @@ export default function RendezVous() {
             </thead>
             <tbody>
               {!items.length && (
-                <tr><td colSpan="9" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="10" className="py-10 text-center text-gray-400">
                   {qualifFilter !== "all" && allItems.length ? "Aucun rendez-vous avec cette qualification."
                     : vue === "moi" ? "Aucun rendez-vous ce jour-là." : "Aucun rendez-vous sur cette période."}
                 </td></tr>
@@ -214,9 +239,16 @@ export default function RendezVous() {
                       {a.lead_phone && <p className="text-xs text-gray-500 flex items-center gap-1"><Phone size={11} /> {a.lead_phone}</p>}
                       <p className="text-xs text-gray-400 flex items-center gap-1">
                         {a.kind === "physique" ? <><MapPin size={11} /> {a.location || "Physique"}</> : "Appel"}
-                        {a.formation_titre ? ` · ${a.formation_titre}` : ""}
                       </p>
                       {a.notes && <p className="text-xs text-gray-500 mt-1 italic">« {a.notes} »</p>}
+                    </td>
+                    <td className="py-2.5 px-4 text-xs max-w-[180px]" data-testid={`rdv-formation-${a.id}`}>
+                      {a.formation_interessee ? (
+                        <>
+                          <p className="text-gray-800">{a.formation_interessee}</p>
+                          <p className="text-[11px] text-gray-400">{data.categorie_labels?.[a.categorie] || ""}</p>
+                        </>
+                      ) : <span className="text-gray-300">Non précisée</span>}
                     </td>
                     <td className="py-2.5 px-4 whitespace-nowrap">{formatDateFR(a.date_paris)}</td>
                     <td className="py-2.5 px-4 font-mono">{a.heure_paris}</td>
@@ -287,6 +319,7 @@ export default function RendezVous() {
           </table>
         </div>
       </Card>
+      <BookAppointmentDialog open={newOpen} onOpenChange={setNewOpen} onCreated={load} defaultMode="nouveau" />
       <RdvNotesDialog appt={notesFor} onClose={() => setNotesFor(null)} onSaved={(updated) => { setNotesFor((cur) => ({ ...cur, ...updated })); load(); }} />
     </div>
   );

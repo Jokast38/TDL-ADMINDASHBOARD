@@ -25,10 +25,12 @@ import {
   ChartLineUp, MagnifyingGlass, Megaphone, EnvelopeSimple, ShareNetwork, Sparkle,
   EnvelopeOpen, Cursor, PaperPlaneTilt, WarningCircle, Paperclip, X as XIcon, PencilSimple,
   Browser, ArrowSquareOut, Robot, PhoneCall, LinkedinLogo, Phone, Headset, NotePencil,
-  LinkSimple, UploadSimple, Tag, CalendarPlus, CreditCard, CheckCircle,
+  LinkSimple, UploadSimple, Tag, CalendarPlus, CreditCard, CheckCircle, PhoneOutgoing,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
+import ScheduleCallbackDialog from "@/components/ScheduleCallbackDialog";
+import { TraiteParCell } from "@/components/SuiviProspect";
 import SendPaymentLinkDialog from "@/components/SendPaymentLinkDialog";
 import { canonicalizeInterest } from "@/lib/leadInterest";
 import {
@@ -656,6 +658,7 @@ function CosmosiaTab() {
   const [page, setPage] = useState(1);
   const [importing, setImporting] = useState(false);
   const [bookTarget, setBookTarget] = useState(null);
+  const [callbackTarget, setCallbackTarget] = useState(null);
   const [paymentLinkTarget, setPaymentLinkTarget] = useState(null);
   const [relanceDueCount, setRelanceDueCount] = useState(0);
 
@@ -955,7 +958,7 @@ function CosmosiaTab() {
                       </SelectContent>
                     </Select>
                   </td>
-                  <td className="py-2.5 px-4 text-xs text-gray-600">{l.qualified_by_name || <span className="text-gray-300">—</span>}</td>
+                  <td className="py-2.5 px-4"><TraiteParCell lead={l} fallbackName={l.qualified_by_name} /></td>
                   <td className="py-2.5 px-4 text-xs">
                     <span
                       className="inline-flex items-center gap-1 text-gray-600"
@@ -995,6 +998,14 @@ function CosmosiaTab() {
                       >
                         <CalendarPlus size={14} />
                       </button>
+                      <button
+                        onClick={() => setCallbackTarget(l)}
+                        className="p-1.5 text-[#0052CC] hover:bg-blue-50 rounded"
+                        title="Planifier un rappel téléphonique"
+                        data-testid={`cosmosia-callback-btn-${l.id}`}
+                      >
+                        <PhoneOutgoing size={14} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -1019,6 +1030,12 @@ function CosmosiaTab() {
         open={!!bookTarget}
         onOpenChange={(v) => !v && setBookTarget(null)}
         lead={bookTarget}
+        onCreated={() => load()}
+      />
+      <ScheduleCallbackDialog
+        open={!!callbackTarget}
+        onOpenChange={(v) => !v && setCallbackTarget(null)}
+        lead={callbackTarget}
         onCreated={() => load()}
       />
       <SendPaymentLinkDialog
@@ -1046,6 +1063,7 @@ function MetaEventsTab() {
   const [pendingImportFile, setPendingImportFile] = useState(null);
   const [enrollFor, setEnrollFor] = useState(null);
   const [bookTarget, setBookTarget] = useState(null);
+  const [callbackTarget, setCallbackTarget] = useState(null);
   const [paymentLinkTarget, setPaymentLinkTarget] = useState(null);
   const [relanceDueCount, setRelanceDueCount] = useState(0);
 
@@ -1345,7 +1363,7 @@ function MetaEventsTab() {
                       <span className="text-gray-300">—</span>
                     )}
                   </td>
-                  <td className="py-2.5 px-4 text-xs text-gray-600">{l.qualified_by_name || <span className="text-gray-300">—</span>}</td>
+                  <td className="py-2.5 px-4"><TraiteParCell lead={l} fallbackName={l.qualified_by_name} /></td>
                   <td className="py-2.5 px-4 text-xs">
                     <span
                       className="inline-flex items-center gap-1 text-gray-600"
@@ -1379,6 +1397,14 @@ function MetaEventsTab() {
                         data-testid={`meta-lead-book-btn-${l.id}`}
                       >
                         <CalendarPlus size={14} />
+                      </button>
+                      <button
+                        onClick={() => setCallbackTarget(l)}
+                        className="p-1.5 text-[#0052CC] hover:bg-blue-50 rounded"
+                        title="Planifier un rappel téléphonique"
+                        data-testid={`meta-lead-callback-btn-${l.id}`}
+                      >
+                        <PhoneOutgoing size={14} />
                       </button>
                       {l.inscription_id ? (
                         <span className="text-xs text-gray-400">Déjà inscrit</span>
@@ -1418,6 +1444,12 @@ function MetaEventsTab() {
         open={!!bookTarget}
         onOpenChange={(v) => !v && setBookTarget(null)}
         lead={bookTarget}
+        onCreated={() => load()}
+      />
+      <ScheduleCallbackDialog
+        open={!!callbackTarget}
+        onOpenChange={(v) => !v && setCallbackTarget(null)}
+        lead={callbackTarget}
         onCreated={() => load()}
       />
       <SendPaymentLinkDialog

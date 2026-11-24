@@ -321,6 +321,9 @@ async def send_pending_callback_reminders() -> int:
     now = datetime.now(timezone.utc)
     pending = await db.callback_requests.find({"handled": {"$ne": True}}, {"_id": 0}).to_list(2000)
     pending = [p for p in pending if (ref := _parse_iso(p.get("created_at"))) and (now - ref) >= _MIN_AGE_FOR_REMINDER]
+    # Rappel planifié pour plus tard (page Rappels, 2026-11-24) : pas de
+    # relance avant son heure — la personne assignée est prévenue à l'heure.
+    pending = [p for p in pending if not ((due := _parse_iso(p.get("scheduled_at"))) and (due if due.tzinfo else due.replace(tzinfo=timezone.utc)) > now)]
     if not pending:
         return 0
 

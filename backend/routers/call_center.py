@@ -20,7 +20,10 @@ from core.security import require_role
 from core.config import ROLES_LEADS, ROLES_TEAM_MGMT, effective_assigned_categories
 from core.utils import now_iso
 from models.commercial_call import CallLogIn, CallScriptIn, CallScriptUpdate
-from models.call_appointment import CallAppointmentIn, CallAppointmentUpdate, RdvResultatIn, RdvNoteIn, RdvQualificationIn
+from models.call_appointment import (
+    CallAppointmentIn, CallAppointmentUpdate, RdvResultatIn, RdvNoteIn, RdvQualificationIn,
+    NouveauContactIn, RappelIn, RappelTentativeIn, RappelUpdate,
+)
 from services.activity import log_action
 from services.appointment_notify import cancel_to_prospect, confirm_to_prospect
 from core import rdv_suivi
@@ -330,10 +333,13 @@ async def appointment_availability(commercial_id: str, date: str, user: dict = D
 @router.get("/rendez-vous")
 async def list_rendez_vous(
     vue: str = "moi", date_from: Optional[str] = None, date_to: Optional[str] = None,
-    commercial_id: Optional[str] = None, user: dict = Depends(require_role(*ROLES_LEADS)),
+    commercial_id: Optional[str] = None, categorie: Optional[str] = None,
+    user: dict = Depends(require_role(*ROLES_LEADS)),
 ):
     """Onglet Rendez-vous : `vue=moi` (mes RDV, aujourd'hui par défaut) ou
-    `vue=equipe` (tous les RDV attribués, avec la personne assignée)."""
+    `vue=equipe` (tous les RDV attribués, avec la personne assignée).
+    `categorie` : onglets par catégorie de formation (2026-11-24), déduite
+    de la formation du RDV, sinon de l'intérêt du prospect."""
     today = datetime.now(PARIS).date().isoformat()
     date_from, date_to = date_from or today, date_to or date_from or today
     query: Dict = {"status": {"$ne": "disponible"}}
@@ -351,9 +357,38 @@ async def list_rendez_vous(
         a["statut_suivi"] = rdv_suivi.statut_suivi(a, now)
         a["date_paris"], a["heure_paris"] = d.date().isoformat(), d.strftime("%H:%M")
         out.append(a)
+    await _avec_formation(out)
+    categories: Dict[str, int] = {}
+    for a in out:
+        categories[a["categorie"]] = categories.get(a["categorie"], 0) + 1
+    if categorie:
+        out = [a for a in out if a["categorie"] == categorie]
     await _avec_qualification(out)
     await _avec_auteur(out)
-    return {"items": out, "statuts": rdv_suivi.STATUTS, "date_from": date_from, "date_to": date_to}
+    return {"items": out, "statuts": rdv_suivi.STATUTS, "date_from": date_from, "date_to": date_to,
+            "categories": categories, "categorie_labels": {**_CATEGORIE_LABELS}}
+
+
+_CATEGORIE_LABELS = {
+    "VTC_TAXI": "VTC / Taxi", "CACES": "CACES", "PERMIS": "Récupération de points", "AUTO_ECOLE": "Auto-école",
+    "SSIAP": "SSIAP", "ECSR": "ECSR", "VENTE": "Conseiller de vente", "AUTRE": "Non précisée",
+}
+
+
+async def _avec_formation(appts: list) -> None:
+    """Formation qui intéresse le prospect (2026-11-24) : celle choisie au
+    RDV, sinon l'intérêt de sa fiche ; et sa catégorie (onglets)."""
+    from routers.leads import _category_for_interest
+    manquants = list({a.get("lead_id") for a in appts if a.get("lead_id") and not (a.get("formation_titre") or a.get("lead_interest"))})
+    interets = {}
+    if manquants:
+        for l in await db.leads.find({"id": {"$in": manquants}}, {"_id": 0, "id": 1, "interest": 1}).to_list(len(manquants)):
+            interets[l["id"]] = l.get("interest")
+    for a in appts:
+        formation = a.get("formation_titre") or a.get("lead_interest") or interets.get(a.get("lead_id")) or ""
+        a["formation_interessee"] = formation
+        a["categorie"] = _category_for_interest(formation) or "AUTRE"
+
 
 
 async def _avec_auteur(appts: list) -> None:
@@ -577,7 +612,14 @@ async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depen
     """Création manuelle — contrairement aux créneaux générés en masse par
     l'import Cosmosia (toujours "disponible", sans agent), un créneau créé
     ici a un agent dès le départ (soi-même par défaut) et est donc déjà
-    "planifié", sans étape d'attribution à franchir."""
+    "planifié", sans étape d'attribution à franchir.
+    Sans lead_id, `nouveau_contact` crée le prospect (ou retrouve la fiche
+    existante par email / téléphone) — RDV saisi à la main, 2026-11-24."""
+    if not payload.lead_id:
+        if not payload.nouveau_contact:
+            raise HTTPException(status_code=400, detail="Choisissez une personne ou saisissez ses coordonnées")
+        new_lead = await _lead_depuis_contact(payload.nouveau_contact, user, payload.formation_titre, "rdv_manuel")
+        payload.lead_id = new_lead["id"]
     lead = await db.leads.find_one({"id": payload.lead_id}, {"_id": 0})
     if not lead:
         # Prospects Meta (db.meta_lead_imports) — collection séparée de
@@ -603,7 +645,7 @@ async def create_call_appointment(payload: CallAppointmentIn, user: dict = Depen
     appt = {
         "id": str(uuid.uuid4()), "lead_id": payload.lead_id,
         "lead_name": lead.get("name"), "lead_phone": lead.get("phone"), "lead_email": lead.get("email"),
-        "lead_interest": lead.get("interest"),
+        "lead_interest": lead.get("interest") or payload.formation_titre,
         "commercial_id": commercial_id, "commercial_name": commercial.get("name", ""),
         "scheduled_at": payload.scheduled_at, "notes": payload.notes or "",
         "status": "planifie", "reminder_sent": False, "source": "manuel", "person_type": person_type,
@@ -701,3 +743,245 @@ async def delete_call_appointment(appointment_id: str, user: dict = Depends(requ
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Rendez-vous introuvable")
     return {"ok": True}
+
+
+async def _lead_depuis_contact(c: NouveauContactIn, user: dict, formation: Optional[str], source: str) -> dict:
+    """Prospect créé depuis un RDV ou un rappel saisi à la main (personne pas
+    encore dans le CRM), ou fiche existante retrouvée par email / téléphone."""
+    from routers.leads import create_lead_from_contact
+    from services.meta_rapprochement import norm_phone
+    nom = f"{(c.prenom or '').strip()} {(c.nom or '').strip()}".strip()
+    email = (c.email or "").strip().lower() or None
+    phone = (c.telephone or "").strip() or None
+    if not nom:
+        raise HTTPException(status_code=400, detail="Nom du prospect requis")
+    if not email and not phone:
+        raise HTTPException(status_code=400, detail="Téléphone ou email requis")
+    if phone and norm_phone(phone):
+        # Même numéro saisi dans un autre format (06…, +33 6…, espaces).
+        chiffres = norm_phone(phone)
+        existing = await db.leads.find_one({"phone": {"$regex": "".join(f"{d}\\D*" for d in chiffres) + "$"}}, {"_id": 0})
+        if existing:
+            return existing
+    lead = await create_lead_from_contact(
+        name=nom, email=email, phone=phone, interest=(c.interest or formation or "").strip(), source=source)
+    if lead and lead.get("is_new"):
+        await db.leads.update_one({"id": lead["id"]}, {"$set": {"created_by": user["id"], "created_by_name": user.get("name", "")}})
+        await log_action(user, "lead_cree", "lead", lead["id"], {"name": nom, "source": source})
+    return lead
+
+
+# ---- Rappels téléphoniques (demande du 2026-11-24) ----
+# Une seule liste pour tout ce qui est « à rappeler » : demandes de rappel du
+# site et des SMS (db.callback_requests, déjà existantes) + rappels planifiés
+# depuis le CRM (même collection, source « crm_rappel »), avec le suivi de
+# chaque tentative (qui, quand, résultat, note).
+RAPPEL_RESULTATS = {
+    "joint": "Joint, traité",
+    "messagerie": "Messagerie, message laissé",
+    "injoignable": "Injoignable",
+    "a_rappeler": "À rappeler plus tard",
+    "rdv_pris": "Rendez-vous pris",
+    "pas_interesse": "Plus intéressé",
+}
+RAPPEL_STATUTS = {
+    "a_rappeler": "À rappeler", "en_cours": "Tentatives en cours", "traite": "Traité",
+    "rdv_pris": "RDV pris", "clos": "Clos (plus intéressé)",
+}
+_STATUT_APRES = {"joint": "traite", "messagerie": "en_cours", "injoignable": "en_cours",
+                 "a_rappeler": "a_rappeler", "rdv_pris": "rdv_pris", "pas_interesse": "clos"}
+_FERMES = ("traite", "rdv_pris", "clos")
+_SOURCE_LABELS = {"crm_rappel": "Planifié depuis le CRM", "sms_qualification": "Réponse SMS",
+                  "contact_form": "Formulaire de contact", "contact_page": "Page contact"}
+
+
+def rappel_statut(r: dict) -> str:
+    if r.get("statut") in RAPPEL_STATUTS:
+        return r["statut"]
+    return "traite" if r.get("handled") else "a_rappeler"
+
+
+def _rappel_public(r: dict, now: datetime) -> dict:
+    r["statut"] = rappel_statut(r)
+    r["nom_complet"] = f"{r.get('prenom') or ''} {r.get('nom') or ''}".strip() or r.get("telephone") or "—"
+    r["origine"] = _SOURCE_LABELS.get(r.get("source") or "", "Site internet")
+    tent = r.get("tentatives") or []
+    r["nb_tentatives"] = len(tent)
+    r["derniere_tentative"] = tent[-1] if tent else None
+    quand = rdv_suivi.parse(r.get("scheduled_at")) if r.get("scheduled_at") else None
+    r["en_retard"] = bool(r["statut"] not in _FERMES and quand and quand < now)
+    return r
+
+
+async def _rappel_ou_404(rid: str) -> dict:
+    r = await db.callback_requests.find_one({"id": rid}, {"_id": 0})
+    if not r:
+        raise HTTPException(status_code=404, detail="Rappel introuvable")
+    return r
+
+
+@router.get("/rappels")
+async def list_rappels(
+    etat: str = "ouverts", assigne: Optional[str] = None,
+    user: dict = Depends(require_role(*ROLES_LEADS)),
+):
+    """Page « Rappels » : `etat` = ouverts | fermes | tous ; `assigne` = moi
+    ou l'id d'une personne. Les commerciaux limités à des catégories voient
+    les rappels de leurs catégories, ceux sans catégorie et ceux qui leur
+    sont attribués."""
+    items = await db.callback_requests.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    assigned = effective_assigned_categories(user)
+    if user["role"] in ("commercial", "responsable_commercial", "agent_telephonique") and assigned:
+        items = [r for r in items if not r.get("interest") or r.get("interest") in assigned or r.get("assigned_to") == user["id"]]
+    if assigne == "moi":
+        items = [r for r in items if r.get("assigned_to") == user["id"]]
+    elif assigne:
+        items = [r for r in items if r.get("assigned_to") == assigne]
+    now = datetime.now(PARIS)
+    out = [_rappel_public(r, now) for r in items]
+    compte = {"ouverts": sum(1 for r in out if r["statut"] not in _FERMES),
+              "en_retard": sum(1 for r in out if r["en_retard"]),
+              "fermes": sum(1 for r in out if r["statut"] in _FERMES)}
+    if etat == "ouverts":
+        out = [r for r in out if r["statut"] not in _FERMES]
+        # Les plus urgents d'abord : planifiés passés, puis planifiés à venir, puis les autres.
+        out.sort(key=lambda r: (r.get("scheduled_at") or "9999", r.get("created_at") or ""))
+    elif etat == "fermes":
+        out = [r for r in out if r["statut"] in _FERMES]
+    return {"items": out, "compte": compte, "statuts": RAPPEL_STATUTS, "resultats": RAPPEL_RESULTATS}
+
+
+@router.post("/rappels")
+async def create_rappel(payload: RappelIn, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Rappel téléphonique planifié depuis le CRM (bouton « Planifier un
+    rappel » à côté de « Rendez-vous »). Rien n'est envoyé au prospect : la
+    personne assignée reçoit une notification à l'heure du rappel."""
+    from routers.leads import _category_for_interest
+    if payload.lead_id:
+        lead = await db.leads.find_one({"id": payload.lead_id}, {"_id": 0}) \
+            or await db.meta_lead_imports.find_one({"id": payload.lead_id}, {"_id": 0}) \
+            or await _student_as_contact(payload.lead_id)
+        if not lead:
+            raise HTTPException(status_code=404, detail="Personne introuvable")
+    elif payload.nouveau_contact:
+        lead = await _lead_depuis_contact(payload.nouveau_contact, user, payload.formation_titre, "rappel_manuel")
+    else:
+        raise HTTPException(status_code=400, detail="Choisissez une personne ou saisissez ses coordonnées")
+    if not rdv_suivi.parse(payload.scheduled_at):
+        raise HTTPException(status_code=400, detail="Date du rappel invalide")
+    assigne_id = payload.assigned_to or user["id"]
+    assigne = await db.users.find_one({"id": assigne_id}, {"_id": 0, "id": 1, "name": 1})
+    if not assigne:
+        raise HTTPException(status_code=404, detail="Personne assignée introuvable")
+    prenom, _, nom = (lead.get("name") or "").partition(" ")
+    formation = payload.formation_titre or lead.get("interest") or ""
+    doc = {
+        "id": str(uuid.uuid4()), "prenom": prenom, "nom": nom,
+        "telephone": lead.get("phone") or "", "email": lead.get("email") or "",
+        "message": (payload.notes or "").strip(), "session": formation,
+        "source": "crm_rappel", "interest": _category_for_interest(formation), "center": "",
+        "from_meta_ads": bool(lead.get("from_meta_ads")), "lead_id": lead.get("id"),
+        "handled": False, "notes": "", "statut": "a_rappeler",
+        "scheduled_at": payload.scheduled_at, "reminder_sent": False,
+        "assigned_to": assigne["id"], "assigned_to_name": assigne.get("name", ""),
+        "created_by": user["id"], "created_by_name": user.get("name", ""),
+        "tentatives": [], "created_at": now_iso(),
+    }
+    await db.callback_requests.insert_one(doc)
+    await log_action(user, "rappel_planifie", "lead", lead.get("id"), {
+        "name": lead.get("name"), "scheduled_at": payload.scheduled_at, "assigned_to_name": assigne.get("name", ""),
+        "note": doc["message"]})
+    doc.pop("_id", None)
+    return _rappel_public(doc, datetime.now(PARIS))
+
+
+@router.post("/rappels/{rid}/tentatives")
+async def add_rappel_tentative(rid: str, payload: RappelTentativeIn, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Résultat d'un rappel : la tentative est gardée (qui, quand, résultat,
+    note), le statut du rappel suit, et la note va aussi dans l'historique
+    du prospect."""
+    if payload.resultat not in RAPPEL_RESULTATS:
+        raise HTTPException(status_code=400, detail="Résultat inconnu")
+    r = await _rappel_ou_404(rid)
+    note = (payload.note or "").strip()
+    tentative = {"at": now_iso(), "by_id": user["id"], "by_name": user.get("name", ""),
+                 "resultat": payload.resultat, "label": RAPPEL_RESULTATS[payload.resultat], "note": note}
+    statut = _STATUT_APRES[payload.resultat]
+    upd = {"statut": statut, "handled": statut in _FERMES, "updated_at": now_iso(),
+           "last_attempt_at": tentative["at"], "last_attempt_by_name": tentative["by_name"]}
+    if statut in _FERMES:
+        upd.update({"handled_by": user["id"], "handled_by_name": user.get("name", ""), "handled_at": tentative["at"]})
+    if payload.prochain_rappel:
+        if not rdv_suivi.parse(payload.prochain_rappel):
+            raise HTTPException(status_code=400, detail="Date du prochain rappel invalide")
+        upd.update({"scheduled_at": payload.prochain_rappel, "reminder_sent": False})
+        tentative["prochain_rappel"] = payload.prochain_rappel
+        if not r.get("assigned_to"):
+            upd.update({"assigned_to": user["id"], "assigned_to_name": user.get("name", "")})
+    await db.callback_requests.update_one({"id": rid}, {"$set": upd, "$push": {"tentatives": tentative}})
+
+    lead_id = r.get("lead_id")
+    if lead_id:
+        texte = f"📞 Rappel ({RAPPEL_RESULTATS[payload.resultat]})" + (f" : {note}" if note else "")
+        entry = {"text": texte, "at": tentative["at"], "by_id": user["id"], "by_name": user.get("name", ""), "rappel_id": rid}
+        for coll in (db.leads, db.meta_lead_imports):
+            res = await coll.update_one({"id": lead_id}, {
+                "$push": {"notes_history": {"$each": [entry], "$slice": -20}},
+                "$set": {"notes": texte, "notes_updated_at": entry["at"], "notes_updated_by": user["id"],
+                         "notes_updated_by_name": user.get("name", ""), "last_contacted_by": user["id"],
+                         "last_contacted_at": entry["at"], "contacted": True, "updated_at": now_iso()},
+                "$inc": {"relance_count": 1},
+            })
+            if getattr(res, "matched_count", 0):
+                if coll is db.leads:
+                    from routers.leads import _leads_cache_clear
+                    _leads_cache_clear()
+                break
+    await log_action(user, "rappel_tentative", "lead", lead_id, {
+        "name": f"{r.get('prenom') or ''} {r.get('nom') or ''}".strip(), "resultat": RAPPEL_RESULTATS[payload.resultat],
+        "note": note, "rappel_id": rid})
+    if statut in _FERMES:
+        await log_action(user, "rappel_traite", "callback_request", rid, {"name": f"{r.get('prenom') or ''} {r.get('nom') or ''}".strip()})
+    return _rappel_public(await _rappel_ou_404(rid), datetime.now(PARIS))
+
+
+@router.patch("/rappels/{rid}")
+async def update_rappel(rid: str, payload: RappelUpdate, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Réattribuer un rappel ou changer son heure (la notification repart)."""
+    await _rappel_ou_404(rid)
+    upd = {"updated_at": now_iso()}
+    if payload.assigned_to:
+        assigne = await db.users.find_one({"id": payload.assigned_to}, {"_id": 0, "id": 1, "name": 1})
+        if not assigne:
+            raise HTTPException(status_code=404, detail="Personne assignée introuvable")
+        upd.update({"assigned_to": assigne["id"], "assigned_to_name": assigne.get("name", "")})
+    if payload.scheduled_at:
+        if not rdv_suivi.parse(payload.scheduled_at):
+            raise HTTPException(status_code=400, detail="Date invalide")
+        upd.update({"scheduled_at": payload.scheduled_at, "reminder_sent": False})
+    await db.callback_requests.update_one({"id": rid}, {"$set": upd})
+    return _rappel_public(await _rappel_ou_404(rid), datetime.now(PARIS))
+
+
+async def send_rappels_dus() -> int:
+    """Notification push à la personne assignée quand l'heure d'un rappel
+    planifié arrive (boucle de fond toutes les 15 min, voir server.py)."""
+    from services.push import send_push_to_users
+    now = datetime.now(PARIS)
+    dus = await db.callback_requests.find(
+        {"scheduled_at": {"$ne": None}, "handled": {"$ne": True}, "reminder_sent": {"$ne": True}}, {"_id": 0},
+    ).to_list(2000)
+    sent = 0
+    for r in dus:
+        quand = rdv_suivi.parse(r.get("scheduled_at"))
+        if not quand or quand > now or not r.get("assigned_to"):
+            continue
+        nom = f"{r.get('prenom') or ''} {r.get('nom') or ''}".strip() or r.get("telephone") or ""
+        try:
+            await send_push_to_users([r["assigned_to"]], "📞 Rappel à passer",
+                                     f"{nom} — {r.get('telephone') or ''} ({quand.strftime('%H:%M')})", "/admin/rappels")
+        except Exception:
+            pass
+        await db.callback_requests.update_one({"id": r["id"]}, {"$set": {"reminder_sent": True}})
+        sent += 1
+    return sent

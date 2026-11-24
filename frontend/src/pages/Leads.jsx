@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MetaFormAnswers from "@/components/MetaFormAnswers";
+import ScheduleCallbackDialog from "@/components/ScheduleCallbackDialog";
+import { TraiteParCell } from "@/components/SuiviProspect";
+import SuiviEquipe from "@/components/SuiviEquipe";
+import { useAuth } from "@/contexts/AuthContext";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -18,7 +23,7 @@ import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
 import {
   Plus, UploadSimple, FileXls, FileCode, MagnifyingGlass, Trash, Phone,
   EnvelopeSimple, PaperPlaneTilt, Warning, X, UsersThree, PencilSimple, GraduationCap,
-  EnvelopeOpen, Eye, Megaphone, ArrowsClockwise, CalendarPlus, NotePencil, CreditCard,
+  EnvelopeOpen, Eye, Megaphone, ArrowsClockwise, CalendarPlus, NotePencil, CreditCard, PhoneOutgoing,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
@@ -408,7 +413,32 @@ const TEMPLATES = {
 const emptyLead = { name: "", email: "", phone: "", interest: "", notes: "", tags: [] };
 
 // ─── Composant principal ──────────────────────────────────────────────────────
+// Onglet « Suivi de l'équipe » réservé aux responsables (demande du
+// 2026-11-24) : classement des traitements de prospects par jour et
+// rapprochement Meta / inscriptions sur place. La liste reste montée quand
+// on change d'onglet (filtres conservés).
+const ROLES_SUIVI_EQUIPE = ["admin", "responsable_commercial", "responsable_admission"];
+
 export default function Leads() {
+  const { user } = useAuth();
+  const [onglet, setOnglet] = useState("prospects");
+  const [suiviVu, setSuiviVu] = useState(false);
+  if (!ROLES_SUIVI_EQUIPE.includes(user?.role)) return <LeadsList />;
+  return (
+    <div className="space-y-4">
+      <Tabs value={onglet} onValueChange={(v) => { setOnglet(v); if (v === "suivi") setSuiviVu(true); }}>
+        <TabsList>
+          <TabsTrigger value="prospects" data-testid="leads-tab-prospects">Prospects</TabsTrigger>
+          <TabsTrigger value="suivi" data-testid="leads-tab-suivi">Suivi de l'équipe</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      <div className={onglet === "prospects" ? "" : "hidden"}><LeadsList /></div>
+      {suiviVu && <div className={onglet === "suivi" ? "" : "hidden"}><SuiviEquipe /></div>}
+    </div>
+  );
+}
+
+function LeadsList() {
   const location = useLocation();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -507,6 +537,7 @@ export default function Leads() {
   const [enrollForm, setEnrollForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "" });
   const [enrolling, setEnrolling] = useState(false);
   const [bookTarget, setBookTarget] = useState(null);
+  const [callbackTarget, setCallbackTarget] = useState(null);
   const [paymentLinkTarget, setPaymentLinkTarget] = useState(null);
 
   const [emailsOpen, setEmailsOpen] = useState(false);
@@ -2018,6 +2049,7 @@ export default function Leads() {
                 <th className="py-3 px-4 overline">Réponses formulaire</th>
                 <th className="py-3 px-4 overline">Tags</th>
                 <th className="py-3 px-4 overline">Statut</th>
+                <th className="py-3 px-4 overline">Traité par</th>
                 <th className="py-3 px-4 overline">Suivi</th>
                 <th className="py-3 px-4 overline">Date</th>
                 <th className="py-3 px-4 overline text-right">Actions</th>
@@ -2074,6 +2106,9 @@ export default function Leads() {
                       </SelectContent>
                     </Select>
                   </td>
+                  <td className="py-3 px-4">
+                    <TraiteParCell lead={l} fallbackName={l.qualified_by_name} />
+                  </td>
                   <td className="py-3 px-4 text-xs">
                     <div className="flex flex-col gap-1">
                       <span
@@ -2123,6 +2158,14 @@ export default function Leads() {
                         <CalendarPlus size={14} />
                       </button>
                       <button
+                        onClick={() => setCallbackTarget(l)}
+                        className="p-1.5 text-[#0052CC] hover:bg-blue-50 rounded"
+                        title="Planifier un rappel téléphonique"
+                        data-testid={`schedule-callback-${l.id}`}
+                      >
+                        <PhoneOutgoing size={14} />
+                      </button>
+                      <button
                         onClick={() => setPaymentLinkTarget(l)}
                         className="p-1.5 text-[#0a0a0a] hover:bg-gray-100 rounded disabled:opacity-30"
                         disabled={!l.email}
@@ -2165,7 +2208,7 @@ export default function Leads() {
               ))}
               {!filteredItems.length && !loading && (
                 <tr>
-                  <td colSpan="10" className="py-12 text-center text-gray-400">
+                  <td colSpan="11" className="py-12 text-center text-gray-400">
                     Aucun lead. Importez un fichier ou ajoutez-en un manuellement.
                   </td>
                 </tr>
@@ -2346,6 +2389,13 @@ export default function Leads() {
         open={!!bookTarget}
         onOpenChange={(v) => !v && setBookTarget(null)}
         lead={bookTarget}
+        onCreated={() => load()}
+      />
+
+      <ScheduleCallbackDialog
+        open={!!callbackTarget}
+        onOpenChange={(v) => !v && setCallbackTarget(null)}
+        lead={callbackTarget}
         onCreated={() => load()}
       />
 

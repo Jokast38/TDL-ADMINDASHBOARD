@@ -589,6 +589,7 @@ async def list_leads(
                  tuple(sorted(assigned)) if scoped else None, sort, sms_qualif)
     cached = _leads_cache_get(cache_key)
     if cached is not None:
+        await _avec_suivi(cached["items"])
         return cached
 
     total = await db.leads.count_documents(query)
@@ -638,7 +639,65 @@ async def list_leads(
 
     result = {"items": items, "total": total, "page": page, "page_size": page_size, "pages": max((total + page_size - 1) // page_size, 1)}
     _leads_cache_set(cache_key, result)
+    await _avec_suivi(items)
     return result
+
+
+async def _avec_suivi(items: list) -> None:
+    """Colonne « Traité par » (demande du 2026-11-24) : dernière personne
+    qui a traité le prospect, quand, nombre de contacts et de traitements —
+    calculé à chaque affichage depuis le journal d'activité (hors cache)."""
+    from services.suivi_prospects import suivi_resume
+    resume = await suivi_resume([i["id"] for i in items])
+    for i in items:
+        i["suivi"] = resume.get(i["id"])
+
+
+# Suivi précis et classement de l'équipe (demande du 2026-11-24), onglet
+# réservé aux responsables sur la page Prospects.
+ROLES_SUIVI_EQUIPE = ("admin", "responsable_commercial", "responsable_admission")
+
+
+@router.get("/suivi-equipe")
+async def suivi_equipe(date_from: Optional[str] = None, date_to: Optional[str] = None,
+                       user: dict = Depends(require_role(*ROLES_SUIVI_EQUIPE))):
+    """Classement des employés par prospects traités (par jour et sur la
+    période), avec notes, qualifications, RDV placés et rappels."""
+    from datetime import date as _date
+    from services.suivi_prospects import classement
+    today = _date.today().isoformat()
+    date_from, date_to = date_from or today, date_to or date_from or today
+    try:
+        _date.fromisoformat(date_from), _date.fromisoformat(date_to)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates invalides")
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
+    return await classement(date_from, date_to)
+
+
+@router.get("/rapprochement-meta")
+async def rapprochement_meta(user: dict = Depends(require_role(*ROLES_SUIVI_EQUIPE))):
+    """Inscriptions (sur place ou autre canal) qui correspondent à un
+    prospect Meta arrivé avant : simulation, rien n'est écrit."""
+    from services.meta_rapprochement import analyser
+    return await analyser()
+
+
+@router.post("/rapprochement-meta")
+async def appliquer_rapprochement_meta(user: dict = Depends(require_role(*ROLES_SUIVI_EQUIPE))):
+    """Corrige l'origine de ces inscriptions (Meta) et passe les prospects
+    Meta correspondants en « Inscrit »."""
+    from services.meta_rapprochement import appliquer
+    return await appliquer(user)
+
+
+@router.get("/{lid}/suivi")
+async def lead_suivi(lid: str, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Contacts numérotés de ce prospect (1er contact, 2e contact...) :
+    qui, quel jour, et ce qui a été fait (notes, qualification, RDV, rappel)."""
+    from services.suivi_prospects import suivi_detail
+    return await suivi_detail(lid)
 
 
 @router.get("/origins")

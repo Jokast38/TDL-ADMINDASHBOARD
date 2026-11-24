@@ -534,6 +534,11 @@ async def _call_appointment_reminders_loop():
             notified = await send_rdv_sans_retour_notifications()
             if notified:
                 log.info(f"Rendez-vous sans retour : {notified} notification(s)")
+            # Rappels téléphoniques planifiés arrivés à échéance (2026-11-24).
+            from routers.call_center import send_rappels_dus
+            notified = await send_rappels_dus()
+            if notified:
+                log.info(f"Rappels à passer : {notified} notification(s)")
         except Exception as e:
             log.warning(f"Rappels d'appels programmés : erreur — {e}")
         await asyncio.sleep(15 * 60)

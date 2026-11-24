@@ -10,9 +10,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
+import ScheduleCallbackDialog from "@/components/ScheduleCallbackDialog";
 import MetaFormAnswers, { metaFormAnswers } from "@/components/MetaFormAnswers";
 import {
-  Phone, EnvelopeSimple, FileText, CalendarPlus, CheckCircle, Headset, MagnifyingGlass, X as XIcon,
+  Phone, EnvelopeSimple, FileText, CalendarPlus, CheckCircle, PhoneOutgoing, Headset, MagnifyingGlass, X as XIcon,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { formatDateTimeFR } from "@/lib/dateFormat";
@@ -84,6 +85,7 @@ export default function CentreAppel() {
   const [sendingDocs, setSendingDocs] = useState(false);
 
   const [rdvLead, setRdvLead] = useState(null);
+  const [rappelLead, setRappelLead] = useState(null);
 
   const [finalizeLead, setFinalizeLead] = useState(null);
   const [finalizeFormationId, setFinalizeFormationId] = useState("");
@@ -374,6 +376,9 @@ export default function CentreAppel() {
                         <button onClick={() => setRdvLead(l)} className="p-1.5 rounded hover:bg-gray-100 text-gray-600" title="Planifier un rendez-vous" data-testid={`centre-appel-rdv-${l.id}`}>
                           <CalendarPlus size={14} />
                         </button>
+                        <button onClick={() => setRappelLead(l)} className="p-1.5 rounded hover:bg-blue-50 text-[#0052CC]" title="Planifier un rappel téléphonique" data-testid={`centre-appel-rappel-${l.id}`}>
+                          <PhoneOutgoing size={14} />
+                        </button>
                         <button onClick={() => openFinalize(l)} className="p-1.5 rounded hover:bg-green-50 text-green-600 ml-auto" title="Finaliser l'inscription" data-testid={`centre-appel-finalize-${l.id}`}>
                           <CheckCircle size={16} weight="fill" />
                         </button>
@@ -441,6 +446,7 @@ export default function CentreAppel() {
         lead={rdvLead}
         onCreated={() => { setRdvLead(null); toast.success("Rendez-vous planifié"); }}
       />
+      <ScheduleCallbackDialog open={!!rappelLead} onOpenChange={(v) => !v && setRappelLead(null)} lead={rappelLead} />
 
       {/* Détail du prospect — ouvert en cliquant n'importe où sur la carte
           (hors boutons d'action, qui gardent leur propre comportement). */}

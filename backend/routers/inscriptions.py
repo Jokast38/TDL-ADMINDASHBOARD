@@ -192,6 +192,10 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         inscription["created_by_name"] = acting_staff.get("name")
         inscription["processed_by"] = acting_staff["id"]
     await db.inscriptions.insert_one(inscription)
+    # Vraie origine (demande du 2026-11-24) : un prospect Meta déjà connu qui
+    # s'inscrit sur place ou par un autre canal reste compté comme venant de Meta.
+    from services.meta_rapprochement import rapprocher_inscription
+    await rapprocher_inscription(inscription)
     if acting_staff:
         await log_action(acting_staff, "inscription_creee", "inscription", insc_id, {
             "student_name": payload.student_name, "formation_title": formation["title"],

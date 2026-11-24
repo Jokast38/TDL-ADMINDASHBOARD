@@ -177,6 +177,9 @@ const ORIGIN_COLOR = {
   [ORIGIN_IMPORTED]: "bg-teal-50 text-teal-700 border-teal-200",
 };
 const getOrigin = (i) => {
+  // Prospect Meta retrouvé (même email ou téléphone, arrivé avant) : la vraie
+  // origine est la pub Meta, même saisi sur place (rapprochement du 2026-11-24).
+  if (i.origine_reelle === "meta") return ORIGIN_META_ADS;
   if ((i.source || "").startsWith("excel_import")) return ORIGIN_IMPORTED;
   if (i.source === "admin_walkin") return ORIGIN_WALKIN;
   if (i.from_meta_ads) return ORIGIN_META_ADS;
@@ -749,12 +752,12 @@ export default function Inscriptions() {
                           title={`Voir la page d'origine : ${i.landing_url}`}
                         >
                           <Badge variant="outline" className={`text-[10px] hover:underline cursor-pointer ${ORIGIN_COLOR[getOrigin(i)]}`}>
-                            {ORIGIN_LABEL[getOrigin(i)]}
+                            {ORIGIN_LABEL[getOrigin(i)]}{i.origine_reelle === "meta" && i.source === "admin_walkin" ? " · inscrit sur place" : ""}
                           </Badge>
                         </a>
                       ) : (
                         <Badge variant="outline" className={`text-[10px] ${ORIGIN_COLOR[getOrigin(i)]}`}>
-                          {ORIGIN_LABEL[getOrigin(i)]}{getOrigin(i) === ORIGIN_WALKIN && i.created_by_name ? ` — ${i.created_by_name}` : ""}
+                          {ORIGIN_LABEL[getOrigin(i)]}{getOrigin(i) === ORIGIN_WALKIN && i.created_by_name ? ` — ${i.created_by_name}` : ""}{i.origine_reelle === "meta" && i.source === "admin_walkin" ? ` · inscrit sur place${i.created_by_name ? ` (${i.created_by_name})` : ""}` : ""}
                         </Badge>
                       )}
                     </td>

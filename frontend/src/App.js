@@ -55,6 +55,7 @@ const CacesAdmin = lazy(() => import("@/pages/CacesAdmin"));
 const VerifCaces = lazy(() => import("@/pages/VerifCaces"));
 const Appointments = lazy(() => import("@/pages/Appointments"));
 const RendezVous = lazy(() => import("@/pages/RendezVous"));
+const Rappels = lazy(() => import("@/pages/Rappels"));
 const Dossiers = lazy(() => import("@/pages/Dossiers"));
 const CentreAppel = lazy(() => import("@/pages/CentreAppel"));
 const KamiStreet = lazy(() => import("@/pages/KamiStreet"));
@@ -256,6 +257,9 @@ function App() {
             } />
             <Route path="/admin/rendez-vous" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"]}><AdminLayout><RendezVous /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/rappels" element={
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"]}><AdminLayout><Rappels /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/leads" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"]}><AdminLayout><Leads /></AdminLayout></ProtectedRoute>

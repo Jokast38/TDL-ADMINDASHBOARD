@@ -416,6 +416,12 @@ async def list_meta_leads(
             d["inscription_id"] = insc["id"]
             d["inscription_formation_title"] = insc.get("formation_title")
 
+    # Colonne « Traité par » (2026-11-24) : dernière personne, nombre de contacts.
+    from services.suivi_prospects import suivi_resume
+    resume = await suivi_resume([d["id"] for d in docs])
+    for d in docs:
+        d["suivi"] = resume.get(d["id"])
+
     leads_meta_filter = {"$or": [{"source": "meta"}, {"sources": "meta"}]}
     accounts = sorted({
         *[a for a in await db.meta_lead_imports.distinct("meta_account") if a],

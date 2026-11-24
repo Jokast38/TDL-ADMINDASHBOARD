@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import PersonChooser, { EMPTY_CONTACT, contactValide } from "@/components/PersonChooser";
 
 function toISO(d) {
   const y = d.getFullYear();
@@ -28,19 +28,9 @@ function toISO(d) {
  *   (généré par un import Cosmosia), on propose de le confirmer directement
  *   plutôt que d'en recréer un nouveau.
  */
-const PERSON_TYPES = {
-  inscrit: ["Inscrit", "bg-green-50 text-green-700 border-green-200"],
-  apprenant: ["Apprenant", "bg-blue-50 text-blue-700 border-blue-200"],
-  prospect: ["Prospect", "bg-gray-50 text-gray-500 border-gray-200"],
-};
-
-function PersonBadge({ type }) {
-  const t = PERSON_TYPES[type];
-  if (!t) return null;
-  return <span className={`ml-1 text-[10px] font-normal border rounded px-1.5 py-0.5 ${t[1]}`}>{t[0]}</span>;
-}
-
-export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedLead, onCreated }) {
+// Sans `lead`, la personne se cherche dans le CRM ou se saisit à la main
+// (nouvelle personne pas encore dans le CRM, demande du 2026-11-24).
+export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedLead, onCreated, defaultMode = "recherche" }) {
   const { user } = useAuth();
   // L'attribution du suivi (qui s'occupe de ce prospect) se fait ici, au
   // moment de la prise de RDV, plutôt que sur l'inscription a posteriori —
@@ -57,9 +47,8 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
   const [assignees, setAssignees] = useState([]);
   const [assignedTo, setAssignedTo] = useState("");
   const [lead, setLead] = useState(fixedLead || null);
-  const [leadQuery, setLeadQuery] = useState("");
-  const [leadResults, setLeadResults] = useState([]);
-  const [searchingLead, setSearchingLead] = useState(false);
+  const [personMode, setPersonMode] = useState(defaultMode);
+  const [contact, setContact] = useState(EMPTY_CONTACT);
   const [pendingSlot, setPendingSlot] = useState(null);
   const [checkingSlot, setCheckingSlot] = useState(false);
   const [formations, setFormations] = useState([]);
@@ -92,7 +81,7 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
   useEffect(() => {
     if (!open) return;
     setLead(fixedLead || null);
-    setLeadQuery(""); setLeadResults([]); setPendingSlot(null);
+    setPersonMode(defaultMode); setContact(EMPTY_CONTACT); setPendingSlot(null);
     setKind("physique"); setFormationId(""); setLocation(""); setAssignedTo("");
     setDate(toISO(new Date())); setTime(""); setNotes("");
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data)).catch(() => {});
@@ -118,20 +107,6 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
       .finally(() => setCheckingSlot(false));
   }, [open, lead]);
 
-  useEffect(() => {
-    if (fixedLead || !leadQuery.trim()) { setLeadResults([]); return; }
-    setSearchingLead(true);
-    const t = setTimeout(() => {
-      // Inscrits/apprenants ET prospects (demande du 2026-11-06 : avant,
-      // seuls les prospects étaient proposés).
-      api.get("/call-center/people", { params: { q: leadQuery.trim() } })
-        .then((r) => setLeadResults(r.data || []))
-        .catch(() => setLeadResults([]))
-        .finally(() => setSearchingLead(false));
-    }, 300);
-    return () => clearTimeout(t);
-  }, [leadQuery, fixedLead]);
-
   const claimPendingSlot = async () => {
     if (!pendingSlot) return;
     setClaiming(true);
@@ -148,14 +123,18 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
   };
 
   const submit = async () => {
-    if (!lead) return toast.error("Choisissez un lead");
+    const nouveau = !fixedLead && personMode === "nouveau";
+    if (nouveau ? !contactValide(contact) : !lead) {
+      return toast.error(nouveau ? "Prénom et téléphone (ou email) requis" : "Choisissez une personne");
+    }
     if (!date || !time) return toast.error("Choisissez un créneau disponible");
     if (kind === "physique" && !location.trim()) return toast.error("Lieu requis pour un rendez-vous physique");
     setSubmitting(true);
     try {
       const formation = formations.find((f) => f.id === formationId);
       await api.post("/call-center/appointments", {
-        lead_id: lead.id,
+        lead_id: nouveau ? undefined : lead.id,
+        nouveau_contact: nouveau ? contact : undefined,
         scheduled_at: new Date(`${date}T${time}:00`).toISOString(),
         kind,
         location: kind === "physique" ? location : undefined,
@@ -178,49 +157,12 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="book-appointment-dialog">
+      <DialogContent className="max-h-[92vh] overflow-y-auto" data-testid="book-appointment-dialog">
         <DialogHeader><DialogTitle>Prendre un rendez-vous</DialogTitle></DialogHeader>
         <div className="space-y-3 mt-2">
           {!fixedLead && (
-            <div>
-              <label className="text-sm font-medium">Personne</label>
-              {lead ? (
-                <div className="flex items-center justify-between border border-gray-200 rounded-md px-3 py-2 mt-1">
-                  <div className="text-sm">
-                    <p className="font-medium">{lead.name || lead.full_name} <PersonBadge type={lead.type} /></p>
-                    <p className="text-xs text-gray-400">{lead.email || lead.phone}{lead.formation ? ` · ${lead.formation}` : ""}</p>
-                  </div>
-                  <button className="text-xs text-gray-400 hover:text-red-600 underline" onClick={() => setLead(null)}>Changer</button>
-                </div>
-              ) : (
-                <div className="relative mt-1">
-                  <MagnifyingGlass size={14} className="absolute left-2.5 top-2.5 text-gray-400" />
-                  <Input
-                    className="pl-8" placeholder="Rechercher un prospect, un inscrit ou un apprenant (nom, email, téléphone)..."
-                    value={leadQuery} onChange={(e) => setLeadQuery(e.target.value)}
-                    data-testid="book-appointment-lead-search"
-                  />
-                  {leadQuery.trim() && (
-                    <div className="mt-1 border border-gray-200 rounded-md max-h-48 overflow-y-auto">
-                      {searchingLead ? (
-                        <p className="text-xs text-gray-400 px-3 py-2">Recherche...</p>
-                      ) : leadResults.length === 0 ? (
-                        <p className="text-xs text-gray-400 px-3 py-2">{leadQuery.trim().length < 2 ? "Tapez au moins 2 caractères" : "Aucune personne trouvée"}</p>
-                      ) : leadResults.map((l) => (
-                        <button
-                          key={l.id} type="button"
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-100 last:border-0"
-                          onClick={() => { setLead(l); setLeadQuery(""); setLeadResults([]); }}
-                        >
-                          <p className="font-medium">{l.name || l.full_name} <PersonBadge type={l.type} /></p>
-                          <p className="text-xs text-gray-400">{l.email || l.phone}{l.formation ? ` · ${l.formation}` : ""}</p>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <PersonChooser lead={lead} setLead={setLead} mode={personMode} setMode={setPersonMode}
+              contact={contact} setContact={setContact} testid="book-appointment-person" />
           )}
 
           {checkingSlot && <p className="text-xs text-gray-400">Vérification d'un créneau déjà disponible...</p>}
@@ -261,7 +203,7 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
             </Select>
           </div>
           <div>
-            <label className="text-sm font-medium">Formation concernée</label>
+            <label className="text-sm font-medium">Formation qui intéresse</label>
             <Select value={formationId || "aucune"} onValueChange={(v) => setFormationId(v === "aucune" ? "" : v)}>
               <SelectTrigger data-testid="book-appointment-formation"><SelectValue placeholder="Aucune formation précise" /></SelectTrigger>
               <SelectContent>
@@ -308,7 +250,7 @@ export default function BookAppointmentDialog({ open, onOpenChange, lead: fixedL
         </div>
         <div className="flex justify-end gap-2 mt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Annuler</Button>
-          <Button onClick={submit} disabled={submitting || !lead || !time} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="book-appointment-submit">
+          <Button onClick={submit} disabled={submitting || !time || (fixedLead || personMode !== "nouveau" ? !lead : !contactValide(contact))} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="book-appointment-submit">
             {submitting ? "..." : "Confirmer le rendez-vous"}
           </Button>
         </div>

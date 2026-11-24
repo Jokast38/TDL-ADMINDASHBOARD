@@ -45,6 +45,8 @@ export const navAll = [
   { to: "/admin/rdv", label: "Créneaux pratique / examen", icon: SteeringWheel, roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   // Suivi des rendez-vous du CRM (cahier des charges du 2026-11-10).
   { to: "/admin/rendez-vous", label: "Rendez-vous", icon: CalendarDots, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
+  // Rappels téléphoniques et leur suivi (2026-11-24).
+  { to: "/admin/rappels", label: "Rappels", icon: PhoneCall, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
   { to: "/admin/leads", label: "Leads", icon: UsersThree, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
   { to: "/admin/documents-library", label: "Bibliothèque PDF", icon: FilePdf, roles: ["admin", "responsable_admission", "agent_admin"] },
   { to: "/admin/doc-templates", label: "Modèles PDF", icon: FileText, roles: ["admin"] },
