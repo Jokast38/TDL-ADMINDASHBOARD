@@ -155,6 +155,10 @@ def _origin_for(ins: dict) -> str:
     synchronisée pour que la répartition par origine corresponde à ce que
     montre déjà la colonne "Origine" de la page Inscriptions."""
     source = ins.get("source") or ""
+    # Prospect Meta retrouvé à l'inscription (même sur place) : la vraie
+    # origine est la pub Meta (services/meta_rapprochement.py, 2026-11-24).
+    if ins.get("origine_reelle") == "meta":
+        return "meta_ads"
     if source.startswith("excel_import"):
         return "imported"
     if source == "admin_walkin":
@@ -177,7 +181,7 @@ async def revenue_breakdown(
 
     inscriptions = await db.inscriptions.find(
         {}, {"_id": 0, "price": 1, "payment_status": 1, "created_at": 1,
-             "formation_id": 1, "formation_title": 1, "source": 1, "from_meta_ads": 1}
+             "formation_id": 1, "formation_title": 1, "source": 1, "from_meta_ads": 1, "origine_reelle": 1}
     ).to_list(50000)
     formations_price = {
         f["id"]: f.get("price", 0)

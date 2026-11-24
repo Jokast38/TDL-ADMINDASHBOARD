@@ -140,3 +140,67 @@ def test_rendez_vous_par_employe():
             r["rdv_inscriptions"], r["delai_retour_min"]) == (3, 2, 1, 1, 1, 1, 30)
     res = sp.fusion_rdv(sp.classement_from_entries([]), {"k": r})
     assert res["classement"][0]["user_name"] == "Karim" and res["classement"][0]["par_jour"][0]["rdv_prevus"] == 3
+
+
+def test_inscription_sur_place_rattachee_a_meta_en_temps_reel(monkeypatch):
+    """Un agent inscrit sur place une personne déjà venue par une pub Meta :
+    l'inscription passe en origine Meta, le prospect en « Inscrit » au nom
+    de l'agent (tracé), et les statistiques par origine la comptent Meta."""
+    import re as _re
+
+    def ok(doc, q):
+        for k, v in q.items():
+            if k == "$and":
+                if not all(ok(doc, x) for x in v):
+                    return False
+            elif k == "$or":
+                if not any(ok(doc, x) for x in v):
+                    return False
+            elif isinstance(v, dict) and "$regex" in v:
+                flags = _re.I if "i" in v.get("$options", "") else 0
+                if not _re.search(v["$regex"], str(doc.get(k) or ""), flags):
+                    return False
+            elif doc.get(k) != v:
+                return False
+        return True
+
+    class Coll(_Coll):
+        def find(self, q, _p=None):
+            docs = [dict(d) for d in self.docs if ok(d, q)]
+
+            class C:
+                async def to_list(self, _n):
+                    return docs
+            return C()
+
+    class DbType(type):
+        def __getitem__(cls, name):
+            return getattr(cls, name)
+
+    class Db(metaclass=DbType):
+        leads = Coll([{"id": "M1", "name": "Ali B", "email": "ali@mail.fr", "phone": "+33612345678", "source": "meta",
+                       "statut": "a_relancer", "created_at": "2026-11-20T10:00:00+00:00", "campaign_name": "VTC Novembre"}])
+        meta_lead_imports = Coll()
+        inscriptions = Coll([{"id": "I1"}])
+
+    logs = []
+
+    async def log(user, action, ttype, tid, meta=None):
+        logs.append((user["name"], action, tid, meta.get("qualification")))
+
+    import services.activity as act
+    import routers.leads as lr
+    monkeypatch.setattr(mr, "db", Db)
+    monkeypatch.setattr(act, "log_action", log)
+    monkeypatch.setattr(lr, "_leads_cache_clear", lambda: None)
+    insc = {"id": "I1", "student_email": "autre@mail.fr", "student_phone": "06 12 34 56 78",
+            "source": "admin_walkin", "created_at": "2026-11-24T15:00:00+00:00"}
+    agent = {"id": "a1", "name": "Anaïs", "role": "agent_admin"}
+    assert asyncio.run(mr.rapprocher_inscription(insc, agent)) == "M1"
+    assert insc["origine_reelle"] == "meta" and insc["meta_campagne"] == "VTC Novembre"
+    assert Db.inscriptions.docs[0]["origine_reelle"] == "meta"
+    lead = Db.leads.docs[0]
+    assert (lead["statut"], lead["inscription_id"], lead["qualified_by_name"]) == ("inscrit", "I1", "Anaïs")
+    assert logs == [("Anaïs", "lead_qualifie", "M1", "inscrit")]
+    from routers.dashboard import _origin_for
+    assert _origin_for(insc) == "meta_ads"

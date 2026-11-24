@@ -133,29 +133,42 @@ async def analyser() -> dict:
             "sur_place": sum(1 for x in a_corriger if x["sur_place"])}
 
 
-async def _appliquer_un(insc_id: str, p_id: str, collection: str, campagne: Optional[str], meta_le: Optional[str]) -> None:
-    await db.inscriptions.update_one({"id": insc_id}, {"$set": {
-        "origine_reelle": "meta", "meta_lead_id": p_id, "meta_lead_collection": collection,
-        "meta_campagne": campagne, "meta_lead_created_at": meta_le, "origine_corrigee_at": now_iso(),
-    }})
-    prospect = await db[collection].find_one({"id": p_id}, {"_id": 0, "statut": 1, "qualification": 1, "inscription_id": 1})
+async def _appliquer_un(insc_id: str, p_id: str, collection: str, campagne: Optional[str], meta_le: Optional[str],
+                        user: Optional[dict] = None) -> dict:
+    """Écrit la correction ; renvoie les champs posés sur l'inscription."""
+    champs = {"origine_reelle": "meta", "meta_lead_id": p_id, "meta_lead_collection": collection,
+              "meta_campagne": campagne, "meta_lead_created_at": meta_le, "origine_corrigee_at": now_iso()}
+    await db.inscriptions.update_one({"id": insc_id}, {"$set": champs})
+    prospect = await db[collection].find_one({"id": p_id}, {"_id": 0, "name": 1, "statut": 1, "qualification": 1, "inscription_id": 1})
     if not prospect:
-        return
+        return champs
     upd = {"updated_at": now_iso()}
     if not prospect.get("inscription_id"):
         upd["inscription_id"] = insc_id
+    passe_inscrit = False
     if collection == "leads":
         if prospect.get("statut") not in ("inscrit", "paye"):
             upd.update({"statut": "inscrit", "chaleur": None, "motif_cloture": None})
+            passe_inscrit = True
     elif prospect.get("qualification") not in ("inscrit", "paye"):
         upd["qualification"] = "inscrit"
+        passe_inscrit = True
+    if passe_inscrit and user:
+        # Qualification signée par l'agent qui a fait l'inscription : visible
+        # dans « Traité par », le suivi du prospect et le classement.
+        upd.update({"qualified_by": user["id"], "qualified_by_name": user.get("name", ""), "qualified_at": now_iso()})
     await db[collection].update_one({"id": p_id}, {"$set": upd})
+    if passe_inscrit and user:
+        from services.activity import log_action
+        await log_action(user, "lead_qualifie", "meta_lead" if collection == "meta_lead_imports" else "lead", p_id, {
+            "name": prospect.get("name"), "qualification": "inscrit", "auto": True, "inscription_id": insc_id})
+    return champs
 
 
 async def appliquer(user: Optional[dict] = None) -> dict:
     res = await analyser()
     for x in res["a_corriger"]:
-        await _appliquer_un(x["inscription_id"], x["meta_lead_id"], x["meta_collection"], x["meta_campagne"], x["meta_le"])
+        await _appliquer_un(x["inscription_id"], x["meta_lead_id"], x["meta_collection"], x["meta_campagne"], x["meta_le"], user)
     if res["a_corriger"]:
         from routers.leads import _leads_cache_clear
         _leads_cache_clear()
@@ -165,9 +178,12 @@ async def appliquer(user: Optional[dict] = None) -> dict:
     return {"corrigees": len(res["a_corriger"]), "sur_place": res["sur_place"], "deja_rapproches": res["deja_rapproches"]}
 
 
-async def rapprocher_inscription(insc: dict) -> Optional[str]:
-    """Appelé à chaque nouvelle inscription : rattache tout de suite le
-    prospect Meta correspondant. Ne lève jamais d'exception."""
+async def rapprocher_inscription(insc: dict, user: Optional[dict] = None) -> Optional[str]:
+    """Appelé à chaque nouvelle inscription (dont « sur place » par un agent) :
+    rattache tout de suite le prospect Meta correspondant, met l'origine
+    « Pub Meta » sur l'inscription (aussi dans le dict reçu, donc dans la
+    réponse) et passe le prospect en « Inscrit » au nom de l'agent. Ne lève
+    jamais d'exception."""
     try:
         email, phone = norm_email(insc.get("student_email")), norm_phone(insc.get("student_phone"))
         if not email and not phone:
@@ -188,9 +204,13 @@ async def rapprocher_inscription(insc: dict) -> Optional[str]:
         p = match(insc, *_index(cands))
         if not p:
             return None
-        await _appliquer_un(insc["id"], p["id"], p["_collection"],
-                            p.get("campaign_name") or p.get("campagne") or (p.get("meta_details") or {}).get("form_name"),
-                            p.get("created_time") or p.get("created_at"))
+        champs = await _appliquer_un(insc["id"], p["id"], p["_collection"],
+                                     p.get("campaign_name") or p.get("campagne") or (p.get("meta_details") or {}).get("form_name"),
+                                     p.get("created_time") or p.get("created_at"), user)
+        insc.update(champs)
+        if p["_collection"] == "leads":
+            from routers.leads import _leads_cache_clear
+            _leads_cache_clear()
         return p["id"]
     except Exception:
         return None
