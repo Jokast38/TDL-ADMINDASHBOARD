@@ -28,6 +28,7 @@ const STATUT_STYLE = {
   clos: "bg-gray-100 text-gray-500",
 };
 const MANAGERS = ["admin", "responsable_admission", "responsable_commercial"];
+const PAGE_SIZE = 25;
 
 export default function Rappels() {
   const { user } = useAuth();
@@ -39,6 +40,10 @@ export default function Rappels() {
   const [newOpen, setNewOpen] = useState(false);
   const [tentativeFor, setTentativeFor] = useState(null);
   const [rdvFor, setRdvFor] = useState(null);
+  // Onglets par formation, comme Prospects et Rendez-vous (« Non précisée »
+  // = demandes sans formation), et pagination de 25 lignes (2026-11-24).
+  const [categorie, setCategorie] = useState("all");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     api.get("/call-center/assignees").then((r) => setAssignees(r.data || [])).catch(() => {});
@@ -48,12 +53,14 @@ export default function Rappels() {
     setLoading(true);
     const params = { etat };
     if (assigne !== "all") params.assigne = assigne;
+    if (categorie !== "all") params.categorie = categorie;
     api.get("/call-center/rappels", { params })
       .then((r) => setData(r.data))
       .catch(() => toast.error("Rappels non chargés"))
       .finally(() => setLoading(false));
   };
-  useEffect(load, [etat, assigne]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [etat, assigne, categorie]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPage(1); }, [etat, assigne, categorie]);
 
   const reassign = async (r, uid) => {
     try {
@@ -65,7 +72,17 @@ export default function Rappels() {
     }
   };
 
-  const items = data.items || [];
+  const allItems = data.items || [];
+  const pages = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));
+  const pageCourante = Math.min(page, pages);
+  const items = allItems.slice((pageCourante - 1) * PAGE_SIZE, pageCourante * PAGE_SIZE);
+  const cats = data.categories || {};
+  const ongletsFormation = [
+    ["all", "Toutes formations", Object.values(cats).reduce((s, n) => s + n, 0)],
+    ...Object.entries(cats).filter(([k]) => k !== "AUTRE").sort((a, b) => b[1] - a[1]).map(([k, n]) => [k, data.categorie_labels?.[k] || k, n]),
+    ...(cats.AUTRE ? [["AUTRE", "Non précisée", cats.AUTRE]] : []),
+    ...(categorie !== "all" && !cats[categorie] ? [[categorie, categorie === "AUTRE" ? "Non précisée" : data.categorie_labels?.[categorie] || categorie, 0]] : []),
+  ];
   return (
     <div className="space-y-6" data-testid="rappels-page">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -102,6 +119,15 @@ export default function Rappels() {
         )}
       </div>
 
+      <div className="flex flex-wrap gap-1.5" data-testid="rappels-categories">
+        {ongletsFormation.map(([k, label, n]) => (
+          <button key={k} type="button" onClick={() => setCategorie(k)} data-testid={`rappels-cat-${k}`}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap ${categorie === k ? "bg-[#0a0a0a] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+            {label} <span className="opacity-60">({n})</span>
+          </button>
+        ))}
+      </div>
+
       <Card className="overflow-hidden border border-gray-200 rounded-md shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full text-sm" data-testid="rappels-table">
@@ -117,8 +143,8 @@ export default function Rappels() {
               </tr>
             </thead>
             <tbody>
-              {loading && !items.length && <tr><td colSpan="7" className="py-10 text-center text-gray-400">Chargement...</td></tr>}
-              {!loading && !items.length && <tr><td colSpan="7" className="py-10 text-center text-gray-400">Aucun rappel.</td></tr>}
+              {loading && !allItems.length && <tr><td colSpan="7" className="py-10 text-center text-gray-400">Chargement...</td></tr>}
+              {!loading && !allItems.length && <tr><td colSpan="7" className="py-10 text-center text-gray-400">Aucun rappel.</td></tr>}
               {items.map((r) => {
                 const der = r.derniere_tentative;
                 return (
@@ -131,7 +157,10 @@ export default function Rappels() {
                       <p className="text-[11px] text-gray-400">{r.origine} · reçu le {formatDateTimeFR(r.created_at)}{r.created_by_name ? ` par ${r.created_by_name}` : ""}</p>
                       {r.message && <p className="text-xs text-gray-500 italic mt-1 max-w-[280px]">« {r.message} »</p>}
                     </td>
-                    <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[160px]">{r.session || "—"}</td>
+                    <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[160px]">
+                      {r.session || <span className="text-gray-300">Non précisée</span>}
+                      {r.categorie !== "AUTRE" && <p className="text-[11px] text-gray-400">{data.categorie_labels?.[r.categorie]}</p>}
+                    </td>
                     <td className="py-2.5 px-4 text-xs whitespace-nowrap">
                       {r.scheduled_at ? (
                         <span className={r.en_retard ? "text-red-700 font-semibold" : "text-gray-700"}>
@@ -177,6 +206,18 @@ export default function Rappels() {
             </tbody>
           </table>
         </div>
+        {allItems.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 text-sm text-gray-500" data-testid="rappels-pagination">
+            <p>{(pageCourante - 1) * PAGE_SIZE + 1}–{Math.min(pageCourante * PAGE_SIZE, allItems.length)} sur {allItems.length}</p>
+            {pages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={pageCourante <= 1} onClick={() => setPage(pageCourante - 1)}>Précédent</Button>
+                <span className="text-xs">Page {pageCourante} / {pages}</span>
+                <Button variant="outline" size="sm" disabled={pageCourante >= pages} onClick={() => setPage(pageCourante + 1)}>Suivant</Button>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       <ScheduleCallbackDialog open={newOpen} onOpenChange={setNewOpen} onCreated={load} />

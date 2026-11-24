@@ -822,7 +822,7 @@ async def _rappel_ou_404(rid: str) -> dict:
 
 @router.get("/rappels")
 async def list_rappels(
-    etat: str = "ouverts", assigne: Optional[str] = None,
+    etat: str = "ouverts", assigne: Optional[str] = None, categorie: Optional[str] = None,
     user: dict = Depends(require_role(*ROLES_LEADS)),
 ):
     """Page « Rappels » : `etat` = ouverts | fermes | tous ; `assigne` = moi
@@ -839,6 +839,11 @@ async def list_rappels(
         items = [r for r in items if r.get("assigned_to") == assigne]
     now = datetime.now(PARIS)
     out = [_rappel_public(r, now) for r in items]
+    # Onglets par formation (2026-11-24) : catégorie de la demande, sinon
+    # déduite de la formation saisie ; « AUTRE » = demande sans précision.
+    from routers.leads import _category_for_interest
+    for r in out:
+        r["categorie"] = (r.get("interest") if r.get("interest") in _CATEGORIE_LABELS else None)             or _category_for_interest(r.get("session")) or "AUTRE"
     compte = {"ouverts": sum(1 for r in out if r["statut"] not in _FERMES),
               "en_retard": sum(1 for r in out if r["en_retard"]),
               "fermes": sum(1 for r in out if r["statut"] in _FERMES)}
@@ -848,7 +853,13 @@ async def list_rappels(
         out.sort(key=lambda r: (r.get("scheduled_at") or "9999", r.get("created_at") or ""))
     elif etat == "fermes":
         out = [r for r in out if r["statut"] in _FERMES]
-    return {"items": out, "compte": compte, "statuts": RAPPEL_STATUTS, "resultats": RAPPEL_RESULTATS}
+    categories: Dict[str, int] = {}
+    for r in out:
+        categories[r["categorie"]] = categories.get(r["categorie"], 0) + 1
+    if categorie:
+        out = [r for r in out if r["categorie"] == categorie]
+    return {"items": out, "compte": compte, "statuts": RAPPEL_STATUTS, "resultats": RAPPEL_RESULTATS,
+            "categories": categories, "categorie_labels": {**_CATEGORIE_LABELS}}
 
 
 @router.post("/rappels")
