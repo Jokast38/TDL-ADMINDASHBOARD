@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import MetaFormAnswers from "@/components/MetaFormAnswers";
 import { api } from "@/lib/api";
 import { selectableStages } from "@/lib/selectableStages";
 import { Card } from "@/components/ui/card";
@@ -1297,13 +1298,14 @@ function MetaEventsTab() {
                 <th className="py-2.5 px-4 overline">Paiement</th>
                 <th className="py-2.5 px-4 overline">Traité par</th>
                 <th className="py-2.5 px-4 overline">Suivi</th>
+                <th className="py-2.5 px-4 overline">Réponses formulaire</th>
                 <th className="py-2.5 px-4 overline">Notes</th>
                 <th className="py-2.5 px-4 overline text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {!pagedItems.length && (
-                <tr><td colSpan="10" className="py-10 text-center text-gray-400">
+                <tr><td colSpan="11" className="py-10 text-center text-gray-400">
                   {items.length ? "Aucun lead pour ce filtre." : "Aucun lead — importez un export CSV pour commencer."}
                 </td></tr>
               )}
@@ -1352,6 +1354,9 @@ function MetaEventsTab() {
                       <Phone size={11} className={l.relance_count ? "text-[#0052CC]" : "text-gray-300"} />
                       {l.relance_count || 0}
                     </span>
+                  </td>
+                  <td className="py-2.5 px-4 align-top">
+                    <MetaFormAnswers lead={l} compact />
                   </td>
                   <td className="py-2.5 px-4 max-w-[220px]">
                     <MetaLeadNotesCell lead={l} onSave={updateNotes} onEdited={onNoteEdited} />

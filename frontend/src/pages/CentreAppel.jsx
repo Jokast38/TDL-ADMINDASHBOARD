@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import BookAppointmentDialog from "@/components/BookAppointmentDialog";
+import MetaFormAnswers, { metaFormAnswers } from "@/components/MetaFormAnswers";
 import {
   Phone, EnvelopeSimple, FileText, CalendarPlus, CheckCircle, Headset, MagnifyingGlass, X as XIcon,
 } from "@phosphor-icons/react";
@@ -483,6 +484,13 @@ export default function CentreAppel() {
                     <p>{detailLead.relance_count || 0}</p>
                   </div>
                 </div>
+
+                {metaFormAnswers(detailLead).length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Réponses au formulaire Meta</p>
+                    <MetaFormAnswers lead={detailLead} />
+                  </div>
+                )}
 
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Notes</p>

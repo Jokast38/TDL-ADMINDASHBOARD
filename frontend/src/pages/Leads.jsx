@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import MetaFormAnswers from "@/components/MetaFormAnswers";
 import { useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
@@ -2014,6 +2015,7 @@ export default function Leads() {
                 <th className="py-3 px-4 overline">Nom</th>
                 <th className="py-3 px-4 overline">Contact</th>
                 <th className="py-3 px-4 overline">Intérêt</th>
+                <th className="py-3 px-4 overline">Réponses formulaire</th>
                 <th className="py-3 px-4 overline">Tags</th>
                 <th className="py-3 px-4 overline">Statut</th>
                 <th className="py-3 px-4 overline">Suivi</th>
@@ -2042,6 +2044,9 @@ export default function Leads() {
                         Pub Meta
                       </Badge>
                     )}
+                  </td>
+                  <td className="py-3 px-4 align-top">
+                    <MetaFormAnswers lead={l} compact />
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex flex-wrap gap-1 max-w-[180px]">
@@ -2160,7 +2165,7 @@ export default function Leads() {
               ))}
               {!filteredItems.length && !loading && (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-gray-400">
+                  <td colSpan="10" className="py-12 text-center text-gray-400">
                     Aucun lead. Importez un fichier ou ajoutez-en un manuellement.
                   </td>
                 </tr>
