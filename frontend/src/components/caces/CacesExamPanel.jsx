@@ -45,7 +45,7 @@ export async function downloadPdf(url, filename) {
 }
 
 const DOC_LABELS = {
-  questionnaires: "Questionnaires", corriges: "Corrigés", resultat_theorie: "Résultat théorie",
+  questionnaires: "Questionnaires", corriges: "Corrigés", feuilles_reponses: "Feuilles de réponses", resultat_theorie: "Résultat théorie",
   grille_pratique: "Grille pratique", adequation: "Examen d'adéquation",
 };
 
@@ -117,8 +117,12 @@ export default function CacesExamPanel({ stage }) {
               </Button>
               {nbCopies > 0 && (
                 <>
-                  <Button variant="outline" onClick={() => downloadPdf(`/caces/sessions/${stage.id}/theorie/questionnaires.pdf`, "questionnaires_caces.pdf")}>
-                    <FilePdf size={14} className="mr-1" /> Questionnaires à imprimer
+                  <Button variant="outline" onClick={async () => {
+                    // Questionnaires + feuilles de réponses (cases VRAI / FAUX vides) en un clic.
+                    await downloadPdf(`/caces/sessions/${stage.id}/theorie/questionnaires.pdf`, "questionnaires_caces.pdf");
+                    await downloadPdf(`/caces/sessions/${stage.id}/theorie/feuilles-reponses.pdf`, "feuilles_reponses_caces.pdf");
+                  }} data-testid="caces-questionnaires-pdf">
+                    <FilePdf size={14} className="mr-1" /> Questionnaires + feuilles de réponses
                   </Button>
                   <Button variant="outline" onClick={() => downloadPdf(`/caces/sessions/${stage.id}/theorie/corriges.pdf`, "corriges_caces.pdf")}>
                     <FilePdf size={14} className="mr-1" /> Corrigés (testeur)

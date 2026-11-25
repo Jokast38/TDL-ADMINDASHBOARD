@@ -39,6 +39,7 @@ _S = {
     "small": ParagraphStyle("sm", fontName="Helvetica", fontSize=7.5, leading=9.5, textColor=GREY),
     "cell": ParagraphStyle("c", fontName="Helvetica", fontSize=8, leading=10),
     "cellb": ParagraphStyle("cb", fontName="Helvetica-Bold", fontSize=8, leading=10),
+    "small_head": ParagraphStyle("sh", fontName="Helvetica-Bold", fontSize=7.5, leading=9, alignment=TA_CENTER),
     "center": ParagraphStyle("ce", fontName="Helvetica-Bold", fontSize=9, leading=11, alignment=TA_CENTER),
 }
 
@@ -192,6 +193,136 @@ def corriges_pdf(copies: List[dict], stage: dict) -> bytes:
             t, Spacer(1, 6)]))
     doc.build(story, onFirstPage=_footer("Corrigés — document confidentiel, ne pas distribuer"),
               onLaterPages=_footer("Corrigés — document confidentiel, ne pas distribuer"))
+    return buf.getvalue()
+
+
+def _sections_reponses(questions: List[dict]) -> List[tuple]:
+    """[(titre, points, [numéros])] dans la numérotation du questionnaire :
+    par thème (numéros de la grille officielle) quand les questions en ont
+    un, sinon 1..N dans l'ordre de la copie."""
+    if questions and all(q.get("theme_num") and q.get("numero") for q in questions):
+        sections: List[list] = []
+        for q in questions:
+            t = int(q["theme_num"])
+            if not sections or sections[-1][0] != t:
+                sections.append([t, []])
+            sections[-1][1].append(int(q["numero"]))
+        bareme = {i: b for i, (_, _, b) in enumerate(THEMES_THEORIE, start=1)}
+        return [(f"THÈME {t} :", f"{bareme.get(t, len(nums))} POINTS", nums) for t, nums in sections]
+    return [("QUESTIONS :", f"{len(questions)} POINTS", list(range(1, len(questions) + 1)))]
+
+
+def feuilles_reponses_pdf(copies: List[dict], stage: dict) -> bytes:
+    """Feuille d'examen du candidat (demandes du 2026-11-25), sur le modèle
+    de la fiche officielle « R.489 RÉPONSES - V1 - 12/2024 » : deux colonnes
+    (thèmes 1 à 3 à gauche, thème 4 à droite), une ligne « Question NN » avec
+    les deux cases VRAI et FAUX imprimées en noir, sans couleur ; le candidat
+    fait une croix ou hachure la case de sa réponse. Une page par copie,
+    numérotée comme son questionnaire."""
+    from reportlab.pdfgen import canvas as rl_canvas
+    from services.caces_r489_pdf import grilles as r489_grilles
+
+    W, H = A4
+    marge, gouttiere = 22, 16
+    col_w = (W - 2 * marge - gouttiere) / 2
+    case_w = 34
+    row_h = 12.6
+    navy = colors.HexColor("#1f3554")
+    version = r489_grilles().get("version", "")
+    buf = io.BytesIO()
+    c = rl_canvas.Canvas(buf, pagesize=A4)
+    c.setTitle("Feuilles d'examen CACES R.489")
+    c.setAuthor("TDL Formation")
+
+    def ligne(x, y, label, header=False, points=""):
+        """Une ligne de la fiche ; `y` = haut de la ligne."""
+        bas = y - row_h
+        c.setLineWidth(0.6)
+        if header:
+            c.setFillColor(navy)
+            c.rect(x, bas, col_w, row_h, stroke=1, fill=1)
+            c.setFillColor(colors.white)
+            c.setFont("Helvetica-Bold", 8)
+            c.drawString(x + 3, bas + 3.6, label)
+            c.drawCentredString(x + col_w - case_w, bas + 3.6, points)
+            c.setFillColor(colors.black)
+            return
+        c.rect(x, bas, col_w - 2 * case_w, row_h, stroke=1, fill=0)
+        c.setFont("Helvetica-Oblique", 8)
+        c.drawString(x + 3, bas + 3.6, label)
+        for k, txt in enumerate(("VRAI", "FAUX")):
+            cx = x + col_w - 2 * case_w + k * case_w
+            c.rect(cx, bas, case_w, row_h, stroke=1, fill=0)
+            c.setFont("Helvetica", 7.5)
+            c.drawCentredString(cx + case_w / 2, bas + 3.6, txt)
+
+    for copie in copies:
+        grille = copie.get("grille") or ""
+        vierge = copie.get("vierge")
+        # En-tête comme la fiche officielle, plus l'identité du candidat.
+        if _LOGO.exists():
+            try:
+                c.drawImage(str(_LOGO), marge, H - 50, width=30, height=30, preserveAspectRatio=True, mask="auto")
+            except Exception:
+                pass
+        c.setFont("Helvetica", 8)
+        c.drawString(marge + 36, H - 26, version)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawCentredString(W / 2 + 20, H - 28, f"EPREUVE THEORIQUE CACES® R.489 - [Grille {grille}]")
+        champs = [("Candidat :", "" if vierge else copie.get("student_name") or "", 210),
+                  ("Date :", "" if vierge or not copie.get("date") else _date(copie.get("date")), 130),
+                  ("Copie n° :", "" if vierge else str(copie.get("numero_copie") or ""), 50)]
+        x, y_id = marge + 36, H - 46
+        for label, val, larg in champs:
+            c.setFont("Helvetica-Bold", 8.5)
+            c.drawString(x, y_id, label)
+            lw = c.stringWidth(label, "Helvetica-Bold", 8.5) + 3
+            if val:
+                c.setFont("Helvetica", 8.5)
+                c.drawString(x + lw, y_id, val)
+            else:
+                c.setDash(1, 1.5)
+                c.line(x + lw, y_id - 1.5, x + lw + larg - 10, y_id - 1.5)
+                c.setDash()
+            x += lw + larg
+        c.setFont("Helvetica", 7)
+        c.setFillColor(colors.HexColor("#444444"))
+        c.drawString(marge, H - 62, "Pour chaque question, faites une croix ou hachurez UNE SEULE case : VRAI ou FAUX. "
+                                    "Une réponse double ou absente vaut 0. Ne rien écrire sur le questionnaire.")
+        c.setFillColor(colors.black)
+
+        # Deux colonnes : une section entière par colonne quand elle tient,
+        # sinon elle continue en haut de la colonne suivante.
+        haut, bas_min = H - 72, 70
+        col, y = 0, haut
+        for titre, points, nums in _sections_reponses(copie["questions"]):
+            if col == 0 and y != haut and y - row_h * (len(nums) + 1) < bas_min:
+                col, y = 1, haut
+            ligne(marge + col * (col_w + gouttiere), y, titre, header=True, points=points)
+            y -= row_h
+            for n in nums:
+                if y - row_h < bas_min:
+                    if col == 1:
+                        break
+                    col, y = 1, haut
+                    ligne(marge + col * (col_w + gouttiere), y, titre.rstrip(" :") + " (suite) :", header=True, points=points)
+                    y -= row_h
+                ligne(marge + col * (col_w + gouttiere), y, f"Question {n:02d}")
+                y -= row_h
+
+        # Signature et note en bas de page.
+        c.setLineWidth(0.6)
+        c.rect(marge, 22, W / 2 - marge - 4, 42)
+        c.rect(W / 2 + 4, 22, W / 2 - marge - 4, 42)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(marge + 4, 55, "Signature du candidat :")
+        c.drawString(W / 2 + 8, 55, f"Note (réservé au testeur) :        / {len(copie['questions'])}")
+        c.setFont("Helvetica", 6.5)
+        c.setFillColor(colors.HexColor("#666666"))
+        c.drawString(marge, 10, "TDL Formation - CACES® R.489 - feuille d'examen du candidat")
+        c.setFillColor(colors.black)
+        c.showPage()
+    c.save()
     return buf.getvalue()
 
 

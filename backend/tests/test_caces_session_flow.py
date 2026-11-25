@@ -180,7 +180,7 @@ def test_parcours_complet(env):
     assert sorted(c["numero_copie"] for c in copies) == [1, 2]
     assert all(len(c["questions"]) == 100 for c in copies)
     assert all(c["copie"]["nb_questions"] == 100 and "questions" not in c["copie"] for c in state["candidats"])
-    assert {d["type"] for d in db.caces_documents.docs} == {"questionnaires", "corriges"}
+    assert {d["type"] for d in db.caces_documents.docs} == {"questionnaires", "corriges", "feuilles_reponses"}
 
     # Un 2e tirage sans « regenerer » garde les mêmes copies.
     before = [(c["id"], c["grille"]) for c in copies]

@@ -121,6 +121,8 @@ def test_grille_a_telecharger(monkeypatch):
     import pymupdf
     text = "".join(p.get_text() for p in pymupdf.open(stream=r.body, filetype="pdf"))
     assert "Nom et prénom du candidat" in text and "Affirmation 100" in text
+    r = asyncio.run(caces_exam.download_grille("1", False, user, feuille=True))
+    assert "feuille_reponses_caces_grille_1" in r.headers["content-disposition"]
     r = asyncio.run(caces_exam.download_grille("toutes", True, user))
     assert "corrige_caces_grille_toutes" in r.headers["content-disposition"]
     with pytest.raises(HTTPException):

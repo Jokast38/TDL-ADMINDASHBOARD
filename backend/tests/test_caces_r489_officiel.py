@@ -106,3 +106,19 @@ def test_fiche_pratique_officielle_remplie(category):
     text = fitz.open(stream=pdf, filetype="pdf")[0].get_text()
     assert "DUPONT Karim" in text and "100 / 100" in text and "ADMIS" in text and "4 min" in text
     assert P.render("2A", grille_pratique("2A"), {}, sc, {}) is None  # pas de fiche officielle : PDF générique
+
+
+def test_feuille_reponses_vierge_numerotee_comme_le_questionnaire():
+    """Feuille de composition (2026-11-25) : une page par copie, numéros par
+    thème de la grille officielle, aucune réponse cochée."""
+    import pymupdf as fitz
+    from services import caces_exam_pdf, caces_r489_pdf
+    qs = caces_r489_pdf.official_questions("2")
+    pdf = caces_exam_pdf.feuilles_reponses_pdf(
+        [{"student_name": "Candidat A", "numero_copie": 1, "grille": "2", "date": "2026-11-25", "questions": qs},
+         {"student_name": "Candidat B", "numero_copie": 2, "grille": "2", "date": "2026-11-25", "questions": qs}], {})
+    doc = fitz.open(stream=pdf)
+    assert len(doc) == 2
+    texte = doc[0].get_text()
+    assert "Candidat A" in texte and "Question 50" in texte and texte.count("VRAI") == 101 and texte.count("FAUX") == 101  # 100 lignes + la consigne
+    assert "Candidat B" in doc[1].get_text()

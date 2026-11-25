@@ -268,7 +268,8 @@ async def get_grille(numero: str, user: dict = Depends(require_role(*ROLES_DOSSI
 
 
 @router.get("/theorie/grilles/{numero}/questionnaire.pdf")
-async def download_grille(numero: str, corrige: bool = False, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+async def download_grille(numero: str, corrige: bool = False, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT)),
+                          feuille: bool = False):
     """Grille à imprimer depuis la page CACES (demande du 2026-11-16) :
     questionnaire vierge, questions dans l'ordre de la grille, en-tête du
     candidat à remplir à la main — ou son corrigé. `numero` = « toutes » pour
@@ -281,6 +282,9 @@ async def download_grille(numero: str, corrige: bool = False, user: dict = Depen
               for n in numeros if (docs.get(n) or {}).get("questions")]
     if not copies:
         raise HTTPException(status_code=404, detail="Aucune question saisie dans cette grille")
+    if feuille:
+        # Feuille de réponses vierge (cases VRAI / FAUX), téléchargée avec le questionnaire.
+        return _pdf_response(pdfs.feuilles_reponses_pdf(copies, {}), f"feuille_reponses_caces_grille_{numero}.pdf")
     if all(_officielle(c["questions"], c["grille"]) for c in copies):
         doc = None
         for c in copies:
@@ -680,6 +684,8 @@ async def generate_papers(sid: str, payload: GenerateIn, user: dict = Depends(ge
     copies = await _copies(sid)
     await _archive("questionnaires", f"Questionnaires théoriques ({len(copies)} copies)", stage, user, _papers_pdf(copies, stage, False))
     await _archive("corriges", f"Corrigés des questionnaires ({len(copies)} copies)", stage, user, _papers_pdf(copies, stage, True))
+    await _archive("feuilles_reponses", f"Feuilles de réponses ({len(copies)} copies)", stage, user,
+                   pdfs.feuilles_reponses_pdf(copies, stage))
     return await session_exam_state(sid, user)
 
 
@@ -716,6 +722,18 @@ async def download_papers(sid: str, user: dict = Depends(get_current_user)):
     if not copies:
         raise HTTPException(status_code=404, detail="Questionnaires pas encore générés")
     return _pdf_response(_papers_pdf(copies, stage, False), f"questionnaires_caces_{exam_date(stage)}.pdf")
+
+
+@router.get("/sessions/{sid}/theorie/feuilles-reponses.pdf")
+async def download_answer_sheets(sid: str, user: dict = Depends(get_current_user)):
+    """Feuille de composition de chaque copie (demande du 2026-11-25) : cases
+    VRAI / FAUX vides, numérotées comme le questionnaire du candidat."""
+    stage = await _stage(sid)
+    _require_testeur(user, stage, exam_day=True)
+    copies = await _copies(sid)
+    if not copies:
+        raise HTTPException(status_code=404, detail="Questionnaires pas encore générés")
+    return _pdf_response(pdfs.feuilles_reponses_pdf(copies, stage), f"feuilles_reponses_caces_{exam_date(stage)}.pdf")
 
 
 @router.get("/sessions/{sid}/theorie/corriges.pdf")

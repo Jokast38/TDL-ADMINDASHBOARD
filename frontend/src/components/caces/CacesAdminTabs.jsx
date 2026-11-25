@@ -84,7 +84,10 @@ export function QuestionBankTab() {
           <Button size="sm" variant="outline" onClick={() => downloadPdf("/caces/theorie/modele.xlsx", "modele_questions_caces_r489.xlsx")}>
             <DownloadSimple size={14} className="mr-1" /> Modèle de fichier
           </Button>
-          <Button size="sm" variant="outline" disabled={!hasQuestions} onClick={() => downloadPdf("/caces/theorie/grilles/toutes/questionnaire.pdf", "grilles_caces_r489.pdf")} data-testid="caces-grilles-pdf">
+          <Button size="sm" variant="outline" disabled={!hasQuestions} onClick={async () => {
+            await downloadPdf("/caces/theorie/grilles/toutes/questionnaire.pdf", "grilles_caces_r489.pdf");
+            await downloadPdf("/caces/theorie/grilles/toutes/questionnaire.pdf?feuille=true", "feuilles_reponses_caces_r489.pdf");
+          }} data-testid="caces-grilles-pdf">
             <FilePdf size={14} className="mr-1" /> Les 5 grilles à imprimer
           </Button>
           <Button size="sm" variant="outline" disabled={!hasQuestions} onClick={() => downloadPdf("/caces/theorie/grilles/toutes/questionnaire.pdf?corrige=true", "corriges_caces_r489.pdf")}>
@@ -124,8 +127,11 @@ export function QuestionBankTab() {
                 <Button size="sm" variant="outline" onClick={() => setEditing(g.numero)}>
                   <PencilSimple size={14} className="mr-1" /> Voir / modifier
                 </Button>
-                <Button size="sm" variant="outline" disabled={!g.nb_questions} onClick={() => downloadPdf(`/caces/theorie/grilles/${g.numero}/questionnaire.pdf`, `questionnaire_caces_grille_${g.numero}.pdf`)} data-testid={`caces-grille-pdf-${g.numero}`}>
-                  <FilePdf size={14} className="mr-1" /> Questionnaire
+                <Button size="sm" variant="outline" disabled={!g.nb_questions} onClick={async () => {
+                  await downloadPdf(`/caces/theorie/grilles/${g.numero}/questionnaire.pdf`, `questionnaire_caces_grille_${g.numero}.pdf`);
+                  await downloadPdf(`/caces/theorie/grilles/${g.numero}/questionnaire.pdf?feuille=true`, `feuille_reponses_caces_grille_${g.numero}.pdf`);
+                }} data-testid={`caces-grille-pdf-${g.numero}`}>
+                  <FilePdf size={14} className="mr-1" /> Questionnaire + feuille de réponses
                 </Button>
                 <Button size="sm" variant="outline" disabled={!g.nb_questions} onClick={() => downloadPdf(`/caces/theorie/grilles/${g.numero}/questionnaire.pdf?corrige=true`, `corrige_caces_grille_${g.numero}.pdf`)}>
                   <FilePdf size={14} className="mr-1" /> Corrigé
