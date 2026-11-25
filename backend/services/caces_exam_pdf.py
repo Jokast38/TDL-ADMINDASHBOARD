@@ -217,7 +217,9 @@ def feuilles_reponses_pdf(copies: List[dict], stage: dict) -> bytes:
     de la fiche officielle « R.489 RÉPONSES - V1 - 12/2024 » : deux colonnes
     (thèmes 1 à 3 à gauche, thème 4 à droite), une ligne « Question NN » avec
     les deux cases VRAI et FAUX imprimées en noir, sans couleur ; le candidat
-    fait une croix ou hachure la case de sa réponse. Une page par copie,
+    fait une croix ou hachure la case de sa réponse ; une 3e case vide sert
+    au correcteur (1 si bonne réponse, 0 sinon). Titre sans numéro de grille :
+    la même feuille sert pour toutes les grilles. Une page par copie,
     numérotée comme son questionnaire."""
     from reportlab.pdfgen import canvas as rl_canvas
     from services.caces_r489_pdf import grilles as r489_grilles
@@ -226,6 +228,8 @@ def feuilles_reponses_pdf(copies: List[dict], stage: dict) -> bytes:
     marge, gouttiere = 22, 16
     col_w = (W - 2 * marge - gouttiere) / 2
     case_w = 34
+    note_w = 18      # case de correction : 1 (bonne réponse) ou 0, remplie par le testeur
+    rep_w = col_w - note_w
     row_h = 12.6
     navy = colors.HexColor("#1f3554")
     version = r489_grilles().get("version", "")
@@ -244,20 +248,26 @@ def feuilles_reponses_pdf(copies: List[dict], stage: dict) -> bytes:
             c.setFillColor(colors.white)
             c.setFont("Helvetica-Bold", 8)
             c.drawString(x + 3, bas + 3.6, label)
-            c.drawCentredString(x + col_w - case_w, bas + 3.6, points)
+            c.drawCentredString(x + rep_w - case_w, bas + 3.6, points)
+            c.setFont("Helvetica-Bold", 6)
+            c.drawCentredString(x + rep_w + note_w / 2, bas + 4, "1 / 0")
             c.setFillColor(colors.black)
             return
-        c.rect(x, bas, col_w - 2 * case_w, row_h, stroke=1, fill=0)
+        c.rect(x, bas, rep_w - 2 * case_w, row_h, stroke=1, fill=0)
         c.setFont("Helvetica-Oblique", 8)
         c.drawString(x + 3, bas + 3.6, label)
         for k, txt in enumerate(("VRAI", "FAUX")):
-            cx = x + col_w - 2 * case_w + k * case_w
+            cx = x + rep_w - 2 * case_w + k * case_w
             c.rect(cx, bas, case_w, row_h, stroke=1, fill=0)
             c.setFont("Helvetica", 7.5)
             c.drawCentredString(cx + case_w / 2, bas + 3.6, txt)
+        # Case vide de correction, séparée des réponses par un trait épais.
+        c.rect(x + rep_w, bas, note_w, row_h, stroke=1, fill=0)
+        c.setLineWidth(1.4)
+        c.line(x + rep_w, bas, x + rep_w, y)
+        c.setLineWidth(0.6)
 
     for copie in copies:
-        grille = copie.get("grille") or ""
         vierge = copie.get("vierge")
         # En-tête comme la fiche officielle, plus l'identité du candidat.
         if _LOGO.exists():
@@ -268,7 +278,7 @@ def feuilles_reponses_pdf(copies: List[dict], stage: dict) -> bytes:
         c.setFont("Helvetica", 8)
         c.drawString(marge + 36, H - 26, version)
         c.setFont("Helvetica-Bold", 11)
-        c.drawCentredString(W / 2 + 20, H - 28, f"EPREUVE THEORIQUE CACES® R.489 - [Grille {grille}]")
+        c.drawCentredString(W / 2 + 20, H - 28, "EPREUVE THEORIQUE CACES® R.489")  # valable pour toutes les grilles
         champs = [("Candidat :", "" if vierge else copie.get("student_name") or "", 210),
                   ("Date :", "" if vierge or not copie.get("date") else _date(copie.get("date")), 130),
                   ("Copie n° :", "" if vierge else str(copie.get("numero_copie") or ""), 50)]
@@ -288,7 +298,7 @@ def feuilles_reponses_pdf(copies: List[dict], stage: dict) -> bytes:
         c.setFont("Helvetica", 7)
         c.setFillColor(colors.HexColor("#444444"))
         c.drawString(marge, H - 62, "Pour chaque question, faites une croix ou hachurez UNE SEULE case : VRAI ou FAUX. "
-                                    "Une réponse double ou absente vaut 0. Ne rien écrire sur le questionnaire.")
+                                    "Réponse double ou absente = 0. Dernière case (1 / 0) réservée au correcteur.")
         c.setFillColor(colors.black)
 
         # Deux colonnes : une section entière par colonne quand elle tient,
