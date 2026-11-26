@@ -299,7 +299,7 @@ function App() {
               <ProtectedRoute roles={["admin"]}><AdminLayout><Activity /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/activite/employe/:employeeId" element={
-              <ProtectedRoute roles={["admin"]}><AdminLayout><EmployeeAudit /></AdminLayout></ProtectedRoute>
+              <ProtectedRoute roles={["admin", "responsable_commercial", "responsable_admission"]}><AdminLayout><EmployeeAudit /></AdminLayout></ProtectedRoute>
             } />
             <Route path="/admin/settings" element={
               <ProtectedRoute roles={["admin"]}><AdminLayout><Settings /></AdminLayout></ProtectedRoute>

@@ -421,8 +421,10 @@ const ROLES_SUIVI_EQUIPE = ["admin", "responsable_commercial", "responsable_admi
 
 export default function Leads() {
   const { user } = useAuth();
-  const [onglet, setOnglet] = useState("prospects");
-  const [suiviVu, setSuiviVu] = useState(false);
+  // Retour depuis la page d'activité d'un employé : on revient sur le suivi.
+  const retourSuivi = useLocation().state?.onglet === "suivi";
+  const [onglet, setOnglet] = useState(retourSuivi ? "suivi" : "prospects");
+  const [suiviVu, setSuiviVu] = useState(retourSuivi);
   if (!ROLES_SUIVI_EQUIPE.includes(user?.role)) return <LeadsList />;
   return (
     <div className="space-y-4">

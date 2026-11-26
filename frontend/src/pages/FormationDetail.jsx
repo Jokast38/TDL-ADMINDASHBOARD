@@ -23,6 +23,7 @@ import UpcomingSessionsSection from "@/components/UpcomingSessions";
 import GoogleCentersMap from "@/components/GoogleCentersMap";
 import PricingTable from "@/components/PricingTable";
 import SideRail from "@/components/SideRail";
+import { ELEARNING_TIERS } from "@/components/FormationBookingWidget";
 
 const { TopBar, StageNav, GOLD } = Kit;
 
@@ -82,6 +83,7 @@ export default function FormationDetail() {
   }
 
   const f = formation;
+  const isOnlineFormation = f.slug === "formation-vtc-en-ligne" || /en ligne/i.test(f.title || "");
   const gallery = galleryForCategory(f.category);
   const facts = [
     f.duration_hours > 0 && { icon: Clock, label: "Durée", value: `${f.duration_hours} heures` },
@@ -203,6 +205,32 @@ export default function FormationDetail() {
                 <li className="flex items-start gap-2"><CheckCircle size={16} className="text-[#0B7238] mt-0.5 shrink-0" weight="fill" /> Dossier ANTS suivi par notre équipe</li>
               </ul>
             </div>
+
+            {isOnlineFormation && (
+              <div className="mt-10 pt-8 border-t border-gray-200" id="formules-elearning">
+                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: "#8A6400" }}>Formules e-learning</p>
+                <h2 className="font-display text-xl font-bold mb-2">Deux formules pour avancer à votre rythme</h2>
+                <p className="text-gray-500 text-sm mb-6">
+                  Que vous préfériez être totalement autonome ou accompagné par un formateur, choisissez la formule adaptée lors de votre inscription.
+                </p>
+                <div className="grid sm:grid-cols-2 gap-5">
+                  {ELEARNING_TIERS.map((tier) => (
+                    <div key={tier.id} className="rounded-lg border-t-4 shadow-sm p-5 bg-white" style={{ borderTopColor: GOLD }}>
+                      <h3 className="font-display text-lg font-bold mb-1">{tier.label}</h3>
+                      <p className="text-xs text-gray-500 mb-3">{tier.tagline}</p>
+                      <ul className="space-y-1.5">
+                        {tier.features.map((feat) => (
+                          <li key={feat} className="text-sm text-gray-700 flex items-start gap-2">
+                            <CheckCircle size={15} weight="fill" className="mt-0.5 shrink-0" style={{ color: GOLD }} />
+                            {feat}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-10 pt-8 border-t border-gray-200" id="tarifs-formation">
               <PricingTable formation={f} others={others} ctaHref="#inscription" />

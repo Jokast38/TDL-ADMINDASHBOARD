@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { selectableStages } from "@/lib/selectableStages";
 import { Card } from "@/components/ui/card";
@@ -209,6 +209,7 @@ const PAGE_SIZE = 25;
 
 export default function Inscriptions() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   // Redirection depuis le bilan détaillé d'un employé (EmployeeAudit.jsx)
   const [q, setQ] = useState(location.state?.prefillSearch || new URLSearchParams(location.search).get("q") || "");
@@ -361,6 +362,17 @@ export default function Inscriptions() {
   const markCallbackHandled = async (id, handled) => {
     try { await api.put(`/callback-requests/${id}`, { handled }); loadCallbacks(); }
     catch { toast.error("Erreur"); }
+  };
+
+  // Bouton vert (demande du 2026-11-26) : la demande est prise en charge,
+  // elle quitte cette liste et on ouvre sa fiche dans la page Rappels pour
+  // saisir le résultat de l'appel et la note.
+  const prendreEnCharge = async (c) => {
+    try {
+      await api.post(`/call-center/rappels/${c.id}/prise-en-charge`);
+      setCallbacks((list) => list.filter((x) => x.id !== c.id));
+      navigate(`/admin/rappels?rappel=${c.id}`);
+    } catch (e) { toast.error(e.response?.data?.detail || "Prise en charge impossible"); }
   };
 
   const deleteCallback = async (id) => {
@@ -559,7 +571,9 @@ export default function Inscriptions() {
     finally { setSaving(false); }
   };
 
-  const pendingCallbacks = callbacks.filter((c) => !c.handled);
+  // Seules les demandes que personne n'a encore prises en charge restent
+  // ici ; le suivi (tentatives, notes, traitées) se fait dans Rappels.
+  const pendingCallbacks = callbacks.filter((c) => !c.handled && (!c.statut || c.statut === "a_rappeler"));
 
   return (
     <div className="space-y-6" data-testid="inscriptions-page">
@@ -574,7 +588,7 @@ export default function Inscriptions() {
         </Button>
       </div>
 
-      {callbacks.length > 0 && (
+      {pendingCallbacks.length > 0 && (
         <Card className="border border-amber-200 bg-amber-50/50 rounded-md shadow-none p-5" data-testid="callback-requests-card">
           <button
             type="button"
@@ -585,17 +599,17 @@ export default function Inscriptions() {
             {callbacksCollapsed ? <CaretRight size={14} className="text-amber-700" /> : <CaretDown size={14} className="text-amber-700" />}
             <PhoneCall size={16} className="text-amber-700" />
             <h2 className="font-display text-lg font-bold">Demandes de rappel</h2>
-            {pendingCallbacks.length > 0 ? (
-              <Badge className="bg-amber-200 text-amber-900 hover:bg-amber-200">{pendingCallbacks.length} en attente</Badge>
-            ) : (
-              <span className="text-xs text-gray-400">({callbacks.length} traitée(s))</span>
-            )}
+            <Badge className="bg-amber-200 text-amber-900 hover:bg-amber-200">{pendingCallbacks.length} en attente</Badge>
           </button>
           {!callbacksCollapsed && (
           <>
-          <p className="text-xs text-gray-500 mb-4">Formulaire "Être rappelé" de la landing page offre fidélité.</p>
+          <p className="text-xs text-gray-500 mb-4">
+            Formulaire "Être rappelé" du site. Le bouton vert prend la demande en charge et ouvre sa fiche dans{" "}
+            <button type="button" onClick={() => navigate("/admin/rappels")} className="underline hover:text-gray-800">Rappels</button>{" "}
+            pour noter le résultat de l'appel.
+          </p>
           <div className="space-y-2">
-            {callbacks.map((c) => (
+            {pendingCallbacks.map((c) => (
               <div
                 key={c.id}
                 className={`flex items-center justify-between gap-3 bg-white border border-gray-200 rounded-md px-4 py-2.5 ${c.handled ? "opacity-50" : ""}`}
@@ -625,23 +639,14 @@ export default function Inscriptions() {
                   >
                     <GraduationCap size={14} />
                   </button>
-                  {!c.handled ? (
-                    <button
-                      onClick={() => markCallbackHandled(c.id, true)}
-                      className="p-1.5 text-green-600 hover:bg-green-50 rounded"
-                      title="Marquer comme rappelé"
-                    >
-                      <Check size={14} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => markCallbackHandled(c.id, false)}
-                      className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"
-                      title="Remettre en attente"
-                    >
-                      <ArrowCounterClockwise size={14} />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => prendreEnCharge(c)}
+                    className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                    title="Prendre en charge et noter le résultat dans Rappels"
+                    data-testid={`callback-prendre-${c.id}`}
+                  >
+                    <Check size={14} />
+                  </button>
                   <button onClick={() => deleteCallback(c.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded" title="Supprimer">
                     <Trash size={14} />
                   </button>

@@ -372,10 +372,10 @@ async def send_pending_callback_reminders() -> int:
             f"<tr><th style='text-align:left;padding:6px 10px;'>Nom</th><th style='text-align:left;padding:6px 10px;'>Téléphone</th><th style='text-align:left;padding:6px 10px;'>Intérêt</th><th style='text-align:left;padding:6px 10px;'>Centre</th></tr>"
             f"{rows}</table>"
         )
-        await send_email(member["email"], subject, _staff_email(body, "Traiter les demandes", "/admin/inscriptions"))
+        await send_email(member["email"], subject, _staff_email(body, "Traiter les demandes", "/admin/rappels"))
         await send_push_to_users(
             [member["id"]], "Demandes de rappel en attente",
-            f"{len(mine)} demande(s) non traitée(s)", "/admin/inscriptions",
+            f"{len(mine)} demande(s) non traitée(s)", "/admin/rappels",
         )
         notified += 1
     return notified

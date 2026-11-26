@@ -78,14 +78,14 @@ export default function NotificationBell() {
               <>
                 {summary.callback_pending > 0 && (
                   <button
-                    onClick={() => { setOpen(false); navigate("/admin/inscriptions"); }}
+                    onClick={() => { setOpen(false); navigate("/admin/rappels"); }}
                     className="w-full flex items-start gap-3 p-3 hover:bg-gray-50 text-left border-b border-gray-100"
                     data-testid="notif-callback"
                   >
                     <ChatCircleText size={18} className="text-[#d4af37] mt-0.5 shrink-0" weight="fill" />
                     <div>
                       <p className="text-sm font-medium">{summary.callback_pending} demande(s) de rappel</p>
-                      <p className="text-xs text-gray-500">Non traitées — page Inscriptions</p>
+                      <p className="text-xs text-gray-500">Non traitées — page Rappels</p>
                     </div>
                   </button>
                 )}

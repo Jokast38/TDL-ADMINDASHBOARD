@@ -690,7 +690,7 @@ async def employees_activity_timeseries(days: int = 7, user: dict = Depends(requ
 
 
 @router.get("/employees/activity-by-day")
-async def employees_activity_by_day(days: int = 14, user: dict = Depends(require_role("admin", *ROLES_TEAM_MGMT))):
+async def employees_activity_by_day(days: int = 14, user: dict = Depends(require_role("admin", *ROLES_TEAM_MGMT, "responsable_admission"))):
     """Temps de travail réel PAR employé ET par jour — contrairement à
     GET /employees/activity (total global uniquement) et à
     GET /employees/activity-timeseries (total de toute l'équipe par jour),
@@ -722,7 +722,7 @@ async def employees_activity_by_day(days: int = 14, user: dict = Depends(require
 async def employees_activity_log(
     user_id: str = None, action: str = None, date_from: str = None, date_to: str = None,
     page: int = 1, page_size: int = 50,
-    user: dict = Depends(require_role("admin", *ROLES_TEAM_MGMT)),
+    user: dict = Depends(require_role("admin", *ROLES_TEAM_MGMT, "responsable_admission")),
 ):
     """Journal chronologique réel ("qui a fait quoi, quand") — distinct des
     compteurs agrégés de GET /employees/activity. Alimenté par
@@ -734,7 +734,10 @@ async def employees_activity_log(
     if user_id:
         query["user_id"] = user_id
     if action:
-        query["action"] = action
+        # Plusieurs actions séparées par des virgules (filtre « Notes »,
+        # « Inscriptions »... de la page d'activité d'un employé).
+        actions = [a.strip() for a in action.split(",") if a.strip()]
+        query["action"] = actions[0] if len(actions) == 1 else {"$in": actions}
     if date_from or date_to:
         date_range = {}
         if date_from:
@@ -762,7 +765,7 @@ async def employees_activity_log(
     collection_by_type = {
         "lead": ("leads", "/admin/leads"),
         "inscription": ("inscriptions", "/admin/inscriptions"),
-        "callback_request": ("callback_requests", "/admin/inscriptions"),
+        "callback_request": ("callback_requests", "/admin/rappels"),
         "meta_lead": ("meta_lead_imports", "/admin/marketing"),
     }
     for target_type, ids in ids_by_type.items():

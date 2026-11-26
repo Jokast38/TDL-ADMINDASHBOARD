@@ -26,8 +26,28 @@ const ACTION_META = {
   appel_attribue: { label: "Appel attribué", icon: PhoneCall, color: "#0e7490" },
   inscription_creee: { label: "Inscription créée", icon: UserPlus, color: "#0B7238" },
   lead_note: { label: "Note ajoutée", icon: NotePencil, color: "#6b7280" },
+  lead_note_modifiee: { label: "Note modifiée", icon: NotePencil, color: "#6b7280" },
+  inscription_note: { label: "Note sur une inscription", icon: NotePencil, color: "#6b7280" },
+  inscription_note_modifiee: { label: "Note d'inscription modifiée", icon: NotePencil, color: "#6b7280" },
+  rdv_note: { label: "Note de rendez-vous", icon: NotePencil, color: "#6b7280" },
+  rappel_tentative: { label: "Rappel — résultat", icon: PhoneCall, color: "#d4af37" },
+  rappel_planifie: { label: "Rappel planifié", icon: Clock, color: "#d4af37" },
+  rappel_pris_en_charge: { label: "Rappel pris en charge", icon: ListChecks, color: "#d4af37" },
+  lead_cree: { label: "Prospect créé", icon: UserPlus, color: "#0052CC" },
+  lead_assigne: { label: "Prospect attribué", icon: UserPlus, color: "#0e7490" },
+  lead_pipeline_status: { label: "Statut du prospect", icon: ListChecks, color: "#6b21a8" },
+  inscription_caces_categories: { label: "Catégories CACES", icon: ListChecks, color: "#0B7238" },
   paiement_lien_envoye: { label: "Lien de paiement envoyé", icon: Clock, color: "#0B7238" },
 };
+
+// Filtres du journal (2026-11-26) : « Notes » pour relire ce que la personne a écrit.
+const FILTRES = [
+  ["", "Toutes les actions"],
+  ["lead_note,lead_note_modifiee,inscription_note,inscription_note_modifiee,rdv_note,rappel_tentative", "Notes"],
+  ["inscription_creee,paiement_lien_envoye,dossier_traite,inscription_caces_categories", "Inscriptions & paiements"],
+  ["lead_contacte,lead_qualifie,lead_cree,lead_assigne,lead_pipeline_status,appel,appel_attribue", "Prospects & appels"],
+  ["rappel_traite,rappel_tentative,rappel_planifie,rappel_pris_en_charge,rdv_appel_cree,rdv_note", "Rappels & RDV"],
+];
 
 function actionMeta(action) {
   return ACTION_META[action] || { label: action, icon: ListChecks, color: "#6b7280" };
@@ -98,7 +118,10 @@ export default function EmployeeAudit() {
   const presetName = location.state?.name;
   const presetRole = location.state?.role;
 
-  const [rangeDays, setRangeDays] = useState(7);
+  const [rangeDays, setRangeDays] = useState(location.state?.dateFrom ? 0 : 7);
+  const [filtre, setFiltre] = useState("");
+  // Période reçue du Suivi de l'équipe (page Prospects).
+  const periodeSuivi = location.state?.dateFrom ? { from: location.state.dateFrom, to: location.state.dateTo || location.state.dateFrom } : null;
   const [employee, setEmployee] = useState(presetName ? { name: presetName, role: presetRole } : null);
   const [dailyMinutes, setDailyMinutes] = useState([]);
   const [logItems, setLogItems] = useState([]);
@@ -110,11 +133,14 @@ export default function EmployeeAudit() {
   const PAGE_SIZE = 100;
 
   const dateFrom = useMemo(() => {
+    if (!rangeDays && periodeSuivi) return periodeSuivi.from;
     const d = new Date();
     d.setDate(d.getDate() - (rangeDays - 1));
     return toISO(d);
-  }, [rangeDays]);
-  const dateTo = toISO(new Date());
+  }, [rangeDays]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dateTo = !rangeDays && periodeSuivi ? periodeSuivi.to : toISO(new Date());
+  // Temps actif : depuis le début de la période choisie jusqu'à aujourd'hui.
+  const joursActivite = Math.max(1, Math.round((new Date() - new Date(`${dateFrom}T00:00:00`)) / 86400000) + 1);
 
   useEffect(() => {
     if (!employee) {
@@ -139,19 +165,19 @@ export default function EmployeeAudit() {
     setLoading(true);
     setPage(1);
     Promise.all([
-      api.get("/employees/activity-by-day", { params: { days: rangeDays } }),
-      api.get("/employees/activity-log", { params: { user_id: employeeId, date_from: dateFrom, date_to: dateTo, page: 1, page_size: PAGE_SIZE } }),
+      api.get("/employees/activity-by-day", { params: { days: joursActivite } }),
+      api.get("/employees/activity-log", { params: { user_id: employeeId, date_from: dateFrom, date_to: dateTo, page: 1, page_size: PAGE_SIZE, action: filtre || undefined } }),
     ]).then(([daily, log]) => {
       const emp = daily.data.employees.find((e) => e.id === employeeId);
-      setDailyMinutes(emp ? emp.days : []);
+      setDailyMinutes((emp ? emp.days : []).filter((d) => d.date >= dateFrom && d.date <= dateTo));
       setLogItems(log.data.items);
       setLogTotal(log.data.total);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, [employeeId, rangeDays, dateFrom, dateTo]);
+  }, [employeeId, rangeDays, dateFrom, dateTo, filtre]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = () => {
     const nextPage = page + 1;
-    api.get("/employees/activity-log", { params: { user_id: employeeId, date_from: dateFrom, date_to: dateTo, page: nextPage, page_size: PAGE_SIZE } })
+    api.get("/employees/activity-log", { params: { user_id: employeeId, date_from: dateFrom, date_to: dateTo, page: nextPage, page_size: PAGE_SIZE, action: filtre || undefined } })
       .then((r) => { setLogItems((prev) => [...prev, ...r.data.items]); setPage(nextPage); })
       .catch(() => {});
   };
@@ -191,10 +217,10 @@ export default function EmployeeAudit() {
     <div className="space-y-6" data-testid="employee-audit-page">
       <div>
         <button
-          onClick={() => navigate("/admin/activite")}
+          onClick={() => (location.state?.retour === "suivi" ? navigate("/admin/leads", { state: { onglet: "suivi" } }) : navigate("/admin/activite"))}
           className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1 mb-3"
         >
-          <CaretLeft size={14} /> Retour à Activité
+          <CaretLeft size={14} /> {location.state?.retour === "suivi" ? "Retour au suivi de l'équipe" : "Retour à Activité"}
         </button>
         <div className="flex items-center gap-3">
           <Avatar className="h-12 w-12">
@@ -209,7 +235,15 @@ export default function EmployeeAudit() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
       <div className="flex border border-gray-200 rounded-md overflow-hidden w-fit">
+        {periodeSuivi && (
+          <button
+            className={`px-3 py-1.5 text-xs font-medium ${!rangeDays ? "bg-[#0a0a0a] text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+            onClick={() => setRangeDays(0)}
+            data-testid="employee-audit-range-suivi"
+          >{periodeSuivi.from === periodeSuivi.to ? formatDateFR(periodeSuivi.from) : `${formatDateFR(periodeSuivi.from)} → ${formatDateFR(periodeSuivi.to)}`}</button>
+        )}
         {RANGE_OPTIONS.map((o) => (
           <button
             key={o.days}
@@ -218,6 +252,15 @@ export default function EmployeeAudit() {
             data-testid={`employee-audit-range-${o.days}`}
           >{o.label}</button>
         ))}
+      </div>
+      <div className="flex flex-wrap gap-1.5" data-testid="employee-audit-filtres">
+        {FILTRES.map(([v, label]) => (
+          <button key={label} type="button" onClick={() => setFiltre(v)}
+            className={`px-3 py-1.5 text-xs font-medium rounded-md ${filtre === v ? "bg-[#0a0a0a] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+            {label === "Notes" && <NotePencil size={12} className="inline mr-1" />}{label}
+          </button>
+        ))}
+      </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

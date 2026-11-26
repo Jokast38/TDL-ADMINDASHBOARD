@@ -783,13 +783,14 @@ RAPPEL_RESULTATS = {
     "a_rappeler": "À rappeler plus tard",
     "rdv_pris": "Rendez-vous pris",
     "pas_interesse": "Plus intéressé",
+    "inscrit": "Inscrit",
 }
 RAPPEL_STATUTS = {
     "a_rappeler": "À rappeler", "en_cours": "Tentatives en cours", "traite": "Traité",
     "rdv_pris": "RDV pris", "clos": "Clos (plus intéressé)",
 }
 _STATUT_APRES = {"joint": "traite", "messagerie": "en_cours", "injoignable": "en_cours",
-                 "a_rappeler": "a_rappeler", "rdv_pris": "rdv_pris", "pas_interesse": "clos"}
+                 "a_rappeler": "a_rappeler", "rdv_pris": "rdv_pris", "pas_interesse": "clos", "inscrit": "traite"}
 _FERMES = ("traite", "rdv_pris", "clos")
 _SOURCE_LABELS = {"crm_rappel": "Planifié depuis le CRM", "sms_qualification": "Réponse SMS",
                   "contact_form": "Formulaire de contact", "contact_page": "Page contact"}
@@ -858,6 +859,14 @@ async def list_rappels(
         categories[r["categorie"]] = categories.get(r["categorie"], 0) + 1
     if categorie:
         out = [r for r in out if r["categorie"] == categorie]
+    # Lien avec les inscriptions (2026-11-26) : demande encore ouverte alors
+    # que la personne s'est inscrite depuis.
+    from services.rappels_inscriptions import inscriptions_liees
+    liees = await inscriptions_liees(out)
+    for r in out:
+        i = liees.get(r["id"])
+        r["inscription_liee"] = {k: i.get(k) for k in ("id", "formation_title", "created_at", "created_by_name")} if i else None
+    compte["inscrits_ouverts"] = len(liees)
     return {"items": out, "compte": compte, "statuts": RAPPEL_STATUTS, "resultats": RAPPEL_RESULTATS,
             "categories": categories, "categorie_labels": {**_CATEGORIE_LABELS}}
 
@@ -953,6 +962,47 @@ async def add_rappel_tentative(rid: str, payload: RappelTentativeIn, user: dict 
         "note": note, "rappel_id": rid})
     if statut in _FERMES:
         await log_action(user, "rappel_traite", "callback_request", rid, {"name": f"{r.get('prenom') or ''} {r.get('nom') or ''}".strip()})
+    return _rappel_public(await _rappel_ou_404(rid), datetime.now(PARIS))
+
+
+@router.post("/rappels/cloturer-inscrits")
+async def cloturer_rappels_inscrits(user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Clôt d'un coup les demandes de rappel encore ouvertes dont la personne
+    s'est inscrite après la demande (bouton de la page Rappels)."""
+    from services.rappels_inscriptions import inscriptions_liees, clore_rappel_inscrit
+    items = await db.callback_requests.find({}, {"_id": 0}).to_list(5000)
+    liees = await inscriptions_liees(items)
+    par_id = {r["id"]: r for r in items}
+    for rid, insc in liees.items():
+        await clore_rappel_inscrit(par_id[rid], insc, user["id"], user.get("name", ""))
+    if liees:
+        await log_action(user, "rappels_inscrits_clos", None, None, {"nombre": len(liees)})
+    return {"clos": len(liees)}
+
+
+@router.get("/rappels/{rid}")
+async def get_rappel(rid: str, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Un rappel seul : ouverture directe de sa fiche (lien depuis la page
+    Inscriptions, la cloche ou une notification)."""
+    return _rappel_public(await _rappel_ou_404(rid), datetime.now(PARIS))
+
+
+@router.post("/rappels/{rid}/prise-en-charge")
+async def prendre_en_charge_rappel(rid: str, user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Bouton vert de la page Inscriptions (demande du 2026-11-26) : la
+    demande quitte la liste « à rappeler », elle est attribuée à la personne
+    qui clique (si personne ne l'a), qui saisit ensuite le résultat et sa note
+    dans la page Rappels. Le rappel reste ouvert tant qu'aucun résultat
+    « traité » n'est enregistré."""
+    r = await _rappel_ou_404(rid)
+    upd = {"updated_at": now_iso(), "pris_en_charge_at": now_iso(), "pris_en_charge_par": user.get("name", "")}
+    if rappel_statut(r) == "a_rappeler":
+        upd.update({"statut": "en_cours", "handled": False})
+    if not r.get("assigned_to"):
+        upd.update({"assigned_to": user["id"], "assigned_to_name": user.get("name", "")})
+    await db.callback_requests.update_one({"id": rid}, {"$set": upd})
+    await log_action(user, "rappel_pris_en_charge", "callback_request", rid,
+                     {"name": f"{r.get('prenom') or ''} {r.get('nom') or ''}".strip()})
     return _rappel_public(await _rappel_ou_404(rid), datetime.now(PARIS))
 
 

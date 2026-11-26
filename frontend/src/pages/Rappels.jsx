@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -44,6 +45,17 @@ export default function Rappels() {
   // = demandes sans formation), et pagination de 25 lignes (2026-11-24).
   const [categorie, setCategorie] = useState("all");
   const [page, setPage] = useState(1);
+  // Lien direct vers un rappel (bouton vert de la page Inscriptions, cloche,
+  // notifications) : sa fiche s'ouvre pour noter le résultat de l'appel.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rappelLien = searchParams.get("rappel");
+  useEffect(() => {
+    if (!rappelLien || !data.resultats || !Object.keys(data.resultats).length) return;
+    api.get(`/call-center/rappels/${rappelLien}`)
+      .then((r) => setTentativeFor(r.data))
+      .catch(() => toast.error("Rappel introuvable"))
+      .finally(() => { searchParams.delete("rappel"); setSearchParams(searchParams, { replace: true }); });
+  }, [rappelLien, data.resultats]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     api.get("/call-center/assignees").then((r) => setAssignees(r.data || [])).catch(() => {});
@@ -61,6 +73,26 @@ export default function Rappels() {
   };
   useEffect(load, [etat, assigne, categorie]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(1); }, [etat, assigne, categorie]);
+
+  // Demandes encore ouvertes alors que la personne s'est inscrite depuis
+  // (2026-11-26) : on les clôt avec le résultat « Inscrit ».
+  const cloreInscrit = async (r) => {
+    const i = r.inscription_liee;
+    try {
+      await api.post(`/call-center/rappels/${r.id}/tentatives`, {
+        resultat: "inscrit", note: `Inscrit à ${i.formation_title || "une formation"} le ${formatDateTimeFR(i.created_at)}`,
+      });
+      toast.success("Rappel clos : personne inscrite");
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Non enregistré"); }
+  };
+  const cloreTousInscrits = async () => {
+    try {
+      const { data: res } = await api.post("/call-center/rappels/cloturer-inscrits");
+      toast.success(`${res.clos} rappel(s) clos`);
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Non enregistré"); }
+  };
 
   const reassign = async (r, uid) => {
     try {
@@ -112,6 +144,12 @@ export default function Rappels() {
             {assignees.filter((u) => u.id !== user?.id).map((u) => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
           </SelectContent>
         </Select>
+        {data.compte?.inscrits_ouverts > 0 && (
+          <button type="button" onClick={cloreTousInscrits} data-testid="rappels-clore-inscrits"
+            className="text-sm text-green-800 bg-green-50 border border-green-200 rounded-md px-3 py-1.5 hover:bg-green-100">
+            {data.compte.inscrits_ouverts} personne{data.compte.inscrits_ouverts > 1 ? "s" : ""} déjà inscrite{data.compte.inscrits_ouverts > 1 ? "s" : ""} — clore {data.compte.inscrits_ouverts > 1 ? "ces rappels" : "ce rappel"}
+          </button>
+        )}
         {data.compte?.en_retard > 0 && (
           <span className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-1.5 flex items-center gap-1">
             <Warning size={14} /> {data.compte.en_retard} rappel{data.compte.en_retard > 1 ? "s" : ""} en retard
@@ -156,6 +194,12 @@ export default function Rappels() {
                       )}
                       <p className="text-[11px] text-gray-400">{r.origine} · reçu le {formatDateTimeFR(r.created_at)}{r.created_by_name ? ` par ${r.created_by_name}` : ""}</p>
                       {r.message && <p className="text-xs text-gray-500 italic mt-1 max-w-[280px]">« {r.message} »</p>}
+                      {r.inscription_liee && (
+                        <p className="text-[11px] mt-1 text-green-800 bg-green-50 border border-green-200 rounded px-1.5 py-0.5 inline-block" data-testid={`rappel-inscrit-${r.id}`}>
+                          Inscrit le {formatDateTimeFR(r.inscription_liee.created_at)} — {r.inscription_liee.formation_title}
+                          {r.inscription_liee.created_by_name ? ` (par ${r.inscription_liee.created_by_name})` : ""}
+                        </p>
+                      )}
                     </td>
                     <td className="py-2.5 px-4 text-xs text-gray-600 max-w-[160px]">
                       {r.session || <span className="text-gray-300">Non précisée</span>}
@@ -189,6 +233,12 @@ export default function Rappels() {
                     </td>
                     <td className="py-2.5 px-4 text-right">
                       <div className="flex justify-end gap-1">
+                        {r.inscription_liee && (
+                          <Button size="sm" variant="outline" className="border-green-300 text-green-800 hover:bg-green-50"
+                            onClick={() => cloreInscrit(r)} title="Clore : la personne est inscrite" data-testid={`rappel-clore-inscrit-${r.id}`}>
+                            Clore (inscrit)
+                          </Button>
+                        )}
                         <Button size="sm" variant="outline" onClick={() => setTentativeFor(r)} data-testid={`rappel-resultat-${r.id}`}>
                           <PhoneCall size={14} className="mr-1" /> Résultat
                         </Button>

@@ -210,6 +210,10 @@ async def create_inscription(payload: InscriptionIn, request: Request):
     # s'inscrit sur place ou par un autre canal reste compté comme venant de Meta.
     from services.meta_rapprochement import rapprocher_inscription
     await rapprocher_inscription(inscription, acting_staff)
+    # Demande de rappel de la même personne encore ouverte : close, elle
+    # s'est inscrite (2026-11-26, voir services/rappels_inscriptions.py).
+    from services.rappels_inscriptions import cloturer_rappels_inscrit
+    await cloturer_rappels_inscrit(inscription, acting_staff)
     if acting_staff:
         await log_action(acting_staff, "inscription_creee", "inscription", insc_id, {
             "student_name": payload.student_name, "formation_title": formation["title"],

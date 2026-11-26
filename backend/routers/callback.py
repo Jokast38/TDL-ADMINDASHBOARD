@@ -94,7 +94,7 @@ async def create_callback_request(payload: CallbackRequestIn, request: Request):
         email_subject=subject, email_body_html="".join(lines),
         push_title="Nouvelle demande de rappel",
         push_body=f"{payload.prenom} {payload.nom} — {CATEGORY_LABELS.get(category, 'formation non précisée')}",
-        push_url="/admin/inscriptions",
+        push_url=f"/admin/rappels?rappel={doc['id']}",
         center=payload.center,
         action_label="Traiter la demande",
     )
@@ -146,9 +146,13 @@ async def update_callback_request(cid: str, payload: CallbackRequestUpdate, user
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not update:
         raise HTTPException(status_code=400, detail="Aucune modification fournie")
+    # Même statut que la page Rappels (routers/call_center.py), sinon une
+    # demande marquée traitée ici restait « à rappeler » là-bas.
     if update.get("handled"):
-        update["handled_by"] = user["id"]
+        update.update({"handled_by": user["id"], "handled_by_name": user.get("name", ""), "handled_at": now_iso(), "statut": "traite"})
         await log_action(user, "rappel_traite", "callback_request", cid, {"name": existing.get("name")})
+    elif update.get("handled") is False:
+        update["statut"] = "a_rappeler"
     update["updated_at"] = now_iso()
     await db.callback_requests.update_one({"id": cid}, {"$set": update})
     if update.get("handled"):

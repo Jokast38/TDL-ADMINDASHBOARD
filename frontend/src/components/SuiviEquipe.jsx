@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -55,6 +56,14 @@ export default function SuiviEquipe() {
   const [to, setTo] = useState(iso(new Date()));
   const [data, setData] = useState(null);
   const [ouvert, setOuvert] = useState(null);
+  const navigate = useNavigate();
+  // Clic sur le nom (2026-11-26) : page d'activité de la personne sur la
+  // même période (modifications, inscriptions, notes...).
+  const voirActivite = (e, u) => {
+    e.stopPropagation();
+    if (!u.user_id) return;
+    navigate(`/admin/activite/employe/${u.user_id}`, { state: { name: u.user_name, dateFrom: from, dateTo: to, retour: "suivi" } });
+  };
 
   useEffect(() => {
     setData(null);
@@ -135,7 +144,12 @@ export default function SuiviEquipe() {
                       <td className="py-2.5 px-4 font-medium">
                         <span className="inline-flex items-center gap-1">
                           {u.par_jour.length > 1 && (isOpen ? <CaretDown size={12} /> : <CaretRight size={12} />)}
-                          {u.user_name || "—"}
+                          {u.user_id ? (
+                            <button type="button" onClick={(e) => voirActivite(e, u)} className="text-[#0052CC] hover:underline text-left"
+                              title="Voir son activité : modifications, inscriptions, notes" data-testid={`suivi-equipe-activite-${key}`}>
+                              {u.user_name || "—"}
+                            </button>
+                          ) : (u.user_name || "—")}
                         </span>
                         <p className="text-[11px] text-gray-400">{u.jours_actifs} jour{u.jours_actifs > 1 ? "s" : ""} actif{u.jours_actifs > 1 ? "s" : ""}</p>
                       </td>
