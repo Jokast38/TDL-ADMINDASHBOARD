@@ -248,6 +248,18 @@ export function CacesSessionsTab() {
     }
   };
 
+  // Génération des cartes par le testeur (routers/caces_cartes.py) : auto =
+  // jour de l'examen + lendemain ; l'équipe peut autoriser ou bloquer.
+  const setModeCartes = async (s, mode) => {
+    try {
+      await api.put(`/caces/sessions/${s.id}/cartes-testeur`, { mode });
+      toast.success(mode === "autorise" ? "Le testeur peut générer les cartes" : mode === "bloque" ? "Génération des cartes bloquée pour le testeur" : "Génération automatique (24 h après l'examen)");
+      load();
+    } catch (e) {
+      toast.error(errorDetail(e, "Réglage non enregistré"));
+    }
+  };
+
   const openArchives = async (s) => {
     setArchivesFor(s);
     setDocs([]);
@@ -290,6 +302,23 @@ export function CacesSessionsTab() {
               <Button size="sm" variant="outline" onClick={() => openArchives(s)}><Archive size={14} className="mr-1" /> Archives</Button>
             </div>
           </div>
+          {s.cartes_testeur && (
+            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2" data-testid={`caces-cartes-mode-${s.id}`}>
+              <p className={`text-xs ${s.cartes_testeur.ouvert ? "text-green-700" : "text-gray-500"}`}>
+                <b>Cartes CACES par le testeur :</b> {s.cartes_testeur.message}
+                {s.cartes_generees > 0 ? ` · ${s.cartes_generees} carte(s) générée(s)` : ""}
+              </p>
+              <div className="flex gap-1">
+                {[["auto", "Auto (24 h)"], ["autorise", "Autoriser"], ["bloque", "Bloquer"]].map(([m, label]) => (
+                  <Button key={m} size="sm" variant={(s.cartes_testeur.mode || "auto") === m ? "default" : "outline"}
+                    className={`h-7 text-xs ${(s.cartes_testeur.mode || "auto") === m ? "bg-[#0a0a0a] text-white" : ""}`}
+                    onClick={() => setModeCartes(s, m)} data-testid={`caces-cartes-${m}-${s.id}`}>
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
           <EmargementDownload session={s} />
         </Card>
       ))}

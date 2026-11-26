@@ -14,7 +14,8 @@ import { HELP_CATEGORIES } from "@/constants/helpTours";
 import FormateurPlanningTab from "@/components/FormateurPlanningTab";
 import EmargementPanel from "@/components/stages/EmargementPanel";
 import CacesExamPanel, { DocumentsList } from "@/components/caces/CacesExamPanel";
-import { Archive, ListChecks, Compass } from "@phosphor-icons/react";
+import TesteurCartes from "@/components/caces/TesteurCartes";
+import { Archive, ListChecks, Compass, IdentificationCard } from "@phosphor-icons/react";
 import QuestionsRevueTab from "@/components/caces/QuestionsRevueTab";
 
 // Pièces justifiant le droit d'exercer — doit rester synchronisé avec
@@ -342,6 +343,8 @@ export default function AnimateurSpace() {
   const { user } = useAuth();
   const { startTour } = useTour();
   const isTesteur = user?.titre === "Testeur CACES";
+  // Cartes CACES à faire (sessions dont la génération est ouverte), en pastille sur l'onglet.
+  const [cartesAFaire, setCartesAFaire] = useState(0);
   // Formateur CACES (testeur ou non) : onglet de validation des questions et
   // visite guidée propre au CACES (demande du 2026-11-12).
   const isCaces = isTesteur || (user?.assigned_categories || []).includes("CACES");
@@ -435,6 +438,12 @@ export default function AnimateurSpace() {
             <UserCircle size={14} className="mr-1" /> Mon dossier
           </Button>
           {isTesteur && (
+            <Button variant={tab === "cartes" ? "default" : "outline"} size="sm" onClick={() => setTab("cartes")} className={tab === "cartes" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-cartes-caces">
+              <IdentificationCard size={14} className="mr-1" /> Cartes CACES
+              {cartesAFaire > 0 && <span className="ml-1.5 rounded-full bg-red-600 text-white text-[10px] px-1.5">{cartesAFaire}</span>}
+            </Button>
+          )}
+          {isTesteur && (
             <Button variant={tab === "caces" ? "default" : "outline"} size="sm" onClick={() => setTab("caces")} className={tab === "caces" ? "bg-[#0a0a0a] text-white" : ""} data-testid="tab-caces-docs">
               <Archive size={14} className="mr-1" /> Documents CACES
             </Button>
@@ -457,6 +466,7 @@ export default function AnimateurSpace() {
       {tab === "dossier" && <DossierTab />}
       {tab === "signature" && <SignatureTab user={user} />}
       {tab === "caces" && <TesteurDocuments />}
+      {isTesteur && <div className={tab === "cartes" ? "" : "hidden"}><TesteurCartes key={tab === "cartes" ? "on" : "off"} onCount={setCartesAFaire} /></div>}
       {tab === "revue" && isCaces && <QuestionsRevueTab />}
 
       {tab === "sessions" && (!selected ? (

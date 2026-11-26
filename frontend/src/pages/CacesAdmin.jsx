@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import PhotoCapture from "@/components/PhotoCapture";
 import { QuestionBankTab, CacesSessionsTab } from "@/components/caces/CacesAdminTabs";
 import AttestationsFormationTab from "@/components/caces/AttestationsFormationTab";
+import CacesCategoriesPicker, { CACES_CATEGORIES_PROPOSEES } from "@/components/caces/CacesCategoriesPicker";
 import { formatDateFR } from "@/lib/dateFormat";
 import {
   MagnifyingGlass, Plus, PaperPlaneTilt, DownloadSimple, Certificate, Link as LinkIcon, PencilSimple, Camera,
@@ -55,6 +56,8 @@ export default function CacesAdmin() {
   const [newOpen, setNewOpen] = useState(false);
   const [resultFor, setResultFor] = useState(null); // { attempt, epreuve: "theorie" | "pratique" }
   const [editCert, setEditCert] = useState(null);
+  const [editAttempt, setEditAttempt] = useState(null);
+  const [newCertOpen, setNewCertOpen] = useState(false);
   const [photoFor, setPhotoFor] = useState(null);
   const [busy, setBusy] = useState(null);
 
@@ -123,9 +126,14 @@ export default function CacesAdmin() {
           <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight mt-1">CACES®</h1>
           <p className="text-gray-500 mt-2">Résultats des épreuves, envoi au candidat et cartes CACES R.489.</p>
         </div>
-        <Button onClick={() => setNewOpen(true)} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="caces-new-attempt">
-          <Plus size={16} className="mr-1" /> Nouvel examen
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setNewCertOpen(true)} data-testid="caces-new-cert">
+            <Certificate size={16} className="mr-1" /> Nouvelle carte
+          </Button>
+          <Button onClick={() => setNewOpen(true)} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="caces-new-attempt">
+            <Plus size={16} className="mr-1" /> Nouvel examen
+          </Button>
+        </div>
       </div>
 
       {stats && (
@@ -188,6 +196,7 @@ export default function CacesAdmin() {
                       <>
                         <Button size="sm" variant="outline" onClick={() => setResultFor({ attempt: a, epreuve: "theorie" })}>Théorie</Button>
                         <Button size="sm" variant="outline" onClick={() => setResultFor({ attempt: a, epreuve: "pratique" })}>Pratique</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditAttempt(a)} title="Changer la catégorie ou supprimer"><PencilSimple size={14} /></Button>
                       </>
                     )}
                     {dossier && (
@@ -234,7 +243,7 @@ export default function CacesAdmin() {
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2 shrink-0">
-                    <Button size="sm" variant="outline" onClick={() => setEditCert(c)}><PencilSimple size={14} className="mr-1" /> Compléter</Button>
+                    <Button size="sm" variant="outline" onClick={() => setEditCert(c)}><PencilSimple size={14} className="mr-1" /> Modifier</Button>
                     <Button size="sm" variant="outline" onClick={() => copyVerifLink(c)}><LinkIcon size={14} className="mr-1" /> Lien de vérification</Button>
                     <Button size="sm" disabled={busy === c.id} onClick={() => downloadCard(c)} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid={`caces-card-${c.id}`}>
                       <DownloadSimple size={14} className="mr-1" /> Télécharger la carte
@@ -247,9 +256,11 @@ export default function CacesAdmin() {
         </div>
       )}
 
-      <NewAttemptDialog open={newOpen} onClose={() => setNewOpen(false)} candidats={candidats} categories={categories} onCreated={load} />
+      <NewAttemptDialog open={newOpen} onClose={() => setNewOpen(false)} candidats={candidats} testeurs={testeurs} onCreated={load} />
+      <EditAttemptDialog attempt={editAttempt} categories={categories} onClose={() => setEditAttempt(null)} onSaved={load} />
       <ResultDialog target={resultFor} testeurs={testeurs} onClose={() => setResultFor(null)} onSaved={load} />
-      <CertificateDialog certificate={editCert} onClose={() => setEditCert(null)} onSaved={load} />
+      <CertificateDialog certificate={editCert} categories={categories} testeurs={testeurs} onClose={() => setEditCert(null)} onSaved={load} />
+      <NewCertificateDialog open={newCertOpen} onClose={() => setNewCertOpen(false)} candidats={candidats} categories={categories} testeurs={testeurs} onCreated={load} />
       <Dialog open={!!photoFor} onOpenChange={(o) => { if (!o) { setPhotoFor(null); load(); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-display">Photo d'identité — {photoFor?.student_name}</DialogTitle></DialogHeader>
@@ -262,28 +273,47 @@ export default function CacesAdmin() {
   );
 }
 
-function NewAttemptDialog({ open, onClose, candidats, categories, onCreated }) {
+function NewAttemptDialog({ open, onClose, candidats, testeurs, onCreated }) {
   const [dossierId, setDossierId] = useState("");
-  const [category, setCategory] = useState("");
+  const [cats, setCats] = useState([]);
+  // Examen déjà passé (ex : sur papier) : résultats saisis tout de suite, la carte est créée.
+  const [dejaAdmis, setDejaAdmis] = useState(false);
+  const [date, setDate] = useState(today());
+  const [testeur, setTesteur] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { if (open) { setDossierId(""); setCategory(""); } }, [open]);
+  useEffect(() => { if (open) { setDossierId(""); setCats([]); setDejaAdmis(false); setDate(today()); setTesteur(""); } }, [open]);
+
+  const pick = (id) => {
+    setDossierId(id);
+    const d = candidats.find((x) => x.id === id);
+    setCats((d?.caces_categories || []).filter((c) => CACES_CATEGORIES_PROPOSEES.includes(c)));
+  };
 
   const create = async () => {
     const d = candidats.find((x) => x.id === dossierId);
-    if (!d || !category) return;
+    if (!d || !cats.length) return;
     setSaving(true);
-    try {
-      await api.post("/caces/exam-attempts", {
-        dossier_id: d.id, student_id: d.student_id, student_name: d.student_name, student_email: d.student_email, category,
-      });
-      toast.success("Examen CACES ouvert");
+    let ok = 0;
+    for (const category of cats) {
+      try {
+        const { data } = await api.post("/caces/exam-attempts", {
+          dossier_id: d.id, student_id: d.student_id, student_name: d.student_name, student_email: d.student_email, category,
+        });
+        if (dejaAdmis) {
+          await api.post(`/caces/exam-attempts/${data.id}/theorie`, { passed: true, date });
+          await api.post(`/caces/exam-attempts/${data.id}/pratique`, { passed: true, date, testeur_name: testeur.trim() });
+        }
+        ok += 1;
+      } catch (e) {
+        toast.error(`Catégorie ${category} : ${errorDetail(e, "examen non créé")}`);
+      }
+    }
+    setSaving(false);
+    if (ok) {
+      toast.success(dejaAdmis ? `${ok} catégorie(s) obtenue(s) — carte créée` : `${ok} examen(s) CACES ouvert(s)`);
       onCreated();
       onClose();
-    } catch (e) {
-      toast.error(errorDetail(e, "Examen non créé"));
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -294,7 +324,7 @@ function NewAttemptDialog({ open, onClose, candidats, categories, onCreated }) {
         <div className="space-y-3">
           <div>
             <p className="text-sm font-medium mb-1">Candidat (dossier CACES)</p>
-            <Select value={dossierId} onValueChange={setDossierId}>
+            <Select value={dossierId} onValueChange={pick}>
               <SelectTrigger><SelectValue placeholder="Choisir un candidat" /></SelectTrigger>
               <SelectContent>
                 {candidats.map((d) => <SelectItem key={d.id} value={d.id}>{d.student_name} — {d.formation_title}</SelectItem>)}
@@ -303,21 +333,70 @@ function NewAttemptDialog({ open, onClose, candidats, categories, onCreated }) {
             {candidats.length === 0 && <p className="text-xs text-gray-500 mt-1">Aucun dossier CACES pour l'instant.</p>}
           </div>
           <div>
-            <p className="text-sm font-medium mb-1">Catégorie</p>
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger><SelectValue placeholder="Choisir une catégorie" /></SelectTrigger>
-              <SelectContent>
-                {categories.map((c) => (
-                  <SelectItem key={c.category} value={c.category}>
-                    Catégorie {c.category}{c.duree_pratique_min ? ` (pratique ${c.duree_pratique_min} min)` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <p className="text-sm font-medium mb-1">Catégorie(s) passée(s)</p>
+            <CacesCategoriesPicker value={cats} onChange={setCats} testId="new-attempt-cats" />
+            <p className="text-xs text-gray-400 mt-1">Pré-cochées d'après l'inscription. Un examen est ouvert par catégorie.</p>
           </div>
-          <Button disabled={!dossierId || !category || saving} onClick={create} className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
-            Ouvrir l'examen
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={dejaAdmis} onChange={(e) => setDejaAdmis(e.target.checked)} data-testid="new-attempt-admis" />
+            Examen déjà passé et réussi (théorie + pratique) — créer la carte
+          </label>
+          {dejaAdmis && (
+            <div className="grid grid-cols-2 gap-2">
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Input list="caces-testeurs-new" placeholder="Nom du testeur" value={testeur} onChange={(e) => setTesteur(e.target.value)} />
+              <datalist id="caces-testeurs-new">{testeurs.map((t) => <option key={t} value={t} />)}</datalist>
+            </div>
+          )}
+          <Button disabled={!dossierId || !cats.length || saving || (dejaAdmis && (!date || !testeur.trim()))} onClick={create} className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">
+            {dejaAdmis ? "Enregistrer et créer la carte" : "Ouvrir l'examen"}
           </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditAttemptDialog({ attempt, categories, onClose, onSaved }) {
+  const [category, setCategory] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (attempt) setCategory(attempt.category); }, [attempt]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.patch(`/caces/exam-attempts/${attempt.id}`, { category });
+      toast.success("Catégorie de l'examen modifiée");
+      onSaved();
+      onClose();
+    } catch (e) { toast.error(errorDetail(e, "Examen non modifié")); } finally { setSaving(false); }
+  };
+  const remove = async () => {
+    if (!window.confirm(`Supprimer l'examen catégorie ${attempt.category} de ${attempt.student_name} ?`)) return;
+    setSaving(true);
+    try {
+      await api.delete(`/caces/exam-attempts/${attempt.id}`);
+      toast.success("Examen supprimé");
+      onSaved();
+      onClose();
+    } catch (e) { toast.error(errorDetail(e, "Examen non supprimé")); } finally { setSaving(false); }
+  };
+
+  return (
+    <Dialog open={!!attempt} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader><DialogTitle className="font-display">Modifier l'examen — {attempt?.student_name}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <Select value={category} onValueChange={setCategory}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {categories.map((c) => <SelectItem key={c.category} value={c.category}>Catégorie {c.category}{c.proposee ? "" : " (non proposée)"}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <div className="flex gap-2">
+            <Button variant="outline" disabled={saving} onClick={remove} className="text-red-600 border-red-200 hover:bg-red-50">Supprimer l'examen</Button>
+            <Button disabled={saving || category === attempt?.category} onClick={save} className="flex-1 bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Enregistrer</Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -386,8 +465,45 @@ function ResultDialog({ target, testeurs, onClose, onSaved }) {
   );
 }
 
-function CertificateDialog({ certificate, onClose, onSaved }) {
+// Lignes « catégorie » de la carte : catégorie, n° CACES (généré si vide),
+// date d'obtention, testeur — demande du 2026-11-26.
+function CategoriesEditor({ rows, setRows, categories, testeurs }) {
+  const set = (i, k, v) => setRows(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  const libres = categories.filter((c) => !rows.some((r) => r.category === c.category));
+  return (
+    <div className="space-y-2">
+      {rows.map((r, i) => (
+        <div key={i} className="grid grid-cols-[80px_1fr_130px_1fr_auto] gap-1.5 items-center">
+          <Select value={r.category} onValueChange={(v) => set(i, "category", v)}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {categories.filter((c) => c.category === r.category || !rows.some((x) => x.category === c.category)).map((c) => (
+                <SelectItem key={c.category} value={c.category}>{c.category}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input className="h-9 font-mono text-xs" value={r.numero_caces || ""} onChange={(e) => set(i, "numero_caces", e.target.value)} placeholder="N° généré si vide" />
+          <Input className="h-9" type="date" value={r.date_obtention || ""} onChange={(e) => set(i, "date_obtention", e.target.value)} />
+          <Input className="h-9" list="caces-testeurs-cert" value={r.testeur_name || ""} onChange={(e) => set(i, "testeur_name", e.target.value)} placeholder="Testeur" />
+          <Button type="button" variant="ghost" size="sm" disabled={rows.length <= 1} onClick={() => setRows(rows.filter((_, j) => j !== i))} title="Retirer la catégorie">✕</Button>
+        </div>
+      ))}
+      <datalist id="caces-testeurs-cert">{testeurs.map((t) => <option key={t} value={t} />)}</datalist>
+      {libres.length > 0 && (
+        <Button type="button" size="sm" variant="outline" onClick={() => {
+          const next = libres.find((c) => c.proposee) || libres[0];
+          setRows([...rows, { category: next.category, numero_caces: "", date_obtention: today(), testeur_name: rows[0]?.testeur_name || "" }]);
+        }}>
+          <Plus size={14} className="mr-1" /> Ajouter une catégorie
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function CertificateDialog({ certificate, categories, testeurs, onClose, onSaved }) {
   const [form, setForm] = useState({});
+  const [rows, setRows] = useState([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -395,7 +511,11 @@ function CertificateDialog({ certificate, onClose, onSaved }) {
       setForm({
         student_name: certificate.student_name || "", date_naissance: certificate.date_naissance || "",
         signataire_name: certificate.signataire_name || "", signataire_qualite: certificate.signataire_qualite || "",
+        otc_numero_inrs: certificate.otc_numero_inrs || "",
       });
+      setRows((certificate.categories || []).map((c) => ({
+        category: c.category, numero_caces: c.numero_caces || "", date_obtention: c.date_obtention || "", testeur_name: c.testeur_name || "",
+      })));
     }
   }, [certificate]);
 
@@ -405,6 +525,7 @@ function CertificateDialog({ certificate, onClose, onSaved }) {
     setSaving(true);
     try {
       await api.put(`/caces/certificates/${certificate.id}`, form);
+      await api.put(`/caces/certificates/${certificate.id}/categories`, { categories: rows });
       toast.success("Carte mise à jour");
       onSaved();
       onClose();
@@ -417,14 +538,79 @@ function CertificateDialog({ certificate, onClose, onSaved }) {
 
   return (
     <Dialog open={!!certificate} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader><DialogTitle className="font-display">Informations de la carte</DialogTitle></DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="font-display">Modifier la carte CACES®</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <div><p className="text-sm font-medium mb-1">Titulaire (en toutes lettres)</p><Input value={form.student_name || ""} onChange={set("student_name")} /></div>
-          <div><p className="text-sm font-medium mb-1">Date de naissance</p><Input type="date" value={form.date_naissance || ""} onChange={set("date_naissance")} /></div>
-          <div><p className="text-sm font-medium mb-1">Signataire</p><Input value={form.signataire_name || ""} onChange={set("signataire_name")} placeholder="Nom du signataire" /></div>
-          <div><p className="text-sm font-medium mb-1">Qualité du signataire</p><Input value={form.signataire_qualite || ""} onChange={set("signataire_qualite")} placeholder="Ex : Directeur" /></div>
-          <Button disabled={saving} onClick={save} className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Enregistrer</Button>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div><p className="text-sm font-medium mb-1">Titulaire (en toutes lettres)</p><Input value={form.student_name || ""} onChange={set("student_name")} /></div>
+            <div><p className="text-sm font-medium mb-1">Date de naissance</p><Input type="date" value={form.date_naissance || ""} onChange={set("date_naissance")} /></div>
+            <div><p className="text-sm font-medium mb-1">Signataire</p><Input value={form.signataire_name || ""} onChange={set("signataire_name")} placeholder="Nom du signataire" /></div>
+            <div><p className="text-sm font-medium mb-1">Qualité du signataire</p><Input value={form.signataire_qualite || ""} onChange={set("signataire_qualite")} placeholder="Ex : Directeur" /></div>
+          </div>
+          <div>
+            <p className="text-sm font-medium mb-1">N° d'inscription dans la base INRS</p>
+            <Input value={form.otc_numero_inrs || ""} onChange={set("otc_numero_inrs")} placeholder="Vide = celui des Paramètres → Attestations" data-testid="cert-inrs" />
+            <p className="text-xs text-gray-400 mt-1">Imprimé au recto : « Inscrit dans la base INRS sous le n° … ».</p>
+          </div>
+          <div>
+            <p className="text-sm font-medium mb-1">Catégories obtenues</p>
+            <CategoriesEditor rows={rows} setRows={setRows} categories={categories} testeurs={testeurs} />
+            <p className="text-xs text-gray-400 mt-1">L'échéance (5 ans) part de la première catégorie obtenue.</p>
+          </div>
+          <Button disabled={saving || !rows.length} onClick={save} className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="cert-save">Enregistrer</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// Carte créée à la main, sans examen saisi ici (examen fait sur papier…).
+function NewCertificateDialog({ open, onClose, candidats, categories, testeurs, onCreated }) {
+  const [dossierId, setDossierId] = useState("");
+  const [rows, setRows] = useState([]);
+  const [naissance, setNaissance] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { if (open) { setDossierId(""); setRows([]); setNaissance(""); } }, [open]);
+
+  const pick = (id) => {
+    setDossierId(id);
+    const d = candidats.find((x) => x.id === id);
+    const cats = d?.caces_categories?.length ? d.caces_categories : ["3"];
+    setRows(cats.map((c) => ({ category: c, numero_caces: "", date_obtention: today(), testeur_name: "" })));
+  };
+
+  const create = async () => {
+    setSaving(true);
+    try {
+      await api.post("/caces/certificates", { dossier_id: dossierId, categories: rows, date_naissance: naissance || null });
+      toast.success("Carte CACES créée — complétez-la puis téléchargez-la");
+      onCreated();
+      onClose();
+    } catch (e) { toast.error(errorDetail(e, "Carte non créée")); } finally { setSaving(false); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader><DialogTitle className="font-display">Nouvelle carte CACES®</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <Select value={dossierId} onValueChange={pick}>
+            <SelectTrigger><SelectValue placeholder="Choisir un candidat" /></SelectTrigger>
+            <SelectContent>
+              {candidats.map((d) => <SelectItem key={d.id} value={d.id}>{d.student_name} — {d.formation_title}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {dossierId && (
+            <>
+              <div><p className="text-sm font-medium mb-1">Date de naissance</p><Input type="date" value={naissance} onChange={(e) => setNaissance(e.target.value)} /></div>
+              <div>
+                <p className="text-sm font-medium mb-1">Catégories obtenues</p>
+                <CategoriesEditor rows={rows} setRows={setRows} categories={categories} testeurs={testeurs} />
+              </div>
+            </>
+          )}
+          <Button disabled={!dossierId || !rows.length || saving} onClick={create} className="w-full bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white">Créer la carte</Button>
         </div>
       </DialogContent>
     </Dialog>

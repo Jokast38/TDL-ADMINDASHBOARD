@@ -104,13 +104,34 @@ async def _next_sequence() -> int:
     return doc["value"]
 
 
-async def finalize_category(attempt: dict, testeur_name: Optional[str] = None) -> dict:
+def categories_inscription(insc: dict) -> list:
+    """Catégories CACES choisies à l'inscription ; à défaut, celles écrites
+    dans l'intitulé (« CACES R489 Cat. 3 - Chariot élévateur »)."""
+    from models.caces import CACES_CATEGORIES
+    if insc.get("caces_categories"):
+        return [c for c in insc["caces_categories"] if c in CACES_CATEGORIES]
+    texte = " ".join(str(insc.get(k) or "") for k in ("formation_title", "stage_titre", "session"))
+    found = re.findall(r"\bcat(?:[ée]gories?|s)?\.?\s*((?:1A|1B|2A|2B|[3-7])\b(?:\s*(?:,|/|et|-)\s*(?:1A|1B|2A|2B|[3-7])\b)*)", texte, re.I)
+    out = []
+    for groupe in found:
+        for c in re.findall(r"1A|1B|2A|2B|[3-7]", groupe.upper()):
+            if c in CACES_CATEGORIES and c not in out:
+                out.append(c)
+    return out
+
+
+async def new_numero(category: str) -> str:
+    return _numero_caces(category, await _next_sequence())
+
+
+async def finalize_category(attempt: dict, testeur_name: Optional[str] = None, date_obtention: Optional[str] = None) -> dict:
     """Appelée dès qu'une tentative passe à l'état 'valide' (théorie + pratique
     réussies, dans la fenêtre de 12 mois) — crée ou met à jour la carte CACES
-    du candidat et y ajoute la catégorie."""
+    du candidat et y ajoute la catégorie. `date_obtention` : jour de
+    l'examen quand le testeur déclare les admis après coup."""
     student_id = attempt["student_id"]
     category = attempt["category"]
-    date_obtention = today_iso()
+    date_obtention = date_obtention or today_iso()
     seq = await _next_sequence()
     numero_caces = _numero_caces(category, seq)
 

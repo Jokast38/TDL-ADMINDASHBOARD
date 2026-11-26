@@ -52,6 +52,17 @@ def _missing_docs(dossier: dict, docs: list) -> list:
     return [r for r in requis if r not in fournis_types]
 
 
+def _caces_categories(cats, formation: dict):
+    """Catégories CACES choisies (1B, 3, 5), seulement pour une formation CACES."""
+    from models.caces import CACES_CATEGORIES_PROPOSEES
+    if not cats or formation.get("category") != "CACES":
+        return None
+    bad = [c for c in cats if c not in CACES_CATEGORIES_PROPOSEES]
+    if bad:
+        raise HTTPException(status_code=400, detail=f"Catégorie CACES non proposée : {', '.join(bad)}")
+    return [c for c in CACES_CATEGORIES_PROPOSEES if c in cats]
+
+
 @router.post("/inscriptions")
 async def create_inscription(payload: InscriptionIn, request: Request):
     formation = await db.formations.find_one({"id": payload.formation_id}, {"_id": 0})
@@ -179,6 +190,7 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         "session": payload.session or "", "center": payload.center or "",
         "stage_id": payload.stage_id, "stage_titre": stage_titre,
         "cas_stage": payload.cas_stage,
+        "caces_categories": _caces_categories(payload.caces_categories, formation),
         "financing_mode": payload.financing_mode or "",
         "utm_source": payload.utm_source or "", "utm_medium": payload.utm_medium or "",
         "utm_campaign": payload.utm_campaign or "", "utm_content": payload.utm_content or "",
@@ -550,6 +562,8 @@ async def update_inscription(iid: str, payload: InscriptionUpdate, user: dict = 
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not update:
         raise HTTPException(status_code=400, detail="Aucune modification fournie")
+    if "caces_categories" in update:
+        update["caces_categories"] = _caces_categories(update["caces_categories"], {"category": "CACES"}) or []
     update["updated_at"] = now_iso()
     # `contact_status` est le signal qu'un membre de l'équipe vient de traiter
     # cette inscription (relance, tag prospect non qualifié, finalisation...)

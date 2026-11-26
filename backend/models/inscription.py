@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 
 
@@ -59,9 +59,13 @@ class InscriptionIn(BaseModel):
     utm_campaign: Optional[str] = None
     utm_content: Optional[str] = None
     utm_term: Optional[str] = None
+    # Catégories CACES R.489 choisies à l'inscription (1B, 3, 5 —
+    # models/caces.py:CACES_CATEGORIES_PROPOSEES), demande du 2026-11-26.
+    caces_categories: Optional[List[str]] = None
 
 
 class InscriptionUpdate(BaseModel):
+    caces_categories: Optional[List[str]] = None
     student_name: Optional[str] = None
     student_phone: Optional[str] = None
     payment_status: Optional[str] = None

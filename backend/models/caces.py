@@ -8,6 +8,10 @@ from pydantic import BaseModel
 # de catégorie sans migration.
 CACES_CATEGORIES = ("1A", "1B", "2A", "2B", "3", "4", "5", "6", "7")
 
+# Catégories que TDL fait passer aujourd'hui : proposées à l'inscription
+# (formulaire public et page Inscriptions) et sur la carte (2026-11-26).
+CACES_CATEGORIES_PROPOSEES = ("1B", "3", "5")
+
 # Durée en minutes de l'épreuve pratique par catégorie proposée — affichée à
 # l'agent lors de la planification, purement informative (ne bloque rien).
 CACES_PRATIQUE_DUREE_MIN = {"1B": 45, "3": 60, "5": 45}
@@ -61,3 +65,19 @@ class CacesCertificateUpdateIn(BaseModel):
     date_naissance: Optional[str] = None
     signataire_name: Optional[str] = None
     signataire_qualite: Optional[str] = None
+    # N° d'inscription de l'OTC dans la base INRS imprimé au recto : celui
+    # des Paramètres par défaut, modifiable carte par carte (2026-11-26).
+    otc_numero_inrs: Optional[str] = None
+
+
+class CacesCategoryEntryIn(BaseModel):
+    """Catégorie inscrite sur la carte, modifiable par l'équipe : numéro
+    généré s'il est laissé vide."""
+    category: str
+    numero_caces: Optional[str] = None
+    date_obtention: Optional[str] = None  # YYYY-MM-DD
+    testeur_name: Optional[str] = None
+
+
+class CacesCategoriesIn(BaseModel):
+    categories: list[CacesCategoryEntryIn]

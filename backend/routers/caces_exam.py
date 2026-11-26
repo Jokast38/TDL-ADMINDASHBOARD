@@ -546,16 +546,24 @@ async def list_caces_sessions(user: dict = Depends(require_role(*ROLES_DOSSIERS_
     stages = await db.stages.find({"formation_id": {"$in": ids}, "statut": {"$ne": "annule"}}, {"_id": 0}).sort("date_debut", -1).to_list(300)
     anim_ids = list({a for s in stages for a in _stage_animateur_ids(s)})
     users = {u["id"]: u for u in await db.users.find({"id": {"$in": anim_ids}}, {"_id": 0, "id": 1, "name": 1, "titre": 1}).to_list(500)}
+    from routers.caces_cartes import fenetre_cartes
+    today = _today()
     out = []
     for s in stages:
         n = await db.inscriptions.count_documents({"stage_id": s["id"], "status": "active"})
         team = [users[a] for a in _stage_animateur_ids(s) if a in users]
+        # Fenêtre de génération des cartes par le testeur (routers/caces_cartes.py).
+        testeur_ids = {u["id"] for u in team if u.get("titre") == TITRE_TESTEUR}
+        autre = any(o["id"] != s["id"] and (o.get("date_fin") or o.get("date_debut") or "") >= today
+                    and testeur_ids & set(_stage_animateur_ids(o)) for o in stages)
+        cartes = fenetre_cartes(s, today, autre)
         out.append({
             "id": s["id"], "formation_titre": s.get("formation_titre"), "date_debut": s.get("date_debut"),
             "date_fin": s.get("date_fin"), "lieu_ville": s.get("lieu_ville"), "date_examen": exam_date(s),
             "nb_candidats": n, "max_candidats": CACES_MAX_CANDIDATS,
             "testeurs": [u.get("name") for u in team if u.get("titre") == TITRE_TESTEUR],
             "formateurs": [u.get("name") for u in team if u.get("titre") != TITRE_TESTEUR],
+            "cartes_testeur": cartes, "cartes_generees": await db.caces_documents.count_documents({"stage_id": s["id"], "type": "carte_caces"}),
         })
     return out
 

@@ -24,9 +24,14 @@ from core.storage import put_object, get_object
 from models.caces import (
     CACES_CATEGORIES, CACES_PRATIQUE_DUREE_MIN,
     CacesExamAttemptIn, CacesTheorieResultIn, CacesPratiqueResultIn,
-    CacesExternalCertificateIn, CacesCertificateUpdateIn,
+    CacesExternalCertificateIn, CacesCertificateUpdateIn, CacesCategoryEntryIn, CacesCategoriesIn,
+    CACES_CATEGORIES_PROPOSEES,
 )
-from services.caces import compute_attempt_status, finalize_category, add_external_category, today_iso
+from pydantic import BaseModel
+from services.caces import (
+    CARTE_VALIDITE_ANS, add_external_category, add_years, categories_inscription, compute_attempt_status,
+    finalize_category, new_numero, today_iso,
+)
 from services.pdf import generate_caces_card_pdf
 from services.photo_crop import crop_id_photo
 
@@ -44,7 +49,8 @@ router = APIRouter(prefix="/caces", tags=["caces"])
 
 @router.get("/categories")
 async def list_categories(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
-    return [{"category": c, "duree_pratique_min": CACES_PRATIQUE_DUREE_MIN.get(c)} for c in CACES_CATEGORIES]
+    return [{"category": c, "duree_pratique_min": CACES_PRATIQUE_DUREE_MIN.get(c), "proposee": c in CACES_CATEGORIES_PROPOSEES}
+            for c in CACES_CATEGORIES]
 
 
 @router.get("/candidats")
@@ -53,10 +59,16 @@ async def list_candidats(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT)
     d'un dossier qu'on ouvre un examen pour une catégorie."""
     dossiers = await db.dossiers.find(
         {"category": "CACES"},
-        {"_id": 0, "id": 1, "student_id": 1, "student_name": 1, "student_email": 1, "formation_title": 1, "status": 1, "id_photo_path": 1},
+        {"_id": 0, "id": 1, "student_id": 1, "student_name": 1, "student_email": 1, "formation_title": 1, "status": 1, "id_photo_path": 1,
+         "inscription_id": 1},
     ).sort("created_at", -1).to_list(2000)
+    inscs = {i["id"]: i for i in await db.inscriptions.find(
+        {"id": {"$in": [d.get("inscription_id") for d in dossiers if d.get("inscription_id")]}},
+        {"_id": 0, "id": 1, "caces_categories": 1, "formation_title": 1, "stage_titre": 1, "session": 1}).to_list(2000)}
     for d in dossiers:
         d["has_photo"] = bool(d.pop("id_photo_path", None))
+        # Catégories choisies à l'inscription, proposées par défaut à l'examen et sur la carte.
+        d["caces_categories"] = categories_inscription(inscs.get(d.pop("inscription_id", None), {}) or {"formation_title": d.get("formation_title")})
     return dossiers
 
 
@@ -173,7 +185,8 @@ async def _card_pdf(certificate: dict) -> bytes:
             cachet_bytes = None
     return generate_caces_card_pdf(
         certificate, f"{PUBLIC_FRONTEND_URL}/verif-caces", photo_bytes=photo_bytes,
-        cachet_bytes=cachet_bytes, otc_numero_inrs=settings_doc.get("caces_otc_numero_inrs"),
+        cachet_bytes=cachet_bytes,
+        otc_numero_inrs=certificate.get("otc_numero_inrs") or settings_doc.get("caces_otc_numero_inrs"),
     )
 
 
@@ -309,6 +322,113 @@ async def update_certificate(certificate_id: str, payload: CacesCertificateUpdat
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Carte introuvable")
     return await db.caces_certificates.find_one({"id": certificate_id}, {"_id": 0})
+
+
+# ---------------------------------------------------------------------------
+# Modification des cartes par l'équipe (demande du 2026-11-26) : catégories
+# obtenues (numéro, date, testeur) et création d'une carte sans passer par
+# un examen saisi ici (ex : examen fait sur papier).
+# ---------------------------------------------------------------------------
+
+async def _entrees_categories(entries: List[CacesCategoryEntryIn], anciennes: List[dict]) -> List[dict]:
+    cats = [e.category for e in entries]
+    if not entries:
+        raise HTTPException(status_code=400, detail="Au moins une catégorie sur la carte")
+    if len(set(cats)) != len(cats):
+        raise HTTPException(status_code=400, detail="Une catégorie apparaît deux fois")
+    bad = [c for c in cats if c not in CACES_CATEGORIES]
+    if bad:
+        raise HTTPException(status_code=400, detail=f"Catégorie CACES inconnue : {', '.join(bad)}")
+    old = {c["category"]: c for c in anciennes}
+    out = []
+    for e in entries:
+        prev = old.get(e.category, {})
+        numero = (e.numero_caces or "").strip() or prev.get("numero_caces") or await new_numero(e.category)
+        out.append({
+            "category": e.category, "numero_caces": numero,
+            "date_obtention": e.date_obtention or prev.get("date_obtention") or today_iso(),
+            "testeur_name": (e.testeur_name or "").strip() or prev.get("testeur_name"),
+            "dossier_id": prev.get("dossier_id"), "exam_attempt_id": prev.get("exam_attempt_id"),
+            "external": prev.get("external"),
+        })
+    return out
+
+
+def _echeance(cert: dict, categories: List[dict]) -> Optional[str]:
+    """Échéance = 5 ans après la première catégorie obtenue chez nous ; celle
+    du centre d'origine pour une carte ouverte par un CACES externe."""
+    internes = sorted(c["date_obtention"] for c in categories if not c.get("external") and c.get("date_obtention"))
+    if any(c.get("external") for c in categories) or not internes:
+        return cert.get("expiration_date")
+    return add_years(internes[0], CARTE_VALIDITE_ANS)
+
+
+@router.put("/certificates/{certificate_id}/categories")
+async def set_certificate_categories(certificate_id: str, payload: CacesCategoriesIn, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    cert = await db.caces_certificates.find_one({"id": certificate_id}, {"_id": 0})
+    if not cert:
+        raise HTTPException(status_code=404, detail="Carte introuvable")
+    categories = await _entrees_categories(payload.categories, cert.get("categories", []))
+    upd = {"categories": categories, "expiration_date": _echeance(cert, categories), "updated_at": now_iso()}
+    await db.caces_certificates.update_one({"id": certificate_id}, {"$set": upd})
+    return await db.caces_certificates.find_one({"id": certificate_id}, {"_id": 0})
+
+
+class CacesCertificateCreateIn(CacesCategoriesIn):
+    dossier_id: str
+    date_naissance: Optional[str] = None
+
+
+@router.post("/certificates")
+async def create_certificate(payload: CacesCertificateCreateIn, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    dossier = await db.dossiers.find_one({"id": payload.dossier_id}, {"_id": 0})
+    if not dossier or not dossier.get("student_id"):
+        raise HTTPException(status_code=404, detail="Dossier introuvable")
+    if await db.caces_certificates.find_one({"student_id": dossier["student_id"]}, {"_id": 0, "id": 1}):
+        raise HTTPException(status_code=400, detail="Ce candidat a déjà une carte : modifiez ses catégories")
+    categories = await _entrees_categories(payload.categories, [])
+    for c in categories:
+        c["dossier_id"] = dossier["id"]
+    cert = {
+        "id": str(uuid.uuid4()), "student_id": dossier["student_id"], "student_name": dossier.get("student_name"),
+        "date_naissance": payload.date_naissance, "signataire_name": None, "signataire_qualite": None,
+        "categories": categories, "created_at": now_iso(), "updated_at": now_iso(), "created_by": user.get("name"),
+    }
+    cert["expiration_date"] = _echeance(cert, categories)
+    await db.caces_certificates.insert_one(dict(cert))
+    return cert
+
+
+class CacesAttemptUpdateIn(BaseModel):
+    category: str
+
+
+@router.patch("/exam-attempts/{attempt_id}")
+async def update_exam_attempt(attempt_id: str, payload: CacesAttemptUpdateIn, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Changer la catégorie d'un examen tant que la carte n'est pas délivrée."""
+    attempt = await db.caces_exam_attempts.find_one({"id": attempt_id}, {"_id": 0})
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Tentative introuvable")
+    if payload.category not in CACES_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Catégorie CACES inconnue")
+    if attempt.get("finalized_certificate_id"):
+        raise HTTPException(status_code=400, detail="CACES déjà délivré : modifiez la carte")
+    if await db.caces_exam_attempts.find_one({"student_id": attempt["student_id"], "category": payload.category, "id": {"$ne": attempt_id}}, {"_id": 0, "id": 1}):
+        raise HTTPException(status_code=400, detail=f"Un examen existe déjà en catégorie {payload.category}")
+    await db.caces_exam_attempts.update_one({"id": attempt_id}, {"$set": {"category": payload.category, "updated_at": now_iso()}})
+    attempt["category"] = payload.category
+    return await _hydrate_attempt(attempt)
+
+
+@router.delete("/exam-attempts/{attempt_id}")
+async def delete_exam_attempt(attempt_id: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    attempt = await db.caces_exam_attempts.find_one({"id": attempt_id}, {"_id": 0})
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Tentative introuvable")
+    if attempt.get("finalized_certificate_id"):
+        raise HTTPException(status_code=400, detail="CACES déjà délivré : retirez la catégorie de la carte d'abord")
+    await db.caces_exam_attempts.delete_one({"id": attempt_id})
+    return {"ok": True}
 
 
 @router.get("/certificates/{certificate_id}/card.pdf")

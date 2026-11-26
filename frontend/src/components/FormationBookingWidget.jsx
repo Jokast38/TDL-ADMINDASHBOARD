@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import { useUpcomingSessions, sessionLabel } from "@/components/UpcomingSessions";
 import { trackLead, trackSchedule, newEventId, getFbCookies } from "@/lib/metaPixel";
+import CacesCategoriesPicker, { isCacesR489 } from "@/components/caces/CacesCategoriesPicker";
 
 const GOLD = "#d4af37";
 
@@ -64,6 +65,8 @@ export default function FormationBookingWidget({ formationId: initialFormationId
   const [participants, setParticipants] = useState(1);
   const [showPrice, setShowPrice] = useState(false);
   const [form, setForm] = useState({ prenom: "", nom: "", email: "", telephone: "" });
+  // CACES R.489 : catégories souhaitées (1B, 3, 5), demande du 2026-11-26.
+  const [cacesCategories, setCacesCategories] = useState([]);
   const [consent, setConsent] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -101,6 +104,7 @@ export default function FormationBookingWidget({ formationId: initialFormationId
   const selectedSession = sessionsForCenter.find((s) => s.id === selectedSessionId) || null;
 
   const showPermisField = activeTab.key === "VTC" || activeTab.key === "TAXI";
+  const showCacesCategories = activeTab.key === "CACES" && (!selectedFormation || isCacesR489(selectedFormation));
   const priceLabel = selectedFormation?.price
     ? `${(selectedFormation.price * participants).toLocaleString("fr-FR")} € TTC`
     : "Sur devis";
@@ -133,6 +137,7 @@ export default function FormationBookingWidget({ formationId: initialFormationId
           : activeTab.label,
         center: CENTERS.find((c) => c.id === center)?.label || "",
         message: [
+          showCacesCategories && cacesCategories.length > 0 && `Catégories CACES : ${cacesCategories.join(", ")}`,
           permisAnnee && `Permis B obtenu en ${permisAnnee}`,
           `Financement envisagé : ${financement}`,
           `Participants : ${participants}`,
@@ -235,6 +240,13 @@ export default function FormationBookingWidget({ formationId: initialFormationId
                     {sessionsForCenter.map((s) => <option key={s.id} value={s.id}>{sessionLabel(s)}</option>)}
                   </select>
                 </div>
+
+                {showCacesCategories && (
+                  <div data-testid="booking-caces-categories">
+                    <label className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2 block">Catégorie(s) CACES® souhaitée(s)</label>
+                    <CacesCategoriesPicker value={cacesCategories} onChange={setCacesCategories} testId="booking-caces-cat" />
+                  </div>
+                )}
 
                 <div className="grid sm:grid-cols-2 gap-5">
                   {showPermisField && (

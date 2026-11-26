@@ -15,6 +15,7 @@ import PrivacyConsentCheckbox from "@/components/PrivacyConsentCheckbox";
 import ChatWidget from "@/components/ChatWidget";
 import ContactBubble from "@/components/ContactBubble";
 import { SESSIONS_PAR_PAGE } from "@/components/UpcomingSessions";
+import CacesCategoriesPicker, { CACES_CATEGORIES_PROPOSEES, isCacesR489, categoriesDepuisTitre } from "@/components/caces/CacesCategoriesPicker";
 
 // Validation basique : téléphone français (avec ou sans +33, espaces/points/
 // tirets tolérés) et email — pour éviter les dossiers avec un numéro
@@ -49,6 +50,8 @@ export default function PublicInscription() {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [visibleSessions, setVisibleSessions] = useState(SESSIONS_PAR_PAGE);
   const [selectedStageId, setSelectedStageId] = useState("");
+  // CACES R.489 : catégories passées (1B, 3, 5), demande du 2026-11-26.
+  const [cacesCategories, setCacesCategories] = useState([]);
 
   // Retour depuis Stripe Checkout : le navigateur recharge la page, l'état React
   // (étapes 1-3) est donc perdu — on affiche un écran dédié basé sur les paramètres
@@ -115,6 +118,9 @@ export default function PublicInscription() {
     if (!EMAIL_RE.test(form.student_email.trim())) {
       return toast.error("Merci de vérifier le format de votre email");
     }
+    if (isCacesR489(selected) && !cacesCategories.length) {
+      return toast.error("Choisissez la ou les catégories CACES que vous souhaitez passer");
+    }
     if (form.student_phone.trim() && !isValidPhone(form.student_phone)) {
       return toast.error("Merci de vérifier votre numéro de téléphone (10 chiffres, ex : 06 12 34 56 78)");
     }
@@ -129,6 +135,7 @@ export default function PublicInscription() {
         source: "inscription_publique", landing_url: window.location.href,
         event_id: leadEventId, ...getFbCookies(),
         financing_mode: selected?.cpf_eligible ? financingMode : undefined,
+        caces_categories: isCacesR489(selected) ? cacesCategories : undefined,
       });
       setSuccess(data);
       setStep(3);
@@ -146,6 +153,10 @@ export default function PublicInscription() {
   };
 
   const selected = formations.find((f) => f.id === formationId);
+  // Catégorie déjà écrite dans l'intitulé de la formation (« Cat. 3 ») : pré-cochée.
+  useEffect(() => {
+    setCacesCategories(categoriesDepuisTitre(selected?.title).filter((c) => CACES_CATEGORIES_PROPOSEES.includes(c)));
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const needsSessionStep = selected && SESSION_STEP_CATEGORIES.includes(selected.category);
 
   const pickFormation = async (f) => {
@@ -341,6 +352,13 @@ export default function PublicInscription() {
                 </div>
               </div>
 
+              {isCacesR489(selected) && (
+                <div className="mt-4" data-testid="caces-categories-section">
+                  <label className="text-sm font-medium block mb-2">Catégorie(s) CACES® que vous souhaitez passer *</label>
+                  <CacesCategoriesPicker value={cacesCategories} onChange={setCacesCategories} testId="inscr-caces-categories" />
+                </div>
+              )}
+
               {selected?.cpf_eligible && (
                 <div className="mt-4" data-testid="financing-mode-section">
                   <label className="text-sm font-medium block mb-2">Mode de financement *</label>
@@ -384,7 +402,7 @@ export default function PublicInscription() {
                 <Button variant="outline" onClick={() => setStep(needsSessionStep ? 1.5 : 1)} className="w-full sm:w-auto">← {needsSessionStep ? "Modifier la session" : "Modifier la formation"}</Button>
                 <Button
                   onClick={submit}
-                  disabled={!form.prenom.trim() || !form.nom.trim() || !form.student_email || !privacyConsent || submitting || (selected?.cpf_eligible && !financingMode)}
+                  disabled={!form.prenom.trim() || !form.nom.trim() || !form.student_email || !privacyConsent || submitting || (selected?.cpf_eligible && !financingMode) || (isCacesR489(selected) && !cacesCategories.length)}
                   className="w-full sm:w-auto bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white"
                   data-testid="inscr-submit"
                 >

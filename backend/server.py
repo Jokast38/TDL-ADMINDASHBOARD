@@ -25,7 +25,7 @@ from routers import (
     exams, appointments, stage_attestations, modules, satisfaction, french_tests,
     mailbox, meta_leads, flash_offer, ocr_test, meta_lead_import,
     call_center, cosmosia_import, custom_payments, meta_crm_test, stats,
-    pricing, caces, caces_exam, caces_attestations, formateur_planning, email_debit, sms_campaigns,
+    pricing, caces, caces_exam, caces_attestations, caces_cartes, formateur_planning, email_debit, sms_campaigns,
 )
 from routers.lead_automations import run_due_automations
 from services.staff_notify import (
@@ -119,6 +119,7 @@ app.include_router(pricing.router,         prefix=_PREFIX)
 app.include_router(caces.router,           prefix=_PREFIX)
 app.include_router(caces_exam.router,      prefix=_PREFIX)
 app.include_router(caces_attestations.router, prefix=_PREFIX)
+app.include_router(caces_cartes.router,    prefix=_PREFIX)
 app.include_router(email_debit.router,     prefix=_PREFIX)
 app.include_router(sms_campaigns.router,   prefix=_PREFIX)
 app.include_router(positioning_tests.router, prefix=_PREFIX)

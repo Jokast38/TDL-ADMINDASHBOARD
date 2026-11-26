@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDateFR } from "@/lib/dateFormat";
+import CacesCategoriesPicker, { isCacesR489, categoriesDepuisTitre } from "@/components/caces/CacesCategoriesPicker";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
@@ -240,18 +241,18 @@ export default function Inscriptions() {
   const [assigning, setAssigning] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [enrollCallback, setEnrollCallback] = useState(null);
-  const [enrollForm, setEnrollForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "" });
+  const [enrollForm, setEnrollForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "", caces_categories: [] });
   const [enrolling, setEnrolling] = useState(false);
 
   // Inscription sur place par un agent (walk-in), avec paiement carte
   // (Stripe) immédiat — distinct du flux "Inscrire" ci-dessus qui part d'une
   // demande de rappel existante et ne déclenche pas de paiement.
   const [walkinOpen, setWalkinOpen] = useState(false);
-  const [walkinForm, setWalkinForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "", pay_now: true, cma: "", cma_dossier_number: "", cpf: "", cpf_titulaire: "" });
+  const [walkinForm, setWalkinForm] = useState({ formation_id: "", name: "", email: "", phone: "", notes: "", pay_now: true, cma: "", cma_dossier_number: "", cpf: "", cpf_titulaire: "", caces_categories: [] });
   const [walkinSubmitting, setWalkinSubmitting] = useState(false);
 
   const openWalkin = () => {
-    setWalkinForm({ formation_id: formations[0]?.id || "", name: "", email: "", phone: "", notes: "", pay_now: true, cma: "", cma_dossier_number: "", cpf: "", cpf_titulaire: "" });
+    setWalkinForm({ formation_id: formations[0]?.id || "", name: "", email: "", phone: "", notes: "", pay_now: true, cma: "", cma_dossier_number: "", cpf: "", cpf_titulaire: "", caces_categories: [] });
     setWalkinOpen(true);
   };
 
@@ -259,6 +260,8 @@ export default function Inscriptions() {
     if (!walkinForm.formation_id) return toast.error("Choisissez une formation");
     if (!walkinForm.name.trim()) return toast.error("Le nom est requis");
     if (!walkinForm.email.trim()) return toast.error("Un email est requis pour créer l'inscription");
+    const walkinCaces = isCacesR489(formations.find((f) => f.id === walkinForm.formation_id));
+    if (walkinCaces && !walkinForm.caces_categories.length) return toast.error("Choisissez au moins une catégorie CACES");
     setWalkinSubmitting(true);
     try {
       const { data } = await api.post("/inscriptions", {
@@ -268,6 +271,7 @@ export default function Inscriptions() {
         student_phone: walkinForm.phone || null,
         notes: walkinForm.notes,
         source: "admin_walkin",
+        caces_categories: walkinCaces ? walkinForm.caces_categories : undefined,
       });
       // CMA/CPF ne font pas partie du formulaire de création (InscriptionIn)
       // — saisis uniquement pour les formations VTC/Taxi (voir VTC_TAXI_CATEGORY
@@ -355,6 +359,7 @@ export default function Inscriptions() {
       email: c.email || "",
       phone: c.telephone || "",
       notes: c.message || "",
+      caces_categories: [],
     });
     setEnrollOpen(true);
   };
@@ -363,6 +368,8 @@ export default function Inscriptions() {
     if (!enrollForm.formation_id) return toast.error("Choisissez une formation");
     if (!enrollForm.name.trim()) return toast.error("Le nom est requis");
     if (!enrollForm.email.trim()) return toast.error("Un email est requis pour créer l'inscription");
+    const enrollCaces = isCacesR489(formations.find((f) => f.id === enrollForm.formation_id));
+    if (enrollCaces && !enrollForm.caces_categories.length) return toast.error("Choisissez au moins une catégorie CACES");
     setEnrolling(true);
     try {
       await api.post("/inscriptions", {
@@ -371,6 +378,7 @@ export default function Inscriptions() {
         student_email: enrollForm.email,
         student_phone: enrollForm.phone || null,
         notes: enrollForm.notes,
+        caces_categories: enrollCaces ? enrollForm.caces_categories : undefined,
       });
       toast.success("Inscription créée");
       if (enrollCallback) await markCallbackHandled(enrollCallback.id, true);
@@ -511,7 +519,10 @@ export default function Inscriptions() {
 
   const openEdit = (i) => {
     setEditItem(i);
-    setEditForm({ student_name: i.student_name || "", student_phone: i.student_phone || "", notes: i.notes || "", price: i.price ?? "" });
+    setEditForm({
+      student_name: i.student_name || "", student_phone: i.student_phone || "", notes: i.notes || "", price: i.price ?? "",
+      caces_categories: i.caces_categories?.length ? i.caces_categories : categoriesDepuisTitre(i.formation_title),
+    });
     setEditOpen(true);
   };
 
@@ -519,7 +530,10 @@ export default function Inscriptions() {
     if (!editItem) return;
     setSaving(true);
     try {
-      const payload = { ...editForm, price: editForm.price === "" ? undefined : +editForm.price };
+      const payload = {
+        ...editForm, price: editForm.price === "" ? undefined : +editForm.price,
+        caces_categories: isCacesR489({ category: editItem.category, title: editItem.formation_title }) ? editForm.caces_categories : undefined,
+      };
       await api.put(`/inscriptions/${editItem.id}`, payload);
       toast.success("Inscription mise à jour");
       setEditOpen(false);
@@ -740,7 +754,14 @@ export default function Inscriptions() {
                       <p className="text-xs text-gray-500">{i.student_email}</p>
                       {i.student_phone && <p className="text-xs text-gray-400">{i.student_phone}</p>}
                     </td>
-                    <td className="py-3 px-4">{i.formation_title}</td>
+                    <td className="py-3 px-4">
+                      {i.formation_title}
+                      {i.caces_categories?.length > 0 && (
+                        <span className="flex flex-wrap gap-1 mt-1">
+                          {i.caces_categories.map((c) => <Badge key={c} variant="outline" className="text-[10px] px-1.5 py-0">Cat. {c}</Badge>)}
+                        </span>
+                      )}
+                    </td>
                     <td className="py-3 px-4"><Badge variant="outline">{i.category}</Badge></td>
                     <td className="py-3 px-4 text-xs text-gray-600">{i.lieu_ville || <span className="text-gray-300">—</span>}</td>
                     <td className="py-3 px-4">
@@ -995,6 +1016,12 @@ export default function Inscriptions() {
               <label className="text-sm font-medium">Téléphone</label>
               <Input value={editForm.student_phone} onChange={(e) => setEditForm({ ...editForm, student_phone: e.target.value })} />
             </div>
+            {isCacesR489({ category: editItem?.category, title: editItem?.formation_title }) && (
+              <div>
+                <label className="text-sm font-medium">Catégories CACES passées</label>
+                <div className="mt-1"><CacesCategoriesPicker value={editForm.caces_categories || []} onChange={(v) => setEditForm({ ...editForm, caces_categories: v })} testId="edit-caces-categories" /></div>
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium">Prix (€)</label>
               <Input
@@ -1034,6 +1061,12 @@ export default function Inscriptions() {
                 </SelectContent>
               </Select>
             </div>
+            {isCacesR489(formations.find((f) => f.id === enrollForm.formation_id)) && (
+              <div>
+                <label className="text-sm font-medium">Catégories CACES passées <span className="text-red-500">*</span></label>
+                <div className="mt-1"><CacesCategoriesPicker value={enrollForm.caces_categories} onChange={(v) => setEnrollForm({ ...enrollForm, caces_categories: v })} testId="enroll-caces-categories" /></div>
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium">Nom</label>
               <Input value={enrollForm.name} onChange={(e) => setEnrollForm({ ...enrollForm, name: e.target.value })} />
@@ -1126,6 +1159,12 @@ export default function Inscriptions() {
               <label className="text-sm font-medium">Notes</label>
               <Textarea rows={2} value={walkinForm.notes} onChange={(e) => setWalkinForm({ ...walkinForm, notes: e.target.value })} data-testid="walkin-notes" />
             </div>
+            {isCacesR489(formations.find((f) => f.id === walkinForm.formation_id)) && (
+              <div>
+                <label className="text-sm font-medium">Catégories CACES passées <span className="text-red-500">*</span></label>
+                <div className="mt-1"><CacesCategoriesPicker value={walkinForm.caces_categories} onChange={(v) => setWalkinForm({ ...walkinForm, caces_categories: v })} testId="walkin-caces-categories" /></div>
+              </div>
+            )}
             {formations.find((f) => f.id === walkinForm.formation_id)?.category === VTC_TAXI_CATEGORY && (
               <div className="border border-gray-200 rounded-md p-3 space-y-2 bg-gray-50/50">
                 <p className="text-xs font-medium text-gray-500">Financement (VTC/Taxi)</p>
