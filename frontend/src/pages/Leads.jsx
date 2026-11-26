@@ -57,6 +57,7 @@ const TDL_PHONE   = "01 80 90 72 49";
 const TDL_SITE    = "https://tdl-formation.fr";
 const TDL_CONTACT = "https://tdl-formation.fr/contact/";
 const TDL_VTC     = "https://tdl-formation.fr/formation-continue-vtc/";
+const TDL_CACES   = "https://tdl-formation.fr/formation-caces";
 const TDL_LANDING_FIDELITE = "https://tdl-admindashboard.vercel.app/offre-fidelite";
 
 // ─── Briques HTML emails ──────────────────────────────────────────────────────
@@ -307,6 +308,88 @@ const TEMPLATES = {
     ),
   },
 
+  // Modèles CACES (demande du 2026-11-26) : CACES R489 chariots, catégories
+  // 1B, 3 et 5, sessions de 3 jours (examen le dernier jour), à Épinay.
+  caces_r489: {
+    label: "🏗️ Formation CACES R489 (chariots élévateurs)",
+    subject: "Obtenez votre CACES® R489 chariots élévateurs en 3 jours",
+    body: makeEmail(
+      `<p style="margin:0 0 18px 0;font-size:16px;color:#0a0a0a;">Bonjour <b>{{name}}</b>,</p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Vous souhaitez conduire un <b>chariot élévateur</b> en entreprise, en entrepôt ou sur une
+         plateforme logistique ? Le <b>CACES® R489</b> est le certificat attendu par les employeurs.
+       </p>
+       <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
+         TDL Formation vous prépare aux catégories suivantes :
+       </p>
+       <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px 0;">
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">✅ <b>Catégorie 1B</b> — transpalettes et gerbeurs à conducteur porté</td></tr>
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">✅ <b>Catégorie 3</b> — chariots élévateurs frontaux en porte-à-faux</td></tr>
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">✅ <b>Catégorie 5</b> — chariots élévateurs à mât rétractable</td></tr>
+       </table>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         La session dure <b>3 jours</b> : théorie, pratique sur engins, puis examen passé
+         le dernier jour, dans notre centre d'<b>Épinay-sur-Seine (93)</b>.
+       </p>
+       <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Plusieurs financements sont possibles selon votre situation : employeur, OPCO,
+         France Travail ou financement personnel. Réservez votre place :
+       </p>`,
+      "Découvrir la formation CACES →",
+      TDL_CACES
+    ),
+  },
+
+  caces_relance: {
+    label: "🏗️ CACES — Relance prospect",
+    subject: "Votre CACES® R489 : il reste des places sur nos prochaines sessions",
+    body: makeEmail(
+      `<p style="margin:0 0 18px 0;font-size:16px;color:#0a0a0a;">Bonjour <b>{{name}}</b>,</p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Vous vous êtes intéressé(e) à notre formation <b>CACES® R489</b> et nous n'avons pas
+         encore pu finaliser votre inscription.
+       </p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Nos sessions de 3 jours se remplissent vite : les groupes sont volontairement réduits
+         pour que chacun ait le temps de pratiquer sur les engins avant l'examen.
+       </p>
+       <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Pour réserver, il suffit de nous indiquer :
+       </p>
+       <table cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 20px 0;">
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">1. La ou les catégories souhaitées (1B, 3 ou 5).</td></tr>
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">2. Vos dates de disponibilité.</td></tr>
+         <tr><td style="padding:4px 0;font-size:15px;color:#333333;">3. Votre mode de financement (employeur, OPCO, France Travail ou personnel).</td></tr>
+       </table>
+       <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Répondez simplement à cet email ou appelez-nous, nous nous occupons du reste.
+       </p>`,
+      "Réserver ma session CACES →",
+      TDL_CACES
+    ),
+  },
+
+  caces_recyclage: {
+    label: "🏗️ CACES — Recyclage (renouvellement 5 ans)",
+    subject: "Votre CACES® arrive à échéance ? Pensez au recyclage",
+    body: makeEmail(
+      `<p style="margin:0 0 18px 0;font-size:16px;color:#0a0a0a;">Bonjour <b>{{name}}</b>,</p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Le <b>CACES® R489</b> est valable <b>5 ans</b>. Une fois cette date passée, votre
+         employeur ne peut plus vous autoriser à conduire les chariots concernés.
+       </p>
+       <p style="margin:0 0 14px 0;font-size:15px;line-height:1.7;color:#333333;">
+         TDL Formation organise des sessions de recyclage pour les catégories <b>1B, 3 et 5</b>,
+         dans notre centre d'<b>Épinay-sur-Seine (93)</b>, avec l'examen le dernier jour de la session.
+       </p>
+       <p style="margin:0 0 8px 0;font-size:15px;line-height:1.7;color:#333333;">
+         Anticipez l'échéance pour continuer à travailler sans interruption :
+       </p>`,
+      "Renouveler mon CACES →",
+      TDL_CACES
+    ),
+  },
+
   ecsr: {
     label: "🎓 Formation ECSR (Moniteur auto-école)",
     subject: "Devenez moniteur d'auto-école — Titre Pro ECSR avec TDL Formation",
@@ -364,6 +447,7 @@ const TEMPLATES = {
          <tr><td style="padding:6px 0;font-size:14px;color:#333333;">🚗 &nbsp;<b>Formation VTC</b> — journée ou soirée</td></tr>
          <tr><td style="padding:6px 0;font-size:14px;color:#333333;">🚕 &nbsp;<b>Formation TAXI</b> et Passerelle VTC → TAXI</td></tr>
          <tr><td style="padding:6px 0;font-size:14px;color:#333333;">🔵 &nbsp;<b>Stage récupération de points</b> permis (jusqu'à 4 pts)</td></tr>
+         <tr><td style="padding:6px 0;font-size:14px;color:#333333;">🏗️ &nbsp;<b>CACES® R489</b> — chariots élévateurs (cat. 1B, 3, 5)</td></tr>
          <tr><td style="padding:6px 0;font-size:14px;color:#333333;">🎓 &nbsp;<b>Titre Pro ECSR</b> — Moniteur auto-école</td></tr>
          <tr><td style="padding:6px 0;font-size:14px;color:#333333;">🏪 &nbsp;<b>Titre Pro Conseiller de Vente</b> (Niveau 4, CPF)</td></tr>
        </table>
