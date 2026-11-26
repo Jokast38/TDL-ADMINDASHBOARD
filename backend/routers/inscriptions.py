@@ -179,6 +179,8 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         "price": payload.price if payload.price is not None else formation.get("price", 0),
         "payment_status": "pending",
         "status": "active", "contact_status": "en_cours", "notes": payload.notes or "", "created_at": now_iso(),
+        # Première note datée et signée (historique, voir add_inscription_note).
+        "notes_history": [note_entry(payload.notes.strip(), acting_staff)] if (payload.notes or "").strip() else [],
         "source": payload.source or "", "landing_url": payload.landing_url or "",
         # `fbc` (cookie Meta Click ID) n'existe QUE si le visiteur est arrivé en
         # cliquant sur une pub Meta (voir lib/metaPixel.js synthesizeFbc, reconstruit
@@ -564,6 +566,17 @@ async def update_inscription(iid: str, payload: InscriptionUpdate, user: dict = 
         raise HTTPException(status_code=400, detail="Aucune modification fournie")
     if "caces_categories" in update:
         update["caces_categories"] = _caces_categories(update["caces_categories"], {"category": "CACES"}) or []
+        if update["caces_categories"] != (existing.get("caces_categories") or []):
+            await log_action(user, "inscription_caces_categories", "inscription", iid, {
+                "student_name": existing.get("student_name"), "categories": update["caces_categories"]})
+    # Note modifiée par l'ancien champ texte : ajoutée à l'historique signé.
+    if "notes" in update and update["notes"].strip() and update["notes"].strip() != (existing.get("notes") or "").strip():
+        update["notes"] = update["notes"].strip()
+        update["notes_history"] = _historique_notes(existing) + [note_entry(update["notes"], user)]
+        update["notes_updated_at"] = update["notes_history"][-1]["at"]
+        update["notes_updated_by_name"] = user.get("name", "")
+    elif "notes" in update:
+        update.pop("notes")
     update["updated_at"] = now_iso()
     # `contact_status` est le signal qu'un membre de l'équipe vient de traiter
     # cette inscription (relance, tag prospect non qualifié, finalisation...)
@@ -590,6 +603,80 @@ async def update_inscription(iid: str, payload: InscriptionUpdate, user: dict = 
             if dossier and dossier.get("status") == "nouveau":
                 await db.dossiers.update_one({"id": dossier["id"]}, {"$set": {"status": "en_verification", "updated_at": now_iso()}})
     return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+
+
+# ---------------------------------------------------------------------------
+# Notes de suivi d'une inscription (demande du 2026-11-26) : historique daté
+# et signé comme pour les prospects (leads.notes_history). `notes` garde la
+# dernière note, affichée dans la liste.
+# ---------------------------------------------------------------------------
+
+class InscriptionNoteIn(BaseModel):
+    text: str
+
+
+def _historique_notes(insc: dict) -> List[dict]:
+    """Historique des notes ; une ancienne note sans historique (saisie avant
+    le 2026-11-26) devient la première entrée, datée de l'inscription."""
+    hist = list(insc.get("notes_history") or [])
+    if not hist and (insc.get("notes") or "").strip():
+        hist.append({"id": "origine", "text": insc["notes"], "at": insc.get("notes_updated_at") or insc.get("created_at"),
+                     "by_name": insc.get("created_by_name") or "Inscription en ligne"})
+    return hist
+
+
+def note_entry(text: str, user: Optional[dict]) -> dict:
+    return {"id": str(uuid.uuid4()), "text": text, "at": now_iso(),
+            "by_id": (user or {}).get("id"), "by_name": (user or {}).get("name") or "Inscription en ligne"}
+
+
+@router.get("/inscriptions/{iid}/notes")
+async def list_inscription_notes(iid: str, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    insc = await db.inscriptions.find_one({"id": iid}, {"_id": 0, "notes": 1, "notes_history": 1, "created_at": 1,
+                                                     "created_by_name": 1, "notes_updated_at": 1})
+    if not insc:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    return _historique_notes(insc)
+
+
+@router.post("/inscriptions/{iid}/notes")
+async def add_inscription_note(iid: str, payload: InscriptionNoteIn, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="La note est vide")
+    insc = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    if not insc:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    hist = _historique_notes(insc) + [note_entry(text, user)]
+    await db.inscriptions.update_one({"id": iid}, {"$set": {
+        "notes_history": hist, "notes": text, "notes_updated_at": hist[-1]["at"], "notes_updated_by_name": user.get("name", ""),
+        "updated_at": now_iso()}})
+    await log_action(user, "inscription_note", "inscription", iid, {"student_name": insc.get("student_name"), "note": text})
+    return hist
+
+
+@router.put("/inscriptions/{iid}/notes/{note_id}")
+async def edit_inscription_note(iid: str, note_id: str, payload: InscriptionNoteIn, user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    """Corrige une note : le texte change, l'auteur et l'heure d'origine
+    restent, la modification est signée (edited_at / edited_by_name)."""
+    text = payload.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="La note est vide")
+    insc = await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    if not insc:
+        raise HTTPException(status_code=404, detail="Inscription introuvable")
+    hist = _historique_notes(insc)
+    note = next((n for n in hist if n.get("id") == note_id), None)
+    if not note:
+        raise HTTPException(status_code=404, detail="Note introuvable")
+    if note["text"] != text:
+        note.update({"text": text, "edited_at": now_iso(), "edited_by_name": user.get("name", "")})
+    upd = {"notes_history": hist, "updated_at": now_iso()}
+    if hist[-1] is note:
+        upd["notes"] = text
+    await db.inscriptions.update_one({"id": iid}, {"$set": upd})
+    await log_action(user, "inscription_note_modifiee", "inscription", iid, {"student_name": insc.get("student_name"), "note": text})
+    return hist
 
 
 @router.put("/inscriptions/{iid}/stage")

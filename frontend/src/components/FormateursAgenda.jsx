@@ -59,6 +59,9 @@ export default function FormateursAgenda({ formateurs }) {
   const [loading, setLoading] = useState(true);
   const [filtre, setFiltre] = useState("tous");
   const [lieu, setLieu] = useState("tous");
+  // Filtre par formation (demande du 2026-11-26) : « cat:CACES » = toute la
+  // catégorie, « titre:… » = une formation précise.
+  const [formation, setFormation] = useState("toutes");
   const [selected, setSelected] = useState(null);
 
   const days = useMemo(() => monthGrid(anchor), [anchor]);
@@ -71,12 +74,28 @@ export default function FormateursAgenda({ formateurs }) {
       .finally(() => setLoading(false));
   }, [days]);
 
+  const matchFormation = (s) => formation === "toutes"
+    || (formation.startsWith("cat:") && (s.category || "AUTRE") === formation.slice(4))
+    || (formation.startsWith("titre:") && s.formation_titre === formation.slice(6));
+  const optionsFormation = useMemo(() => {
+    const cats = [...new Set(sessions.map((s) => s.category || "AUTRE"))].sort();
+    const titres = [...new Set(sessions.map((s) => s.formation_titre).filter(Boolean))].sort((a, b) => a.localeCompare(b, "fr"));
+    const opts = [
+      ...cats.map((c) => [`cat:${c}`, `Toutes les formations ${c === "AUTRE" ? "sans catégorie" : c}`]),
+      ...titres.map((t) => [`titre:${t}`, t]),
+    ];
+    // Le choix reste affiché même si le mois affiché n'a pas cette formation.
+    if (formation !== "toutes" && !opts.some(([v]) => v === formation)) opts.push([formation, formation.replace(/^cat:|^titre:/, "")]);
+    return opts;
+  }, [sessions, formation]);
+
   const visibles = useMemo(() => sessions.filter((s) => {
     if (lieu !== "tous" && lieuOf(s) !== lieu) return false;
+    if (!matchFormation(s)) return false;
     if (filtre === "tous") return true;
     if (filtre === "a_pourvoir") return placesLibres(s) > 0;
     return Object.values(s.places).some((holders) => holders.some((h) => h.id === filtre));
-  }), [sessions, filtre, lieu]);
+  }), [sessions, filtre, lieu, formation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const byDay = useMemo(() => {
     const map = new Map();
@@ -87,7 +106,7 @@ export default function FormateursAgenda({ formateurs }) {
     return map;
   }, [days, visibles]);
 
-  const aPourvoir = sessions.filter((s) => (lieu === "tous" || lieuOf(s) === lieu) && placesLibres(s) > 0 && s.date_debut.slice(0, 7) === toISO(anchor).slice(0, 7)).length;
+  const aPourvoir = sessions.filter((s) => (lieu === "tous" || lieuOf(s) === lieu) && matchFormation(s) && placesLibres(s) > 0 && s.date_debut.slice(0, 7) === toISO(anchor).slice(0, 7)).length;
   const todayIso = toISO(new Date());
   const shift = (n) => setAnchor(new Date(anchor.getFullYear(), anchor.getMonth() + n, 1));
 
@@ -108,6 +127,13 @@ export default function FormateursAgenda({ formateurs }) {
             <SelectContent>
               {LIEUX.filter((l) => l.key !== "autre" || sessions.some((s) => lieuOf(s) === "autre"))
                 .map((l) => <SelectItem key={l.key} value={l.key}>{l.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={formation} onValueChange={setFormation}>
+            <SelectTrigger className="w-64" data-testid="agenda-formation"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="toutes">Toutes les formations</SelectItem>
+              {optionsFormation.map(([v, label]) => <SelectItem key={v} value={v}>{label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filtre} onValueChange={setFiltre}>

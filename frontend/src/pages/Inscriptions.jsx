@@ -9,12 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatDateFR } from "@/lib/dateFormat";
+import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
+import InscriptionNotesDialog from "@/components/InscriptionNotesDialog";
 import CacesCategoriesPicker, { isCacesR489, categoriesDepuisTitre } from "@/components/caces/CacesCategoriesPicker";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
+import { NotePencil } from "@phosphor-icons/react";
 import { MagnifyingGlass, PencilSimple, XCircle, ArrowCounterClockwise, PhoneCall, Check, Trash, GraduationCap, Hourglass, CaretRight, CaretDown, Plus, CreditCard, CalendarCheck, ArrowsClockwise } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -229,6 +231,21 @@ export default function Inscriptions() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [editItem, setEditItem] = useState(null);
+  // Notes datées et signées (fenêtre dédiée) et catégories CACES modifiables
+  // depuis la liste (demande du 2026-11-26).
+  const [notesFor, setNotesFor] = useState(null);
+  const [catsFor, setCatsFor] = useState(null); // { item, value }
+  const [savingCats, setSavingCats] = useState(false);
+  const saveCats = async () => {
+    setSavingCats(true);
+    try {
+      await api.put(`/inscriptions/${catsFor.item.id}`, { caces_categories: catsFor.value });
+      toast.success("Catégories CACES enregistrées");
+      setCatsFor(null);
+      load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Catégories non enregistrées"); }
+    finally { setSavingCats(false); }
+  };
   const [editForm, setEditForm] = useState({ student_name: "", student_phone: "", notes: "", price: "" });
   const [saving, setSaving] = useState(false);
 
@@ -520,7 +537,7 @@ export default function Inscriptions() {
   const openEdit = (i) => {
     setEditItem(i);
     setEditForm({
-      student_name: i.student_name || "", student_phone: i.student_phone || "", notes: i.notes || "", price: i.price ?? "",
+      student_name: i.student_name || "", student_phone: i.student_phone || "", price: i.price ?? "",
       caces_categories: i.caces_categories?.length ? i.caces_categories : categoriesDepuisTitre(i.formation_title),
     });
     setEditOpen(true);
@@ -756,11 +773,17 @@ export default function Inscriptions() {
                     </td>
                     <td className="py-3 px-4">
                       {i.formation_title}
-                      {i.caces_categories?.length > 0 && (
-                        <span className="flex flex-wrap gap-1 mt-1">
-                          {i.caces_categories.map((c) => <Badge key={c} variant="outline" className="text-[10px] px-1.5 py-0">Cat. {c}</Badge>)}
-                        </span>
-                      )}
+                      {isCacesR489({ category: i.category, title: i.formation_title }) && (() => {
+                        const cats = i.caces_categories?.length ? i.caces_categories : categoriesDepuisTitre(i.formation_title);
+                        return (
+                          <button type="button" onClick={() => setCatsFor({ item: i, value: cats })} data-testid={`insc-caces-cats-${i.id}`}
+                            className="flex flex-wrap items-center gap-1 mt-1 group" title="Modifier ou ajouter des catégories CACES">
+                            {cats.map((c) => <Badge key={c} variant="outline" className="text-[10px] px-1.5 py-0">Cat. {c}</Badge>)}
+                            {!cats.length && <span className="text-[11px] text-amber-600">Catégorie à préciser</span>}
+                            <PencilSimple size={11} className="text-gray-400 group-hover:text-gray-700" />
+                          </button>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 px-4"><Badge variant="outline">{i.category}</Badge></td>
                     <td className="py-3 px-4 text-xs text-gray-600">{i.lieu_ville || <span className="text-gray-300">—</span>}</td>
@@ -904,12 +927,22 @@ export default function Inscriptions() {
                         })()}
                       </button>
                     </td>
-                    <td className="py-3 px-4 max-w-[180px]">
-                      {i.notes ? (
-                        <p className="text-xs text-gray-500 truncate" title={i.notes}>{i.notes}</p>
-                      ) : (
-                        <span className="text-xs text-gray-300">—</span>
-                      )}
+                    <td className="py-3 px-4 max-w-[200px]">
+                      <button type="button" onClick={() => setNotesFor(i)} className="text-left w-full group" data-testid={`insc-notes-${i.id}`}
+                        title="Voir, ajouter ou modifier les notes">
+                        {i.notes ? (
+                          <>
+                            <p className="text-xs text-gray-700 truncate group-hover:underline">{i.notes}</p>
+                            <p className="text-[10px] text-gray-400">
+                              {formatDateTimeFR(i.notes_updated_at || i.created_at)}
+                              {(i.notes_updated_by_name || (!i.notes_history?.length && i.created_by_name)) ? ` — ${i.notes_updated_by_name || i.created_by_name}` : ""}
+                              {i.notes_history?.length > 1 ? ` · ${i.notes_history.length} notes` : ""}
+                            </p>
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400 inline-flex items-center gap-1 group-hover:text-gray-700"><Plus size={11} /> Note</span>
+                        )}
+                      </button>
                     </td>
                     <td className="py-3 px-4 text-right font-mono">{fmtMoney(i.price)}</td>
                     <td className="py-3 px-4 text-right">
@@ -1004,6 +1037,20 @@ export default function Inscriptions() {
         </div>
       )}
 
+      <InscriptionNotesDialog inscription={notesFor} onClose={() => setNotesFor(null)} onChanged={load} />
+
+      <Dialog open={!!catsFor} onOpenChange={(o) => !o && setCatsFor(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Catégories CACES — {catsFor?.item.student_name}</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-500">Cochez les catégories passées par le candidat. Elles sont proposées au testeur pour la déclaration des admis et la carte.</p>
+          {catsFor && <CacesCategoriesPicker value={catsFor.value} onChange={(v) => setCatsFor({ ...catsFor, value: v })} testId="insc-cats-picker" />}
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="outline" onClick={() => setCatsFor(null)} disabled={savingCats}>Annuler</Button>
+            <Button onClick={saveCats} disabled={savingCats || !catsFor?.value.length} className="bg-[#0a0a0a] hover:bg-[#1a1a1a] text-white" data-testid="insc-cats-save">Enregistrer</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Modifier l'inscription</DialogTitle></DialogHeader>
@@ -1034,7 +1081,11 @@ export default function Inscriptions() {
             </div>
             <div>
               <label className="text-sm font-medium">Notes</label>
-              <Textarea rows={3} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} />
+              <div className="mt-1">
+                <Button type="button" size="sm" variant="outline" onClick={() => setNotesFor(editItem)}>
+                  <NotePencil size={14} className="mr-1" /> Voir, ajouter ou modifier les notes
+                </Button>
+              </div>
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-4">
