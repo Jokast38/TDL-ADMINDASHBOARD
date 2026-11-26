@@ -20,6 +20,38 @@ const CENTERS = [
 
 const FINANCEMENTS = ["Personnel", "CPF", "France Travail", "Employeur"];
 
+// Les 2 formules de la "Formation VTC en ligne" (demandé le 26/11/2026) - mêmes
+// niveaux que candidates.elearning_tier côté TDL Brain (lib/elearningTier.ts) : le
+// choix fait ici n'active rien automatiquement (ce formulaire reste une demande de
+// rappel, voir submit() plus bas), il est juste transmis au conseiller qui active le
+// bon niveau depuis le dashboard (page E-learning) une fois le dossier confirmé.
+export const ELEARNING_TIERS = [
+  {
+    id: "standard",
+    label: "Standard",
+    price: "Tarif de base",
+    tagline: "Autonome, à votre rythme",
+    features: [
+      "Accès à tous les cours et modules en ligne",
+      "Assistant Brain disponible pour vous orienter vers le bon cours",
+      "QCM d'entraînement et examen blanc illimités",
+      "Suivi de votre progression (théorie, Ready Examen)",
+    ],
+  },
+  {
+    id: "premium",
+    label: "Premium",
+    price: "Avec suivi personnalisé",
+    tagline: "Accompagné par un formateur",
+    features: [
+      "Tout ce qui est inclus dans l'offre Standard",
+      "Suivi humain par un formateur dédié",
+      "Propositions de cours ciblées selon vos difficultés",
+      "Assistant Brain sans limite de conversation",
+    ],
+  },
+];
+
 // Les 8 onglets attendus par le cahier des charges (maquette) — certains se
 // partagent une seule catégorie backend (VTC_TAXI), distingués ici par un
 // mot-clé dans le titre de la formation plutôt que par un champ dédié, pour
@@ -67,6 +99,7 @@ export default function FormationBookingWidget({ formationId: initialFormationId
   const [form, setForm] = useState({ prenom: "", nom: "", email: "", telephone: "" });
   // CACES R.489 : catégories souhaitées (1B, 3, 5), demande du 2026-11-26.
   const [cacesCategories, setCacesCategories] = useState([]);
+  const [elearningTier, setElearningTier] = useState("standard");
   const [consent, setConsent] = useState(false);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -105,6 +138,7 @@ export default function FormationBookingWidget({ formationId: initialFormationId
 
   const showPermisField = activeTab.key === "VTC" || activeTab.key === "TAXI";
   const showCacesCategories = activeTab.key === "CACES" && (!selectedFormation || isCacesR489(selectedFormation));
+  const isOnlineFormation = /en ligne/i.test(selectedFormation?.title || "");
   const priceLabel = selectedFormation?.price
     ? `${(selectedFormation.price * participants).toLocaleString("fr-FR")} € TTC`
     : "Sur devis";
@@ -141,6 +175,7 @@ export default function FormationBookingWidget({ formationId: initialFormationId
           permisAnnee && `Permis B obtenu en ${permisAnnee}`,
           `Financement envisagé : ${financement}`,
           `Participants : ${participants}`,
+          isOnlineFormation && `Formule e-learning souhaitée : ${ELEARNING_TIERS.find((t) => t.id === elearningTier)?.label}`,
         ].filter(Boolean).join(" · "),
         source,
         page_url: window.location.href,
@@ -240,6 +275,44 @@ export default function FormationBookingWidget({ formationId: initialFormationId
                     {sessionsForCenter.map((s) => <option key={s.id} value={s.id}>{sessionLabel(s)}</option>)}
                   </select>
                 </div>
+
+                {isOnlineFormation && (
+                  <div data-testid="booking-elearning-tiers">
+                    <label className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-2 block">
+                      Formule e-learning <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {ELEARNING_TIERS.map((tier) => (
+                        <button
+                          key={tier.id}
+                          type="button"
+                          onClick={() => setElearningTier(tier.id)}
+                          data-testid={`booking-elearning-tier-${tier.id}`}
+                          className={`text-left rounded-lg border-2 p-4 transition-colors ${
+                            elearningTier === tier.id ? "border-black bg-gray-50" : "border-gray-200 hover:border-gray-400"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-bold text-sm">{tier.label}</span>
+                            {elearningTier === tier.id && <Check size={16} weight="bold" />}
+                          </div>
+                          <p className="text-xs text-gray-500 mb-2">{tier.tagline}</p>
+                          <ul className="space-y-1">
+                            {tier.features.map((f) => (
+                              <li key={f} className="text-xs text-gray-600 flex items-start gap-1.5">
+                                <Check size={12} weight="bold" className="mt-0.5 flex-none" style={{ color: GOLD }} />
+                                {f}
+                              </li>
+                            ))}
+                          </ul>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">
+                      La formule est confirmée avec vous par un conseiller lors de l'activation de votre accès e-learning.
+                    </p>
+                  </div>
+                )}
 
                 {showCacesCategories && (
                   <div data-testid="booking-caces-categories">

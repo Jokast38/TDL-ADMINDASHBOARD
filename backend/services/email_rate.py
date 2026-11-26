@@ -83,7 +83,8 @@ def _minute_key(now: Optional[datetime] = None) -> str:
 
 async def _shared_take(kind: str, lim: dict) -> bool:
     """Réserve une place dans le compteur partagé de la minute en cours ;
-    False si la minute est pleine (pour ce type d'envoi)."""
+    False si la minute est pleine (pour ce type d'envoi), ou si TDL Brain signale que
+    le compteur domaine-wide (voir services/tdl_brain.acquire_smtp_slot) est plein."""
     key = _minute_key()
     inc = {"total": 1, MARKETING: 1 if kind == MARKETING else 0}
     try:
@@ -94,6 +95,15 @@ async def _shared_take(kind: str, lim: dict) -> bool:
         over = doc.get("total", 0) > lim["par_minute"] or (
             kind == MARKETING and doc.get(MARKETING, 0) > lim["marketing_par_minute"])
         if over:
+            await db.smtp_rate.update_one({"id": key}, {"$inc": {k: -v for k, v in inc.items()}})
+            return False
+
+        # Compteur domaine-wide partagé avec TDL Brain (26/11/2026) - ce compteur Mongo
+        # ci-dessus ne voit que les envois DE CE DASHBOARD ; TDL Brain envoie aussi sur
+        # le même domaine o2switch (voir services/tdl_brain.py). Si TDL Brain signale
+        # son compteur plein, on annule notre réservation locale pour rester cohérent.
+        from services import tdl_brain
+        if not await tdl_brain.acquire_smtp_slot():
             await db.smtp_rate.update_one({"id": key}, {"$inc": {k: -v for k, v in inc.items()}})
             return False
         return True

@@ -60,6 +60,7 @@ export const navAll = [
   { to: "/admin/activite", label: "Activité", icon: TrendUp, roles: ["admin"] },
   { to: "/admin/settings", label: "Paramètres", icon: Gear, roles: ["admin"] },
   { to: "/admin/marketing", label: "Marketing", icon: ChartBar, roles: ["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"] },
+  { to: "/admin/elearning", label: "E-learning", icon: GraduationCap, color: "text-blue-600 hover:bg-blue-50", roles: ["admin", "employe", "responsable_admission", "agent_admin"] },
   { to: "/admin/aide", label: "Centre d'aide", icon: Question, roles: ["admin", "employe", "animateur", "responsable_admission", "agent_admin", "commercial", "responsable_commercial"] },
 ];
 
@@ -152,7 +153,7 @@ export default function Layout({ children }) {
               title={collapsed ? item.label : undefined}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${collapsed ? "justify-center" : ""} ${
-                  isActive ? "bg-[#0a0a0a] text-white hover:bg-[#1a1a1a]" : "text-gray-700 hover:bg-gray-100"
+                  isActive ? "bg-[#0a0a0a] text-white hover:bg-[#1a1a1a]" : item.color || "text-gray-700 hover:bg-gray-100"
                 }`
               }
               data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}

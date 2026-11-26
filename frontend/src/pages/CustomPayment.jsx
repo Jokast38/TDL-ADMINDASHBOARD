@@ -17,6 +17,20 @@ const isValidPhone = (v) => PHONE_RE.test((v || "").replace(/[\s.\-]/g, ""));
 // Page dédiée (pas un onglet) : envoi d'un lien de paiement Stripe à prix
 // libre — distincte du tunnel d'inscription standard, toujours au tarif
 // catalogue d'une formation (voir routers/custom_payments.py).
+// Statut d'un canal d'envoi du lien (email, WhatsApp, SMS) — l'erreur
+// complète est dans l'infobulle.
+function StatutEnvoi({ status, opened }) {
+  if (!status || status === "disabled") return <span className="text-xs text-gray-300">—</span>;
+  if (status === "sent" || status === "mocked") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-[#0B7238]">
+        <ChatCircleText size={13} weight="fill" /> {opened ? "Ouvert" : "Envoyé"}
+      </span>
+    );
+  }
+  return <span className="inline-flex items-center gap-1 text-xs text-red-500" title={status}><ChatCircleText size={13} /> Échec</span>;
+}
+
 export default function CustomPayment() {
   const [formations, setFormations] = useState([]);
   const [titleMode, setTitleMode] = useState("formation"); // "formation" | "libre"
@@ -245,7 +259,9 @@ export default function CustomPayment() {
                 <th className="py-2.5 px-4 overline">Destinataire</th>
                 <th className="py-2.5 px-4 overline text-right">Prix</th>
                 <th className="py-2.5 px-4 overline">Statut</th>
+                <th className="py-2.5 px-4 overline">Email</th>
                 <th className="py-2.5 px-4 overline">WhatsApp</th>
+                <th className="py-2.5 px-4 overline">SMS</th>
                 <th className="py-2.5 px-4 overline">Envoyé le</th>
                 <th className="py-2.5 px-4 overline">Envoyé par</th>
                 <th className="py-2.5 px-4 overline text-right">Lien</th>
@@ -253,7 +269,7 @@ export default function CustomPayment() {
             </thead>
             <tbody>
               {!loadingHistory && !history.length && (
-                <tr><td colSpan="8" className="py-10 text-center text-gray-400">Aucun paiement personnalisé envoyé.</td></tr>
+                <tr><td colSpan="10" className="py-10 text-center text-gray-400">Aucun paiement personnalisé envoyé.</td></tr>
               )}
               {history.map((h) => (
                 <tr key={h.id} className="border-b border-gray-100">
@@ -271,16 +287,9 @@ export default function CustomPayment() {
                       {h.status === "paid" ? "Payé" : "En attente"}
                     </Badge>
                   </td>
-                  <td className="py-2.5 px-4">
-                    {/* Anciens liens : seul le statut SMS existait (avant le 2026-11-03). */}
-                    {(h.whatsapp_status || h.sms_status) === "sent" ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-[#0B7238]"><ChatCircleText size={13} weight="fill" /> Envoyé</span>
-                    ) : (h.whatsapp_status || h.sms_status) && (h.whatsapp_status || h.sms_status) !== "disabled" ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-red-500" title={h.whatsapp_status || h.sms_status}><ChatCircleText size={13} /> Échec</span>
-                    ) : (
-                      <span className="text-xs text-gray-300">—</span>
-                    )}
-                  </td>
+                  <td className="py-2.5 px-4"><StatutEnvoi status={h.email_status} opened={h.email_opened} /></td>
+                  <td className="py-2.5 px-4"><StatutEnvoi status={h.whatsapp_status} /></td>
+                  <td className="py-2.5 px-4"><StatutEnvoi status={h.sms_status} /></td>
                   <td className="py-2.5 px-4 text-xs text-gray-500 font-mono whitespace-nowrap">
                     {h.created_at ? formatDateFR(h.created_at) : "—"}
                   </td>

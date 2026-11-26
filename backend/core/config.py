@@ -33,6 +33,16 @@ GOOGLE_PLACE_ID = os.getenv("GOOGLE_PLACE_ID")
 # Paramètres → Limova (db.settings) ; ce dernier a priorité s'il est renseigné.
 LIMOVA_API_KEY = os.getenv("LIMOVA_API_KEY")
 
+# API publique TDL Brain (api/v1/apprenants) - page E-learning du dashboard
+# (26/11/2026) : lister/activer les comptes e-learning, inscrire manuellement. Clé
+# générée depuis /admin/api-keys sur TDL Brain (voir lib/apiKeys.ts côté TDL Brain).
+# URL canonique "www.app..." obligatoire : "app.tdl-formation.fr" (sans www) répond en
+# redirection 307 vers "www.app.tdl-formation.fr", et `requests` retire l'en-tête
+# Authorization lors d'une redirection vers un autre host (comportement volontaire de
+# sécurité de la lib) - la clé API "disparaissait" silencieusement avant cette correction.
+TDL_BRAIN_API_URL = os.getenv("TDL_BRAIN_API_URL", "https://www.app.tdl-formation.fr")
+TDL_BRAIN_API_KEY = os.getenv("TDL_BRAIN_API_KEY")
+
 # Paiement des inscriptions (formations non éligibles CPF) — mêmes priorités :
 # Paramètres → Stripe (db.settings) prioritaire si renseigné, sinon ces env vars.
 # Boîte de messagerie interne (Messagerie du dashboard) — distincte du SMTP

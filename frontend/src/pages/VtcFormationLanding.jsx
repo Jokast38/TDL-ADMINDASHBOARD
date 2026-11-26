@@ -12,7 +12,7 @@ import GoogleCentersMap from "@/components/GoogleCentersMap";
 import SideRail from "@/components/SideRail";
 import UpcomingSessionsSection, { useUpcomingSessions, sessionLabel } from "@/components/UpcomingSessions";
 import PricingTable from "@/components/PricingTable";
-import FormationBookingWidget from "@/components/FormationBookingWidget";
+import FormationBookingWidget, { ELEARNING_TIERS } from "@/components/FormationBookingWidget";
 import { galleryForCategory } from "@/constants/formationAssets";
 import {
   CaretRight, ShieldCheck, CalendarBlank, Certificate, Car, ChatCircleText,
@@ -335,6 +335,33 @@ export default function VtcFormationLanding() {
       </div>
 
       <GoogleReviewsCarousel />
+
+      {/* Formules e-learning (Formation VTC en ligne) - demandé le 26/11/2026 */}
+      <section className="py-16 lg:py-20 bg-gray-50">
+        <div className="max-w-5xl mx-auto px-6 lg:px-8">
+          <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: GOLD }}>Formation VTC en ligne</p>
+          <h2 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight mb-3">Deux formules pour avancer à votre rythme.</h2>
+          <p className="text-gray-500 mb-10 max-w-2xl">
+            Que vous préfériez être totalement autonome ou accompagné par un formateur, choisissez la formule adaptée lors de votre inscription ci-dessous.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-6">
+            {ELEARNING_TIERS.map((tier) => (
+              <div key={tier.id} className="bg-white rounded-xl border-t-4 shadow-sm p-6" style={{ borderTopColor: GOLD }}>
+                <h3 className="font-display text-xl font-bold mb-1">{tier.label}</h3>
+                <p className="text-sm text-gray-500 mb-4">{tier.tagline}</p>
+                <ul className="space-y-2">
+                  {tier.features.map((f) => (
+                    <li key={f} className="text-sm text-gray-700 flex items-start gap-2">
+                      <CheckCircle size={16} weight="fill" className="mt-0.5 flex-none" style={{ color: GOLD }} />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* Contact / devis */}
       <div id="contact" ref={formRef} className="scroll-mt-20">

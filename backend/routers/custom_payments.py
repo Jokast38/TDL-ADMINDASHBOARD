@@ -38,7 +38,36 @@ async def list_custom_payments(user: dict = Depends(require_role(*ROLES_LEADS)))
         staff_by_id = {s["id"]: s.get("name", "") for s in staff}
     for i in items:
         i["created_by_name"] = staff_by_id.get(i.get("created_by"))
+    await _statuts_envoi(items)
     return items
+
+
+async def _statuts_envoi(items: list) -> None:
+    """Statut de l'email et du SMS de chaque lien (demande du 2026-11-26),
+    retrouvés dans les journaux d'envoi : marche aussi pour les liens envoyés
+    avant que ces statuts soient enregistrés sur le paiement."""
+    if not items:
+        return
+    ids = [i["id"] for i in items]
+    sms_by_payment = {}
+    for s in await db.sms_logs.find({"custom_payment_id": {"$in": ids}}, {"_id": 0, "custom_payment_id": 1, "status": 1, "created_at": 1}).to_list(2000):
+        sms_by_payment.setdefault(s["custom_payment_id"], s)
+    emails = list({i["recipient_email"] for i in items if i.get("recipient_email")})
+    subjects = list({f"Paiement — {i.get('title', '')}" for i in items})
+    mails = await db.email_logs.find(
+        {"to": {"$in": emails}, "subject": {"$in": subjects}},
+        {"_id": 0, "to": 1, "subject": 1, "status": 1, "opened": 1, "created_at": 1},
+    ).sort("created_at", 1).to_list(5000) if emails else []
+    for i in items:
+        if not i.get("sms_status") and i["id"] in sms_by_payment:
+            i["sms_status"] = sms_by_payment[i["id"]].get("status")
+        # Email du lien : le premier envoyé à cette adresse avec ce sujet, au
+        # plus tôt à la création du paiement.
+        mail = next((m for m in mails if m["to"] == i.get("recipient_email") and m["subject"] == f"Paiement — {i.get('title', '')}"
+                     and (m.get("created_at") or "") >= (i.get("created_at") or "")[:19]), None)
+        if mail:
+            i["email_status"] = i.get("email_status") or mail.get("status")
+            i["email_opened"] = bool(mail.get("opened"))
 
 
 @router.post("")
@@ -83,7 +112,9 @@ async def create_custom_payment(payload: CustomPaymentIn, user: dict = Depends(r
         "Cliquez sur le bouton ci-dessous pour régler en ligne par carte bancaire, en toute sécurité via Stripe.",
         "Payer maintenant", session.url,
     )
-    await send_email(payload.recipient_email, f"Paiement — {payload.title}", body)
+    mail_log = await send_email(payload.recipient_email, f"Paiement — {payload.title}", body)
+    doc["email_status"] = (mail_log or {}).get("status")
+    await db.custom_payments.update_one({"id": payment_id}, {"$set": {"email_status": doc["email_status"]}})
 
     # Secours SMS : certains clients ne reçoivent jamais l'email (filtres
     # anti-spam, adresse mal surveillée...) — un lien de paiement manqué veut

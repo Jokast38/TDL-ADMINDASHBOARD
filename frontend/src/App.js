@@ -67,6 +67,7 @@ const Activity = lazy(() => import("@/pages/Activity"));
 const EmployeeAudit = lazy(() => import("@/pages/EmployeeAudit"));
 const Settings = lazy(() => import("@/pages/Settings"));
 const Marketing = lazy(() => import("@/pages/Marketing"));
+const Elearning = lazy(() => import("@/pages/Elearning"));
 const AdminBlog = lazy(() => import("@/pages/AdminBlog"));
 const Stages = lazy(() => import("@/pages/Stages"));
 const Agenda = lazy(() => import("@/pages/Agenda"));
@@ -317,6 +318,9 @@ function App() {
             } />
             <Route path="/admin/marketing" element={
               <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin", "commercial", "responsable_commercial", "agent_telephonique"]}><AdminLayout><Marketing /></AdminLayout></ProtectedRoute>
+            } />
+            <Route path="/admin/elearning" element={
+              <ProtectedRoute roles={["admin", "employe", "responsable_admission", "agent_admin"]}><AdminLayout><Elearning /></AdminLayout></ProtectedRoute>
             } />
 
             <Route path="*" element={<ErrorPage />} />
