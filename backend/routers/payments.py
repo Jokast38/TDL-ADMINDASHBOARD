@@ -1,4 +1,6 @@
 import logging
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from core.database import db
@@ -136,7 +138,62 @@ async def sync_pending_stripe_payments() -> int:
             payment_intent = session.get("payment_intent") if isinstance(session, dict) else session.payment_intent
             await _mark_paid_and_notify(c["id"], (amount_total or 0) / 100, payment_intent)
             updated += 1
+    # Liens de paiement personnalisés (2026-11-27) : jusque-là seuls les
+    # inscriptions étaient rattrapées, un lien payé restait « En attente » si
+    # le webhook n'arrivait pas.
+    updated += await sync_pending_custom_payments()
     return updated
+
+
+def _champ(session, key):
+    return session.get(key) if isinstance(session, dict) else getattr(session, key, None)
+
+
+async def mark_custom_payment_paid(custom_payment_id: str, amount_total=None, payment_intent=None) -> bool:
+    """Passe un lien de paiement personnalisé en « Payé » (webhook ou
+    vérification Stripe). Ne fait rien s'il l'est déjà."""
+    upd = {"status": "paid", "paid_at": now_iso(), "stripe_status": "paid"}
+    if amount_total is not None:
+        upd["amount_paid"] = amount_total / 100
+    if payment_intent:
+        upd["stripe_payment_intent"] = payment_intent if isinstance(payment_intent, str) else getattr(payment_intent, "id", None)
+    res = await db.custom_payments.update_one({"id": custom_payment_id, "status": {"$ne": "paid"}}, {"$set": upd})
+    if not getattr(res, "modified_count", 0):
+        return False
+    cp = await db.custom_payments.find_one({"id": custom_payment_id}, {"_id": 0, "lead_id": 1, "recipient_email": 1, "recipient_phone": 1})
+    if cp:
+        await sync_lead_payment(lead_id=cp.get("lead_id"), email=cp.get("recipient_email"), phone=cp.get("recipient_phone"))
+    return True
+
+
+async def sync_custom_payment(cp: dict) -> Optional[str]:
+    """Relit sur Stripe la session d'un lien personnalisé. Renvoie le statut
+    Stripe (paid, unpaid...) ou « expired » ; None si Stripe est illisible."""
+    try:
+        session = await stripe_service.retrieve_checkout_session(cp["stripe_session_id"])
+    except Exception as e:
+        log.warning(f"sync_custom_payment : lecture Stripe impossible pour {cp['id']} — {e}")
+        return None
+    if _champ(session, "payment_status") == "paid":
+        await mark_custom_payment_paid(cp["id"], _champ(session, "amount_total"), _champ(session, "payment_intent"))
+        return "paid"
+    statut = "expired" if _champ(session, "status") == "expired" else _champ(session, "payment_status")
+    await db.custom_payments.update_one({"id": cp["id"]}, {"$set": {"stripe_status": statut, "stripe_checked_at": now_iso()}})
+    return statut
+
+
+async def sync_pending_custom_payments() -> int:
+    """Liens non payés dont la session Stripe peut encore aboutir (une
+    session expirée ne peut plus être payée : on ne la relit plus)."""
+    pendants = await db.custom_payments.find(
+        {"status": {"$ne": "paid"}, "stripe_status": {"$ne": "expired"}, "stripe_session_id": {"$exists": True, "$ne": None}},
+        {"_id": 0, "id": 1, "stripe_session_id": 1},
+    ).to_list(500)
+    payes = 0
+    for cp in pendants:
+        if await sync_custom_payment(cp) == "paid":
+            payes += 1
+    return payes
 
 
 @router.get("/status")
@@ -294,15 +351,7 @@ async def stripe_webhook(request: Request):
             if event_type == "checkout.session.completed" and session.get("payment_status") != "paid":
                 pass  # paiement différé, attend l'évènement async
             else:
-                await db.custom_payments.update_one(
-                    {"id": custom_payment_id}, {"$set": {"status": "paid", "paid_at": now_iso()}},
-                )
-                custom_payment = await db.custom_payments.find_one({"id": custom_payment_id}, {"_id": 0, "lead_id": 1, "recipient_email": 1, "recipient_phone": 1})
-                if custom_payment:
-                    await sync_lead_payment(
-                        lead_id=custom_payment.get("lead_id"),
-                        email=custom_payment.get("recipient_email"), phone=custom_payment.get("recipient_phone"),
-                    )
+                await mark_custom_payment_paid(custom_payment_id, session.get("amount_total"), session.get("payment_intent"))
         elif not inscription_id:
             log.warning(f"Stripe webhook {event_type} : metadata.inscription_id absent (session {session.get('id')}) — aucune mise à jour possible")
         elif event_type == "checkout.session.completed" and session.get("payment_status") != "paid":

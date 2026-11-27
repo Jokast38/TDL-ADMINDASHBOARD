@@ -138,6 +138,18 @@ async def create_custom_payment(payload: CustomPaymentIn, user: dict = Depends(r
     return doc
 
 
+@router.post("/sync")
+async def sync_custom_payments(user: dict = Depends(require_role(*ROLES_LEADS))):
+    """Bouton « Vérifier sur Stripe » et ouverture de la page (2026-11-27) :
+    relit sur Stripe tous les liens encore en attente."""
+    from routers.payments import sync_pending_custom_payments
+    try:
+        await stripe_service.secret_key()
+    except stripe_service.StripeNotConfigured as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"updated": await sync_pending_custom_payments()}
+
+
 @router.get("/search-person")
 async def search_person(q: str, user: dict = Depends(require_role(*ROLES_LEADS))):
     """Recherche unifiée (Prospects + apprenants déjà inscrits) pour

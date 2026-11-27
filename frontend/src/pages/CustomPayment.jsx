@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CreditCard, PaperPlaneTilt, LinkSimple, MagnifyingGlass, ChatCircleText } from "@phosphor-icons/react";
+import { CreditCard, PaperPlaneTilt, LinkSimple, MagnifyingGlass, ChatCircleText, ArrowsClockwise } from "@phosphor-icons/react";
 import { formatDateFR } from "@/lib/dateFormat";
 
 const fmtSessionLabel = (s) => `${s.date_debut} → ${s.date_fin}${s.lieu_ville ? ` — ${s.lieu_ville}` : ""}`;
@@ -52,6 +52,7 @@ export default function CustomPayment() {
   useEffect(() => {
     api.get("/formations", { params: { active_only: true } }).then((r) => setFormations(r.data)).catch(() => {});
     loadHistory();
+    verifierStripe(false);
     // Le statut "Payé" est posé par le webhook Stripe dès que le paiement
     // aboutit (voir routers/payments.py) — un simple rafraîchissement
     // périodique suffit à le refléter sans action manuelle, pas besoin de
@@ -95,6 +96,21 @@ export default function CustomPayment() {
       .then((r) => setSessions(r.data))
       .catch(() => setSessions([]));
   }, [titleMode, formationId]);
+
+  // Relit sur Stripe les liens en attente (2026-11-27) : à l'ouverture de la
+  // page et sur le bouton, au cas où le webhook n'est pas arrivé.
+  const [verifying, setVerifying] = useState(false);
+  const verifierStripe = async (manuel = true) => {
+    setVerifying(true);
+    try {
+      const { data } = await api.post("/custom-payments/sync");
+      if (data.updated) toast.success(`${data.updated} paiement(s) confirmé(s) par Stripe`);
+      else if (manuel) toast.info("Aucun nouveau paiement sur Stripe");
+      if (data.updated || manuel) loadHistory();
+    } catch (e) {
+      if (manuel) toast.error(e.response?.data?.detail || "Vérification Stripe impossible");
+    } finally { setVerifying(false); }
+  };
 
   const loadHistory = () => {
     setLoadingHistory(true);
@@ -248,8 +264,11 @@ export default function CustomPayment() {
       </Card>
 
       <Card className="border border-gray-200 rounded-md shadow-none overflow-hidden">
-        <div className="px-5 pt-5 pb-3">
+        <div className="px-5 pt-5 pb-3 flex items-center justify-between gap-3">
           <p className="font-display text-lg font-bold">Historique</p>
+          <Button size="sm" variant="outline" onClick={() => verifierStripe(true)} disabled={verifying} data-testid="custom-payments-sync">
+            <ArrowsClockwise size={14} className={`mr-1 ${verifying ? "animate-spin" : ""}`} /> Vérifier sur Stripe
+          </Button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -283,9 +302,14 @@ export default function CustomPayment() {
                   </td>
                   <td className="py-2.5 px-4 text-right font-mono">{Number(h.price).toFixed(2)} €</td>
                   <td className="py-2.5 px-4">
-                    <Badge className={h.status === "paid" ? "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10" : "bg-[#F5A623]/10 text-[#F5A623] hover:bg-[#F5A623]/10"}>
-                      {h.status === "paid" ? "Payé" : "En attente"}
-                    </Badge>
+                    {h.status === "paid" ? (
+                      <Badge className="bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10">Payé</Badge>
+                    ) : h.stripe_status === "expired" ? (
+                      <Badge className="bg-gray-100 text-gray-500 hover:bg-gray-100" title="Le lien Stripe a expiré sans paiement : renvoyez un nouveau lien si besoin">Expiré</Badge>
+                    ) : (
+                      <Badge className="bg-[#F5A623]/10 text-[#F5A623] hover:bg-[#F5A623]/10">En attente</Badge>
+                    )}
+                    {h.paid_at && h.status === "paid" && <p className="text-[10px] text-gray-400 mt-0.5">le {formatDateFR(h.paid_at)}</p>}
                   </td>
                   <td className="py-2.5 px-4"><StatutEnvoi status={h.email_status} opened={h.email_opened} /></td>
                   <td className="py-2.5 px-4"><StatutEnvoi status={h.whatsapp_status} /></td>
