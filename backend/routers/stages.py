@@ -284,8 +284,23 @@ async def stage_roster(sid: str, user: dict = Depends(require_role(*ROLES_ALL_ST
         raise HTTPException(status_code=403, detail="Accès refusé")
     roster = await db.inscriptions.find(
         {"stage_id": sid, "status": "active"},
-        {"_id": 0, "id": 1, "student_name": 1, "student_email": 1, "student_phone": 1, "payment_status": 1, "contact_status": 1},
+        {"_id": 0, "id": 1, "student_name": 1, "student_email": 1, "student_phone": 1, "payment_status": 1, "contact_status": 1,
+         "category": 1, "source": 1, "created_by": 1, "status": 1},
     ).sort("student_name", 1).to_list(200)
+    # Réservations du site non payées (2026-11-27) : pas encore dans la
+    # session pour le formateur ; signalées à l'équipe.
+    from services.reservations_non_payees import reservation_non_payee
+    for r in roster:
+        r["reservation_non_payee"] = False
+    # Réservations du site pas encore payées (2026-11-27) : pas dans la
+    # session ; montrées à l'équipe seulement, à part, sans compter.
+    if user["role"] != "animateur":
+        resas = await db.inscriptions.find(
+            {"stage_choisi_id": sid, "status": "active"},
+            {"_id": 0, "id": 1, "student_name": 1, "student_email": 1, "student_phone": 1, "payment_status": 1, "contact_status": 1,
+             "category": 1, "source": 1, "created_by": 1, "status": 1},
+        ).sort("student_name", 1).to_list(200)
+        roster += [{**r, "reservation_non_payee": True} for r in resas if reservation_non_payee(r)]
     # Jointure vers le dossier correspondant — pour pouvoir, depuis le panneau
     # de session (SessionDrawer.jsx), cliquer un inscrit et être redirigé
     # directement sur son dossier (demande du 2026-10-23) plutôt que de devoir

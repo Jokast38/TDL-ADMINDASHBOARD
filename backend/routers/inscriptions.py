@@ -126,7 +126,7 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         stage_titre = stage.get("formation_titre")
         duplicate = await db.inscriptions.find_one({
             "student_email": payload.student_email.lower(), "formation_id": payload.formation_id,
-            "stage_id": payload.stage_id, "status": "active",
+            "$or": [{"stage_id": payload.stage_id}, {"stage_choisi_id": payload.stage_id}], "status": "active",
         })
         if duplicate:
             raise HTTPException(status_code=409, detail="Cette personne est déjà inscrite à cette même session — pour une nouvelle tentative (ex: repassage d'examen), assignez-la plutôt à une autre session.")
@@ -205,6 +205,12 @@ async def create_inscription(payload: InscriptionIn, request: Request):
         inscription["created_by"] = acting_staff["id"]
         inscription["created_by_name"] = acting_staff.get("name")
         inscription["processed_by"] = acting_staff["id"]
+    # Stage de récupération de points réservé sur le site : pas dans la
+    # session tant que le paiement n'est pas reçu (2026-11-27).
+    from services.reservations_non_payees import reservation_non_payee
+    if inscription.get("stage_id") and reservation_non_payee(inscription):
+        inscription["stage_choisi_id"], inscription["stage_choisi_titre"] = inscription["stage_id"], inscription["stage_titre"]
+        inscription["stage_id"] = inscription["stage_titre"] = None
     await db.inscriptions.insert_one(inscription)
     # Vraie origine (demande du 2026-11-24) : un prospect Meta déjà connu qui
     # s'inscrit sur place ou par un autre canal reste compté comme venant de Meta.
@@ -508,6 +514,7 @@ async def bulk_download_attestations(dossier_ids: str, user: dict = Depends(requ
 
 @router.get("/inscriptions")
 async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MGMT))):
+    from services.reservations_non_payees import reservation_non_payee
     query = {}
     allowed = effective_assigned_categories(user)
     if allowed:
@@ -529,7 +536,7 @@ async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MG
     # Mois de la session de formation affectée — pour le filtre par mois côté
     # frontend (Inscriptions/Apprenants), distinct du mois de création de
     # l'inscription elle-même.
-    stage_ids = {i["stage_id"] for i in items if i.get("stage_id")}
+    stage_ids = {i.get("stage_id") or i.get("stage_choisi_id") for i in items if i.get("stage_id") or i.get("stage_choisi_id")}
     stages_by_id = {}
     if stage_ids:
         stages = await db.stages.find({"id": {"$in": list(stage_ids)}}, {"_id": 0, "id": 1, "date_debut": 1, "lieu_ville": 1}).to_list(len(stage_ids))
@@ -539,13 +546,16 @@ async def list_inscriptions(user: dict = Depends(require_role(*ROLES_DOSSIERS_MG
         i["dossier_id"] = d["id"] if d else None
         i["dossier_status"] = d["status"] if d else None
         i["processed_by_name"] = staff_by_id.get(i.get("processed_by"))
-        stage = stages_by_id.get(i.get("stage_id"))
+        stage = stages_by_id.get(i.get("stage_id") or i.get("stage_choisi_id"))
         i["session_month"] = (stage["date_debut"][:7] if stage and stage.get("date_debut") else None)
         # Lieu de la formation (Épinay-sur-Seine / Creil...) — repris de la
         # session affectée en priorité (toujours à jour), sinon du champ
         # `center` saisi à la création (ex: import Excel VTC/Taxi) pour les
         # inscriptions pas encore affectées à une session précise.
         i["lieu_ville"] = (stage.get("lieu_ville") if stage else None) or i.get("center")
+        # Stage réservé sur le site, pas encore payé : place libérée 24 h
+        # avant la session s'il n'est pas réglé (2026-11-27).
+        i["reservation_non_payee"] = bool(i.get("stage_choisi_id")) and reservation_non_payee(i)
     return items
 
 
@@ -592,6 +602,9 @@ async def update_inscription(iid: str, payload: InscriptionUpdate, user: dict = 
             "contact_status": update.get("contact_status"), "student_name": existing.get("student_name"),
         })
     await db.inscriptions.update_one({"id": iid}, {"$set": update})
+    if update.get("payment_status") in ("paid", "cpf_valide") and existing.get("payment_status") not in ("paid", "cpf_valide"):
+        from services.reservations_non_payees import placer_apres_paiement
+        await placer_apres_paiement(iid)
     if "contact_status" in update:
         try:
             await check_dossier_milestone(user["id"])
@@ -718,9 +731,20 @@ async def assign_inscription_stage(iid: str, payload: StageAssignIn, user: dict 
             if nb_inscrits + (stage.get("external_reserved") or 0) >= await _capacite(stage):
                 raise HTTPException(status_code=409, detail=f"Cette session est à son quota ({await _capacite(stage)} places, dont {stage.get('external_reserved') or 0} réservée(s) ailleurs) — augmentez la capacité ou choisissez une autre session.")
 
-    await db.inscriptions.update_one(
-        {"id": iid}, {"$set": {"stage_id": payload.stage_id, "stage_titre": stage_titre, "updated_at": now_iso()}}
-    )
+    from services.reservations_non_payees import reservation_non_payee
+    if reservation_non_payee(inscription) and payload.stage_id:
+        # Pas encore payé : on change seulement la session choisie ; la
+        # personne y entrera au passage à « Payé ».
+        await db.inscriptions.update_one({"id": iid}, {"$set": {
+            "stage_choisi_id": payload.stage_id, "stage_choisi_titre": stage_titre, "stage_id": None, "stage_titre": None,
+            "en_attente_placement": False, "updated_at": now_iso()}})
+        return await db.inscriptions.find_one({"id": iid}, {"_id": 0})
+    upd = {"stage_id": payload.stage_id, "stage_titre": stage_titre, "updated_at": now_iso()}
+    if payload.stage_id:
+        upd["en_attente_placement"] = False
+    else:
+        upd.update({"stage_choisi_id": None, "stage_choisi_titre": None})
+    await db.inscriptions.update_one({"id": iid}, {"$set": upd})
 
     # Envoyer la convocation immédiatement à l'affectation plutôt que
     # d'attendre la relance automatique J-7 (voir send_convocations dans
@@ -729,7 +753,8 @@ async def assign_inscription_stage(iid: str, payload: StageAssignIn, user: dict 
     # 7 jours avant le stage, ce qui n'a pas de sens quand l'affectation a
     # lieu bien avant. On ne marque `convocation_sent_at` que dans ce cas
     # pour éviter un double envoi par la relance automatique.
-    if payload.stage_id and inscription.get("student_email") and not inscription.get("convocation_sent_at"):
+    if payload.stage_id and inscription.get("student_email") and not inscription.get("convocation_sent_at") \
+            and not reservation_non_payee(inscription):
         try:
             formation = await db.formations.find_one({"id": stage.get("formation_id")}, {"_id": 0, "category": 1}) or {}
             stage["formation_category"] = formation.get("category")

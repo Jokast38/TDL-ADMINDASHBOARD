@@ -18,6 +18,7 @@ from services.pdf import generate_attestation_pdf
 from services.whatsapp import send_whatsapp, send_whatsapp_or_sms
 from core import whatsapp_templates as wa
 from core.stage_hours import RECUP_ACCUEIL, is_recup, stage_hours
+from services.reservations_non_payees import reservation_non_payee
 
 CONTACT_EMAIL = "contact@tdl-formation.fr"
 CONTACT_PHONE = "01 XX XX XX XX"  # à ajuster depuis Paramètres si besoin
@@ -156,6 +157,24 @@ async def send_convocation_whatsapp(stage: dict, insc: dict) -> dict:
     )
 
 
+async def convoquer_apres_paiement(inscription_id: str) -> bool:
+    """Réservation de stage payée (demande du 2026-11-27) : la convocation,
+    retenue tant que la personne n'avait pas réglé, part dès le paiement si
+    la session n'a pas encore commencé."""
+    insc = await db.inscriptions.find_one({"id": inscription_id}, {"_id": 0})
+    if not insc or not insc.get("stage_id") or insc.get("convocation_sent_at") or not insc.get("student_email"):
+        return False
+    stage = await db.stages.find_one({"id": insc["stage_id"]}, {"_id": 0})
+    if not stage or stage.get("statut") == "annule" or (stage.get("date_debut") or "") < _today().isoformat():
+        return False
+    formation = await db.formations.find_one({"id": stage.get("formation_id")}, {"_id": 0, "category": 1}) or {}
+    stage["formation_category"] = formation.get("category")
+    await send_email(insc["student_email"], f"📋 Convocation — {stage.get('formation_titre', '')}", render_branded_email(convocation_message(stage, insc)))
+    await send_convocation_whatsapp(stage, insc)
+    await db.inscriptions.update_one({"id": insc["id"]}, {"$set": {"convocation_sent_at": now_iso()}})
+    return True
+
+
 async def send_convocations() -> int:
     """Envoie la convocation 7 jours avant le début de chaque session, à
     tout candidat actif affecté et pas encore convoqué."""
@@ -169,7 +188,7 @@ async def send_convocations() -> int:
             {"stage_id": stage["id"], "status": "active", "convocation_sent_at": {"$exists": False}}, {"_id": 0}
         ).to_list(300)
         for insc in inscriptions:
-            if not insc.get("student_email"):
+            if not insc.get("student_email") or reservation_non_payee(insc):
                 continue
             message = convocation_message(stage, insc)
             await send_email(insc["student_email"], f"📋 Convocation — {stage.get('formation_titre', '')}", render_branded_email(message))
@@ -205,7 +224,7 @@ async def send_session_eve_reminders() -> int:
             {"stage_id": stage["id"], "status": "active", "eve_reminder_sent_at": {"$exists": False}}, {"_id": 0}
         ).to_list(300)
         for insc in inscriptions:
-            if not insc.get("student_email") and not insc.get("student_phone"):
+            if (not insc.get("student_email") and not insc.get("student_phone")) or reservation_non_payee(insc):
                 continue
             if insc.get("student_email"):
                 message = (

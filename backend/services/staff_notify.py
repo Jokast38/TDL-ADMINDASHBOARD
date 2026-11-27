@@ -848,8 +848,13 @@ async def send_session_reminders() -> int:
     notified = 0
     for stage in stages:
         inscriptions = await db.inscriptions.find(
-            {"stage_id": stage["id"], "status": "active"}, {"_id": 0, "student_email": 1, "student_name": 1, "student_id": 1}
+            {"stage_id": stage["id"], "status": "active"},
+            {"_id": 0, "student_email": 1, "student_name": 1, "student_id": 1, "category": 1, "payment_status": 1,
+             "source": 1, "created_by": 1, "status": 1},
         ).to_list(200)
+        # Réservations du site non payées : ni rappel, ni comptées (2026-11-27).
+        from services.reservations_non_payees import reservation_non_payee
+        inscriptions = [i for i in inscriptions if not reservation_non_payee(i)]
         animateur_ids = list(stage.get("animateur_ids") or [])
         if stage.get("animateur_id") and stage["animateur_id"] not in animateur_ids:
             animateur_ids.append(stage["animateur_id"])

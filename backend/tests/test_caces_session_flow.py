@@ -82,6 +82,8 @@ class _Coll:
         for d in self.docs:
             if _matches(d, query):
                 d.update(update.get("$set", {}))
+                for k in update.get("$unset", {}):
+                    d.pop(k, None)
                 for k, v in update.get("$push", {}).items():
                     d.setdefault(k, []).append(v)
                 return

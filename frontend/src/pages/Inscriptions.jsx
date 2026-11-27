@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDateFR, formatDateTimeFR } from "@/lib/dateFormat";
+import { PAYMENT_LABEL, PAYMENT_PAID_LIKE, stripeStatusLabel } from "@/lib/paymentStatus";
 import InscriptionNotesDialog from "@/components/InscriptionNotesDialog";
 import CacesCategoriesPicker, { isCacesR489, categoriesDepuisTitre } from "@/components/caces/CacesCategoriesPicker";
 import {
@@ -26,12 +27,8 @@ const fmtMoney = (n) => new Intl.NumberFormat("fr-FR", { style: "currency", curr
 // financement validé ou pas encore) — distinct de "paid"/"pending" qui
 // concernent un règlement direct (carte, espèces...). CPF validé est traité
 // visuellement comme un paiement acquis (vert), comme "Payé".
-const PAYMENT_LABEL = {
-  pending: "En attente", paid: "Payé",
-  cpf_valide: "CPF Validé", cpf_attente: "CPF en attente",
-  refunded: "Remboursé",
-};
-const PAYMENT_PAID_LIKE = ["paid", "cpf_valide"];
+// Libellés partagés (lib/paymentStatus.js) : « Paiement en cours » manquait,
+// le sélecteur s'affichait vide pour ces inscriptions.
 
 // Mode de règlement réel — distinct de payment_status (payé/en attente).
 // "CMA" n'est pas un mode de paiement (juste le statut du compte CMA, déjà
@@ -496,7 +493,7 @@ export default function Inscriptions() {
     try {
       const { data } = await api.post(`/payments/${id}/sync`);
       if (data.updated) toast.success("Paiement confirmé sur Stripe — statut mis à jour");
-      else toast.info(`Stripe indique : ${data.stripe_payment_status || "aucun paiement confirmé"}`);
+      else toast.info(`Stripe indique : ${data.stripe_payment_status ? stripeStatusLabel(data.stripe_payment_status) : "aucun paiement confirmé"}`);
       load();
     } catch (e) {
       toast.error(e.response?.data?.detail || "Erreur de vérification Stripe");
@@ -931,6 +928,23 @@ export default function Inscriptions() {
                           return st ? `${st.date_debut} → ${st.date_fin}` : "Non affecté";
                         })()}
                       </button>
+                      {/* Stage réservé sur le site sans payer (2026-11-27). */}
+                      {i.reservation_non_payee && (() => {
+                        const st = stages.find((s) => s.id === i.stage_choisi_id);
+                        return (
+                          <p className="text-[10px] text-amber-700 mt-1 max-w-[180px]" data-testid={`insc-resa-non-payee-${i.id}`}
+                            title="Pas dans la session tant que le paiement n'est pas « Payé » ; session retirée le jour J sans paiement">
+                            Session choisie{st ? ` : ${st.date_debut}` : ""} — en attente de paiement
+                          </p>
+                        );
+                      })()}
+                      {!i.stage_id && i.en_attente_placement && (
+                        <p className="text-[10px] text-red-700 mt-1 max-w-[180px]" data-testid={`insc-attente-placement-${i.id}`}
+                          title={i.session_choisie_retiree?.motif || ""}>
+                          En attente de placement
+                          {i.session_choisie_retiree?.date_debut ? ` — session du ${formatDateFR(i.session_choisie_retiree.date_debut)} retirée` : ""}
+                        </p>
+                      )}
                     </td>
                     <td className="py-3 px-4 max-w-[200px]">
                       <button type="button" onClick={() => setNotesFor(i)} className="text-left w-full group" data-testid={`insc-notes-${i.id}`}

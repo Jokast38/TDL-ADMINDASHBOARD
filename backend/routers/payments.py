@@ -107,6 +107,15 @@ async def _mark_paid_and_notify(inscription_id: str, amount_paid: float, payment
         await notify_inscription_paid(inscription)
     except Exception as e:
         log.warning(f"_mark_paid_and_notify : équipe non prévenue du paiement de {inscription_id} — {e}")
+    # Stage réservé sur le site : la personne entre dans la session choisie
+    # et reçoit sa convocation maintenant qu'elle a payé (2026-11-27).
+    try:
+        from services.reservations_non_payees import placer_apres_paiement
+        from services.candidate_automation import convoquer_apres_paiement
+        if not await placer_apres_paiement(inscription_id):
+            await convoquer_apres_paiement(inscription_id)
+    except Exception as e:
+        log.warning(f"_mark_paid_and_notify : placement/convocation non faits pour {inscription_id} — {e}")
 
     # Unification des prospects (Phase 1) : le prospect d'origine (retrouvé
     # par email/téléphone) passe en statut "payé" avec le montant réellement
@@ -266,6 +275,9 @@ async def create_checkout(payload: CheckoutIn, request: Request):
         log.warning(f"Stripe checkout error: {detail}")
         raise HTTPException(status_code=502, detail=f"Erreur Stripe : {detail}")
 
+    if not inscription.get("checkout_started_at"):
+        # Point de départ des relances de paiement abandonné (5 min / 24 h).
+        await db.inscriptions.update_one({"id": inscription["id"]}, {"$set": {"checkout_started_at": now_iso()}})
     await db.inscriptions.update_one(
         {"id": inscription["id"]},
         {"$set": {
@@ -281,6 +293,23 @@ async def create_checkout(payload: CheckoutIn, request: Request):
         }},
     )
     return {"url": session.url}
+
+
+@router.get("/reprendre/{iid}")
+async def reprendre_paiement(iid: str, request: Request):
+    """Lien des emails de relance (paiement abandonné) : ouvre une nouvelle
+    page de paiement Stripe pour cette inscription."""
+    from fastapi.responses import RedirectResponse
+    inscription = await db.inscriptions.find_one({"id": iid}, {"_id": 0, "payment_status": 1, "allow_klarna": 1})
+    if not inscription:
+        return RedirectResponse(f"{PUBLIC_FRONTEND_URL}/inscription", status_code=303)
+    if inscription.get("payment_status") in ("paid", "cpf_valide"):
+        return RedirectResponse(f"{PUBLIC_FRONTEND_URL}/inscription?paiement=succes&inscription={iid}", status_code=303)
+    try:
+        res = await create_checkout(CheckoutIn(inscription_id=iid, allow_klarna=bool(inscription.get("allow_klarna"))), request)
+    except HTTPException:
+        return RedirectResponse(f"{PUBLIC_FRONTEND_URL}/contact", status_code=303)
+    return RedirectResponse(res["url"], status_code=303)
 
 
 @router.post("/sync-pending")

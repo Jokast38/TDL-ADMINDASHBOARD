@@ -342,7 +342,34 @@ async def _payment_sync_loop():
                 log.info(f"Synchronisation paiements Stripe : {updated} inscription(s) mise(s) à jour")
         except Exception as e:
             log.warning(f"Synchronisation paiements Stripe : erreur — {e}")
+        # Après la relecture Stripe (un paiement tout juste fait compte) :
+        # stages réservés sur le site et non payés le jour de la session →
+        # session choisie retirée (services/reservations_non_payees.py).
+        try:
+            from services.reservations_non_payees import retirer_sessions_non_payees
+            retirees = await retirer_sessions_non_payees()
+            if retirees:
+                log.info(f"Réservations non payées : {retirees} inscription(s) mise(s) à jour")
+        except Exception as e:
+            log.warning(f"Réservations non payées : erreur — {e}")
         await asyncio.sleep(15 * 60)
+
+
+async def _payment_relances_loop():
+    """Toutes les minutes : paiements en ligne ouverts depuis le site,
+    vérifiés sur Stripe, et relance par email 5 min puis 24 h après en cas
+    d'abandon (demande du 2026-11-27)."""
+    log = logging.getLogger(__name__)
+    from services.reservations_non_payees import relancer_paiements_abandonnes
+    await asyncio.sleep(60)
+    while True:
+        try:
+            n = await relancer_paiements_abandonnes()
+            if n:
+                log.info(f"Relances de paiement : {n} email(s) envoyé(s)")
+        except Exception as e:
+            log.warning(f"Relances de paiement : erreur — {e}")
+        await asyncio.sleep(60)
 
 
 async def _document_reminders_loop():
@@ -639,6 +666,7 @@ async def startup():
     asyncio.create_task(_daily_dossiers_digest_loop())
     asyncio.create_task(_document_reminders_loop())
     asyncio.create_task(_payment_sync_loop())
+    asyncio.create_task(_payment_relances_loop())
     asyncio.create_task(_wordpress_auto_sync_loop())
     asyncio.create_task(_weekly_admin_report_loop())
     asyncio.create_task(_leads_digest_loop())

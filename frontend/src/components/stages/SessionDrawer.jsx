@@ -12,6 +12,7 @@ import FillGauge from "./FillGauge";
 import EmargementPanel from "./EmargementPanel";
 import FormateursDialog from "./FormateursDialog";
 import { extractCreneau, placesRestantes, fillRatio, displayStatus } from "./stageHelpers";
+import { paymentLabel, paymentBadgeClass } from "@/lib/paymentStatus";
 
 const STATUT_LABELS = { planifie: "Planifié", en_cours: "En cours", complet: "Complet", termine: "Terminé", annule: "Annulé" };
 
@@ -186,7 +187,10 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
           </div>
 
           <div>
-            <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 mb-2"><Users size={13} /> Inscrits ({roster.length})</p>
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 mb-2"><Users size={13} /> Inscrits ({roster.filter((r) => !r.reservation_non_payee).length})
+              {roster.some((r) => r.reservation_non_payee) && (
+                <span className="font-normal text-amber-700"> · {roster.filter((r) => r.reservation_non_payee).length} réservation(s) non payée(s), hors session</span>
+              )}</p>
             <div className="space-y-1 max-h-72 overflow-y-auto border border-gray-100 rounded-md p-2">
               {loadingRoster ? (
                 <p className="text-xs text-gray-400 text-center py-4">Chargement...</p>
@@ -209,7 +213,10 @@ export default function SessionDrawer({ stage, onClose, animateurs, onEdit, onTo
                           {DOSSIER_STATUS_LABELS[r.dossier_status] || r.dossier_status}
                         </Badge>
                       )}
-                      <Badge variant="outline" className="text-[10px]">{r.payment_status}</Badge>
+                      <Badge variant="outline" className={`text-[10px] ${paymentBadgeClass(r.payment_status)}`}
+                        title={r.reservation_non_payee ? "Réservé sur le site sans payer : pas dans la session tant que le paiement n'est pas « Payé »" : undefined}>
+                        {r.reservation_non_payee ? "Réservation non payée" : paymentLabel(r.payment_status)}
+                      </Badge>
                     </div>
                   </div>
                 ))

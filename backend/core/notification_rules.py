@@ -13,7 +13,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 
 PAYMENT_LABELS = {
     "pending": "Non payé", "processing": "Paiement en cours", "paid": "Payé",
-    "cpf_valide": "CPF validé", "refunded": "Remboursé",
+    "cpf_valide": "CPF validé", "cpf_attente": "CPF en attente", "refunded": "Remboursé",
 }
 
 # 4h : l'étudiant reçoit "Nous vous contactons sous 24h" — le rappel doit

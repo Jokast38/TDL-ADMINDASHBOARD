@@ -15,6 +15,7 @@ import {
 import { MagnifyingGlass, EnvelopeSimple, Phone, GraduationCap, FolderOpen, Sparkle, PaperPlaneTilt, Signature, Trash, DownloadSimple, UsersThree, CheckCircle, Clock, FileText, IdentificationCard, PencilSimple, ArrowsClockwise } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { formatDateFR, formatDateLongFR } from "@/lib/dateFormat";
+import { PAYMENT_PAID_LIKE, paymentLabel } from "@/lib/paymentStatus";
 
 const PAGE_SIZE = 25;
 
@@ -68,11 +69,7 @@ const DOSSIER_STATUS_COLOR = {
 // comme "Payé" — même logique que PAYMENT_LABEL/PAYMENT_PAID_LIKE dans
 // Inscriptions.jsx, sans quoi "cpf_valide" ressortait en orange avec son nom
 // de statut brut au lieu d'un libellé lisible.
-const PAYMENT_LABEL = {
-  pending: "En attente", paid: "Payé", refunded: "Remboursé",
-  cpf_valide: "CPF Validé", cpf_attente: "CPF en attente",
-};
-const PAYMENT_PAID_LIKE = ["paid", "cpf_valide"];
+// Libellés partagés : lib/paymentStatus.js.
 
 const CENTER_OPTIONS = ["Épinay-sur-Seine (93)", "Creil (60)"];
 
@@ -771,7 +768,7 @@ export default function Students() {
                         PAYMENT_PAID_LIKE.includes(s.payment_status) ? "bg-[#0B7238]/10 text-[#0B7238] hover:bg-[#0B7238]/10" :
                         s.payment_status === "refunded" ? "bg-gray-200 text-gray-600 hover:bg-gray-200" :
                         "bg-[#F5A623]/10 text-[#F5A623] hover:bg-[#F5A623]/10"
-                      }>{PAYMENT_LABEL[s.payment_status] || s.payment_status}</Badge>
+                      }>{paymentLabel(s.payment_status)}</Badge>
                     ) : <span className="text-xs text-gray-300">—</span>}
                   </td>
                   {showCmaColumn && (
